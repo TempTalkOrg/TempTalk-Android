@@ -1,0 +1,56 @@
+<resources>
+    <string name="login_to_chative">注册或登录TempTalk</string>
+    <string name="login_sign_to_chative">登录TempTalk</string>
+    <string name="login_email_or_invite_code_hint">邮箱/手机号</string>
+    <string name="login_next">下一步</string>
+    <string name="login_in">登录</string>
+    <string name="login_skip">跳过</string>
+    <string name="login_email_does_not_exist">邮箱不存在，请尝试另一个邮箱</string>
+    <string name="login_otp_sent">OTP 已发送，请查看</string>
+    <string name="login_otp_sent_to">已发送 OTP 至 "%s"</string>
+    <string name="login_otp_error">OTP 不正确，请重试</string>
+    <string name="login_invite_code_invalid">无效，请检查</string>
+    <string name="login_bind_email_hint">输入邮箱</string>
+    <string name="login_bind_email_skip_dissuade">如果不绑定邮箱，您的账户可能会丢失。确定要跳过此步骤吗？</string>
+    <string name="login_bind_email_skip_cancel">取消</string>
+    <string name="login_bind_email_skip_continue">继续</string>
+    <string name="login_email_code_not_receive">没有收到？</string>
+    <string name="login_email_code_resend">重新发送%s</string>
+    <string name="login_email_code_change_email">更换邮箱</string>
+    <string name="login_email_code_or">或</string>
+    <string name="login_logo" translatable="false">标志</string>
+    <string name="login_error_not_exist">登录码过期或不存在，请检查</string>
+    <string name="login_error_verification_failed">验证失败</string>
+    <string name="login_error_too_many_attempts">尝试次数过多，请稍后再试。</string>
+    <string name="settings_passcode_submit">确认</string>
+    <string name="settings_enter_passcode">请输入屏幕锁密码</string>
+    <string name="settings_passcode_error_tips">密码不匹配。</string>
+    <string name="settings_passcode_attempts_delay">下一次尝试需要等待%d秒。</string>
+    <string name="settings_forget_passcode">忘记解锁码？</string>
+    <string name="settings_forget_passcode_dialog_tips">请删除并重装应用。</string>
+
+    <string name="login_select_country_code">选择国家编码</string>
+
+    <string name="login_bind_email">绑定邮箱</string>
+    <string name="login_change_email">修改邮箱</string>
+    <string name="login_new_email">新邮箱</string>
+    <string name="login_bind_phone_number">绑定手机号</string>
+    <string name="login_change_phone_number">修改手机号</string>
+    <string name="login_new_phone_number">新手机号</string>
+
+    <string name="login_new_user">新用户?</string>
+    <string name="login_sign_up">注册</string>
+    <string name="login_have_an_account">已有账号?</string>
+    <string name="login_start_to_chat">开始聊天</string>
+
+    <string name="login_phone_number_already_linked">手机号已绑定其他账号</string>
+    <string name="login_phone_number_already_linked_tips">该手机号已绑定其他账号，是否确认替换为当前账号的手机号？</string>
+    <string name="login_email_already_linked">邮箱已绑定其他账号</string>
+    <string name="login_email_already_linked_tips">该邮箱已绑定其他账号，是否确认替换为当前账号的邮箱？</string>
+
+    <string name="login_different_dialog_title">异常提示</string>
+    <string name="login_different_dialog_content">不同账号登录，原数据将被删除。</string>
+    <string name="login_different_dialog_ok_text">删除并重新登录</string>
+    <string name="login_different_dialog_cancel_text">取消</string>
+
+</resources>

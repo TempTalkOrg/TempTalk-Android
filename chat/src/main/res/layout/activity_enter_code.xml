@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg1"
+    android:gravity="center_horizontal"
+    android:orientation="vertical">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/ib_back"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:padding="10dp"
+            android:src="@drawable/chat_contact_detail_ic_back"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/t.primary" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_my_code"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="16dp"
+            android:gravity="center_vertical"
+            android:text="@string/invite_my_code"
+            android:textColor="@color/icon"
+            android:textSize="16sp"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/loginTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:text="@string/invite_add_new_friend"
+        android:textColor="@color/t.primary"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/loginHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="10dp"
+        android:text="@string/invite_enter_code_to_add"
+        android:textColor="@color/t.secondary"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/loginTitle" />
+
+    <LinearLayout
+        android:id="@+id/inputZone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="30dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/loginHint">
+
+
+        <com.maning.pswedittextlibrary.MNPasswordEditText
+            android:id="@+id/et_code"
+            android:layout_width="230dp"
+            android:layout_height="50dp"
+            android:focusableInTouchMode="true"
+            android:inputType="number"
+            android:maxLength="4"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            app:psw_background_color="@android:color/transparent"
+            app:psw_border_color="@color/line"
+            app:psw_border_radius="4dp"
+            app:psw_border_selected_color="@color/t.info"
+            app:psw_border_width="2dp"
+            app:psw_cursor_width="1dp"
+            app:psw_item_margin="10dp"
+            app:psw_mode="OriginalText"
+            app:psw_show_cursor="true"
+            app:psw_style="StyleOneself"
+            app:psw_text_color="@color/t.primary">
+
+            <requestFocus />
+        </com.maning.pswedittextlibrary.MNPasswordEditText>
+
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="49dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:lineSpacingExtra="3sp"
+            android:textColor="@color/t.error"
+            android:textSize="14sp"
+            tools:text="@string/chat_net_error"
+            tools:visibility="visible" />
+
+    </LinearLayout>
+</LinearLayout>

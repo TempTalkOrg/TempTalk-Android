@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg.setting"
+    android:orientation="vertical">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@color/bg1">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/ib_back"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:padding="10dp"
+            android:src="@drawable/chat_contact_detail_ic_back"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/t.primary" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_title"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:gravity="center"
+            android:src="@drawable/chat_contact_detail_ic_back"
+            android:text="@string/me_privacy"
+            android:textColor="@color/t.primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="@+id/ib_back"
+            app:layout_constraintLeft_toRightOf="@+id/ib_back"
+            app:layout_constraintTop_toTopOf="@+id/ib_back" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!--    <androidx.appcompat.widget.AppCompatTextView-->
+    <!--        android:id="@+id/tv_security"-->
+    <!--        android:layout_width="match_parent"-->
+    <!--        android:layout_height="wrap_content"-->
+    <!--        android:layout_marginStart="16dp"-->
+    <!--        android:layout_marginTop="16dp"-->
+    <!--        android:background="@null"-->
+    <!--        android:src="@drawable/chat_contact_detail_ic_back"-->
+    <!--        android:text="@string/settings_security"-->
+    <!--        android:textColor="@color/t.secondary"-->
+    <!--        android:textSize="12sp"-->
+    <!--        app:layout_constraintLeft_toLeftOf="parent"-->
+    <!--        app:layout_constraintTop_toBottomOf="@+id/ib_back" />-->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginRight="16dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:orientation="vertical">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_screen_lock"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:gravity="center_vertical"
+                android:text="@string/settings_screen_lock"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="@+id/cb_screen_lock"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/cb_screen_lock" />
+
+            <androidx.appcompat.widget.AppCompatCheckBox
+                android:id="@+id/cb_screen_lock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:buttonTint="@color/event_checkbox_color_selector"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/bg.setting" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_timeout"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_screen_lock_time_out"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:gravity="center_vertical"
+                android:text="@string/settings_screen_lock_timeout"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_timeout"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="10dp"
+                android:gravity="center_vertical"
+                android:lineSpacingExtra="5sp"
+                android:textColor="@color/t.third"
+                android:textSize="16sp"
+                app:layout_constraintEnd_toStartOf="@+id/arrow"
+                tools:text="5m" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/arrow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/chat_ic_arrow_right"
+                android:tint="@color/t.primary"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_security_tips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:background="@null"
+        android:paddingStart="32dp"
+        android:paddingEnd="28dp"
+        android:src="@drawable/chat_contact_detail_ic_back"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/ib_back"
+        tools:text="@string/settings_screen_lock_tips" />
+
+    <LinearLayout
+        android:id="@+id/cl_renew_identity_key"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="25dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/chat_group_info_bg"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:text="@string/me_renew_identity_key"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/renew_identity_key_arrow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/chat_ic_arrow_right"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_renew_key_tips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:background="@null"
+        android:paddingStart="32dp"
+        android:paddingEnd="28dp"
+        android:src="@drawable/chat_contact_detail_ic_back"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/ib_back"
+        tools:text="@string/settings_new_key_tips"
+        tools:visibility="visible" />
+
+
+    <LinearLayout
+        android:id="@+id/ll_delete_account"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="25dp"
+        android:orientation="vertical">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_delete_account"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginHorizontal="16dp"
+            android:background="@drawable/chat_group_info_bg"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:text="@string/me_delete_account"
+                android:textColor="@color/t.error"
+                android:textSize="16sp"
+                app:layout_constraintStart_toStartOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/chat_ic_arrow_right"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_delete_account_tips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:paddingStart="32dp"
+            android:paddingEnd="28dp"
+            android:text="@string/me_delete_account_tips"
+            android:textColor="@color/t.secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!--        <androidx.appcompat.widget.AppCompatTextView-->
+    <!--            android:id="@+id/tv_find_me"-->
+    <!--            android:layout_width="match_parent"-->
+    <!--            android:layout_height="wrap_content"-->
+    <!--            android:layout_marginStart="16dp"-->
+    <!--            android:layout_marginTop="30dp"-->
+    <!--            android:background="@null"-->
+    <!--            android:src="@drawable/chat_contact_detail_ic_back"-->
+    <!--            android:text="@string/settings_privacy_find_me"-->
+    <!--            android:textColor="@color/t.secondary"-->
+    <!--            android:textSize="12sp"-->
+    <!--            app:layout_constraintLeft_toLeftOf="parent"-->
+    <!--            app:layout_constraintTop_toBottomOf="@+id/ib_back" />-->
+
+    <!--        <LinearLayout-->
+    <!--            android:layout_width="match_parent"-->
+    <!--            android:layout_height="wrap_content"-->
+    <!--            android:layout_marginLeft="16dp"-->
+    <!--            android:layout_marginTop="8dp"-->
+    <!--            android:layout_marginRight="16dp"-->
+    <!--            android:background="@drawable/chat_group_info_bg"-->
+    <!--            android:orientation="vertical">-->
+
+    <!--            <androidx.constraintlayout.widget.ConstraintLayout-->
+    <!--                android:layout_width="match_parent"-->
+    <!--                android:layout_height="52dp"-->
+    <!--                android:paddingStart="16dp"-->
+    <!--                android:paddingEnd="12dp">-->
+
+    <!--                <androidx.appcompat.widget.AppCompatTextView-->
+    <!--                    android:id="@+id/tv_phone"-->
+    <!--                    android:layout_width="wrap_content"-->
+    <!--                    android:layout_height="match_parent"-->
+    <!--                    android:background="@null"-->
+    <!--                    android:gravity="center_vertical"-->
+    <!--                    android:text="@string/settings_privacy_phone"-->
+    <!--                    android:textColor="@color/t.primary"-->
+    <!--                    android:textSize="16sp"-->
+    <!--                    app:layout_constraintBottom_toBottomOf="@+id/cb_phone"-->
+    <!--                    app:layout_constraintLeft_toLeftOf="parent"-->
+    <!--                    app:layout_constraintTop_toTopOf="@+id/cb_phone" />-->
+
+    <!--                <androidx.appcompat.widget.AppCompatCheckBox-->
+    <!--                    android:id="@+id/cb_phone"-->
+    <!--                    android:layout_width="wrap_content"-->
+    <!--                    android:layout_height="wrap_content"-->
+    <!--                    android:buttonTint="@color/event_checkbox_color_selector"-->
+    <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
+    <!--                    app:layout_constraintEnd_toEndOf="parent"-->
+    <!--                    app:layout_constraintRight_toRightOf="parent"-->
+    <!--                    app:layout_constraintTop_toTopOf="parent" />-->
+    <!--            </androidx.constraintlayout.widget.ConstraintLayout>-->
+
+    <!--            <androidx.constraintlayout.widget.ConstraintLayout-->
+    <!--                android:layout_width="match_parent"-->
+    <!--                android:layout_height="52dp"-->
+    <!--                android:paddingStart="16dp"-->
+    <!--                android:paddingEnd="12dp">-->
+
+    <!--                <androidx.appcompat.widget.AppCompatTextView-->
+    <!--                    android:id="@+id/tv_email"-->
+    <!--                    android:layout_width="wrap_content"-->
+    <!--                    android:layout_height="match_parent"-->
+    <!--                    android:background="@null"-->
+    <!--                    android:gravity="center_vertical"-->
+    <!--                    android:text="@string/settings_privacy_email"-->
+    <!--                    android:textColor="@color/t.primary"-->
+    <!--                    android:textSize="16sp"-->
+    <!--                    app:layout_constraintBottom_toBottomOf="@+id/cb_email"-->
+    <!--                    app:layout_constraintLeft_toLeftOf="parent"-->
+    <!--                    app:layout_constraintTop_toTopOf="@+id/cb_email" />-->
+
+    <!--                <androidx.appcompat.widget.AppCompatCheckBox-->
+    <!--                    android:id="@+id/cb_email"-->
+    <!--                    android:layout_width="wrap_content"-->
+    <!--                    android:layout_height="wrap_content"-->
+    <!--                    android:buttonTint="@color/event_checkbox_color_selector"-->
+    <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
+    <!--                    app:layout_constraintEnd_toEndOf="parent"-->
+    <!--                    app:layout_constraintRight_toRightOf="parent"-->
+    <!--                    app:layout_constraintTop_toTopOf="parent" />-->
+
+    <!--            </androidx.constraintlayout.widget.ConstraintLayout>-->
+    <!--        </LinearLayout>-->
+
+    <!--    </LinearLayout>-->
+
+
+</LinearLayout>

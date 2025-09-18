@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--Brand Color & Function Color-->
+    <color name="primary" tools:ignore="ResourceName">#056FFA</color>
+    <color name="success" tools:ignore="ResourceName">#01BC6A</color>
+    <color name="warning" tools:ignore="ResourceName">#F84135</color>
+    <color name="error" tools:ignore="ResourceName">#F84135</color>
+    <color name="divider" tools:ignore="ResourceName">#2B3139</color>
+    <color name="line" tools:ignore="ResourceName">#474D57</color>
+    <color name="line_indicator" >#EAECEF</color>
+    <color name="icon" tools:ignore="ResourceName">#B7BDC6</color>
+
+    <color name="loading_secondary_icon" tools:ignore="ResourceName">@color/t.secondary</color>
+    <color name="number_of_missing_missing_muted" tools:ignore="ResourceName">#474D57</color>
+
+    <!--Text Color-->
+    <color name="t.primary" tools:ignore="ResourceName">#EAECEF</color>
+    <color name="t.secondary" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="t.third" tools:ignore="ResourceName">#848E9C</color>
+    <color name="t.disable" tools:ignore="ResourceName">#5E6673</color>
+    <color name="t.white" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="t.black" tools:ignore="ResourceName">#181A20</color>
+    <color name="t.warning" tools:ignore="ResourceName">#FFC814</color>
+    <color name="t.error" tools:ignore="ResourceName">#F84135</color>
+    <color name="t.success" tools:ignore="ResourceName">#01BC6A</color>
+    <color name="t.info" tools:ignore="ResourceName">#82C1FC</color>
+
+
+    <color name="bg.secondary.clicked" tools:ignore="ResourceName">@color/bg3</color>
+    <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
+    <color name="bg.confidential" tools:ignore="ResourceName">#5E6673</color>
+    <color name="bg.emoji" tools:ignore="ResourceName">@color/bg.disable</color>
+
+    <!--Background Color-->
+    <color name="bg1" tools:ignore="ResourceName">#181A20</color>
+    <color name="bg2" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bg3" tools:ignore="ResourceName">#2B3139</color>
+    <color name="bg4" tools:ignore="ResourceName">#474D57</color>
+    <color name="bg.disable" tools:ignore="ResourceName">#474D57</color>
+    <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
+    <color name="bg.modal" tools:ignore="ResourceName">#2B3139</color>
+    <color name="bg.popup" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bg.blue" tools:ignore="ResourceName">#003366</color>
+<!--    <color name="bg.dark" tools:ignore="ResourceName">#000000</color>-->
+
+    <color name="bg.setting" tools:ignore="ResourceName">#181A20</color>
+    <color name="bg.setting.item" tools:ignore="ResourceName">#1E2329</color>
+
+    <color name="login_logo_color" tools:ignore="ResourceName">#FFFFFF</color>
+
+    <color name="event_available">#CC003366</color>
+    <color name="event_not_available">#CC411902</color>
+    <color name="caution">#FF8800</color>
+    <color name="t.caution">#FF8800</color>
+
+    <color name="chat_full_input_bg">#181A20</color>
+    <color name="bottom_tab_bg">#801E2329</color>
+    <color name="bottom_tab_divider">#00FFFFFF</color>
+</resources>

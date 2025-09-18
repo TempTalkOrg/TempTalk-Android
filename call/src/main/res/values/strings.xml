@@ -1,0 +1,59 @@
+<resources>
+
+    <string name="no_permission_camera_and_voice_tip">Application has no permission for video and voice. You can enable camera and microphone permissions in app permissions settings of the system settings.</string>
+    <string name="call_pip_not_supported_message">Device does not support picture-in-picture mode</string>
+    <string name="call_callee_action_reject">Call rejected</string>
+    <string name="call_callee_action_cancel">Call canceled</string>
+    <string name="call_callee_action_hangup">Call ended</string>
+    <string name="call_callee_action_noanswer">The callee did not answer</string>
+    <string name="call_newcall_tip">There is a call in progress. You can answer the call after hanging up the current call.</string>
+    <string name="call_timeout_tip">Call timeout</string>
+    <string name="call_is_calling_tip">You are already in a meeting.</string>
+    <string name="call_status_calling">Calling…</string>
+    <string name="call_connecting_title">Connecting…</string>
+    <string name="call_connecting_retry_tip">The meeting is connecting, please try again later.</string>
+    <string name="call_disconnected_title">Disconnected</string>
+    <string name="call_screen_sharing_title">\'s Screen Sharing</string>
+    <string name="call_instant_call_title">\'s instant call</string>
+    <string name="call_instant_call_title_default">instant call</string>
+    <string name="call_push_stream_limit_tip">The current server has reached the publish streaming limit. Please try again later.</string>
+    <string name="call_connect_timeout_tip">Connection timed out, please try again later.</string>
+    <string name="call_connect_exception_error">Network connection abnormality</string>
+    <string name="call_other_exception_error">Exception error</string>
+    <string name="call_all_mute_timeout_reminder">No one has been speaking for a while. Would you like to leave the meeting?</string>
+    <string name="call_single_person_timeout_reminder">No other participants are in the meeting. Would you like to leave?</string>
+    <string name="call_reminder_button_continue">Continue</string>
+    <string name="call_reminder_button_exit">Exit</string>
+    <string name="call_group_send_message">%s has started a call</string>
+    <string name="call_1v1_send_message">Calling</string>
+    <string name="call_invite_send_message">%s invites you to a call</string>
+    <string name="call_invite_fail_tip">Call invitation failed. Please try again.</string>
+    <string name="call_barrage_message_join">joined</string>
+    <string name="call_barrage_message_open_mic">turned ON mic 🙋🙋🙋</string>
+    <string name="call_barrage_message_close_mic">turned OFF mic 🔕</string>
+    <string name="call_barrage_message_screensharing">starts sharing 🖥</string>
+    <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
+    <string name="call_attendees">Attendees</string>
+    <string name="call_barrage_broadcast_message_tip">Send to all</string>
+    <string name="call_other_network_poor_tip">The other party\'s network connection is poor.</string>
+    <string name="call_myself_network_poor_tip">Your network connection is poor.</string>
+    <string name="call_current_audio_device">%s ✓</string>
+    <string name="call_button_group_leave_meeting">Leave</string>
+    <string name="call_button_group_end_meeting">End</string>
+    <string name="call_button_group_end_meeting_tip">Do you want to end the meeting for all?</string>
+    <string name="call_button_group_end_alert_title">End Meeting</string>
+    <string name="call_button_group_alert_cancel_text">Cancel</string>
+    <string name="call_button_group_alert_end_text">End for all</string>
+    <string name="call_toolbar_noise_suppression_text">Mic Noise Suppression</string>
+    <string name="call_toolbar_bottom_invite_text">Invite</string>
+    <string name="call_toolbar_bottom_raise_hand_text">Raise hand</string>
+    <string name="call_toolbar_bottom_switch_text">Switch</string>
+    <string name="call_join_failed_tip">Failed to join the call, please try again.</string>
+    <string name="call_start_failed_tip">Failed to start the call, please try again.</string>
+    <string name="call_chat_header_1v1_another_device">In call on another device.</string>
+    <string name="call_chat_header_started_call">%s started a call</string>
+    <string name="call_chat_header_1v1_calling">%s is calling</string>
+    <string name="call_params_url_exception_tip">The server URL parameter is abnormal.</string>
+
+
+</resources>

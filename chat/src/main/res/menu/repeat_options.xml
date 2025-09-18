@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/option_never" android:title="Never" />
+    <item android:id="@+id/option_weekdays" android:title="Weekdays" />
+    <item android:id="@+id/option_daily" android:title="Daily" />
+    <item android:id="@+id/option_weekly" android:title="Weekly" />
+    <item android:id="@+id/option_monthly" android:title="Monthly" />
+    <item android:id="@+id/option_biweekly" android:title="Biweekly" />
+</menu>

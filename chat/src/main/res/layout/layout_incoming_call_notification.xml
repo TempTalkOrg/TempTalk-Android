@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/t.primary"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        tools:text="Notification Title" />
+
+    <TextView
+        android:id="@+id/content"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp"
+        tools:text="Notification Content" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="30dp">
+
+        <TextView
+            android:id="@+id/reject_button"
+            android:layout_width="150dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="30dp"
+            android:background="@color/error"
+            android:gravity="center"
+            android:src="@mipmap/chat_ic_call_reject"
+            android:textColor="@color/white"
+            tools:text="Reject" />
+
+        <TextView
+            android:id="@+id/accept_button"
+            android:layout_width="150dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:background="@color/green_600"
+            android:gravity="center"
+            android:src="@mipmap/chat_ic_call_accept"
+            android:textColor="@color/white"
+            tools:text="Accept" />
+    </LinearLayout>
+</LinearLayout>

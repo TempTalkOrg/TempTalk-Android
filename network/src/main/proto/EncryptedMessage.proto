@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package signalservice.ecnryptedprotos;
+
+option java_package = "org.whispersystems.signalservice.internal.push";
+option java_outer_classname = "EncryptedMessageProtos";
+
+message EncryptContent{
+  optional uint32 version = 1;
+  optional bytes cipherText = 2;
+  optional bytes signedEKey = 3;
+  optional bytes eKey = 4;
+  optional bytes identityKey = 5;
+}

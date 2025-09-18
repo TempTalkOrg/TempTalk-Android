@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/action_goto_members_page"
+    app:startDestination="@id/chat_groupchatfragment">
+    <!-- 弃用，这里要add不能replace fragment -->
+
+    <fragment
+        android:id="@+id/chat_groupchatfragment"
+        android:name="com.difft.android.chat.group.GroupChatFragment"
+        android:label="GroupChatFragment">
+<!--        <action-->
+<!--            android:id="@+id/goto_group_info_page"-->
+<!--            app:destination="@id/chat_groupinfoFragment" />-->
+    </fragment>
+
+    <!--    <fragment-->
+    <!--        android:id="@+id/chat_groupinfoFragment"-->
+    <!--        android:name="com.difft.android.chat.contacts.contactsgroup.GroupInfoFragment"-->
+    <!--        android:label="GroupInfoFragment">-->
+    <!--        <argument-->
+    <!--            android:name="groupId"-->
+    <!--            app:argType="string" />-->
+    <!--    </fragment>-->
+
+    <!--    <fragment-->
+    <!--        android:id="@+id/chat_groupmembersfragment"-->
+    <!--        android:name="com.difft.android.chat.contacts.contactsgroup.GroupMembersFragment"-->
+    <!--        android:label="GroupMembersFragment" >-->
+    <!--        <argument-->
+    <!--            android:name="groupId"-->
+    <!--            app:argType="string" />-->
+    <!--    </fragment>-->
+</navigation>
