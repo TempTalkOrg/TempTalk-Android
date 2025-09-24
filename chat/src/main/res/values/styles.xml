@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+    </style>
+
+    <style name="TransparentStatusBar" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bg1.night</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/bg1.night</item>
+    </style>
+
+
+    <style name="EventEditorLabelStyle">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:lineSpacingExtra">6sp</item>
+        <item name="android:textColor">@color/t.primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="EventItemSelectorWithBorder">
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:background">@drawable/rounded_border_background
+        </item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:lineSpacingExtra">6sp</item>
+        <item name="android:textColor">@color/t.primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="EventItemToGoogleCalendarWithBorder">
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:background">@drawable/rounded_border_background
+        </item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:lineSpacingExtra">6sp</item>
+        <item name="android:textColor">@color/t.primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="StatusItemSelectorWithBorder">
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:background">@drawable/rounded_border_background_status_settings
+        </item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:lineSpacingExtra">6sp</item>
+        <item name="android:textColor">@color/t.primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="EventEditorPermitCheckbox">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:lineSpacingExtra">6sp</item>
+        <item name="android:textColor">@color/t.primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="CheckBoxTextStyle">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/t.primary</item>
+    </style>
+
+    <style name="MeetingListBottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/MeetingListBottomSheetStyle</item>
+    </style>
+
+    <style name="MeetingListBottomSheetStyle" parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@drawable/rounded_background_for_bottom_sheet</item>
+        <!-- 使背景透明以显示圆角 -->
+        <item name="android:backgroundTint">@android:color/transparent</item>
+    </style>
+
+
+</resources>

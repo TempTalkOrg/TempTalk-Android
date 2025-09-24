@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Checkbox disabled color -->
+    <item android:color="@color/bg.disable" android:state_enabled="false"/>
+    <!-- Checkbox checked color -->
+    <item android:color="@color/primary" android:state_checked="true" />
+    <!-- Checkbox unchecked color -->
+    <item android:color="@color/t.secondary" />
+</selector>

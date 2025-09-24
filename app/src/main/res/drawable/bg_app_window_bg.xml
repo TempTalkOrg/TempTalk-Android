@@ -1,0 +1,9 @@
+<!-- res/drawable/splash_screen.xml -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/bg1" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/ic_launcher_round" />
+    </item>
+</layer-list>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/option_15_mins"
+        android:title="@string/duration_selection_15_mins" />
+    <item
+        android:id="@+id/option_20_mins"
+        android:title="@string/duration_selection_15_mins" />
+    <item
+        android:id="@+id/option_30_mins"
+        android:title="@string/duration_selection_30_mins" />
+    <item
+        android:id="@+id/option_45_mins"
+        android:title="@string/duration_selection_45_mins" />
+    <item
+        android:id="@+id/option_1_hours"
+        android:title="@string/duration_selection_1_hr" />
+    <item
+        android:id="@+id/option_2_hours"
+        android:title="@string/duration_selection_2_hrs" />
+    <item
+        android:id="@+id/option_4_hours"
+        android:title="@string/duration_selection_4_hrs" />
+    <item
+        android:id="@+id/option_8_hours"
+        android:title="@string/duration_selection_8_hrs" />
+    <item
+        android:id="@+id/option_10_hours"
+        android:title="@string/duration_selection_10_hrs" />
+    <item
+        android:id="@+id/option_12_hours"
+        android:title="@string/duration_selection_12_hrs" />
+    <item
+        android:id="@+id/option_24_hours"
+        android:title="@string/duration_selection_24_hrs" />
+    <item
+        android:id="@+id/option_48_hours"
+        android:title="@string/duration_selection_48_hrs" />
+</menu>

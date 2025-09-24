@@ -1,0 +1,46 @@
+<resources>
+    <string name="language_chinese" translatable="false">中文</string>
+    <string name="language_english" translatable="false">English</string>
+    <string name="chat_message_confidential_message">[Message]</string>
+    <string name="chat_message_attachment">[Attachment]</string>
+    <string name="chat_message_image">[Image]</string>
+    <string name="chat_message_video">[Video]</string>
+    <string name="chat_message_audio">[Audio]</string>
+    <string name="chat_message_contact_card">[Contact Card]</string>
+    <string name="chat_message_chat_history">[Chat History]</string>
+    <string name="chat_history">Chat History</string>
+
+    <!-- DateUtils -->
+    <string name="DateUtils_just_now">Now</string>
+    <string name="DateUtils_minutes_ago">%dm</string>
+    <string name="DateUtils_today">Today</string>
+    <string name="DateUtils_yesterday">Yesterday</string>
+    <!-- When scheduling a message, %1$s replaced with either today, tonight, or tomorrow. %2$s replaced with the time. e.g. Tonight at 9:00pm -->
+    <string name="DateUtils_schedule_at">%1$s at %2$s</string>
+    <!-- Used when getting a time in the future. For example, Tomorrow at 9:00pm -->
+    <string name="DateUtils_tomorrow">Tomorrow</string>
+    <!-- Used in the context: Tonight at 9:00pm for example. Specifically this is after 7pm -->
+    <string name="DateUtils_tonight">Tonight</string>
+
+    <!-- plurals.xml -->
+    <plurals name="hours_ago">
+        <item quantity="one">%dh</item>
+        <item quantity="other">%dh</item>
+    </plurals>
+
+    <string name="DeviceListItem_today">Today</string>
+
+    <string name="DateUtils_days">&#160;days</string>
+    <string name="DateUtils_hours">&#160;hours</string>
+    <string name="DateUtils_minutes">&#160;minutes</string>
+    <string name="DateUtils_seconds">&#160;seconds</string>
+    <string name="DateUtils_millis">&#160;millis</string>
+
+    <string name="DateUtils_days_short">d</string>
+    <string name="DateUtils_hours_short">h</string>
+    <string name="DateUtils_minutes_short">m</string>
+    <string name="DateUtils_seconds_short">s</string>
+    <string name="DateUtils_millis_short">ss</string>
+
+    <string name="widget_chat_heder_loading">Loading…</string>
+</resources>

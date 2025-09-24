@@ -1,0 +1,81 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+
+    <!--    <style name="ChatTheme.Group" parent="Theme.AppCompat.Light.NoActionBar">-->
+    <!--        &lt;!&ndash; Primary brand color. &ndash;&gt;-->
+    <!--        <item name="colorAccent">@color/primary</item>-->
+    <!--        <item name="colorPrimary">@color/purple_500</item>-->
+    <!--        <item name="colorPrimaryVariant">@color/purple_700</item>-->
+    <!--        <item name="colorOnPrimary">@color/white</item>-->
+    <!--        &lt;!&ndash; Secondary brand color. &ndash;&gt;-->
+    <!--        <item name="colorSecondary">@color/teal_200</item>-->
+    <!--        <item name="colorSecondaryVariant">@color/teal_700</item>-->
+    <!--        <item name="colorOnSecondary">@color/black</item>-->
+    <!--        &lt;!&ndash; Status bar color. &ndash;&gt;-->
+    <!--        <item name="android:statusBarColor">@color/bg1</item>-->
+    <!--        <item name="android:navigationBarColor">@color/bg1</item>-->
+    <!--        <item name="android:windowLightStatusBar">true</item>-->
+    <!--        <item name="android:windowLightNavigationBar">true</item>-->
+    <!--        &lt;!&ndash; Customize your theme here. &ndash;&gt;-->
+    <!--    </style>-->
+
+    <!--    <style name="chat_Theme.Setting" parent="Theme.Chative">-->
+    <!--        <item name="android:windowBackground">@color/bg2</item>-->
+    <!--        <item name="android:statusBarColor">@color/bg2</item>-->
+    <!--        <item name="android:navigationBarColor">@color/bg2</item>-->
+    <!--        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>-->
+    <!--        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>-->
+    <!--    </style>-->
+    <style name="CustomTabLayoutTextAppearance">
+        <item name="android:textSize">16sp</item> <!-- 设置文本大小为16sp -->
+    </style>
+
+    <style name="TT.Text.Caption" parent="Base.TextAppearance.AppCompat.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingExtra">2sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing" tools:ignore="NewApi">0.03</item>
+    </style>
+
+    <style name="CustomProgressBarStyle" parent="Widget.AppCompat.ProgressBar.Horizontal">
+        <!-- 修改进度条的颜色 -->
+        <item name="android:progressTint">#056FFA</item>
+        <!-- 修改背景的颜色 -->
+        <item name="android:backgroundTint">@color/gray_250</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.TT.BottomSheet.Rounded" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopRight">18dp</item>
+        <item name="cornerSizeTopLeft">18dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
+
+    <style name="Widget.TT.BottomSheet.Rounded" parent="Widget.Material3.BottomSheet">
+        <item name="shapeAppearanceOverlay">
+            @style/ShapeAppearanceOverlay.TT.BottomSheet.Rounded
+        </item>
+        <item name="backgroundTint">@color/colorSurface1</item>
+    </style>
+
+    <style name="Theme.TT.RoundedBottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="android:windowIsFloating">false</item>
+        <item name="bottomSheetStyle">@style/Widget.TT.BottomSheet.Rounded</item>
+
+        <item name="android:textColorPrimary">@color/colorOnSurface</item>
+
+        <item name="colorAccent">#6191f3</item>
+
+        <item name="android:navigationBarColor" tools:ignore="NewApi">@color/colorSurface1
+        </item>
+        <item name="android:windowLightNavigationBar" tools:ignore="NewApi">false</item>
+        <item name="android:statusBarColor" tools:ignore="NewApi">@android:color/transparent</item>
+        <item name="materialButtonStyle">@style/Widget.TT.BottomSheet.MaterialButtonStyle</item>
+    </style>
+
+    <style name="Widget.TT.BottomSheet.MaterialButtonStyle" parent="Widget.Material3.Button.TextButton.Dialog.Flush">
+        <item name="android:lines">@null</item>
+        <item name="android:singleLine">false</item>
+    </style>
+</resources>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/bg2"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_most_use"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginVertical="8dp"
+        android:text="@string/chat_emoji_most_use"
+        android:textColor="@color/t.primary"
+        android:textSize="14sp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_most_use"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        tools:listitem="@layout/layout_item_reaction_emoji" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_others"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginVertical="8dp"
+        android:text="@string/chat_emoji_other"
+        android:textColor="@color/t.primary"
+        android:textSize="14sp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_other"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        tools:listitem="@layout/layout_item_reaction_emoji" />
+
+</LinearLayout>

@@ -1,0 +1,56 @@
+<resources>
+    <string name="login_to_chative">Register or Login to TempTalk</string>
+    <string name="login_sign_to_chative">Sign in to TempTalk</string>
+    <string name="login_email_or_invite_code_hint">Email/Phone Number</string>
+    <string name="login_next">Next</string>
+    <string name="login_in">Log in</string>
+    <string name="login_skip">Skip</string>
+    <string name="login_email_does_not_exist">Email does not exist, please try another email</string>
+    <string name="login_otp_sent">OTP sent, please check</string>
+    <string name="login_otp_sent_to">OTP sent to "%s"</string>
+    <string name="login_otp_error">OTP is not correct, please try again</string>
+    <string name="login_invite_code_invalid">Invalid , please check</string>
+    <string name="login_bind_email_hint">Enter email</string>
+    <string name="login_bind_email_skip_dissuade">You might lost your account without linking to an email account. Are you sure to skip the step?</string>
+    <string name="login_bind_email_skip_cancel">Cancel</string>
+    <string name="login_bind_email_skip_continue">Continue</string>
+    <string name="login_email_code_not_receive">Did\'t receive?</string>
+    <string name="login_email_code_resend">Resend%s</string>
+    <string name="login_email_code_change_email">change an email</string>
+    <string name="login_email_code_or">or</string>
+    <string name="login_logo" translatable="false">logo</string>
+    <string name="login_error_not_exist">Code expired or does not exist, please check</string>
+    <string name="login_error_verification_failed">Verification failed</string>
+    <string name="login_error_too_many_attempts">Too many attempts. Please try again later.</string>
+    <string name="settings_passcode_submit">Done</string>
+    <string name="settings_enter_passcode">Enter Screen Lock passcode</string>
+    <string name="settings_passcode_error_tips">Passcode does not match.</string>
+    <string name="settings_passcode_attempts_delay">Next attempt will be delayed by %ds.</string>
+    <string name="settings_forget_passcode">Forgot passcode?</string>
+    <string name="settings_forget_passcode_dialog_tips">Please delete and reinstall the app.</string>
+
+    <string name="login_select_country_code">Select Country Code</string>
+
+    <string name="login_bind_email">Bind Email</string>
+    <string name="login_change_email">Change Email</string>
+    <string name="login_new_email">New Email</string>
+    <string name="login_bind_phone_number">Bind Phone Number</string>
+    <string name="login_change_phone_number">Change Phone Number</string>
+    <string name="login_new_phone_number">New Phone Number</string>
+
+    <string name="login_new_user">New User？</string>
+    <string name="login_sign_up">Sign Up</string>
+    <string name="login_have_an_account">Already have an account?</string>
+    <string name="login_start_to_chat">Start to Chat</string>
+
+    <string name="login_phone_number_already_linked">Phone Number Already Linked</string>
+    <string name="login_phone_number_already_linked_tips">Confirm replacing it as the current account\'s number?</string>
+    <string name="login_email_already_linked">Email Already Linked</string>
+    <string name="login_email_already_linked_tips">Confirm replacing it as the current account\'s email?</string>
+
+    <string name="login_different_dialog_title">Security Alert</string>
+    <string name="login_different_dialog_content">A different account has logged in. Previous account data will be deleted.</string>
+    <string name="login_different_dialog_ok_text">Delete &amp; Re-login</string>
+    <string name="login_different_dialog_cancel_text">Cancel</string>
+
+</resources>

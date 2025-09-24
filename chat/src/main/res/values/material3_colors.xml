@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Core colors for Material3 -->
+    <color name="colorPrimary">@color/light_colorPrimary</color>
+    <color name="colorPrimaryContainer">@color/light_colorPrimaryContainer</color>
+    <color name="colorSecondary">@color/light_colorSecondary</color>
+    <color name="colorSecondaryContainer">@color/light_colorSecondaryContainer</color>
+    <color name="colorSurface">@color/light_colorSurface</color>
+    <color name="colorSurfaceVariant">@color/light_colorSurfaceVariant</color>
+    <color name="colorBackground">@color/light_colorBackground</color>
+    <color name="colorError">@color/light_colorError</color>
+    <color name="colorErrorContainer">@color/light_colorErrorContainer</color>
+    <color name="colorOnPrimary">@color/light_colorOnPrimary</color>
+    <color name="colorOnPrimaryContainer">@color/light_colorOnPrimaryContainer</color>
+    <color name="colorOnSecondary">@color/light_colorOnSecondary</color>
+    <color name="colorOnSecondaryContainer">@color/light_colorOnSecondaryContainer</color>
+    <color name="colorOnSurface">@color/light_colorOnSurface</color>
+    <color name="colorOnSurfaceVariant">@color/light_colorOnSurfaceVariant</color>
+    <color name="colorOnSurfaceVariant1">@color/light_colorOnSurfaceVariant1</color>
+    <color name="colorOnBackground">@color/light_colorOnBackground</color>
+    <color name="colorOutline">@color/light_colorOutline</color>
+    <color name="neutralSurface">@color/light_neutralSurface</color>
+    <color name="colorOnCustom">@color/light_colorOnCustom</color>
+    <color name="colorOnCustomVariant">@color/light_colorOnCustomVariant</color>
+
+    <color name="colorSurface1">@color/light_colorSurface1</color>
+    <color name="colorSurface2">@color/light_colorSurface2</color>
+    <color name="colorSurface3">@color/light_colorSurface3</color>
+    <color name="colorSurface4">@color/light_colorSurface4</color>
+    <color name="colorSurface5">@color/light_colorSurface5</color>
+    
+    <color name="colorTransparent1">@color/light_colorTransparent1</color>
+    <color name="colorTransparent2">@color/light_colorTransparent2</color>
+    <color name="colorTransparent3">@color/light_colorTransparent3</color>
+    <color name="colorTransparent4">@color/light_colorTransparent4</color>
+    <color name="colorTransparent5">@color/light_colorTransparent5</color>
+    <color name="colorNeutral">@color/light_colorNeutral</color>
+    <color name="colorNeutralVariant">@color/light_colorNeutralVariant</color>
+    <color name="colorTransparentInverse1">@color/light_colorTransparentInverse1</color>
+    <color name="colorTransparentInverse2">@color/light_colorTransparentInverse2</color>
+    <color name="colorTransparentInverse3">@color/light_colorTransparentInverse3</color>
+    <color name="colorTransparentInverse4">@color/light_colorTransparentInverse4</color>
+    <color name="colorTransparentInverse5">@color/light_colorTransparentInverse5</color>
+    <color name="colorNeutralInverse">@color/light_colorNeutralInverse</color>
+    <color name="colorNeutralVariantInverse">@color/light_colorNeutralVariantInverse</color>
+
+    <!-- Inverses -->
+    <color name="colorErrorInverse">@color/dark_colorError</color>
+    <color name="colorErrorContainerInverse">@color/dark_colorErrorContainer</color>
+
+    <!-- Core color alpha variants -->
+    <color name="colorSecondaryContainer_12">#1FDCE5F9</color>
+    <color name="colorSurface_60">#99FBFCFF</color>
+    <color name="colorSurfaceVariant_38">#61E7EBF3</color>
+    <color name="colorSurfaceVariant_64">#A3E7EBF3</color>
+    <color name="colorOnSurface_12">#1F1B1B1D</color>
+    <color name="colorOnSurface_50">#801B1B1D</color>
+    <color name="colorOnSurfaceVariant_60">#99545863</color>
+    <color name="colorOnBackground_60">#991B1D1D</color>
+    <color name="colorOutline_38">#61808389</color>
+    <color name="colorBackground_0">#00FBFCFF</color>
+
+    <!-- Core color alpha variants without alpha channel -->
+    <color name="colorSurfaceVariant_16_no_alpha">#D5D8DE</color>
+    <color name="colorSurfaceVariant_32_no_alpha">#B8BCC5</color>
+</resources>

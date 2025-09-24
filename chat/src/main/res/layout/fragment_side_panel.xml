@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="216dp"
+    android:layout_height="match_parent"
+    android:background="#2B3139"
+    tools:context="com.difft.android.meeting.activities.SlidePanelFragment">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="#00181A20"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:popupTheme="@style/ThemeOverlay.AppCompat.Light">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/btn_invite_people"
+                android:layout_width="24dp"
+                android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/tabler_user_plus" />
+
+            <TextView
+                android:id="@+id/slide_panel_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="sans-serif"
+                android:gravity="center"
+                android:letterSpacing="0"
+                android:lineSpacingExtra="6sp"
+                android:text="Attendees (0)"
+                android:textColor="@color/t.primary.night"
+                android:textSize="14sp" />
+
+            <ImageButton
+                android:id="@+id/btn_close_slide_panel"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_close_slide_panel" />
+
+        </LinearLayout>
+    </androidx.appcompat.widget.Toolbar>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="44dp"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/request_panel_bg"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/slide_panel_request_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="16dp"
+                    android:fontFamily="sans-serif"
+                    android:lineHeight="20sp"
+                    android:text="@string/title_speak_request"
+                    android:textAlignment="viewStart"
+                    android:textColor="@color/t.primary.night"
+                    android:textSize="14sp"
+                    android:textStyle="normal"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/slide_panel_request_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:itemCount="3"
+                    tools:listitem="@layout/slide_panel_request_item_view" />
+            </LinearLayout>
+            <!--            <TextView-->
+            <!--                android:id="@+id/slide_panel_attendees_title"-->
+            <!--                android:layout_width="match_parent"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:layout_marginStart="16dp"-->
+            <!--                android:fontFamily="sans-serif"-->
+            <!--                android:lineHeight="20sp"-->
+            <!--                android:text="Attendees"-->
+            <!--                android:textAlignment="viewStart"-->
+            <!--                android:textColor="@color/t.primary.night"-->
+            <!--                android:textSize="14sp"-->
+            <!--                android:textStyle="normal" />-->
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/slide_panel_attendee_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                tools:listitem="@layout/slide_panel_list_item_view" />
+
+            <!--            <TextView-->
+            <!--                android:id="@+id/slide_panel_guest_title"-->
+            <!--                android:layout_width="match_parent"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:layout_marginStart="16dp"-->
+            <!--                android:fontFamily="sans-serif"-->
+            <!--                android:lineHeight="20sp"-->
+            <!--                android:text="Guests"-->
+            <!--                android:textAlignment="viewStart"-->
+            <!--                android:textColor="@color/t.primary.night"-->
+            <!--                android:textSize="14sp"-->
+            <!--                android:textStyle="normal" />-->
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</FrameLayout>

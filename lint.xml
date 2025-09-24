@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- L10N warnings -->
+    <issue id="MissingTranslation" severity="ignore" />
+    <issue id="ExtraTranslation" severity="warning" />
+    <issue id="MissingDefaultResource" severity="error">
+        <ignore path="*/res/values-*/strings.xml" />
+    </issue>
+
+    <!-- UI related -->
+    <issue id="HardcodedText" severity="error" />
+    <issue id="ButtonOrder" severity="error" />
+    <issue id="VectorRaster" severity="error" />
+    
+    <!-- Common issues -->
+    <issue id="UnspecifiedImmutableFlag" severity="error" />
+    
+    <!-- Ignore some common warnings that might affect development efficiency -->
+    <issue id="OptionalUsedAsFieldOrParameterType" severity="ignore" />
+    <issue id="SameParameterValue" severity="ignore" />
+</lint> 

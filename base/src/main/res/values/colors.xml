@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <color name="ic_launcher_background">#181A1F</color>
+    <!--Brand Color & Function Color-->
+    <color name="primary" tools:ignore="ResourceName">#056FFA</color>
+    <color name="success" tools:ignore="ResourceName">#01BC6A</color>
+    <color name="warning" tools:ignore="ResourceName">#FFC814</color>
+    <color name="error" tools:ignore="ResourceName">#F84135</color>
+    <color name="divider" tools:ignore="ResourceName">#EAECEF</color>
+    <color name="line" tools:ignore="ResourceName">#EAECEF</color>
+    <color name="line_indicator" >#000000</color>
+    <color name="icon" tools:ignore="ResourceName">#474D57</color>
+    <color name="number_of_missing_missing_muted" tools:ignore="ResourceName">#B7BDC6</color>
+
+    <color name="loading_primary_icon" tools:ignore="ResourceName">@color/t.white</color>
+    <color name="loading_secondary_icon" tools:ignore="ResourceName">@color/t.secondary</color>
+
+    <!--Text Color-->
+    <color name="t.primary" tools:ignore="ResourceName">#1E2329</color>
+    <color name="t.secondary" tools:ignore="ResourceName">#474D57</color>
+    <color name="t.secondary.night" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="t.third" tools:ignore="ResourceName">#848E9C</color>
+    <color name="t.disable" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="t.white" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="t.black" tools:ignore="ResourceName">#181A20</color>
+    <color name="t.warning" tools:ignore="ResourceName">#B06D00</color>
+    <color name="t.error" tools:ignore="ResourceName">#D9271E</color>
+    <color name="t.error.night" tools:ignore="ResourceName">#F84135</color>
+    <color name="t.success" tools:ignore="ResourceName">#00764B</color>
+    <color name="t.info" tools:ignore="ResourceName">#056FFA</color>
+    <color name="t.info.night" tools:ignore="ResourceName">#82C1FC</color>
+
+    <!--Background Color-->
+    <color name="bg1" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bg2" tools:ignore="ResourceName">#FAFAFA</color>
+    <color name="bg3" tools:ignore="ResourceName">#F5F5F5</color>
+    <color name="bg3.night" tools:ignore="ResourceName">#2B3139</color>
+    <color name="bg4" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="bg.disable" tools:ignore="ResourceName">#EAECEF</color>
+    <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
+    <color name="bg.modal" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bg.popup" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bg.popup.night" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bg.blue" tools:ignore="ResourceName">#EBF7FF</color>
+    <color name="bg.night" tools:ignore="ResourceName">#001C4E</color>
+    <color name="bg.primary.clicked" tools:ignore="ResourceName">#2558C1</color>
+    <color name="bg.secondary.clicked" tools:ignore="ResourceName">#F5F5F5</color>
+    <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
+    <color name="bg.confidential" tools:ignore="ResourceName">@color/gray_200</color>
+    <color name="bg.emoji" tools:ignore="ResourceName">@color/bg1</color>
+
+    <color name="bg.setting" tools:ignore="ResourceName">#FAFAFA</color>
+    <color name="bg.setting.item" tools:ignore="ResourceName">#FFFFFF</color>
+
+    <color name="login_logo_color" tools:ignore="ResourceName">#181A20</color>
+
+    <!--Blue-->
+    <color name="blue_10" tools:ignore="ResourceName">#EBF7FF</color>
+    <color name="blue_50" tools:ignore="ResourceName">#D4EBFC</color>
+    <color name="blue_100" tools:ignore="ResourceName">#B1DCFD</color>
+    <color name="blue_200" tools:ignore="ResourceName">#82C1FC</color>
+    <color name="blue_300" tools:ignore="ResourceName">#4DA0FF</color>
+    <color name="blue_400" tools:ignore="ResourceName">#328AFD</color>
+    <color name="blue_500" tools:ignore="ResourceName">#0C6CE9</color>
+    <color name="blue_600" tools:ignore="ResourceName">#005AE0</color>
+    <color name="blue_700" tools:ignore="ResourceName">#0046B7</color>
+    <color name="blue_800" tools:ignore="ResourceName">#012C70</color>
+    <color name="blue_900" tools:ignore="ResourceName">#001C4E</color>
+
+    <!--Light Blue-->
+    <color name="blue_light_10" tools:ignore="ResourceName">#EBFAFF</color>
+    <color name="blue_light_50" tools:ignore="ResourceName">#CCF3FF</color>
+    <color name="blue_light_100" tools:ignore="ResourceName">#9BE6FF</color>
+    <color name="blue_light_200" tools:ignore="ResourceName">#64D3FF</color>
+    <color name="blue_light_300" tools:ignore="ResourceName">#33BCFF</color>
+    <color name="blue_light_400" tools:ignore="ResourceName">#22ACFB</color>
+    <color name="blue_light_500" tools:ignore="ResourceName">#008DE8</color>
+    <color name="blue_light_600" tools:ignore="ResourceName">#016DC0</color>
+    <color name="blue_light_700" tools:ignore="ResourceName">#014C8F</color>
+    <color name="blue_light_800" tools:ignore="ResourceName">#003366</color>
+    <color name="blue_light_900" tools:ignore="ResourceName">#001C4E</color>
+
+    <!--Teal-->
+    <color name="teal_10" tools:ignore="ResourceName">#EBFFFD</color>
+    <color name="teal_50" tools:ignore="ResourceName">#C0FCF7</color>
+    <color name="teal_100" tools:ignore="ResourceName">#81F5EB</color>
+    <color name="teal_200" tools:ignore="ResourceName">#4DE7DC</color>
+    <color name="teal_300" tools:ignore="ResourceName">#21D3C9</color>
+    <color name="teal_400" tools:ignore="ResourceName">#00BDB6</color>
+    <color name="teal_500" tools:ignore="ResourceName">#099996</color>
+    <color name="teal_600" tools:ignore="ResourceName">#127878</color>
+    <color name="teal_700" tools:ignore="ResourceName">#155556</color>
+    <color name="teal_800" tools:ignore="ResourceName">#174446</color>
+    <color name="teal_900" tools:ignore="ResourceName">#173536</color>
+
+    <!--Green-->
+    <color name="green_10" tools:ignore="ResourceName">#F2FFF4</color>
+    <color name="green_50" tools:ignore="ResourceName">#DEFFE7</color>
+    <color name="green_100" tools:ignore="ResourceName">#B3F9C8</color>
+    <color name="green_200" tools:ignore="ResourceName">#78F1A3</color>
+    <color name="green_300" tools:ignore="ResourceName">#45E386</color>
+    <color name="green_400" tools:ignore="ResourceName">#1FD275</color>
+    <color name="green_500" tools:ignore="ResourceName">#01BC6A</color>
+    <color name="green_600" tools:ignore="ResourceName">#009659</color>
+    <color name="green_700" tools:ignore="ResourceName">#00764B</color>
+    <color name="green_800" tools:ignore="ResourceName">#00563A</color>
+    <color name="green_900" tools:ignore="ResourceName">#003C2C</color>
+
+    <!--Yellow-->
+    <color name="yellow_10" tools:ignore="ResourceName">#FFFCE5</color>
+    <color name="yellow_50" tools:ignore="ResourceName">#FFF8C2</color>
+    <color name="yellow_100" tools:ignore="ResourceName">#FFEF87</color>
+    <color name="yellow_200" tools:ignore="ResourceName">#FFE24D</color>
+    <color name="yellow_300" tools:ignore="ResourceName">#FFC814</color>
+    <color name="yellow_400" tools:ignore="ResourceName">#F6B602</color>
+    <color name="yellow_500" tools:ignore="ResourceName">#DA9900</color>
+    <color name="yellow_600" tools:ignore="ResourceName">#B06D00</color>
+    <color name="yellow_700" tools:ignore="ResourceName">#8A5000</color>
+    <color name="yellow_800" tools:ignore="ResourceName">#663B00</color>
+    <color name="yellow_900" tools:ignore="ResourceName">#3E2400</color>
+
+    <!--Orange-->
+    <color name="orange_10" tools:ignore="ResourceName">#FFF8EE</color>
+    <color name="orange_50" tools:ignore="ResourceName">#FFEBCC</color>
+    <color name="orange_100" tools:ignore="ResourceName">#FFD587</color>
+    <color name="orange_200" tools:ignore="ResourceName">#FFBE53</color>
+    <color name="orange_300" tools:ignore="ResourceName">#FFA425</color>
+    <color name="orange_400" tools:ignore="ResourceName">#FF8800</color>
+    <color name="orange_500" tools:ignore="ResourceName">#E16F00</color>
+    <color name="orange_600" tools:ignore="ResourceName">#AE5004</color>
+    <color name="orange_700" tools:ignore="ResourceName">#843908</color>
+    <color name="orange_800" tools:ignore="ResourceName">#612E10</color>
+    <color name="orange_900" tools:ignore="ResourceName">#411902</color>
+
+    <!--Red-->
+    <color name="red_10" tools:ignore="ResourceName">#FFF5F4</color>
+    <color name="red_50" tools:ignore="ResourceName">#FFE3E0</color>
+    <color name="red_100" tools:ignore="ResourceName">#FFC1B8</color>
+    <color name="red_200" tools:ignore="ResourceName">#FF897C</color>
+    <color name="red_300" tools:ignore="ResourceName">#FE6756</color>
+    <color name="red_400" tools:ignore="ResourceName">#F84135</color>
+    <color name="red_500" tools:ignore="ResourceName">#D9271E</color>
+    <color name="red_600" tools:ignore="ResourceName">#A71914</color>
+    <color name="red_700" tools:ignore="ResourceName">#8B110F</color>
+    <color name="red_800" tools:ignore="ResourceName">#680909</color>
+    <color name="red_900" tools:ignore="ResourceName">#4A0101</color>
+
+    <!--Pink-->
+    <color name="pink_10" tools:ignore="ResourceName">#FFF2F9</color>
+    <color name="pink_50" tools:ignore="ResourceName">#FFDCEC</color>
+    <color name="pink_100" tools:ignore="ResourceName">#FFADC6</color>
+    <color name="pink_200" tools:ignore="ResourceName">#FF85A7</color>
+    <color name="pink_300" tools:ignore="ResourceName">#FF628A</color>
+    <color name="pink_400" tools:ignore="ResourceName">#FF4274</color>
+    <color name="pink_500" tools:ignore="ResourceName">#EB2064</color>
+    <color name="pink_600" tools:ignore="ResourceName">#CE0857</color>
+    <color name="pink_700" tools:ignore="ResourceName">#99043B</color>
+    <color name="pink_800" tools:ignore="ResourceName">#700831</color>
+    <color name="pink_900" tools:ignore="ResourceName">#4D001F</color>
+
+    <!--Purple-->
+    <color name="purple_10" tools:ignore="ResourceName">#F8F2FF</color>
+    <color name="purple_50" tools:ignore="ResourceName">#ECDBFF</color>
+    <color name="purple_100" tools:ignore="ResourceName">#D3A8FF</color>
+    <color name="purple_200" tools:ignore="ResourceName">#C189FF</color>
+    <color name="purple_300" tools:ignore="ResourceName">#AA63FA</color>
+    <color name="purple_400" tools:ignore="ResourceName">#8E3DEB</color>
+    <color name="purple_500" tools:ignore="ResourceName">#6F24C7</color>
+    <color name="purple_600" tools:ignore="ResourceName">#58209E</color>
+    <color name="purple_700" tools:ignore="ResourceName">#461585</color>
+    <color name="purple_800" tools:ignore="ResourceName">#330B67</color>
+    <color name="purple_900" tools:ignore="ResourceName">#1F0048</color>
+
+    <!--Gray-->
+    <color name="gray_0" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="gray_5" tools:ignore="ResourceName">#FAFAFA</color>
+    <color name="gray_10" tools:ignore="ResourceName">#F5F5F5</color>
+    <color name="gray_50" tools:ignore="ResourceName">#EAECEF</color>
+    <color name="gray_100" tools:ignore="ResourceName">#D8DCE1</color>
+    <color name="gray_200" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="gray_250" tools:ignore="ResourceName">#929AA5</color>
+    <color name="gray_300" tools:ignore="ResourceName">#848E9C</color>
+    <color name="gray_400" tools:ignore="ResourceName">#707A8A</color>
+    <color name="gray_500" tools:ignore="ResourceName">#5E6673</color>
+    <color name="gray_600" tools:ignore="ResourceName">#474D57</color>
+    <color name="gray_700" tools:ignore="ResourceName">#2B3139</color>
+    <color name="gray_800" tools:ignore="ResourceName">#1E2329</color>
+    <color name="gray_900" tools:ignore="ResourceName">#181A20</color>
+    <color name="gray_1000" tools:ignore="ResourceName">#0B0E11</color>
+
+    <color name="bg1.night" tools:ignore="ResourceName">#181A20</color>
+    <color name="bg2.night" tools:ignore="ResourceName">#1E2329</color>
+    <color name="t.primary.night" tools:ignore="ResourceName">#EAECEF</color>
+
+
+    <color name="avatar_0">#eb453a</color>
+    <color name="avatar_1">#eb9f0b</color>
+    <color name="avatar_2">#ead709</color>
+    <color name="avatar_3">#31bd5b</color>
+    <color name="avatar_4">#78c3eb</color>
+    <color name="avatar_5">#0b84eb</color>
+    <color name="avatar_6">#5e5cd2</color>
+    <color name="avatar_7">#d57fe1</color>
+    <color name="avatar_8">#727e73</color>
+    <color name="avatar_9">#eb4f79</color>
+
+    <color name="event_available">#CCEBF7FF</color>
+    <color name="event_not_available">#CCFFF8EE</color>
+    <color name="caution">#FF8800</color>
+    <color name="t.caution">#AE5004</color>
+
+    <color name="chat_full_input_bg">#FFFFFF</color>
+    <color name="bottom_tab_bg">#80FFFFFF</color>
+    <color name="bottom_tab_divider">#EAECEF</color>
+
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="Color_Input">#F5F5F5</color>
+    <color name="Color_Blind_Sell">#DD7A2B</color>
+    <color name="Gray_300">#848E9C</color>
+    <color name="Gray_50">#EAECEF</color>
+    <color name="Gray_850">#202630</color>
+    <color name="Yellow_500">#F0B90B</color>
+</resources>

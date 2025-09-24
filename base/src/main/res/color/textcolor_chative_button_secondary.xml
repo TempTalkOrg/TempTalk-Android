@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" tools:ignore="ResourceName">
+    <item android:color="@color/t.disable" android:state_enabled="false" />
+    <item android:color="@color/t.primary" />
+</selector>

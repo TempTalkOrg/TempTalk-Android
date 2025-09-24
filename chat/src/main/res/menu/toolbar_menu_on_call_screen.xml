@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/camera_rotate"
+        android:icon="@drawable/chat_tabler_camera_rotate"
+        android:title="@string/switch_camera"
+        app:showAsAction="always" />
+
+</menu>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:parentTag="androidx.constraintlayout.widget.ConstraintLayout">
+
+    <de.hdodenhof.circleimageview.CircleImageView
+        android:id="@+id/iv_avatar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:contentDescription="Avatar image." />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_members_number"
+        android:layout_width="wrap_content"
+        android:layout_height="14dp"
+        android:background="@drawable/chat_group_members_number_bg"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:lines="1"
+        android:minWidth="14dp"
+        android:minHeight="14dp"
+        android:paddingHorizontal="5dp"
+        android:textColor="@color/primary"
+        android:textSize="9sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/iv_avatar"
+        app:layout_constraintEnd_toEndOf="@+id/iv_avatar"
+        tools:ignore="SmallSp"
+        tools:text="10"
+        tools:visibility="visible" />
+
+</merge>

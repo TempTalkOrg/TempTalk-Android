@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context="com.difft.android.search.SearchActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/ib_back"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:padding="10dp"
+            android:src="@drawable/chat_contact_detail_ic_back"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:tint="@color/t.primary" />
+
+        <androidx.appcompat.widget.AppCompatEditText
+            android:id="@+id/edittext_search_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/search_input_bg_search_input"
+            android:drawableStart="@drawable/search_input_ic_search_input"
+            android:drawablePadding="6dp"
+            android:hint="@string/search_default_hint"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:lines="1"
+            android:paddingStart="10dp"
+            android:paddingEnd="40dp"
+            android:textColor="@color/t.primary"
+            android:textColorHint="@color/t.disable"
+            android:textSize="14sp"
+            app:drawableTint="@color/icon"
+            app:layout_constraintBottom_toBottomOf="@+id/ib_back"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/ib_back"
+            app:layout_constraintTop_toTopOf="@+id/ib_back">
+
+            <requestFocus />
+        </androidx.appcompat.widget.AppCompatEditText>
+
+        <!--        <View-->
+        <!--            android:id="@+id/view_separator"-->
+        <!--            android:layout_width="0dp"-->
+        <!--            android:layout_height="1dp"-->
+        <!--            android:layout_marginTop="12dp"-->
+        <!--            android:background="@color/line"-->
+        <!--            app:layout_constraintEnd_toEndOf="parent"-->
+        <!--            app:layout_constraintStart_toStartOf="parent"-->
+        <!--            app:layout_constraintTop_toBottomOf="@+id/edittext_search_input" />-->
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/button_clear"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:alpha="0"
+            android:background="@null"
+            android:src="@drawable/search_input_ic_search_clear"
+            android:tint="@color/t.secondary"
+            app:layout_constraintBottom_toBottomOf="@+id/edittext_search_input"
+            app:layout_constraintEnd_toEndOf="@+id/edittext_search_input"
+            app:layout_constraintTop_toTopOf="@+id/edittext_search_input" />
+
+        <!--        <androidx.constraintlayout.widget.ConstraintLayout-->
+        <!--            android:id="@+id/cl_close"-->
+        <!--            android:layout_width="40dp"-->
+        <!--            android:layout_height="0dp"-->
+        <!--            android:paddingStart="0dp"-->
+        <!--            android:paddingEnd="16dp"-->
+        <!--            app:layout_constraintBottom_toBottomOf="@+id/edittext_search_input"-->
+        <!--            app:layout_constraintEnd_toEndOf="parent"-->
+        <!--            app:layout_constraintStart_toEndOf="@+id/edittext_search_input"-->
+        <!--            app:layout_constraintTop_toTopOf="@+id/edittext_search_input">-->
+
+        <!--            <androidx.appcompat.widget.AppCompatImageButton-->
+        <!--                android:layout_width="14dp"-->
+        <!--                android:layout_height="14dp"-->
+        <!--                android:background="@null"-->
+        <!--                android:src="@drawable/search_ic_close"-->
+        <!--                app:layout_constraintBottom_toBottomOf="parent"-->
+        <!--                app:layout_constraintRight_toRightOf="parent"-->
+        <!--                app:layout_constraintTop_toTopOf="parent"-->
+        <!--                app:tint="@color/t.secondary" />-->
+        <!--        </androidx.constraintlayout.widget.ConstraintLayout>-->
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="12dp">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_tips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="80dp"
+            android:gravity="center"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:textColor="@color/t.primary"
+            android:textSize="14sp"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/edittext_search_input" />
+
+        <!--    <androidx.appcompat.widget.AppCompatTextView-->
+        <!--        android:id="@+id/tv_user_tips"-->
+        <!--        android:layout_width="match_parent"-->
+        <!--        android:layout_height="wrap_content"-->
+        <!--        android:gravity="center"-->
+        <!--        android:paddingLeft="16dp"-->
+        <!--        android:paddingRight="16dp"-->
+        <!--        android:text="@string/search_users_default_tips"-->
+        <!--        android:textColor="@color/t.primary"-->
+        <!--        android:textSize="14sp"-->
+        <!--        app:layout_constraintLeft_toLeftOf="parent"-->
+        <!--        app:layout_constraintRight_toRightOf="parent"-->
+        <!--        app:layout_constraintTop_toBottomOf="@+id/tv_message_tips" />-->
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/v_content"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+<!--                <include-->
+<!--                    android:id="@+id/include_search_user"-->
+<!--                    layout="@layout/layout_search_user"-->
+<!--                    android:visibility="gone"-->
+<!--                    tools:visibility="visible" />-->
+
+                <LinearLayout
+                    android:id="@+id/ll_recent_chats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_recent_chats_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="32dp"
+                        android:background="@color/bg2"
+                        android:gravity="center_vertical"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp"
+                        android:text="@string/search_title_recent"
+                        android:textColor="@color/t.primary"
+                        android:textSize="14sp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerview_recent_chats"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scrollbars="none"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        tools:itemCount="2"
+                        tools:listitem="@layout/chat_item_contact" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_contacts"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_contact_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="32dp"
+                        android:background="@color/bg2"
+                        android:gravity="center_vertical"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp"
+                        android:text="@string/search_title_contacts"
+                        android:textColor="@color/t.primary"
+                        android:textSize="14sp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerview_contacts"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scrollbars="none"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        tools:itemCount="2"
+                        tools:listitem="@layout/chat_item_contact" />
+
+                    <include
+                        android:id="@+id/cl_search_contacts_more"
+                        layout="@layout/layout_search_more"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_groups"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_group_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="32dp"
+                        android:background="@color/bg2"
+                        android:gravity="center_vertical"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp"
+                        android:text="@string/search_title_group"
+                        android:textColor="@color/t.primary"
+                        android:textSize="14sp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerview_group"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scrollbars="none"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        tools:itemCount="2"
+                        tools:listitem="@layout/chat_item_group" />
+
+                    <include
+                        android:id="@+id/cl_search_groups_more"
+                        layout="@layout/layout_search_more"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_chat_history"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_chat_history_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="32dp"
+                        android:background="@color/bg2"
+                        android:gravity="center_vertical"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp"
+                        android:text="@string/chat_history"
+                        android:textColor="@color/t.primary"
+                        android:textSize="14sp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerview_chat_history"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scrollbars="none"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        tools:itemCount="2"
+                        tools:listitem="@layout/chat_item_contact" />
+
+                    <include
+                        android:id="@+id/cl_search_chat_history_more"
+                        layout="@layout/layout_search_more"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+    </FrameLayout>
+</LinearLayout>

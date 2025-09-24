@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- 进度消息 -->
+    <TextView
+        android:id="@+id/tv_recovery_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="@string/database_recovery_progress"
+        android:textColor="@color/t.secondary"
+        android:textSize="14sp" />
+
+    <!-- 进度条 -->
+    <ProgressBar
+        android:id="@+id/pb_recovery_progress"
+        style="@style/CustomProgressBarStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:progress="0" />
+
+</LinearLayout> 

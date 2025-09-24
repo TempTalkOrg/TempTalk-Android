@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:icon="@drawable/ic_delete"
+        android:id="@+id/meetings_action_delete"
+        android:title="Cancel meeting" />
+
+    <item
+        android:icon="@drawable/ic_copy"
+        android:id="@+id/meetings_action_copy"
+        android:title="@string/meetings_action_copy_meeting_info" />
+
+    <item
+        android:icon="@drawable/ic_copy"
+        android:id="@+id/meetings_action_copy_live_stream_info"
+        android:title="@string/meetings_action_copy_live_stream_info" />
+
+    <item
+        android:icon="@drawable/ic_delete"
+        android:id="@+id/meetings_action_cancel_event"
+        android:title="Cancel event" />
+
+</menu>

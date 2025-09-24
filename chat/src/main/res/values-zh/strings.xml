@@ -1,0 +1,620 @@
+<resources>
+    <!--    <string name="search_default_hint">Search for messages or users</string>-->
+    <string name="search_default_hint">搜索</string>
+    <!-- LearnMoreTextView -->
+    <string name="LearnMoreTextView_learn_more">了解更多</string>
+    <string name="SpanUtil__read_more">阅读更多</string>
+    <!-- KeyCachingService -->
+    <string name="KeyCachingService_tt_passphrase_cached">点击打开。</string>
+    <string name="KeyCachingService_passphrase_cached">已解锁</string>
+    <string name="KeyCachingService_lock">锁定</string>
+
+    <string name="chat_draft">草稿</string>
+
+    <string name="you">您</string>
+
+    <!-- Contact -->
+    <string name="contact_all">全部</string>
+    <string name="contact_groups">群组</string>
+    <string name="contact_id">ID：</string>
+    <string name="contact_uid">UID：</string>
+    <string name="contact_join_at">注册时间：</string>
+    <string name="contact_how_you_met">如何相遇：</string>
+    <string name="contact_met_not_recorded">未记录。</string>
+    <string name="contact_email">电子邮件：</string>
+    <string name="contact_local_time">当地时间：</string>
+    <string name="contact_removed">联系人已删除</string>
+    <string name="contact_forward">转发</string>
+    <string name="contact_remove">删除联系人</string>
+    <string name="contact_remove_dialog_title">删除联系人</string>
+    <string name="contact_remove_dialog_tips">所有的消息也将会永久地在你和对方的设备上删除。</string>
+    <string name="contact_remove_dialog_yes">删除</string>
+    <string name="contact_remove_dialog_cancel">取消</string>
+    <string name="contact_added">新联系人已添加</string>
+    <string name="contact_request">%s发送给您的联系人请求</string>
+    <string name="contact_request_accept">接受</string>
+    <string name="contact_request_sent">好友请求已发送</string>
+    <string name="contact_friend_request">好友请求</string>
+    <string name="contact_block_users">屏蔽用户</string>
+    <string name="contact_block">屏蔽</string>
+    <string name="contact_block_users_tips">是否屏蔽该用户，禁止其在%s上向你发送消息或发起通话？</string>
+    <string name="contact_block_and_report">屏蔽并举报</string>
+    <string name="contact_blocked">已屏蔽</string>
+    <string name="contact_unblocked">已取消屏蔽</string>
+    <string name="contact_add_contacts">添加联系人</string>
+    <string name="contact_unblock_users">取消屏蔽</string>
+    <string name="contact_unblock_operation_denied">操作被拒绝。您需要先解除屏蔽此联系人。</string>
+    <string name="contact_send_a_request">发送请求</string>
+    <string name="contact_offline_tips">此帐号已登出，消息无法送达。</string>
+    <string name="contact_account_exception_tips">此帐号已被禁用，消息无法送达。</string>
+    <string name="contact_unregistered_tips">操作被拒绝。此帐号已注销。</string>
+    <string name="contact_non_friend_limit_tips">非好友每天最多发3条消息，请等待对方接受请求。</string>
+    <string name="contact_info">联系人信息</string>
+    <string name="contact_bot_cancel">取消</string>
+    <string name="contact_operation_denied">操作被拒绝，请联系</string>
+    <string name="contact_removed_messages_deleted">您已移除%s。所有消息已被删除。</string>
+
+    <string name="contact_ignore">忽略</string>
+    <string name="contact_not_in_list">用户不在联系人列表中!</string>
+
+    <!-- Chat -->
+    <string name="chat_chats">消息</string>
+    <string name="chat_contacts">通讯录</string>
+    <string name="chat_me">我</string>
+    <string name="chat_message_input_hint">消息</string>
+    <string name="chat_message_input_hint_confidential">机密消息</string>
+    <string name="chat_message_confidential_tips">左边下滑以阅读，右边下滑以翻页</string>
+    <string name="chat_message_action_copy">复制</string>
+    <string name="chat_message_action_copied">已复制</string>
+    <string name="chat_message_action_forward">转发</string>
+    <string name="chat_message_action_voice2text">转文字</string>
+    <string name="chat_message_action_voice2text_off">取消转文字</string>
+    <string name="chat_message_action_voice2text_tip_title">信息</string>
+    <string name="chat_message_action_voice2text_tip_info">语音转文字由TempTalk服务器提供</string>
+    <string name="chat_message_action_voice2text_tip_ok">确定</string>
+    <string name="chat_message_action_select_multiple">选择多个</string>
+    <string name="chat_message_action_combine_forward">合并转发</string>
+    <string name="chat_message_action_quote">引用</string>
+    <string name="chat_message_action_reply">回复</string>
+    <string name="chat_message_action_recall">撤回</string>
+    <string name="chat_message_action_download">下载</string>
+    <string name="chat_message_action_save_to_note">保存</string>
+    <string name="chat_message_action_more_info">更多信息</string>
+    <string name="chat_message_action_translate">翻译</string>
+    <string name="chat_message_action_translate_off">关闭</string>
+    <string name="chat_message_attachment">[附件]</string>
+    <string name="chat_message_image">[图片]</string>
+    <string name="chat_message_video">[视频]</string>
+    <string name="chat_message_audio">[语音]</string>
+    <string name="chat_message_confidential_message">[消息]</string>
+    <string name="chat_message_contact_card">[个人名片]</string>
+    <string name="chat_message_chat_history">[聊天记录]</string>
+    <string name="chat_tap_to_view">点击查看</string>
+    <string name="chat_net_error">请求失败，请重试</string>
+    <string name="chat_message_action_resend">重发</string>
+    <string name="chat_message_action_delete">删除</string>
+    <string name="chat_state_offline">离线</string>
+    <string name="chat_state_connecting">连接中…</string>
+    <string name="chat_state_disconnecting">断开连接中…</string>
+    <string name="chat_state_auth_failed">不再注册</string>
+    <string name="chat_state_auth_failed_tips">此设备已退出登录。您的帐号可能已在另一台设备上登录。点击重新登录。</string>
+    <string name="chat_re_login">重新登录?</string>
+    <string name="chat_re_login_ok">确定</string>
+    <string name="chat_re_login_cancel">取消</string>
+    <string name="chat_group_name_too_long">群组名必须小于或等于64个字符。</string>
+    <string name="chat_exceed_bytes_limit">超过4096字节限制</string>
+    <string name="chat_took_a_screen_shot">%s截了屏！</string>
+    <string name="chat_favorites">收藏</string>
+    <string name="chat_contact_info">联系人信息</string>
+    <string name="chat_stick">置顶</string>
+    <string name="chat_unstick">取消置顶</string>
+    <string name="chat_group_group">群组</string>
+    <string name="chat_group_groups">群组</string>
+    <string name="chat_at_group_members">群组成员</string>
+    <string name="chat_at_tips">&#160;&#160;-&#160;&#160;用户会收到提醒</string>
+    <string name="chat_at_other">其他联系人</string>
+    <string name="chat_at_other_tips">&#160;&#160;-&#160;&#160;用户不会收到提醒</string>
+    <string name="chat_at_all">所有人</string>
+    <string name="chat_list_at_you">[@您]</string>
+    <string name="chat_list_at_all">[@所有人]</string>
+    <string name="chat_status_sending">发送中</string>
+    <string name="chat_status_sent">已发送</string>
+    <string name="chat_status_fail">发送失败</string>
+    <string name="chat_emoji_reaction">Emoji Reaction</string>
+    <string name="chat_emoji_most_use">经常使用</string>
+    <string name="chat_emoji_other">其他</string>
+    <string name="chat_contact_card">个人名片</string>
+    <string name="chat_original_message_not_found">未找到原消息</string>
+    <string name="chat_message_detail_title">消息</string>
+    <string name="chat_message_read">已读</string>
+    <string name="chat_message_unread">未读</string>
+    <string name="chat_message_file_name">文件名</string>
+    <string name="chat_message_sender">发送者</string>
+    <string name="chat_translating">翻译中…</string>
+    <string name="chat_speech_to_text">转换中…</string>
+    <string name="chat_speech_to_text_fail">转文字失败</string>
+    <string name="chat_speech_to_text_isblank">未识别到文字</string>
+    <string name="chat_translated_by">翻译自%s</string>
+    <string name="chat_translate_fail">翻译失败</string>
+    <string name="chat_attachment_load_fail">加载失败，请重试。</string>
+    <string name="chat_confidential_can_not_select">机密消息不能被选中</string>
+
+    <string name="chat_action_photo">照片</string>
+    <string name="chat_action_contact">联系人</string>
+    <string name="chat_action_file">文件</string>
+    <string name="chat_action_call">通话</string>
+    <string name="chat_action_newcall">视频会议</string>
+    <string name="chat_action_confidential_mode">机密模式</string>
+    <string name="chat_action_mention">提及</string>
+
+    <string name="chat_voice_hold_to_talk">按住说话</string>
+    <string name="chat_voice_release_to_send">松开发送</string>
+    <string name="chat_voice_release_to_cancel">松开取消</string>
+    <string name="chat_voice_recording_too_short">录音太短</string>
+    <string name="chat_voice_recording_will_stop">%d秒后将停止录音</string>
+    <string name="chat_voice_max_size_limit">录音文件最大限制为10M</string>
+
+    <string name="chat_message_delete_tips">是否删除这条消息？</string>
+
+    <!--Chat Option -->
+    <string name="chat_option_create_group">创建群组</string>
+    <string name="chat_option_scan">扫一扫</string>
+    <string name="chat_option_add_contact">添加联系人</string>
+    <string name="chat_option_instant_call">即时会议</string>
+    <string name="chat_option_mark_all_as_read">全部标为已读</string>
+
+    <string name="chat_created_reminder">\@%1$s创建了一个提醒</string>
+    <string name="chat_changed_reminder">\@%1$s修改了一个提醒</string>
+    <string name="chat_turned_off_reminder">\@%1$s删除了一个提醒</string>
+    <string name="chat_reminder_tips">提醒来自@%1$s：%2$s</string>
+
+    <!-- Topic -->
+    <string name="chat_topic">主题:</string>
+    <string name="chat_topic_reply_to">回复: %1$s</string>
+    <string name="chat_topic_reply_send_to">回复给%1$s</string>
+    <string name="chat_topic_send_to">发主题给%1$s:</string>
+    <string name="chat_topic_reply_from">回复来自%1$s:</string>
+    <string name="chat_topic_reply">回复</string>
+    <string name="chat_topic_with_name">主题: %1$s</string>
+    <string name="chat_topic_from">来自: %1$s</string>
+    <!--    <string name="chat_topic_title1">主题来自%1$s - %2$s</string>-->
+    <!--    <string name="chat_topic_title2">主题来自%1$s</string>-->
+    <string name="chat_topic_title1">%1$s - %2$s</string>
+    <string name="chat_topic_title2">%1$s</string>
+    <string name="chat_topic_list">主题列表</string>
+    <string name="chat_topic_wait_to_reply">[待回复]</string>
+    <string name="chat_topic_message_count">%s 消息</string>
+    <string name="chat_topic_message_count_single">%s 消息</string>
+    <string name="chat_topic_track">追踪</string>
+    <string name="chat_topic_un_track">取消追踪</string>
+    <string name="chat_topic_mark">标记</string>
+    <string name="chat_topic_null">无主题</string>
+
+    <!-- Group -->
+    <string name="new_group">新群组</string>
+    <string name="create_group_input_hint">命名此群聊</string>
+    <string name="create_group_button">创建</string>
+    <string name="group_leave">离开群组</string>
+    <string name="group_leave_leave">离开</string>
+    <string name="group_leave_cancel">取消</string>
+    <string name="group_leave_notice">离开此群将从您的设备上删除所有相关数据。</string>
+    <string name="group_disband">解散群组</string>
+    <string name="group_disband_disband">解散</string>
+    <string name="group_operation_done">完成</string>
+    <string name="group_participants">参加者</string>
+    <string name="group_moderators">协调人</string>
+    <string name="group_edit_info">编辑群组信息</string>
+    <string name="group_management">群管理</string>
+    <string name="group_ext_private_chat">跨组织私聊</string>
+    <string name="group_ext_private_chat_tips">开启开关后，群内成员可以外部成员自由私聊。\n关闭开关后，权限不会立即收回，最多需要延迟7天。</string>
+    <string name="group_edit_save">保存</string>
+    <string name="group_members">成员</string>
+    <string name="group_add_member">添加成员</string>
+    <string name="group_remove_member">移除成员</string>
+    <string name="group_delete">删除</string>
+    <string name="group_meeting_start_title">群组会议</string>
+    <string name="group_meeting_start_message">现在开始或加入群组会议？</string>
+    <string name="group_meeting_start_ok">确定</string>
+    <string name="group_meeting_start_cancel">取消</string>
+    <string name="group_create_a_group">%s创建了群组。</string>
+    <string name="group_added_to_group">%1$s添加了%2$s到群组。</string>
+    <string name="group_left_the_group">%s离开了群组。</string>
+    <string name="group_invited_join_group">%1$s邀请%2$s加入群组。</string>
+    <!-- <string name="group_invited_join_group">%1$s加入了群组。</string> -->
+    <string name="group_removed_from_group">%1$s已从群组中移除。</string>
+    <string name="group_disbanded_group">您已解散此群组，所有会议已取消。</string>
+    <string name="group_has_been_disbanded">此群组已被解散，所有会议已取消。</string>
+    <string name="group_changed_group_name">%1$s更改了群组名称。</string>
+    <string name="group_changed_group_avatar">%1$s更改了群头像。</string>
+    <string name="group_link">群组链接</string>
+    <string name="group_share_group_link">分享群组链接</string>
+    <string name="group_share_content">%1$s邀请您加入“%2$s”，点击加入群组。\nchative://group/join?inviteCode=%3$s</string>
+    <string name="group_enter_group">进入群组</string>
+    <string name="group_permission_denied">没有权限，请联系群协调人</string>
+    <string name="group_turned_on_ext_chat">%1$s开启了“跨组织私聊”</string>
+    <string name="group_turned_off_ext_chat">%1$s关闭了“跨组织私聊”</string>
+    <string name="group_unknown_group">未知群组</string>
+    <string name="group_not_your_friend">%1$s还不是你的朋友，您不能邀请他们加入群组，请先添加他们。</string>
+    <string name="group_select_count">您必须选择1名以上的成员才能创建群组。</string>
+    <string name="group_allow_everyone_to_speak">群组已被设置为所有人可发言</string>
+    <string name="group_only_moderators_can_speak">群组已被设置仅协调人可发言</string>
+    <string name="group_only_moderators_can_speak_tip">仅协调人可发言</string>
+    <string name="group_auto_remove_enabled">自动移除 30 天不活跃群成员设置 - 已开启</string>
+    <string name="group_auto_remove_disabled">自动移除 30 天不活跃群成员设置 - 已关闭</string>
+
+    <string name="group_moderators_title">群协调人</string>
+    <string name="group_transfer_owner">转让群主</string>
+    <string name="group_transfer_owner_tips">确定选择%1$s为新群主，你将自动放弃群主身份</string>
+    <string name="group_only_moderators_can_add">仅协调人可添加成员</string>
+    <string name="group_only_moderators_can_speak1">仅群主和协调人可发言</string>
+    <string name="group_enable_group_link">启用群邀请链接</string>
+    <string name="group_add_moderators">添加协调人</string>
+    <string name="group_remove_moderators">删除协调人</string>
+    <string name="group_become_new_moderator">%1$s已成为协调人</string>
+    <string name="group_been_removed_moderator">%1$s从群协调人中移除</string>
+    <string name="group_transferred_moderator">%1$s将群主身份移交给了%2$s</string>
+    <string name="group_members_view_all">查看全部</string>
+    <string name="group_members_collapse">收起</string>
+
+    <!-- Me -->
+    <string name="me_account">帐户</string>
+    <string name="me_privacy">安全和隐私</string>
+    <string name="me_advanced">高级</string>
+    <string name="me_about">关于</string>
+    <string name="me_logout">退出登录</string>
+    <string name="me_renew_identity_key">生成新密钥</string>
+    <string name="me_email">电子邮件</string>
+    <string name="me_phone_number">电话号码</string>
+    <string name="me_renew_identity_key_tips">您的设备上及好友的设备上历史消息将被清除，如果您有其他设备，他们将会登出，您需要重新链接。</string>
+    <string name="me_renew_identity_key_notify_tips">%1$s重置了密钥，历史消息被清除。</string>
+    <string name="me_logout_tips">安全起见，所有消息将被删除。</string>
+    <string name="me_logout_no_account_linked_tips">未绑定邮箱或手机号，继续操作将删除您的帐户。</string>
+    <string name="me_logout_continue">继续</string>
+    <string name="me_logout_tips_wea">您确定要退出登录吗？</string>
+    <string name="me_logout_ok">登出</string>
+    <string name="me_logout_cancel">取消</string>
+    <string name="me_renew_identity_key_generate">生成</string>
+    <string name="me_renew_identity_key_cancle">取消</string>
+    <string name="me_account_not_linked">未绑定</string>
+    <string name="me_delete_account">删除帐号</string>
+    <string name="me_delete_account_tips">如果您的账号90天没有活跃，我们将自动删除账号及所有数据，包括通讯录、群、消息等。您也可以按需重新注册。</string>
+    <string name="me_delete_account_tips1">这将彻底删除您在客户端和服务器上的所有数据，如您的个人资料、联系人和消息，它们将永远无法恢复。</string>
+    <string name="me_delete_account_tips2">要确认，请在下面的框中输入%1$s。</string>
+    <string name="me_delete">删除</string>
+    <string name="me_delete_dialog_title">删除账号</string>
+    <string name="me_delete_dialog_content">您的账号将被永久删除。</string>
+    <string name="me_delete_dialog_cancel">取消</string>
+    <string name="me_delete_dialog_ok">删除</string>
+    <string name="me_language">语言</string>
+    <string name="me_help">帮助与反馈</string>
+    <string name="me_share_contact">分享名片</string>
+    <string name="me_theme">主题</string>
+    <string name="me_theme_dark">深色</string>
+    <string name="me_theme_light">浅色</string>
+    <string name="me_theme_system">系统</string>
+    <string name="me_chat">聊天</string>
+    <string name="me_save_to_photos">保存至相册</string>
+    <string name="me_automatically_save_photos">自动将收到的照片和视频保存到“照片”中；机密模式下不保存。</string>
+
+    <!-- Contact profile setting-->
+    <string name="contact_profile_info">资料</string>
+    <string name="contact_profile_skip">跳过</string>
+    <string name="contact_profile_done">完成</string>
+    <string name="contact_profile_next">下一步</string>
+    <string name="contact_profile_signature">用个性签名留下你的印记</string>
+    <string name="contact_name">名字</string>
+    <string name="contact_signature">签名</string>
+
+    <string name="contact_profile_set_remark">设置备注</string>
+    <string name="contact_profile_remark">备注</string>
+    <string name="contact_profile_remark_save">保存</string>
+
+    <!-- MainActivity -->
+    <string name="not_granted_necessary_permissions">未获得必要的权限</string>
+    <string name="request_permissions_error">权限申请异常</string>
+    <string name="invalid_link">无效链接</string>
+    <string name="not_supported_link">不支持的链接。请升级客户端后重试。</string>
+    <string name="group_does_not_exist">此群组不存在。</string>
+    <string name="unsupported_file_type">不支持的文件类型</string>
+
+    <!-- Dial Activity -->
+    <string name="incomplete_dial_number">您拨打的号码不完整</string>
+    <string name="peer_not_online">对方尚未登录</string>
+
+    <!-- Calling Activity -->
+    <string name="receiving_call">来电&#8230;</string>
+    <string name="calling_out">呼叫中&#8230;</string>
+    <string name="calling">呼叫</string>
+    <string name="calling_ended">会议结束 %s</string>
+    <string name="media_encryption_enabled">媒体加密已启用</string>
+    <string name="call_operation_denied">操作被禁止</string>
+
+    <!-- Video Activity -->
+    <string name="message_wrong_number">错误的对方号码</string>
+    <string name="tip_waiting_for_answering">等待接听...</string>
+    <string name="tip_miss_call">错过来电。稍后再试</string>
+    <string name="tip_get_invite_call">邀请您进行语音通话</string>
+
+    <!-- Forward message -->
+    <string name="forwarded_message">转发消息</string>
+    <string name="forwarded_from">来自：</string>
+    <string name="group_chat_history">群聊记录</string>
+    <string name="chat_history">聊天记录</string>
+    <string name="chat_history_for">%s的聊天记录</string>
+    <string name="chat_select_dialog_close">关闭</string>
+    <string name="chat_select_dialog_multiple">多选</string>
+    <string name="select_chat">选择聊天</string>
+    <string name="select_contact">选择联系人</string>
+    <string name="chat_select_recent_chats">最近聊天</string>
+    <string name="chat_select_groups">群组</string>
+    <string name="chat_select_contacts">联系人</string>
+    <string name="chat_send_to">发送给:</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_sent">已发送</string>
+    <string name="chat_saved">已保存</string>
+    <string name="chat_received">接收</string>
+    <string name="chat_send_cancel">取消</string>
+    <string name="chat_leave_a_message">留言</string>
+    <string name="chat_re_edit">重新编辑</string>
+    <string name="chat_recall_tips">您确定要撤回信息吗？</string>
+    <string name="chat_recall_dialog_yes">是</string>
+    <string name="chat_recall_dialog_cancel">取消</string>
+
+    <string name="chat_pip_not_supported_message">设备不支持画中画模式</string>
+    <string name="chat_call_can_not_toggle_camera">相机服务不可用，请稍后再试！</string>
+
+    <string name="chat_call_canceled">呼叫已取消。</string>
+    <string name="chat_call_ended">呼叫已结束。</string>
+
+    <!--    invite-->
+    <string name="invite_link">邀请链接</string>
+    <string name="invite_with_this_OQ">用此QR或链接邀请</string>
+    <string name="invite_regenerate">重新生成</string>
+    <string name="invite_share">分享</string>
+    <string name="invite_enter_code">输入邀请码</string>
+    <string name="invite_my_code">我的邀请码</string>
+    <string name="invite_add_new_friend">添加新朋友</string>
+    <string name="invite_enter_code_to_add">输入邀请码添加朋友</string>
+    <string name="invite_copy_link">复制链接</string>
+    <string name="invite_cancel">取消</string>
+    <string name="invite_tips">在TempTalk上跟我聊天%s</string>
+    <string name="invite_regenerate_dialog_title">重新生成邀请码</string>
+    <string name="invite_regenerate_dialog_content">旧的邀请码将过期。您确定要继续吗？</string>
+    <string name="invite_regenerate_dialog_cancel">取消</string>
+    <string name="invite_regenerate_dialog_ok">重新生成</string>
+    <string name="invite_group_tips">%1$s 邀请你加入“%2$s”，点击加入群组：%3$s</string>
+    <string name="invite_invalid_invite_Code">无效的群组邀请链接。</string>
+    <string name="invite_link_invitation_is_disabled">加入群组失败。此群组已禁用邀请链接。</string>
+    <string name="invite_only_moderators">加入群组失败。此群组仅允许协调人邀请。</string>
+    <string name="invite_group_has_been_disbanded">加入群组失败。此群组已被解散。</string>
+    <string name="invite_group_is_invalid">加入群组失败。此群组无效。</string>
+    <string name="invite_ok">好的</string>
+    <!--    <string name="invite_enable_group_invite_link">%1$s invite_enable_group_invite_link</string>-->
+    <!--    <string name="invite_disable_group_invite_link">%1$s invite_disable_group_invite_link</string>-->
+    <!--    <string name="invite_enable_only_moderators">%1$s invite_enable_only_moderators</string>-->
+    <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
+    <string name="invite_only_moderators_can_add">此群组仅允许协调人邀请。</string>
+    <string name="invite_disabled_invite_link">此群组已禁用邀请链接。</string>
+    <string name="invite_code">%s邀请码</string>
+    <string name="invite_group_code">%s群邀请码</string>
+    <string name="invite_joined_at">%s加入</string>
+    <string name="invite_code_error_tips">邀请已满，请稍后重试！</string>
+
+    <!--    scan-->
+    <string name="scan_scan">扫描</string>
+    <string name="link_device">连接这个设备吗？</string>
+    <string name="link_device_tips">此设备将能够查看您的群组和联系人、读取您的所有消息并代表您发送消息。</string>
+    <string name="link_new_device">链接新设备</string>
+    <string name="link_device_cancel">取消</string>
+    <string name="chat_toast_already_on_a_call_zh">你已经在通话中</string>
+    <string name="chat_unable_to_call">无法呼叫</string>
+    <string name="chat_blocked_call_tips">由于其隐私设置，您不能呼叫 %s。</string>
+    <string name="chat_dialog_ok">确认</string>
+    <string name="chat_dialog_cancel">取消</string>
+
+    <string name="chat_answer_incoming_call">接受</string>
+    <string name="chat_decline_incoming_call">拒绝</string>
+    <string name="chat_turn_on_mic">打开</string>
+    <string name="chat_turn_off_mic">关闭</string>
+
+    <string name="search_title_recent">最近</string>
+    <string name="search_title_contacts">联系人</string>
+    <string name="search_title_group">群组</string>
+    <string name="search_chat_history">查找聊天内容</string>
+    <string name="search_messages_default_tips">输入关键词搜索</string>
+    <string name="search_related_messages">%d相关聊天记录</string>
+
+    <string name="chat_new_message">[新消息]</string>
+    <string name="unsupported_message_type">[不支持的消息类型]</string>
+    <string name="max_support_file_size_50">支持最大200M的文件</string>
+    <string name="all_messages_deleted">所有消息已被删除。</string>
+
+    <string name="chat_settings_mute">免打扰</string>
+    <string name="chat_action_unmute">取消免打扰</string>
+    <string name="chat_action_mute">免打扰</string>
+    <string name="action_to_turn_off">关闭</string>
+    <string name="action_to_turn_on">打开</string>
+    <string name="option_toggle_scheduled_meeting_for_this">此次会议</string>
+    <string name="option_toggle_scheduled_meeting_for_all">所有会议</string>
+    <string name="chat_label_host">主持人</string>
+    <string name="chat_make_host">转移主持人</string>
+    <string name="chat_end_meeting">结束会议</string>
+    <string name="chat_leave_meeting">离开会议</string>
+    <string name="switch_camera">切换相机</string>
+
+    <string name="app_sign_error_title">安全提示</string>
+    <string name="app_sign_error_tips">您当前安装的应用为非官方正版签名应用，请确认。</string>
+    <string name="emulator_risk_tips">您当前的设备是模拟器，可能会导致应用程序功能无法正常使用或产生安全风险，请确认。</string>
+    <string name="root_risk_tips">您当前设备已root，存在应用数据被第三方应用窃取的风险，请确认。</string>
+    <string name="url_risk_tips">不确定此链接是否安全，确认要打开么?\n</string>
+    <string name="url_click_open">打开</string>
+    <string name="url_click_cancel">取消</string>
+    <string name="url_risk_error_title">安全提示</string>
+
+    <string name="app_close_application">关闭应用</string>
+    <string name="app_ignore">忽略</string>
+
+    <string name="operation_successful">操作成功</string>
+    <string name="operation_failed">操作失败</string>
+
+    <string name="meeting_detail">会议详情</string>
+    <string name="in_meeting_number">参会人数(%d)</string>
+    <string name="meeting_joined">%s加入了会议</string>
+    <string name="meeting_detail_refresh">刷新</string>
+    <string name="non_participants_number">未参会人数(%d)</string>
+
+    <string name="tip">提示</string>
+    <string name="notification_no_permission_tip">应用没有显示通知的权限，您可以在系统设置中启用它。</string>
+    <string name="notification_no_permission_tip1">请允许%s显示通知，以便您能正常接收到消息和接听电话。</string>
+    <string name="notification_no_permission_tip2">请允许%s显示在锁屏页面上，以便您在设备锁定时接听电话。</string>
+    <string name="notification_no_permission_tip3">请确保开启通知及全屏通知功能，以便您能正常接收到消息和接听电话。</string>
+    <string name="notification_disturb_tip">“请勿打扰”已开启，您可能收不到通知。</string>
+    <string name="notification_no_google_tip">您的设备上没有谷歌服务，请保持开启后台连接，以便能正常接收到消息和接听电话。</string>
+    <string name="notification_ignore">稍后</string>
+    <string name="notification_go_to_settings">设置</string>
+    <string name="notification_title">通知</string>
+    <string name="notification_settings">通知</string>
+    <string name="notification_full_screen_settings">全屏通知</string>
+    <string name="notification_settings_open_fail">此设备没有通知设置页面</string>
+    <string name="notification_enable">已开启</string>
+    <string name="notification_disable">已关闭</string>
+    <string name="notification_display">显示</string>
+    <string name="notification_display_name_and_content">名字和内容</string>
+    <string name="notification_only_name">只显示名字</string>
+    <string name="notification_no_name_or_content">没有名字或者内容</string>
+    <string name="notification_received_message">您收到了一条消息。</string>
+    <string name="notification">通知</string>
+    <string name="notification_all">所有</string>
+    <string name="notification_mention_only">仅@</string>
+    <string name="notification_mention_only_description">只有被@时才会收到推送通知</string>
+    <string name="notification_off">关闭</string>
+    <string name="notification_content">通知内容</string>
+    <string name="notification_default_group_settings">群默认设置</string>
+    <string name="notification_default_setting">默认设置</string>
+    <string name="notification_change_default_setting_tip">通过\"我/通知/群默认设置\"更改默认通知设置。</string>
+    <string name="notification_update_default_group_setting">更新群默认设置</string>
+    <string name="notification_custom_settings">自定义设置</string>
+    <string name="notification_sounds">声音通知</string>
+    <string name="notification_message_sounds">消息提示音</string>
+    <string name="notification_message_notification">消息通知</string>
+
+    <string name="no_permission_camera_and_voice_tip">应用没有视频语音的权限，您可以在系统设置的应用权限设置中启用摄像头和麦克风权限。</string>
+    <string name="no_permission_voice_tip">应用没有语音的权限，您可以在系统设置的应用权限设置中启用麦克风权限。</string>
+    <string name="no_permission_camera_tip">应用没有相机的权限，您可以在系统设置的应用权限设置中启用相机权限。</string>
+    <string name="no_permission_picture_tip">应用没有图片媒体文件访问的权限，您可以在系统设置的应用权限设置中启用图片或存储访问权限。</string>
+
+    <string name="search_no_results_found">未找到结果</string>
+
+    <string name="download_started">附件下载已开始</string>
+    <string name="download_success">附件下载完成</string>
+    <string name="download_failed">下载失败，请重试</string>
+    <string name="download_downloading">下载中，请稍候…</string>
+
+
+    <string name="the_original_message_doesn_t_exist">原始消息不存在</string>
+
+
+    <string name="web_refresh">刷新</string>
+
+    <string name="members">成员</string>
+    <string name="meetings_action_start">发起</string>
+    <string name="meetings_action_invite">邀请</string>
+    <string name="invite_participants">邀请成员</string>
+    <string name="install_call_btn_add">添加</string>
+    <string name="add_participants">添加新成员</string>
+
+    <string name="MediaReviewFragment__add_a_message">添加消息</string>
+    <string name="DataAndStorageSettingsFragment__standard">标准</string>
+    <string name="DataAndStorageSettingsFragment__high">高</string>
+    <string name="MediaReviewFragment__video_set_to_high_quality">视频已设置为高清</string>
+    <string name="MediaReviewFragment__video_set_to_standard_quality">视频已设置为标清</string>
+    <string name="MediaReviewFragment__photo_set_to_high_quality">照片已设置为高清</string>
+    <string name="MediaReviewFragment__photo_set_to_standard_quality">照片已设置为标清</string>
+    <plurals name="MediaReviewFragment__items_set_to_high_quality">
+        <item quantity="other">%1$d 个项目已设置为高清</item>
+    </plurals>
+    <plurals name="MediaReviewFragment__items_set_to_standard_quality">
+        <item quantity="other">%1$d 个项目已设置为标清</item>
+    </plurals>
+    <string name="MediaReviewFragment__one_or_more_items_were_too_large">一个或多个项目过大</string>
+    <string name="MediaReviewFragment__one_or_more_items_were_invalid">一个或多个项目无效</string>
+    <string name="MediaReviewFragment__too_many_items_selected">选择的项目过多</string>
+    <string name="MediaReviewSelectedItem__tap_to_remove">点击移除</string>
+    <string name="MediaReviewSelectedItem__tap_to_select">点击选择</string>
+    <string name="MediaReviewImagePageFragment__discard">放弃</string>
+    <string name="MediaReviewImagePageFragment__discard_changes">要放弃更改吗？</string>
+    <string name="MediaReviewImagePageFragment__youll_lose_any_changes">您将会丢失对这张照片所做的任何更改。</string>
+    <plurals name="ConversationFragment_saving_n_attachments">
+        <item quantity="other">正在保存 %1$d 附件</item>
+    </plurals>
+    <plurals name="ConversationFragment_saving_n_attachments_to_sd_card">
+        <item quantity="other">正在保存 %1$d 附件到存储…</item>
+    </plurals>
+    <string name="StorageUtil__s_s">%1$s/%2$s</string>
+    <plurals name="ConversationFragment_error_while_saving_attachments_to_sd_card">
+        <item quantity="other">保存附件到存储时出错！</item>
+    </plurals>
+    <string name="SaveAttachmentTask_saved_to_album">已保存到系统相册</string>
+    <string name="SaveAttachmentTask_saved_to_audio">已保存到系统音频文件夹</string>
+    <string name="SaveAttachmentTask_saved_to_downloads">已保存到系统下载文件夹</string>
+    <string name="ConversationFragment_unable_to_write_to_sd_card_exclamation">存储无法写入！</string>
+    <string name="ConversationFragment_save_to_sd_card">保存到存储？</string>
+    <plurals name="ConversationFragment_saving_n_media_to_storage_warning">
+        <item quantity="other">保存 %1$d 个媒体至内部存储之后，可供设备上的其他应用访问。\n\n是否继续？</item>
+    </plurals>
+    <string name="ImageEditorHud__cancel">取消</string>
+    <string name="ImageEditorHud__draw">绘画</string>
+    <string name="ImageEditorHud__write_text">编写文本</string>
+    <string name="ImageEditorHud__add_a_sticker">添加贴纸</string>
+    <string name="ImageEditorHud__blur">模糊</string>
+    <string name="ImageEditorHud__done_editing">完成编辑</string>
+    <string name="ImageEditorHud__clear_all">全部清除</string>
+    <string name="ImageEditorHud__undo">撤消</string>
+    <string name="ImageEditorHud__toggle_between_marker_and_highlighter">在马克笔和高亮笔之间切换</string>
+    <string name="ImageEditorHud__toggle_between_text_styles">切换文本样式</string>
+    <string name="ImageEditorHud_blur_faces">面部模糊</string>
+    <string name="ImageEditorHud_new_blur_faces_or_draw_anywhere_to_blur">新功能：在脸部或任意位置涂抹，可实现模糊效果</string>
+    <string name="ImageEditorHud_draw_anywhere_to_blur">任意位置涂抹实现模糊效果</string>
+    <string name="ImageEditorHud_draw_to_blur_additional_faces_or_areas">涂抹更多脸部或区域进行模糊</string>
+
+    <string name="QualitySelectorBottomSheetDialog__standard">标准\n速度更快，数据更少</string>
+    <string name="QualitySelectorBottomSheetDialog__high">高\n速度更慢，数据更多</string>
+    <string name="QualitySelectorBottomSheetDialog__media_quality">媒体质量</string>
+
+    <string name="call_invite">邀请您进行语音通话</string>
+    <string name="call_invite_of_group">邀请您加入会议</string>
+    <string name="call_not_now">稍后处理</string>
+    <string name="call_reject">拒绝</string>
+    <string name="call_join">加入</string>
+    <string name="call_accept">接受</string>
+    <string name="call_is_calling_tip">当前正在通话中，挂断当前通话后即可接听。</string>
+
+    <string name="file_load_error">加载失败</string>
+    <string name="battery_optimizations_tips">请允许%s保持后台运行，以便于能够接收到消息和会议通知。</string>
+    <string name="connecting">连接中…</string>
+
+    <string name="activate_device_title">激活设备</string>
+    <string name="activate_device_tips">由于您的设备长时间未使用，为确保账户安全，已暂时禁用并清除未接收的消息。请激活设备恢复使用。</string>
+    <string name="activate_device">立即激活</string>
+    <string name="activate_device_success">设备已激活</string>
+
+    <string name="background_connection">后台连接</string>
+    <string name="background_connection_enabled">后台连接已启用</string>
+    <string name="background_connection_tips">保持TempTalk低影响后台连接以获得可靠的通知。</string>
+
+    <string name="disappearing_messages">倒计时</string>
+    <string name="disappearing_messages_notify_content">以下消息将在阅读后的 %1$s 内被删除。</string>
+    <string name="disappearing_messages_tips">消息在被阅读后会自动过期，它们将会被删除，无法以任何方式查看。</string>
+    <string name="disappearing_messages_not_archive">不自动过期</string>
+    <string name="group_disband_tips">此群组的数据将被删除，群组中的所有成员也将同时被移除。</string>
+    <string name="chat_group_in_common">共同群组</string>
+    <string name="contact_blocked_tips">操作被拒绝。你们还不是朋友。</string>
+
+    <!-- Chat Archive Settings -->
+    <string name="chat_archive_extend_time_title">延长时间设置？</string>
+    <string name="chat_archive_extend_time_message">你正在延长会话的消息销毁时长。请注意：此前已被销毁的消息无法恢复。</string>
+    <string name="chat_archive_shorten_time_title">缩短时间设置？</string>
+    <string name="chat_archive_shorten_time_message">你正在缩短会话的消息销毁时长。可能更多历史消息被销毁且无法恢复，该操作将同步至你所有设备。</string>
+    <string name="chat_archive_messages_expired">之前消息已过期</string>
+
+</resources>

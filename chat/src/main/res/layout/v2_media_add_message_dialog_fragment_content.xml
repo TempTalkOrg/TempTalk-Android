@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+
+    <!--    <org.thoughtcrime.securesms.components.ComposeText-->
+    <!--        android:id="@+id/add_a_message_input"-->
+    <!--        android:layout_width="0dp"-->
+    <!--        android:layout_height="wrap_content"-->
+    <!--        android:layout_marginTop="8dp"-->
+    <!--        android:layout_marginBottom="8dp"-->
+    <!--        android:background="@null"-->
+    <!--        android:hint="@string/MediaReviewFragment__add_a_message"-->
+    <!--        android:imeOptions="flagNoEnterAction"-->
+    <!--        android:inputType="textAutoCorrect|textCapSentences|textMultiLine"-->
+    <!--        android:maxLength="65536"-->
+    <!--        android:maxLines="3"-->
+    <!--        android:minHeight="@dimen/conversation_compose_height"-->
+    <!--        android:paddingEnd="10dp"-->
+    <!--        android:textAppearance="@style/TT.Text.Body"-->
+    <!--        android:textColor="@color/colorOnSurface"-->
+    <!--        app:layout_constraintBottom_toTopOf="@id/emoji_drawer_stub"-->
+    <!--        app:layout_constraintEnd_toStartOf="@id/view_once_toggle"-->
+    <!--        app:layout_constraintStart_toEndOf="@id/emoji_toggle"-->
+    <!--        app:layout_constraintTop_toTopOf="@id/input_barrier"-->
+    <!--        app:layout_goneMarginEnd="6dp"-->
+    <!--        app:layout_goneMarginStart="12dp" />-->
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg1"
+        android:paddingVertical="16dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <androidx.appcompat.widget.AppCompatEditText
+            android:id="@+id/add_a_message_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/chat_msg_input_bg"
+            android:ellipsize="end"
+            android:gravity="center_vertical"
+            android:hint="@string/MediaReviewFragment__add_a_message"
+            android:maxLines="3"
+            android:minHeight="48dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:textColor="@color/t.primary"
+            android:textColorHint="@color/t.disable"
+            android:textSize="16sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/confirm_button"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/confirm_button"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="2dp"
+            android:padding="6dp"
+            app:layout_constraintBottom_toBottomOf="@+id/add_a_message_input"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/add_a_message_input"
+            app:srcCompat="@drawable/v2_media_add_a_message_check" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>

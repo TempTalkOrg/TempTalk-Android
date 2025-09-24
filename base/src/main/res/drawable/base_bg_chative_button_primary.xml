@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:color="@color/bg.primary.clicked"
+    tools:ignore="ResourceName">
+    <item>
+        <selector>
+            <item android:state_enabled="false">
+                <shape>
+                    <corners android:radius="8dp" />
+                    <solid android:color="@color/bg.disable" />
+                </shape>
+            </item>
+
+            <item>
+                <shape>
+                    <solid android:color="@color/primary" />
+                    <corners android:radius="8dp" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

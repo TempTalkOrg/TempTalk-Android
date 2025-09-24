@@ -1,0 +1,251 @@
+package com.difft.android.login
+
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.text.InputType
+import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.widget.doOnTextChanged
+import com.difft.android.base.BaseActivity
+import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.dp
+import com.difft.android.login.databinding.ActivityBindAccountBinding
+import com.difft.android.login.repo.BindRepo
+import com.difft.android.login.ui.CountryPickerActivity
+import com.difft.android.base.widget.setTopMargin
+import com.google.i18n.phonenumbers.PhoneNumberUtil
+import com.hi.dhl.binding.viewbind
+import com.kongzue.dialogx.dialogs.MessageDialog
+import dagger.hilt.android.AndroidEntryPoint
+import java.util.Locale
+import javax.inject.Inject
+
+@AndroidEntryPoint
+class BindAccountActivity : BaseActivity() {
+
+    companion object {
+        const val INTENT_EXTRA_TYPE = "INTENT_EXTRA_TYPE"
+
+        const val TYPE_BIND_EMAIL = "TYPE_BIND_EMAIL"
+        const val TYPE_CHANGE_EMAIL = "TYPE_CHANGE_EMAIL"
+        const val TYPE_BIND_PHONE = "TYPE_BIND_PHONE"
+        const val TYPE_CHANGE_PHONE = "TYPE_CHANGE_PHONE"
+
+        fun startActivity(activity: Context, type: String) {
+            val intent = Intent(activity, BindAccountActivity::class.java).apply {
+                putExtra(INTENT_EXTRA_TYPE, type)
+            }
+            activity.startActivity(intent)
+        }
+    }
+
+    private val mBinding: ActivityBindAccountBinding by viewbind()
+
+    @Inject
+    lateinit var bindRepo: BindRepo
+
+    private val activityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode != Activity.RESULT_CANCELED) {
+            finish()
+        }
+    }
+
+    private val type: String by lazy {
+        intent.getStringExtra(INTENT_EXTRA_TYPE) ?: ""
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        initView()
+    }
+
+    private val countryPickerActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == Activity.RESULT_OK) {
+            val code = it.data?.getStringExtra("code")
+            mBinding.tvPhoneCode.text = code
+        }
+    }
+
+    private fun initView() {
+        mBinding.ibBack.setOnClickListener { finish() }
+//        mBinding.skip.setOnClickListener { showSkipDialog() }
+
+        when (type) {
+            TYPE_BIND_EMAIL -> {
+                mBinding.loginTitle.text = getString(R.string.login_bind_email)
+                mBinding.account.hint = getString(R.string.login_new_email)
+                mBinding.account.inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            }
+
+            TYPE_CHANGE_EMAIL -> {
+                mBinding.loginTitle.text = getString(R.string.login_change_email)
+                mBinding.account.hint = getString(R.string.login_new_email)
+                mBinding.account.inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            }
+
+            TYPE_BIND_PHONE -> {
+                mBinding.loginTitle.text = getString(R.string.login_bind_phone_number)
+                mBinding.account.hint = getString(R.string.login_new_phone_number)
+                mBinding.account.inputType = InputType.TYPE_CLASS_PHONE
+                mBinding.clPhone.visibility = View.VISIBLE
+                mBinding.tvPhoneCode.text = getDefaultCountryCode()
+            }
+
+            TYPE_CHANGE_PHONE -> {
+                mBinding.loginTitle.text = getString(R.string.login_change_phone_number)
+                mBinding.account.hint = getString(R.string.login_new_phone_number)
+                mBinding.account.inputType = InputType.TYPE_CLASS_PHONE
+                mBinding.clPhone.visibility = View.VISIBLE
+                mBinding.tvPhoneCode.text = getDefaultCountryCode()
+            }
+        }
+
+        mBinding.clPhone.setOnClickListener {
+            val intent = Intent(this, CountryPickerActivity::class.java)
+            countryPickerActivityLauncher.launch(intent)
+        }
+
+        disableHandleZone()
+        mBinding.account.doOnTextChanged { text, _, _, _ ->
+            val content = text.toString().trim()
+            if (content.isEmpty()) disableHandleZone() else enableHandleZone()
+        }
+        mBinding.handleZone.setOnClickListener {
+            verifyAccount(null)
+        }
+    }
+
+    private fun getDefaultCountryCode(): String {
+        val defaultRegion = Locale.getDefault().country
+        val phoneNumberUtil = PhoneNumberUtil.getInstance()
+        val countryCode = phoneNumberUtil.getCountryCodeForRegion(defaultRegion)
+        return "+$countryCode"
+    }
+
+    private fun disableHandleZone() =
+        mBinding.apply {
+            handleZone.isEnabled = false
+            animationView.visibility = View.GONE
+            nextText.visibility = View.VISIBLE
+            nextText.setTextColor(ContextCompat.getColor(this@BindAccountActivity, com.difft.android.base.R.color.t_disable))
+        }
+
+    private fun enableHandleZone() =
+        mBinding.apply {
+            handleZone.isEnabled = true
+            animationView.visibility = View.GONE
+            nextText.visibility = View.VISIBLE
+            nextText.setTextColor(ContextCompat.getColor(this@BindAccountActivity, com.difft.android.base.R.color.t_white))
+        }
+
+    private fun loadingHandleZone() =
+        mBinding.apply {
+            handleZone.isEnabled = true
+            animationView.visibility = View.VISIBLE
+            nextText.visibility = View.GONE
+        }
+
+    private fun verifyAccount(nonce: String?) {
+        val account = mBinding.account.text.toString().trim()
+        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+//        viewModel.verifyEmail(basicAuth, email)
+
+        loadingHandleZone()
+
+        if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
+            bindRepo.verifyEmail(basicAuth, account, nonce)
+                .compose(RxUtil.getSingleSchedulerComposer())
+                .to(RxUtil.autoDispose(this))
+                .subscribe({
+                    enableHandleZone()
+                    if (it.status == 0) {
+                        val bundle = VerifyCodeActivity.createBundle(false, type, account, nonce)
+                        activityLauncher.launch(Intent(this@BindAccountActivity, VerifyCodeActivity::class.java).putExtras(bundle))
+                    } else {
+                        if (it.status == 24) {
+                            it.data?.nonce?.let { nonce ->
+                                showAlreadyLinkedDialog(nonce)
+                            } ?: {
+                                showInvalidView("Nonce is null")
+                            }
+                        } else {
+                            showInvalidView(it.reason)
+                        }
+                    }
+                }, {
+                    it.printStackTrace()
+                    enableHandleZone()
+                    showInvalidView(it.message)
+                })
+        } else {
+            val countryCode = mBinding.tvPhoneCode.text.toString().trim()
+            val fullAccount = countryCode + account
+            bindRepo.verifyPhone(basicAuth, fullAccount, nonce)
+                .compose(RxUtil.getSingleSchedulerComposer())
+                .to(RxUtil.autoDispose(this))
+                .subscribe({
+                    enableHandleZone()
+                    if (it.status == 0) {
+                        val bundle = VerifyCodeActivity.createBundle(false, type, fullAccount, nonce)
+                        activityLauncher.launch(Intent(this@BindAccountActivity, VerifyCodeActivity::class.java).putExtras(bundle))
+                    } else {
+                        if (it.status == 10109) {
+                            it.data?.nonce?.let { nonce ->
+                                showAlreadyLinkedDialog(nonce)
+                            } ?: {
+                                showInvalidView("Nonce is null")
+                            }
+                        } else {
+                            showInvalidView(it.reason)
+                        }
+                    }
+                }, {
+                    it.printStackTrace()
+                    enableHandleZone()
+                    showInvalidView(it.message)
+                })
+        }
+    }
+
+    private fun showInvalidView(errorMessage: String?) {
+        mBinding.clAccount.background = ResUtils.getDrawable(R.drawable.login_account_error_border)
+        if (!errorMessage.isNullOrEmpty()) {
+            mBinding.errorHint.text = errorMessage
+            mBinding.errorHint.visibility = View.VISIBLE
+            mBinding.handleZone.setTopMargin(20.dp)
+        } else {
+            mBinding.errorHint.visibility = View.GONE
+            mBinding.handleZone.setTopMargin(16.dp)
+        }
+    }
+
+    private fun showAlreadyLinkedDialog(nonce: String) {
+        if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
+            MessageDialog.show(
+                R.string.login_email_already_linked,
+                R.string.login_email_already_linked_tips,
+                com.difft.android.chat.R.string.chat_dialog_ok,
+                com.difft.android.chat.R.string.chat_dialog_cancel
+            ).setOkButton { _, _ ->
+                verifyAccount(nonce)
+                false
+            }
+        } else {
+            MessageDialog.show(
+                R.string.login_phone_number_already_linked,
+                R.string.login_phone_number_already_linked_tips,
+                com.difft.android.chat.R.string.chat_dialog_ok,
+                com.difft.android.chat.R.string.chat_dialog_cancel
+            ).setOkButton { _, _ ->
+                verifyAccount(nonce)
+                false
+            }
+        }
+    }
+
+}

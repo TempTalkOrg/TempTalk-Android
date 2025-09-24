@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_index_activity_chat_active" android:state_selected="true" />
+    <item>
+        <bitmap android:src="@drawable/ic_index_activity_chat_default" android:tint="@color/icon" />
+    </item>
+</selector>

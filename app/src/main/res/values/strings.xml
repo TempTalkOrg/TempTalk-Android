@@ -1,0 +1,105 @@
+<resources>
+    <!--    settings-->
+    <string name="settings_privacy_setting_title">Privacy</string>
+    <string name="settings_privacy_find_me">METHODS FOR FINDING ME</string>
+    <string name="settings_privacy_phone">Phone Number</string>
+    <string name="settings_privacy_email">Email</string>
+    <string name="settings_security">SECURITY</string>
+    <string name="settings_screen_lock">Screen lock</string>
+    <string name="settings_screen_lock_timeout">Timeout</string>
+    <string name="settings_screen_lock_timeout_instant">Instant</string>
+    <string name="settings_screen_lock_tips">Unlock screen using a passcode. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to %s. It also prevents content previews from appearing in the app switcher.</string>
+    <string name="settings_passcode_tips">Enter a passcode (4–10 digits).\nYou will be asked to enter this passcode the next time you unlock %s</string>
+    <string name="settings_passcode_confirm_again">Please enter again to confirm your passcode.</string>
+    <string name="settings_passcode_confirm">Confirm</string>
+    <string name="settings_passcode_error_tips">Passcode does not match.</string>
+    <string name="settings_passcode_success">Success!</string>
+    <string name="settings_passcode_success_tips">Safely save this code.</string>
+    <string name="settings_passcode_forget_tips">If you forget your passcode, you’ll need to log out or reinstall the app.</string>
+    <string name="settings_passcode_got_it">I understand</string>
+
+    <string name="settings_new_key_tips">%sAll your data, including messages, are encrypted with this key.</string>
+    <string name="settings_new_key_time_info">🔐 %s\n</string>
+    <string name="settings_new_key_times_limit_tips">Too many attempts. Please try again later.</string>
+    <string name="settings_new_key_time_format">MMM d, yyyy HH:mm:ss</string>
+
+    <string name="settings_about">About</string>
+    <string name="settings_contact_ID">UID</string>
+    <string name="settings_information">INFORMATION</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_build_version">Build Version</string>
+    <string name="settings_build_time">Build Time</string>
+    <string name="settings_check_new_version">Check New Version</string>
+    <string name="settings_obtain_desktop_version">Join Desktop App</string>
+
+    <string name="settings_version_is_latest">The current version is the latest version</string>
+    <string name="settings_new_version_found">A new version found</string>
+    <string name="settings_dialog_ok">OK</string>
+    <string name="settings_dialog_cancel">Cancel</string>
+    <string name="settings_dialog_update">Update</string>
+
+    <string name="settings_logout">Logout</string>
+
+    <string name="settings_logging">LOGGING</string>
+    <string name="settings_submit_debug_log">Submit Debug Log</string>
+    <string name="settings_submit_debug_log_by_es">Submit directly</string>
+    <string name="settings_submit_debug_log_by_app">Submit via %s</string>
+    <string name="settings_submit_debug_log_by_other">Submit via other methods</string>
+    <string name="settings_handle_log_fail">Log upload failed, please try again</string>
+    <string name="settings_handle_log_success">Log upload successful</string>
+
+    <!--    search-->
+    <!--    <string name="search_messages_default_tips">Enter keywords to search messages</string>-->
+    <!--    <string name="search_users_default_tips">Enter email or phone number to search users</string>-->
+    <string name="search_user">Search User:</string>
+    <string name="search_result_dialog_title">Unable to find</string>
+    <string name="search_result_dialog_content">%s does not exist</string>
+    <string name="search_result_dialog_invite">Invite</string>
+    <string name="search_result_dialog_cancel">Cancel</string>
+    <string name="search_no_results_found">No results found</string>
+    <string name="search_view_more">View More</string>
+    <string name="search_more_contacts">More Contacts</string>
+    <string name="search_more_groups">More Groups</string>
+    <string name="search_more_messages">More Messages</string>
+    <string name="search_result_inclued">Include: %s</string>
+
+    <string name="deeplink_meeting">Meeting</string>
+    <string name="indicator_meetings">Calendar</string>
+
+    <string name="language_restart_required">Restart Required</string>
+    <string name="language_restart_tips">The language change will take effect after you restart the app.</string>
+    <string name="language_restart_later">Later</string>
+    <string name="language_restart">Restart</string>
+
+    <string name="status_upgrade_downolad_failed">Update package download failed</string>
+    <string name="status_upgrade_downloading">Update package is downloading in the background</string>
+    <string name="status_upgrade_install_failed">Update package install failed</string>
+    <string name="status_upgrade_filename_error">File name contains illegal characters</string>
+    <string name="status_upgrade_download_success">Update package downloaded successfully. Do you want to install it?</string>
+    <string name="status_upgrade_title">Update tip</string>
+    <string name="status_upgrade_button_install">Install</string>
+    <string name="status_upgrade_button_cancle">Cancel</string>
+    <string name="status_upgrade_verify_failed">Update package security verification failed</string>
+    <string name="status_upgrade_param_exception">Update package parameter exception</string>
+
+
+    <string name="hours_plural">%d hrs</string>
+    <string name="hour_singular">1 hr</string>
+    <string name="minutes_plural">%d mins</string>
+    <string name="minute_singular">1 min</string>
+    <string name="hours_minutes">%1$d hrs %2$d mins</string>
+    <string name="today">Today</string>
+    <string name="migrating_data_please_wait">Migrating data, please wait...</string>
+
+    <string name="me_text_size">Text Size</string>
+    <string name="me_text_size_default">Default</string>
+    <string name="me_text_size_lage">Large</string>
+
+    <!-- Database Recovery -->
+    <string name="database_recovery_title">Database Recovery</string>
+    <string name="database_recovery_progress">Recovering database, please wait… %d%%</string>
+    <string name="database_recovery_failed">Database recovery failed，please log in again.</string>
+    <string name="database_recovery_retry_tip">Database recovery failed. The app will restart to try again. (%d/3)</string>
+
+    <string name="leak_canary_test_class_name">assertk.Assert</string>
+</resources>

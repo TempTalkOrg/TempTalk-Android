@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.Chative" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@android:color/transparent</item>
+        <item name="colorPrimaryVariant">@android:color/transparent</item>
+        <item name="colorOnPrimary">@android:color/transparent</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@android:color/transparent</item>
+        <item name="colorSecondaryVariant">@android:color/transparent</item>
+        <item name="colorOnSecondary">@android:color/transparent</item>
+        <!-- Status bar color. -->
+        <item name="android:windowBackground">@color/bg1</item>
+        <item name="android:statusBarColor">@color/bg1</item>
+        <item name="android:navigationBarColor">@color/bg1</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
+        <!-- Customize your theme here. -->
+    </style>
+    <declare-styleable name="ChativeButton" tools:ignore="ResourceName">
+        <attr name="android:text" />
+        <attr name="type" format="enum">
+            <enum name="primary" value="0" />
+            <enum name="secondary" value="1" />
+        </attr>
+        <attr name="isLoading" format="boolean" />
+        <attr name="lottie_fileName" />
+        <attr name="android:textSize" />
+        <attr name="android:enabled" />
+    </declare-styleable>
+
+    <style name="CustomBottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
+    </style>
+
+    <style name="CustomBottomSheetStyle" parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@color/bg1</item>
+    </style>
+
+    <declare-styleable name="RuleEditText">
+        <attr name="rule" format="flags|string">
+            <flag name="none" value="0x0000001" />
+            <flag name="not_empty" value="0x00000010" />
+            <flag name="email" value="0x000000100" />
+            <flag name="password" value="0x000001000" />
+            <flag name="mobile" value="0x00010000" />
+            <flag name="referral" value="0x00100000" />
+        </attr>
+    </declare-styleable>
+    <declare-styleable name="EditableTextView">
+        <attr name="clearable" format="boolean" />
+    </declare-styleable>
+    <declare-styleable name="uikit_verify_code">
+        <attr name="verifyTitle" format="string" />
+        <attr name="hideInput" format="boolean" />
+        <attr name="canDirectInput" format="boolean" />
+    </declare-styleable>
+    <declare-styleable name="VerificationCodeView">
+        <attr name="codeLength" format="integer" />
+        <attr name="boxSize" format="dimension" />
+        <attr name="spacing" format="dimension" />
+        <attr name="boxColor" format="color" />
+    </declare-styleable>
+
+    <style name="Text_Headline1">
+        <item name="android:textSize">28sp</item>
+    </style>
+
+    <style name="Text_Headline1.H40">
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Text_Headline2">
+        <item name="android:textSize">24sp</item>
+    </style>
+
+    <style name="Text_Headline2.H34">
+        <item name="android:layout_height">34dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Text_Headline3">
+        <item name="android:textSize">20sp</item>
+    </style>
+
+    <style name="Text_Headline3.H28">
+        <item name="android:layout_height">28dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Text_Headline4">
+        <item name="android:textSize">18sp</item>
+    </style>
+
+
+    <style name="Text_Headline4.H28">
+        <item name="android:layout_height">28dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+
+    <style name="Text_Subtitle">
+        <item name="android:textSize">18sp</item>
+    </style>
+
+    <style name="Text_SubtitleBold">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Text_Subtitle1">
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Text_Subtitle1Bold">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Text_Subtitle1.H24">
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+</resources>

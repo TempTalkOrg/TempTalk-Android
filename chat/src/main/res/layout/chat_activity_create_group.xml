@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".group.CreateGroupActivity">
+
+    <RelativeLayout
+        android:id="@+id/title_container"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/ib_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="@null"
+            android:src="@mipmap/chat_tabler_arrow_left"
+            android:tint="@color/t.primary" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="18dp"
+            android:layout_toEndOf="@id/ib_back"
+            android:lineSpacingExtra="4sp"
+            android:text="@string/new_group"
+            android:textColor="@color/t.primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/create_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/create_group_button"
+            android:textColor="@color/t.primary"
+            android:textSize="18sp" />
+    </RelativeLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_group_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="12dp"
+        app:layout_constraintTop_toBottomOf="@id/title_container">
+
+        <com.difft.android.chat.common.GroupAvatarView
+            android:id="@+id/group_avatar"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:src="@mipmap/chat_create_group_default_icon"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <EditText
+            android:id="@+id/group_name_edit"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:background="@null"
+            android:hint="@string/create_group_input_hint"
+            android:inputType="text"
+            android:lineSpacingExtra="3dp"
+            android:lines="1"
+            android:maxLength="64"
+            android:minHeight="48dp"
+            android:textColor="@color/t.primary"
+            android:textColorHint="@color/t.disable"
+            android:textSize="18sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/group_avatar"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+    <!--        <androidx.core.widget.NestedScrollView-->
+    <!--            android:layout_width="match_parent"-->
+    <!--            android:layout_height="0dp"-->
+    <!--            android:layout_marginTop="10dp"-->
+    <!--            app:layout_constraintBottom_toBottomOf="parent"-->
+    <!--            app:layout_constraintEnd_toEndOf="parent"-->
+    <!--            app:layout_constraintStart_toStartOf="parent"-->
+    <!--            app:layout_constraintTop_toBottomOf="@id/group_avatar">-->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/cl_group_info">
+
+        <View
+            android:id="@+id/divider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="16dp"
+            android:background="@color/line"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/to_add_members" />
+
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_search"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingBottom="8dp"
+            app:layout_constraintTop_toBottomOf="@+id/to_add_members">
+
+            <androidx.appcompat.widget.AppCompatEditText
+                android:id="@+id/edittext_search_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:background="@drawable/search_input_bg_search_input"
+                android:drawableStart="@drawable/search_input_ic_search_input"
+                android:drawablePadding="6dp"
+                android:hint="@string/search_default_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:lines="1"
+                android:paddingStart="12dp"
+                android:paddingEnd="40dp"
+                android:textColor="@color/t.primary"
+                android:textColorHint="@color/t.disable"
+                android:textSize="14sp"
+                app:drawableTint="@color/icon"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+            </androidx.appcompat.widget.AppCompatEditText>
+
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/button_clear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:background="@null"
+                android:src="@drawable/search_input_ic_search_clear"
+                android:tint="@color/t.secondary"
+                app:layout_constraintBottom_toBottomOf="@+id/edittext_search_input"
+                app:layout_constraintEnd_toEndOf="@+id/edittext_search_input"
+                app:layout_constraintTop_toTopOf="@+id/edittext_search_input" />
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_contact_title"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:gravity="center_vertical"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:text="@string/search_title_contacts"
+            android:textColor="@color/t.primary"
+            android:textSize="14sp"
+            app:layout_constraintTop_toBottomOf="@id/cl_search" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerview_contacts"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scrollbars="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tv_contact_title"
+            tools:listitem="@layout/chat_item_group_member" />
+
+    </LinearLayout>
+    <!--    </androidx.core.widget.NestedScrollView>-->
+
+</androidx.constraintlayout.widget.ConstraintLayout>

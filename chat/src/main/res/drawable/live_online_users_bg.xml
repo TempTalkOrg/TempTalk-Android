@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?><!-- res/drawable/textview_border.xml -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 背景透明 -->
+    <item>
+        <shape>
+            <solid android:color="@android:color/transparent" />
+            <corners
+                android:bottomLeftRadius="2dp"
+                android:bottomRightRadius="2dp"
+                android:topLeftRadius="2dp"
+                android:topRightRadius="2dp" />
+        </shape>
+    </item>
+    <!-- 右邊、上邊和下邊的線 -->
+    <item>
+        <shape>
+            <solid android:color="@android:color/transparent" />
+            <corners
+                android:bottomLeftRadius="0dp"
+                android:bottomRightRadius="2dp"
+                android:topLeftRadius="0dp"
+                android:topRightRadius="2dp" />
+            <stroke
+                android:width="2dp"
+                android:bottom="2dp"
+                android:color="@color/t.error"
+                android:left="0dp"
+                android:right="2dp"
+                android:top="2dp" />
+        </shape>
+    </item>
+</layer-list>

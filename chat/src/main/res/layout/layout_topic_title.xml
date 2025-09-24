@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="44dp"
+    android:background="@color/bg1"
+    android:orientation="horizontal"
+    android:visibility="gone"
+    app:layout_constraintTop_toTopOf="parent">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/ib_topic_back"
+        android:layout_width="44dp"
+        android:layout_height="match_parent"
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true"
+        android:background="@null"
+        android:padding="15dp"
+        android:src="@drawable/chat_icon_close"
+        android:tint="@color/icon" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_topic_title"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="12dp"
+        android:layout_toEndOf="@id/ib_topic_back"
+        android:ellipsize="end"
+        android:gravity="center_vertical"
+        android:lineSpacingExtra="4sp"
+        android:lines="1"
+        android:textColor="@color/t.primary"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        tools:text="Topic title" />
+</RelativeLayout>

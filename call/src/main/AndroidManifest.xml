@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application>
+        <activity
+            android:name=".LCallActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:resizeableActivity="true"
+            android:showOnLockScreen="true"
+            android:supportsPictureInPicture="true"
+            android:taskAffinity="com.difft.android.call.task"
+            android:theme="@style/Theme.Livekitandroid.NoActionBar" />
+
+        <service
+            android:name=".service.ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback|camera|microphone" />
+
+    </application>
+
+</manifest>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/transfer_host_item"
+        android:title="Make host" />
+    <item
+        android:id="@+id/mute_someone_item"
+        android:title="Mute" />
+
+    <item
+        android:id="@+id/blur_my_video_item"
+        android:title="Blur background" />
+
+    <item
+        android:id="@+id/cancel_host_item"
+        android:title="Cancel" />
+
+</menu>

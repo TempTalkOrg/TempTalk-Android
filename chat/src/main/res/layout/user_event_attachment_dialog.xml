@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/rounded_background"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="24dp"
+    android:paddingEnd="24dp">
+
+    <TextView
+        android:layout_width="72dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="sans-serif"
+        android:text="@string/event_label_title"
+        android:textColor="@color/t.primary"
+        android:textSize="14sp"
+        android:textStyle="normal" />
+
+
+    <EditText
+        android:id="@+id/nameEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/event_edittext_popup_background"
+        android:fontFamily="sans-serif"
+        android:hint="@string/event_attachment_hint_enter_a_name"
+        android:inputType="text"
+        android:lineHeight="20sp"
+        android:paddingLeft="12dp"
+        android:paddingTop="10dp"
+        android:paddingRight="12dp"
+        android:paddingBottom="10dp"
+        android:textColor="@color/t.primary"
+        android:textColorHint="@color/t.disable"
+        android:textSize="14sp" />
+
+
+    <TextView
+        android:layout_width="72dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="sans-serif"
+        android:lineHeight="16sp"
+        android:text="@string/event_label_link"
+        android:textColor="@color/t.primary"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/urlEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/event_edittext_popup_background"
+        android:fontFamily="sans-serif"
+        android:hint="@string/event_attachment_hint_paste_url_here"
+        android:inputType="text"
+        android:paddingLeft="12dp"
+        android:paddingTop="10dp"
+        android:paddingRight="12dp"
+        android:paddingBottom="10dp"
+        android:textColor="@color/t.primary"
+        android:textColorHint="@color/t.disable"
+        android:textSize="14sp" />
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="right"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginTop="24dp"
+            android:layout_marginEnd="24dp"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:letterSpacing="0.089"
+            android:lineSpacingExtra="2sp"
+            android:text="@string/meetings_action_cancel"
+            android:textAllCaps="true"
+            android:textColor="@color/t.info"
+            android:textSize="14sp"
+            android:textStyle="normal" />
+
+        <TextView
+            android:id="@+id/submitButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginTop="24dp"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:letterSpacing="0.089"
+            android:lineSpacingExtra="2sp"
+            android:text="@string/meetings_action_save"
+            android:textAllCaps="true"
+            android:textColor="@color/t.info"
+            android:textSize="14sp"
+            android:textStyle="normal" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+</LinearLayout>

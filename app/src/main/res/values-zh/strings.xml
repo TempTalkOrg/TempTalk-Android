@@ -1,0 +1,102 @@
+<resources>
+    <!--    设置-->
+    <string name="settings_privacy_setting_title">隐私</string>
+    <string name="settings_privacy_find_me">寻找我的方式</string>
+    <string name="settings_privacy_phone">手机号</string>
+    <string name="settings_privacy_email">邮箱</string>
+    <string name="settings_security">安全</string>
+    <string name="settings_screen_lock">屏幕锁</string>
+    <string name="settings_screen_lock_timeout">屏幕锁超时</string>
+    <string name="settings_screen_lock_timeout_instant">立即</string>
+    <string name="settings_screen_lock_tips">使用密码解锁屏幕。密码可以不同于系统密码，因此如果有人设法得到了系统密码，但他仍然无法访问%s。此外，内容预览也会在app切换时被遮盖。</string>
+    <string name="settings_passcode_tips">请设置解锁码（4–10 位数字）。\n下次解锁%s时需输入此解锁码。</string>
+    <string name="settings_passcode_confirm_again">请再次输入以确认。</string>
+    <string name="settings_passcode_confirm">确认</string>
+    <string name="settings_passcode_error_tips">密码不匹配。</string>
+    <string name="settings_passcode_success">成功!</string>
+    <string name="settings_passcode_success_tips">请妥善保存此代码。</string>
+    <string name="settings_passcode_forget_tips">若遗失解锁码，必须退出账户或重新安装应用。</string>
+    <string name="settings_passcode_got_it">我明白了</string>
+
+    <string name="settings_new_key_tips">%s您所有的数据包括消息都是使用此密钥加密的。</string>
+    <string name="settings_new_key_time_info">🔐 %s\n</string>
+    <string name="settings_new_key_times_limit_tips">尝试次数过多，请稍后再试。</string>
+    <string name="settings_new_key_time_format">yyyy-MM-dd HH:mm:ss</string>
+
+    <string name="settings_about">关于</string>
+    <string name="settings_contact_ID">账号ID</string>
+    <string name="settings_information">信息</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_build_version">构建版本</string>
+    <string name="settings_build_time">构建时间</string>
+    <string name="settings_check_new_version">检查新版本</string>
+    <string name="settings_obtain_desktop_version">获取桌面版本</string>
+
+    <string name="settings_version_is_latest">当前版本已是最新版本</string>
+    <string name="settings_new_version_found">发现新版本</string>
+    <string name="settings_dialog_ok">确定</string>
+    <string name="settings_dialog_cancel">取消</string>
+    <string name="settings_dialog_update">更新</string>
+
+    <string name="settings_logout">登出</string>
+
+    <string name="settings_logging">日志</string>
+    <string name="settings_submit_debug_log">提交调试日志</string>
+    <string name="settings_submit_debug_log_by_es">直接提交</string>
+    <string name="settings_submit_debug_log_by_app">通过%s提交</string>
+    <string name="settings_submit_debug_log_by_other">通过其他方式提交</string>
+    <string name="settings_handle_log_fail">日志上传失败，请重试</string>
+    <string name="settings_handle_log_success">日志上传成功</string>
+
+    <!--    搜索-->
+    <!--    <string name="search_messages_default_tips">输入关键词搜索消息</string>-->
+    <!--    <string name="search_users_default_tips">输入电子邮件或手机号搜索用户</string>-->
+    <string name="search_user">搜索用户：</string>
+    <string name="search_result_dialog_title">未找到</string>
+    <string name="search_result_dialog_content">%s 不存在</string>
+    <string name="search_result_dialog_invite">邀请</string>
+    <string name="search_result_dialog_cancel">取消</string>
+    <string name="search_no_results_found">未找到结果</string>
+    <string name="search_view_more">查看更多</string>
+    <string name="search_more_contacts">更多联系人</string>
+    <string name="search_more_groups">更多群组</string>
+    <string name="search_more_messages">更多消息</string>
+    <string name="search_result_inclued">包含: %s</string>
+
+    <string name="deeplink_meeting">会议</string>
+    <string name="indicator_meetings">日程</string>
+
+    <string name="language_restart_required">重启后生效</string>
+    <string name="language_restart_tips">语言设置将在应用重启后生效。</string>
+    <string name="language_restart_later">稍后</string>
+    <string name="language_restart">重启</string>
+
+    <string name="status_upgrade_downolad_failed">更新包下载失败</string>
+    <string name="status_upgrade_downloading">更新包后台下载中</string>
+    <string name="status_upgrade_install_failed">更新包安装失败</string>
+    <string name="status_upgrade_filename_error">文件名包含非法字符</string>
+    <string name="status_upgrade_download_success">更新包下载成功，是否安装？</string>
+    <string name="status_upgrade_title">更新提示</string>
+    <string name="status_upgrade_button_install">安装</string>
+    <string name="status_upgrade_button_cancle">取消</string>
+    <string name="status_upgrade_verify_failed">更新包校验失败</string>
+    <string name="status_upgrade_param_exception">更新包参数异常</string>
+
+    <string name="hours_plural">%d小时</string>
+    <string name="hour_singular">1小时</string>
+    <string name="minutes_plural">%d分钟</string>
+    <string name="minute_singular">1分钟</string>
+    <string name="hours_minutes">%1$d小时%2$d分钟</string>
+    <string name="today">今天</string>
+    <string name="migrating_data_please_wait">数据迁移中，请稍候…</string>
+
+    <string name="me_text_size">字体大小</string>
+    <string name="me_text_size_default">默认</string>
+    <string name="me_text_size_lage">大</string>
+
+    <!-- 数据库恢复 -->
+    <string name="database_recovery_title">数据库恢复</string>
+    <string name="database_recovery_progress">正在恢复数据库，请稍候… %d%%</string>
+    <string name="database_recovery_failed">数据恢复失败，请重新登录</string>
+    <string name="database_recovery_retry_tip">数据库恢复失败，应用将重启重试 (%d/3)</string>
+</resources>

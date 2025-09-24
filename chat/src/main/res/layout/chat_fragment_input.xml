@@ -1,0 +1,728 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/bg1">
+
+    <!--    <View-->
+    <!--        android:id="@+id/topLine"-->
+    <!--        android:layout_width="match_parent"-->
+    <!--        android:layout_height="0.5dp"-->
+    <!--        android:background="@color/line"-->
+    <!--        app:layout_constraintEnd_toEndOf="parent"-->
+    <!--        app:layout_constraintStart_toStartOf="parent"-->
+    <!--        app:layout_constraintTop_toTopOf="parent" />-->
+
+    <LinearLayout
+        android:id="@+id/cl_send_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/ll_at"
+            android:layout_width="match_parent"
+            android:layout_height="210dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <View
+                android:id="@+id/v_line1"
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/line"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_at"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:paddingHorizontal="16dp"
+                android:scrollbarStyle="outsideOverlay"
+                android:scrollbars="vertical"
+                app:layout_constraintBottom_toTopOf="@+id/v_line2"
+                app:layout_constraintTop_toBottomOf="@+id/v_line1"
+                tools:itemCount="5"
+                tools:listitem="@layout/layout_item_contact_at" />
+
+            <View
+                android:id="@+id/v_line2"
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/line"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_at_close"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="15dp"
+                android:src="@drawable/chat_icon_close"
+                android:tint="@color/icon"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <LinearLayout
+            android:id="@+id/quoteZone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <View
+                android:layout_width="4dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/chat_msg_quote_flag" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/author"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/t.secondary"
+                    android:textSize="12sp"
+                    tools:text="LV F" />
+
+                <TextView
+                    android:id="@+id/quoteText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:lines="1"
+                    android:textColor="@color/t.secondary"
+                    android:textSize="12sp"
+                    tools:text="LV F" />
+
+            </LinearLayout>
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/quoteDelete"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="12dp"
+                android:src="@drawable/chat_icon_delete_msg_quote" />
+
+        </LinearLayout>
+
+        <View
+            android:id="@+id/v_confidential_line"
+            android:layout_width="match_parent"
+            android:layout_height="0.5dp"
+            android:background="#056FFA"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="8dp">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_left_actions"
+                android:layout_width="44dp"
+                android:layout_height="0dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/cl_input_content">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_full_input_open"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:padding="10dp"
+                    android:src="@drawable/chat_input_arrow_up"
+                    android:visibility="gone"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_left_buttons"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/button_more_actions"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:enabled="false"
+                        android:padding="10dp"
+                        android:src="@drawable/chat_more_actions"
+                        android:tint="@color/icon" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/button_more_actions_close"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:enabled="false"
+                        android:padding="10dp"
+                        android:src="@drawable/chat_more_actions_close"
+                        android:tint="@color/icon"
+                        android:visibility="gone" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/button_media"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/cl_left_actions">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_media"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:enabled="false"
+                    android:paddingVertical="10dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="10dp"
+                    android:src="@drawable/chat_button_media"
+                    android:tint="@color/icon" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_input_content"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:background="@drawable/chat_msg_input_bg"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/cl_right_actions"
+                app:layout_constraintStart_toEndOf="@+id/button_media"
+                app:layout_goneMarginEnd="12dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/edittext_input"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:background="@android:color/transparent"
+                    android:gravity="center_vertical"
+                    android:hint="@string/chat_message_input_hint"
+                    android:maxLines="5"
+                    android:minHeight="44dp"
+                    android:minLines="1"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="5dp"
+                    android:textColor="@color/t.primary"
+                    android:textColorHint="@color/t.disable"
+                    android:textSize="16sp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@+id/iv_confidential"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_confidential"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:padding="10dp"
+                    android:src="@drawable/chat_btn_confidential_mode_disable"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_right_actions"
+                android:layout_width="44dp"
+                android:layout_height="0dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/cl_input_content">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_confidential_right"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:padding="10dp"
+                    android:src="@drawable/chat_btn_confidential_mode_disable"
+                    android:visibility="gone"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_right_buttons"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/button_submit"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:enabled="false"
+                        android:padding="7dp"
+                        android:src="@drawable/chat_icon_send"
+                        android:visibility="invisible" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/button_keyboard"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:enabled="false"
+                        android:padding="10dp"
+                        android:src="@drawable/chat_keyboard"
+                        android:tint="@color/icon"
+                        android:visibility="gone" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/button_voice"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:enabled="false"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="10dp"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/chat_ic_mic_24"
+                        android:tint="@color/icon" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/ll_chat_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <View
+                android:id="@+id/v_chat_actions_line"
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="@color/divider"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <!--            <LinearLayout-->
+            <!--                android:id="@+id/button_media"-->
+            <!--                android:layout_width="wrap_content"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:gravity="center_horizontal"-->
+            <!--                android:orientation="vertical">-->
+
+            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
+            <!--                    android:id="@+id/cl_media"-->
+            <!--                    android:layout_width="64dp"-->
+            <!--                    android:layout_height="64dp"-->
+            <!--                    android:background="@drawable/chat_msg_input_bg"-->
+            <!--                    android:orientation="horizontal"-->
+            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                    app:layout_constraintStart_toStartOf="parent">-->
+
+            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
+            <!--                        android:layout_width="24dp"-->
+            <!--                        android:layout_height="24dp"-->
+            <!--                        android:src="@drawable/chat_bottom_photos"-->
+            <!--                        android:tint="@color/icon"-->
+            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                        app:layout_constraintStart_toStartOf="parent"-->
+            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
+            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
+
+            <!--                <androidx.appcompat.widget.AppCompatTextView-->
+            <!--                    android:layout_width="70dp"-->
+            <!--                    android:layout_height="40dp"-->
+            <!--                    android:layout_marginTop="5dp"-->
+            <!--                    android:gravity="center_horizontal"-->
+            <!--                    android:text="@string/chat_action_photo"-->
+            <!--                    android:textColor="@color/icon"-->
+            <!--                    android:textSize="12sp"-->
+            <!--                    app:layout_constraintTop_toBottomOf="@+id/cl_media" />-->
+            <!--            </LinearLayout>-->
+
+            <LinearLayout
+                android:id="@+id/button_contact"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_contact"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/chat_msg_input_bg"
+                    android:orientation="horizontal"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/chat_bottom_contact"
+                        android:tint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="70dp"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center_horizontal"
+                    android:text="@string/chat_action_contact"
+                    android:textColor="@color/icon"
+                    android:textSize="12sp"
+                    app:layout_constraintTop_toBottomOf="@+id/cl_contact" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/button_attachment"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_attachment"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/chat_msg_input_bg"
+                    android:orientation="horizontal"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/chat_attachment_open_button"
+                        android:tint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="70dp"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center_horizontal"
+                    android:text="@string/chat_action_file"
+                    android:textColor="@color/icon"
+                    android:textSize="12sp"
+                    app:layout_constraintTop_toBottomOf="@+id/button_at" />
+            </LinearLayout>
+
+            <!--            <LinearLayout-->
+            <!--                android:id="@+id/button_call"-->
+            <!--                android:layout_width="wrap_content"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:gravity="center_horizontal"-->
+            <!--                android:orientation="vertical">-->
+
+            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
+            <!--                    android:id="@+id/cl_call"-->
+            <!--                    android:layout_width="64dp"-->
+            <!--                    android:layout_height="64dp"-->
+            <!--                    android:background="@drawable/chat_msg_input_bg"-->
+            <!--                    android:orientation="horizontal"-->
+            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                    app:layout_constraintStart_toStartOf="parent">-->
+
+            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
+            <!--                        android:layout_width="24dp"-->
+            <!--                        android:layout_height="24dp"-->
+            <!--                        android:src="@drawable/chat_bottom_call"-->
+            <!--                        android:tint="@color/icon"-->
+            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                        app:layout_constraintStart_toStartOf="parent"-->
+            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
+            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
+
+            <!--                <androidx.appcompat.widget.AppCompatTextView-->
+            <!--                    android:layout_width="70dp"-->
+            <!--                    android:layout_height="40dp"-->
+            <!--                    android:layout_marginTop="5dp"-->
+            <!--                    android:gravity="center_horizontal"-->
+            <!--                    android:text="@string/chat_action_call"-->
+            <!--                    android:textColor="@color/icon"-->
+            <!--                    android:textSize="12sp"-->
+            <!--                    app:layout_constraintTop_toBottomOf="@+id/button_new_call" />-->
+            <!--            </LinearLayout>-->
+
+            <!--            <LinearLayout-->
+            <!--                android:id="@+id/button_confidential_mode"-->
+            <!--                android:layout_width="wrap_content"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:gravity="center_horizontal"-->
+            <!--                android:orientation="vertical">-->
+
+            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
+            <!--                    android:id="@+id/cl_confidential"-->
+            <!--                    android:layout_width="64dp"-->
+            <!--                    android:layout_height="64dp"-->
+            <!--                    android:background="@drawable/chat_msg_input_bg"-->
+            <!--                    android:orientation="horizontal"-->
+            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                    app:layout_constraintStart_toStartOf="parent">-->
+
+            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
+            <!--                        android:id="@+id/iv_confidential"-->
+            <!--                        android:layout_width="24dp"-->
+            <!--                        android:layout_height="24dp"-->
+            <!--                        android:src="@drawable/chat_btn_confidential_mode_disable"-->
+            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                        app:layout_constraintStart_toStartOf="parent"-->
+            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
+            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
+
+            <!--                <androidx.appcompat.widget.AppCompatTextView-->
+            <!--                    android:layout_width="70dp"-->
+            <!--                    android:layout_height="40dp"-->
+            <!--                    android:layout_marginTop="5dp"-->
+            <!--                    android:gravity="center_horizontal"-->
+            <!--                    android:text="@string/chat_action_confidential_mode"-->
+            <!--                    android:textColor="@color/icon"-->
+            <!--                    android:textSize="12sp"-->
+            <!--                    app:layout_constraintTop_toBottomOf="@+id/cl_confidential" />-->
+            <!--            </LinearLayout>-->
+
+            <!--            <LinearLayout-->
+            <!--                android:id="@+id/button_new_call"-->
+            <!--                android:layout_width="wrap_content"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:gravity="center_horizontal"-->
+            <!--                android:orientation="vertical"-->
+            <!--                android:visibility="gone">-->
+
+            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
+            <!--                    android:id="@+id/cl_call_image"-->
+            <!--                    android:layout_width="64dp"-->
+            <!--                    android:layout_height="64dp"-->
+            <!--                    android:background="@drawable/chat_msg_input_bg"-->
+            <!--                    android:orientation="horizontal"-->
+            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                    app:layout_constraintStart_toStartOf="parent">-->
+
+            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
+            <!--                        android:layout_width="24dp"-->
+            <!--                        android:layout_height="24dp"-->
+            <!--                        android:src="@drawable/chat_bottom_new_call"-->
+            <!--                        android:tint="@color/icon"-->
+            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
+            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
+            <!--                        app:layout_constraintStart_toStartOf="parent"-->
+            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
+            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
+
+            <!--                <androidx.appcompat.widget.AppCompatTextView-->
+            <!--                    android:layout_width="70dp"-->
+            <!--                    android:layout_height="40dp"-->
+            <!--                    android:layout_marginTop="5dp"-->
+            <!--                    android:gravity="center_horizontal"-->
+            <!--                    android:text="@string/chat_action_newcall"-->
+            <!--                    android:textColor="@color/icon"-->
+            <!--                    android:textSize="12sp"-->
+            <!--                    app:layout_constraintTop_toBottomOf="@+id/cl_at_image" />-->
+            <!--            </LinearLayout>-->
+
+            <LinearLayout
+                android:id="@+id/button_at"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_at_image"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/chat_msg_input_bg"
+                    android:orientation="horizontal"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/chat_btn_at"
+                        android:tint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="70dp"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center_horizontal"
+                    android:text="@string/chat_action_mention"
+                    android:textColor="@color/icon"
+                    android:textSize="12sp"
+                    app:layout_constraintTop_toBottomOf="@+id/cl_at_image" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/placeholder1"
+                android:layout_width="70dp"
+                android:layout_height="0dp"
+                android:visibility="invisible" />
+
+            <View
+                android:id="@+id/placeholder2"
+                android:layout_width="70dp"
+                android:layout_height="0dp"
+                android:visibility="invisible" />
+
+            <androidx.constraintlayout.helper.widget.Flow
+                android:id="@+id/flow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="20dp"
+                app:constraint_referenced_ids="button_contact,button_attachment,button_at,placeholder1,placeholder2"
+                app:flow_horizontalAlign="start"
+                app:flow_horizontalStyle="spread_inside"
+                app:flow_maxElementsWrap="4"
+                app:flow_verticalAlign="top"
+                app:flow_verticalGap="0dp"
+                app:flow_wrapMode="aligned"
+                app:layout_constraintTop_toBottomOf="@+id/v_chat_actions_line" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </LinearLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_friends"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/bg1"
+        android:padding="16dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_found_you"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:gravity="center"
+            android:textColor="@color/t.secondary"
+            android:textSize="14sp"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="Alice found you via your QR code." />
+
+        <LinearLayout
+            android:id="@+id/ll_friends"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal"
+            app:layout_constraintTop_toBottomOf="@+id/tv_found_you">
+
+            <!--            <androidx.appcompat.widget.AppCompatTextView-->
+            <!--                android:id="@+id/tv_block"-->
+            <!--                android:layout_width="0dp"-->
+            <!--                android:layout_height="match_parent"-->
+            <!--                android:layout_weight="1"-->
+            <!--                android:background="@drawable/chat_shape_edit_group_bg"-->
+            <!--                android:gravity="center"-->
+            <!--                android:text="@string/contact_block"-->
+            <!--                android:textColor="@color/t.error"-->
+            <!--                android:textSize="14sp"-->
+            <!--                app:layout_constraintTop_toTopOf="parent" />-->
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_ignore"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_weight="1"
+                android:background="@drawable/chat_shape_edit_group_bg"
+                android:gravity="center"
+                android:text="@string/contact_ignore"
+                android:textColor="@color/t.primary"
+                android:textSize="14sp"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_accept"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/base_bg_chative_button_primary"
+                android:gravity="center"
+                android:text="@string/contact_request_accept"
+                android:textColor="@color/t.white"
+                android:textSize="14sp"
+                app:layout_constraintTop_toTopOf="parent" />
+
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_unblock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:text="@string/contact_unblock_users"
+        android:textColor="@color/t.info"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/combineForward"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible" />
+
+    <FrameLayout
+        android:id="@+id/reactions_shade"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@color/reactions_screen_light_shade_color"
+        android:clickable="true"
+        android:clipToPadding="false"
+        android:focusable="true"
+        android:foreground="@color/reactions_screen_dark_shade_color"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

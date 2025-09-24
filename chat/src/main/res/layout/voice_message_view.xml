@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:parentTag="androidx.constraintlayout.widget.ConstraintLayout">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_file_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_audio_file"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_chat_audio_file" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_file_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:textColor="@color/t.primary"
+            android:textSize="14sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/iv_audio_file"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="file name file name file name.m4a file name file name file name.m4a file name file name file name.m4a" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/play_button"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:background="@android:color/transparent"
+        android:scaleType="centerInside"
+        app:layout_constraintBottom_toBottomOf="@+id/audioWaveProgressBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/audioWaveProgressBar"
+        app:srcCompat="@drawable/ic_chat_audio_item_play"
+        app:tint="@color/icon" />
+
+    <com.difft.android.chat.widget.AudioWaveProgressBar
+        android:id="@+id/audioWaveProgressBar"
+        android:layout_width="0dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="5dp"
+        android:layout_marginTop="5dp"
+        android:layout_marginEnd="5dp"
+        app:layout_constraintEnd_toStartOf="@id/play_time"
+        app:layout_constraintStart_toEndOf="@id/play_button"
+        app:layout_constraintTop_toBottomOf="@+id/cl_file_name"
+        app:layout_goneMarginTop="0dp">
+
+    </com.difft.android.chat.widget.AudioWaveProgressBar>
+
+    <TextView
+        android:id="@+id/play_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/icon"
+        android:textSize="14sp"
+        app:layout_constraintBottom_toBottomOf="@+id/audioWaveProgressBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/audioWaveProgressBar"
+        tools:text="00:00" />
+
+    <!--    <TextView-->
+    <!--        android:layout_width="270dp"-->
+    <!--        android:layout_height="0dp"-->
+    <!--        android:lines="1" />-->
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="@style/CustomProgressBarStyle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="@+id/audioWaveProgressBar"
+        app:layout_constraintEnd_toEndOf="@id/audioWaveProgressBar"
+        app:layout_constraintStart_toStartOf="@id/audioWaveProgressBar"
+        app:layout_constraintTop_toTopOf="@+id/audioWaveProgressBar"
+        tools:progress="20" />
+</merge>
