@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:parentTag="androidx.constraintlayout.widget.ConstraintLayout"
+    tools:ignore="ResourceName">
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/base_guideline_top"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.2" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/base_guideline_bottom"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.8" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/base_guideline_start"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.12" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/base_guideline_end"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.88" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/textview_label"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clickable="false"
+        android:duplicateParentState="true"
+        android:ellipsize="end"
+        android:focusable="false"
+        android:gravity="center"
+        android:lines="1"
+        app:layout_constraintBottom_toTopOf="@+id/base_guideline_bottom"
+        app:layout_constraintEnd_toStartOf="@+id/base_guideline_end"
+        app:layout_constraintStart_toStartOf="@+id/base_guideline_start"
+        app:layout_constraintTop_toBottomOf="@+id/base_guideline_top"
+        tools:text="LabelLabelLabelLabelLabel" />
+
+    <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/lottie_view_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:clickable="false"
+        android:duplicateParentState="true"
+        android:focusable="false"
+        app:lottie_loop="true"
+        app:layout_constraintBottom_toTopOf="@+id/base_guideline_bottom"
+        app:layout_constraintEnd_toStartOf="@+id/base_guideline_end"
+        app:layout_constraintStart_toStartOf="@+id/base_guideline_start"
+        app:layout_constraintTop_toBottomOf="@+id/base_guideline_top" />
+
+
+</merge>

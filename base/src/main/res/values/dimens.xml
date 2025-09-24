@@ -1,0 +1,3 @@
+<resources>
+    <dimen name="chat_sidebar_text_size_normal_default">11sp</dimen>
+</resources>

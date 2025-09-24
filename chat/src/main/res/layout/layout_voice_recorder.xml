@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_stop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingHorizontal="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp"
+        android:textColor="@color/t.primary.night"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toTopOf="@+id/tv_tips"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_goneMarginBottom="10dp"
+        tools:text="@string/chat_voice_recording_will_stop"
+        tools:visibility="visible" />
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_tips"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="5dp"
+        android:gravity="center"
+        android:paddingHorizontal="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp"
+        android:text="@string/chat_voice_release_to_cancel"
+        android:textColor="@color/t.primary"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toTopOf="@+id/cancel_zone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible" />
+
+    <!-- 取消录音区域 -->
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/cancel_zone"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_marginBottom="100dp"
+        android:background="@drawable/chat_voice_cancle_bg"
+        android:padding="24dp"
+        android:src="@drawable/ic_close"
+        android:tint="@color/white"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toTopOf="@+id/ll_record"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible" />
+
+    <!-- 录音按钮 -->
+    <LinearLayout
+        android:id="@+id/ll_record"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:background="@drawable/chat_msg_input_bg"
+        android:gravity="center_horizontal"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_goneMarginTop="0dp">
+
+        <!-- 波形动画控件 -->
+        <com.difft.android.chat.widget.WaveformView
+            android:id="@+id/waveform_view"
+            android:layout_width="50dp"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/record_button"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/chat_voice_hold_to_talk"
+            android:textColor="@color/t.primary"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>

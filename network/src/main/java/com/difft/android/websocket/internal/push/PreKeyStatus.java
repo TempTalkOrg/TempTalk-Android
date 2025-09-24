@@ -1,0 +1,25 @@
+/**
+ * Copyright (C) 2014-2016 Open Whisper Systems
+ *
+ * Licensed according to the LICENSE file in this repository.
+ */
+
+package com.difft.android.websocket.internal.push;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public class PreKeyStatus {
+
+  @JsonProperty
+  private int count;
+
+  public PreKeyStatus() {}
+
+  public PreKeyStatus(int count) {
+    this.count = count;
+  }
+
+  public int getCount() {
+    return count;
+  }
+}

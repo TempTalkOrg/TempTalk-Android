@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 底部阴影 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent"/>
+            <corners android:radius="8dp"/>
+            <padding android:bottom="6dp"/>
+        </shape>
+    </item>
+
+    <!-- 外阴影 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000014"/>
+            <corners android:radius="8dp"/>
+            <padding android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp"/>
+        </shape>
+    </item>
+
+    <!-- 内阴影 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000014"/>
+            <corners android:radius="8dp"/>
+            <padding android:left="7dp" android:top="7dp" android:right="7dp" android:bottom="7dp"/>
+        </shape>
+    </item>
+
+    <!-- 主体背景 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg.popup.night"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+</layer-list>

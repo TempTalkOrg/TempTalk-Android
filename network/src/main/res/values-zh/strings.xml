@@ -1,0 +1,3 @@
+<resources>
+    <string name="chat_net_error">请求失败，请重试</string>
+</resources>

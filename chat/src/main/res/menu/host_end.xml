@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/end_meeting"
+        android:title="@string/chat_end_meeting" />
+    <item
+        android:id="@+id/end_live"
+        android:title="@string/chat_end_live" />
+    <item
+        android:id="@+id/leave_meeting"
+        android:title="@string/chat_leave_meeting" />
+</menu>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        android:background="@drawable/chat_fragment_search_input_bg_search_input"
+        android:drawableStart="@drawable/chat_fragment_search_input_ic_search_input"
+        android:drawablePadding="6dp"
+        android:hint="@string/search_default_hint"
+        android:textColorHint="@color/t.disable"
+        android:textSize="14sp"
+        app:drawableTint="@color/icon" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextView
+            android:id="@+id/empty_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_horizontal"
+            android:paddingVertical="100dp"
+            android:text="@string/ps_data_null"
+            android:textColor="@color/t.third"
+            android:textSize="16sp"
+            android:visibility="invisible" />
+
+        <com.scwang.smart.refresh.layout.SmartRefreshLayout
+            android:id="@+id/smartRefreshLayout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.scwang.smart.refresh.header.MaterialHeader
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_gif"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="6dp"
+                android:scrollbars="vertical" />
+
+            <com.scwang.smart.refresh.footer.BallPulseFooter
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                app:srlAnimatingColor="@color/t.info"
+                app:srlNormalColor="@color/t.info" />
+
+        </com.scwang.smart.refresh.layout.SmartRefreshLayout>
+    </FrameLayout>
+
+</LinearLayout>

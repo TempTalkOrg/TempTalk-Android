@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:paddingVertical="12dp"
+    tools:parentTag="androidx.constraintlayout.widget.ConstraintLayout">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/ll_content"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/logo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@mipmap/chat_attachment_file_logo"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <FrameLayout
+            android:id="@+id/fl_actions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toBottomOf="@+id/logo"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/logo">
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/download"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@null"
+                android:src="@mipmap/chat_attachment_download_button"
+                android:tint="@color/icon"
+                android:visibility="invisible" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/open"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@null"
+                android:src="@mipmap/chat_attachment_open_button"
+                android:tint="@color/icon"
+                android:visibility="invisible" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/fail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@null"
+                android:src="@drawable/chat_attachment_load_fail_button"
+                android:tint="@color/icon"
+                android:visibility="invisible" />
+
+            <com.difft.android.chat.common.CircleProgressBar
+                android:id="@+id/progress"
+                android:layout_width="35dp"
+                android:layout_height="35dp"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                app:circleBackgroundColor="@color/line"
+                app:progressBarColor="@color/t.info"
+                app:strokeWidth="2dp" />
+        </FrameLayout>
+
+
+        <TextView
+            android:id="@+id/attachment_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:ellipsize="middle"
+            android:gravity="start"
+            android:singleLine="true"
+            android:textColor="@color/t.primary"
+            android:textSize="14sp"
+            app:layout_constraintEnd_toStartOf="@id/fl_actions"
+            app:layout_constraintStart_toEndOf="@id/logo"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="Wea UI Guideline.pdf Wea UI Guideline.pdf Wea UI Guideline.pdf Wea UI Guideline.pdf" />
+
+        <TextView
+            android:id="@+id/attachment_size"
+            android:layout_width="0dp"
+            android:layout_height="20dp"
+            android:gravity="top"
+            android:lineSpacingExtra="3sp"
+            android:textColor="@color/t.secondary"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="@+id/attachment_name"
+            app:layout_constraintStart_toStartOf="@+id/attachment_name"
+            tools:text="1.2M" />
+
+        <TextView
+            android:id="@+id/attachment_fail"
+            android:layout_width="0dp"
+            android:layout_height="20dp"
+            android:gravity="top"
+            android:lineSpacingExtra="3sp"
+            android:text="@string/chat_attachment_load_fail"
+            android:textColor="@color/t.error"
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="@+id/attachment_name"
+            app:layout_constraintStart_toStartOf="@+id/attachment_name" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <TextView
+        android:id="@+id/tv_max_limit"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/max_support_file_size_50"
+        android:textColor="@color/t.primary"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:layout_width="270dp"
+        android:layout_height="0dp"
+        android:lines="1" />
+</merge>

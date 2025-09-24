@@ -1,0 +1,6 @@
+<resources>
+    <dimen name="login_dp_0">0dp</dimen>
+    <dimen name="login_title_size">20sp</dimen>
+    <dimen name="login_hint_size">14sp</dimen>
+    <dimen name="login_next_size">16sp</dimen>
+</resources>

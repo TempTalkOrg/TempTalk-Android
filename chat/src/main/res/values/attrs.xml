@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <attr name="theme_type" format="string" />
+
+    <declare-styleable name="EmojiImageView">
+        <attr name="forceJumbo" format="boolean" />
+    </declare-styleable>
+
+    <declare-styleable name="CircleProgressBar">
+        <attr name="progressBarColor" format="color" />
+        <attr name="strokeWidth" format="dimension" />
+        <attr name="circleBackgroundColor" format="color" />
+    </declare-styleable>
+
+    <style name="ShapeAppearanceOverlay.TT.MediaSelection.Selected" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">8dp</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.TT.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <declare-styleable name="VideoPlayer">
+        <attr name="playerLayoutId" format="dimension" />
+    </declare-styleable>
+
+    <declare-styleable name="VideoThumbnailsRangeSelectorView">
+        <attr name="thumbWidth" format="dimension" />
+        <attr name="thumbColorEdited" format="color" />
+        <attr name="thumbColor" format="color" />
+        <attr name="thumbTouchRadius" format="dimension" />
+        <attr name="thumbHintTextSize" format="dimension" />
+        <attr name="thumbHintTextColor" format="color" />
+        <attr name="thumbHintBackgroundColor" format="color" />
+    </declare-styleable>
+</resources>
