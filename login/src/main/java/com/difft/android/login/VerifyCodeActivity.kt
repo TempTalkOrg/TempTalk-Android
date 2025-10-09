@@ -25,13 +25,10 @@ import com.difft.android.network.viewmodel.Status
 import com.difft.android.base.widget.VerifyCodeView
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.util.TextInfo
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class VerifyCodeActivity : BaseActivity() {
@@ -141,7 +138,7 @@ class VerifyCodeActivity : BaseActivity() {
         // 设置 resendEmail 的点击事件
         mBinding.resendEmail.setOnClickListener {
             if (mBinding.resendEmail.isEnabled) {
-                WaitDialog.show(this@VerifyCodeActivity, "")
+                ComposeDialogManager.showWait(this@VerifyCodeActivity, "")
                 mBinding.emailCodeView.clearInput()
                 showInvalidEmailCodeView(null)
                 if (fromLogin) {
@@ -272,13 +269,13 @@ class VerifyCodeActivity : BaseActivity() {
             when (it.status) {
                 Status.LOADING -> {}
                 Status.SUCCESS -> {
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     startTimer()
                 }
 
                 Status.ERROR -> {
-                    WaitDialog.dismiss()
-                    it.exception?.errorMsg?.let { error -> PopTip.show(error) }
+                    ComposeDialogManager.dismissWait()
+                    it.exception?.errorMsg?.let { error -> ToastUtil.show(error) }
                 }
             }
         }
@@ -291,13 +288,13 @@ class VerifyCodeActivity : BaseActivity() {
             when (it.status) {
                 Status.LOADING -> {}
                 Status.SUCCESS -> {
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     startTimer()
                 }
 
                 Status.ERROR -> {
-                    WaitDialog.dismiss()
-                    it.exception?.errorMsg?.let { error -> PopTip.show(error) }
+                    ComposeDialogManager.dismissWait()
+                    it.exception?.errorMsg?.let { error -> ToastUtil.show(error) }
                 }
             }
         }
@@ -348,7 +345,7 @@ class VerifyCodeActivity : BaseActivity() {
     }
 
     private fun verifyBindAccount() {
-        WaitDialog.show(this@VerifyCodeActivity, "")
+        ComposeDialogManager.showWait(this@VerifyCodeActivity, "")
         val account = account ?: return
         val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
         if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
@@ -356,32 +353,32 @@ class VerifyCodeActivity : BaseActivity() {
                 .compose(RxUtil.getSingleSchedulerComposer())
                 .to(RxUtil.autoDispose(this))
                 .subscribe({
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     if (it.status == 0) {
                         startTimer()
                     } else {
-                        PopTip.show(it.reason)
+                        it.reason?.let { message -> ToastUtil.show(message) }
                     }
                 }, {
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     it.printStackTrace()
-                    PopTip.show(it.message)
+                    it.message?.let { message -> ToastUtil.show(message) }
                 })
         } else {
             bindRepo.verifyPhone(basicAuth, account, nonce)
                 .compose(RxUtil.getSingleSchedulerComposer())
                 .to(RxUtil.autoDispose(this))
                 .subscribe({
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     if (it.status == 0) {
                         startTimer()
                     } else {
-                        PopTip.show(it.reason)
+                        it.reason?.let { message -> ToastUtil.show(message) }
                     }
                 }, {
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     it.printStackTrace()
-                    PopTip.show(it.message)
+                    it.message?.let { message -> ToastUtil.show(message) }
                 })
         }
     }
@@ -396,6 +393,9 @@ class VerifyCodeActivity : BaseActivity() {
                 .subscribe({
                     enableHandleZone()
                     if (it.status == 0) {
+                        userManager.update {
+                            this.email = account
+                        }
                         setResult(Activity.RESULT_OK)
                         finish()
                     } else {
@@ -415,6 +415,9 @@ class VerifyCodeActivity : BaseActivity() {
                 .subscribe({
                     enableHandleZone()
                     if (it.status == 0) {
+                        userManager.update {
+                            this.phoneNumber = account
+                        }
                         setResult(Activity.RESULT_OK)
                         finish()
                     } else {
@@ -432,22 +435,23 @@ class VerifyCodeActivity : BaseActivity() {
      * 显示不同账号登录提示框
      */
     private fun showDifferentAccountLoginDialog() {
-        MessageDialog.show(
-            R.string.login_different_dialog_title,
-            R.string.login_different_dialog_content,
-            R.string.login_different_dialog_ok_text,
-            R.string.login_different_dialog_cancel_text,
-        )
-            .setCancelable(false)
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.login_different_dialog_title),
+            message = getString(R.string.login_different_dialog_content),
+            confirmText = getString(R.string.login_different_dialog_ok_text),
+            cancelText = getString(R.string.login_different_dialog_cancel_text),
+            cancelable = false,
+            confirmButtonColor = androidx.compose.ui.graphics.Color(
+                ContextCompat.getColor(this@VerifyCodeActivity, com.difft.android.base.R.color.t_error)
+            ),
+            onConfirm = {
                 logoutManager.doLogout()
-                false
-            }
-            .setCancelButton { _, _ ->
+            },
+            onCancel = {
                 finish()
-                false
             }
-            .okTextInfo = TextInfo().apply { fontColor = ContextCompat.getColor(this@VerifyCodeActivity, com.difft.android.base.R.color.t_error) }
+        )
     }
 
     override fun onDestroy() {

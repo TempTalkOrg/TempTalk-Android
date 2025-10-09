@@ -23,17 +23,15 @@ import com.difft.android.network.UrlManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.setting.data.CheckUpdateResponse
 import com.difft.android.setting.repo.SettingRepo
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import io.reactivex.rxjava3.core.Observable
 import util.ScreenLockUtil
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 class UpdateManager @Inject constructor(
     private val settingRepo: SettingRepo,
     private val environmentHelper: EnvironmentHelper,
@@ -42,14 +40,14 @@ class UpdateManager @Inject constructor(
     private val urlManager: UrlManager,
     private val userManager: UserManager
 ) {
-    private var foreUpdateMessageDialog: MessageDialog? = null
+    private var foreUpdateMessageDialog: ComposeDialog? = null
 
-    private var installMessageDialog: MessageDialog? = null
+    private var installMessageDialog: ComposeDialog? = null
 
 
     fun checkUpdate(context: FragmentActivity, isFromSetting: Boolean) {
         if (isFromSetting) {
-            WaitDialog.show(context, "")
+            ComposeDialogManager.showWait(context, "")
         }
         if (environmentHelper.isInsiderChannel()) { //内部版本通过配置文件检查更新，有新版本自动进行下载更新
             globalConfigHttpClient.httpService.getAppVersionConfigs(urlManager.appVersionConfigUrl)
@@ -58,7 +56,7 @@ class UpdateManager @Inject constructor(
                 .subscribe({
                     L.d { "[UpdateManager] get App Version Configs success:$it" }
                     if (isFromSetting) {
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                     }
                     if (it.versionCode > PackageUtil.getAppVersionCode()) {
                         appInnerToInstall(context, it.url, it.hash)
@@ -71,7 +69,7 @@ class UpdateManager @Inject constructor(
                     L.e { "[UpdateManager] get App Version Configs error:" + it.stackTraceToString() }
                     it.printStackTrace()
                     if (isFromSetting) {
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                     }
                 })
         } else {
@@ -80,7 +78,7 @@ class UpdateManager @Inject constructor(
                 .to(RxUtil.autoDispose(context))
                 .subscribe({
                     if (isFromSetting) {
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                     }
                     if (it.status == 0) {
                         it.data?.let { response ->
@@ -101,8 +99,8 @@ class UpdateManager @Inject constructor(
                 }) {
                     it.printStackTrace()
                     if (isFromSetting) {
-                        WaitDialog.dismiss()
-                        PopTip.show(it.message)
+                        ComposeDialogManager.dismissWait()
+                        it.message?.let { message -> ToastUtil.show(message) }
                     }
                 }
         }
@@ -116,59 +114,65 @@ class UpdateManager @Inject constructor(
             .compose(RxUtil.getSchedulerComposer())
             .to(RxUtil.autoDispose(context))
             .subscribe({
-                TipDialog.show(ResUtils.getString(R.string.settings_version_is_latest), WaitDialog.TYPE.SUCCESS)
+                ToastUtil.showLong(ResUtils.getString(R.string.settings_version_is_latest))
             }, { it.printStackTrace() })
     }
 
     private fun showUpdateDialog(context: Context, response: CheckUpdateResponse) {
-        MessageDialog.show(context.getString(R.string.settings_check_new_version), response.notes, context.getString(R.string.settings_dialog_update), context.getString(R.string.settings_dialog_cancel))
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = context,
+            title = context.getString(R.string.settings_check_new_version),
+            message = response.notes,
+            confirmText = context.getString(R.string.settings_dialog_update),
+            cancelText = context.getString(R.string.settings_dialog_cancel),
+            onConfirm = {
                 if (AppUpgradeService.isDownloading) {
-                    PopTip.show(R.string.status_upgrade_downloading)
+                    ToastUtil.show(R.string.status_upgrade_downloading)
                 } else {
                     update(context, response.url, response.updateWithApk, response.apkHash)
                 }
-                false
             }
+        )
     }
 
 
     private fun showForceUpdateDialog(context: FragmentActivity, response: CheckUpdateResponse) {
-        foreUpdateMessageDialog = MessageDialog.show(context.getString(R.string.settings_check_new_version), response.notes, context.getString(R.string.settings_dialog_update))
-            .setCancelable(false)
-            .setBkgInterceptTouch(true)
-            .setOkButton { dialog, v ->
+        foreUpdateMessageDialog = ComposeDialogManager.showMessageDialog(
+            context = context,
+            title = context.getString(R.string.settings_check_new_version),
+            message = response.notes,
+            confirmText = context.getString(R.string.settings_dialog_update),
+            cancelable = false,
+            showCancel = false,
+            onConfirm = {
                 if (AppUpgradeService.isDownloading) {
-                    PopTip.show(R.string.status_upgrade_downloading)
+                    ToastUtil.show(R.string.status_upgrade_downloading)
                 } else {
                     update(context, response.url, response.updateWithApk, response.apkHash, true)
                 }
-                true
             }
+        )
     }
 
     fun showInstallDialog(context: Context, apkFile: File, isForce: Boolean) {
-        if(installMessageDialog?.isShow == true) {
-            installMessageDialog?.dismiss()
-            installMessageDialog = null
-        }
-        installMessageDialog = MessageDialog.build()
-            .setTitle(getString(R.string.status_upgrade_title))
-            .setMessage(getString(R.string.status_upgrade_download_success))
-            .setOkButton(getString(R.string.status_upgrade_button_install))
-            .apply {
-                if(!isForce) {
-                    setCancelButton(getString(R.string.status_upgrade_button_cancle))
-                }
-            }
-            .setCancelable(false)
-            .setOkButton { _, _ ->
+        installMessageDialog?.dismiss()
+        installMessageDialog = null
+        
+        installMessageDialog = ComposeDialogManager.showMessageDialog(
+            context = context,
+            title = context.getString(R.string.status_upgrade_title),
+            message = context.getString(R.string.status_upgrade_download_success),
+            confirmText = context.getString(R.string.status_upgrade_button_install),
+            cancelText = if (isForce) "" else context.getString(R.string.status_upgrade_button_cancle),
+            showCancel = !isForce,
+            cancelable = !isForce,
+            onConfirm = {
                 ScreenLockUtil.noNeedShowScreenLock = true
                 val authority: String = context.applicationContext.packageName + ".provider"
                 val uri = FileProvider.getUriForFile(context, authority, apkFile)
                 installAPK(context, uri, apkFile)
-                isForce
-            }.show()
+            }
+        )
     }
 
     fun closeForceUpdateDialog() {
@@ -201,7 +205,7 @@ class UpdateManager @Inject constructor(
         if (!TextUtils.isEmpty(url) && !TextUtils.isEmpty(apkHash)) {
             upgradeApk(context, url, apkHash, isForce)
         } else {
-            TipDialog.show(getString(R.string.status_upgrade_param_exception), WaitDialog.TYPE.ERROR)
+            ToastUtil.showLong(getString(R.string.status_upgrade_param_exception))
         }
     }
 
@@ -235,13 +239,13 @@ class UpdateManager @Inject constructor(
 
         // Verify file names to avoid path traversal
         if (filename.contains("../")) {
-            TipDialog.show(getString(R.string.status_upgrade_filename_error), WaitDialog.TYPE.ERROR)
+            ToastUtil.showLong(getString(R.string.status_upgrade_filename_error))
             L.i { "UpdateManager filename Verify error:${filename}" }
             return
         }
 
         // Delete the old version apk file downloaded before
-        if(installMessageDialog == null || installMessageDialog?.isShow == false){
+        if(installMessageDialog == null){
             clearDownloadedApk(fileDir, filename)
         }
 
@@ -330,7 +334,7 @@ class UpdateManager @Inject constructor(
             } catch (e: Exception) {
                 L.i { "UpdateManager installAPK error:${e.message}" }
                 e.printStackTrace()
-                TipDialog.show(getString(R.string.status_upgrade_install_failed) + ":" + e.message, WaitDialog.TYPE.ERROR)
+                ToastUtil.showLong(getString(R.string.status_upgrade_install_failed) + ":" + e.message)
             }
         }
     }

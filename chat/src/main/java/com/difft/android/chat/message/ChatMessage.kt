@@ -1,5 +1,8 @@
 package com.difft.android.chat.message
 
+import difft.android.messageserialization.model.AttachmentStatus
+import com.difft.android.base.utils.FileUtil
+import difft.android.messageserialization.model.isAudioMessage
 import org.difft.app.database.models.ContactorModel
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Mode
 import java.io.Serializable
@@ -79,4 +82,29 @@ abstract class ChatMessage : Serializable {
 
 fun ChatMessage.isConfidential(): Boolean {
     return this.mode == Mode.CONFIDENTIAL_VALUE
+}
+
+fun ChatMessage.canDownloadOrCopyFile(): Boolean {
+    if (this is TextChatMessage) {
+        // 检查当前消息的附件
+        if (this.isAttachmentMessage()
+            && (this.attachment?.isAudioMessage() != true)
+            && (this.attachment?.status == AttachmentStatus.SUCCESS.code || this.getAttachmentProgress() == 100)
+        ) {
+            return true
+        }
+
+        // 检查转发消息的附件
+        val forwards = this.forwardContext?.forwards
+        if (forwards?.size == 1) {
+            val forward = forwards.firstOrNull()
+            if (forward?.attachments?.isNotEmpty() == true
+                && forward.attachments?.firstOrNull()?.isAudioMessage() != true
+                && (forward.attachments?.firstOrNull()?.status == AttachmentStatus.SUCCESS.code || this.getAttachmentProgress() == 100)
+            ) {
+                return true
+            }
+        }
+    }
+    return false
 }

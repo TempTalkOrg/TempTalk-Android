@@ -45,7 +45,7 @@ import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
-import com.kongzue.dialogx.dialogs.MessageDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
@@ -337,10 +337,15 @@ class ChatArchiveSettingsActivity : BaseActivity() {
             getString(R.string.chat_archive_shorten_time_message)
         }
 
-        MessageDialog.show(title, message, getString(R.string.chat_dialog_ok), getString(R.string.chat_dialog_cancel))
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = title,
+            message = message,
+            confirmText = getString(R.string.chat_dialog_ok),
+            cancelText = getString(R.string.chat_dialog_cancel),
+            onConfirm = {
                 onConfirm()
-                false
             }
+        )
     }
 }

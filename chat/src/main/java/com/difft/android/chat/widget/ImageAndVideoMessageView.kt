@@ -5,6 +5,7 @@ import android.content.res.Resources
 import android.util.AttributeSet
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.net.toUri
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
@@ -14,12 +15,14 @@ import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutImageMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canAutoSaveAttachment
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
+import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isVideo
-import com.hi.dhl.binding.viewbind
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
+import org.thoughtcrime.securesms.util.MediaUtil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -51,40 +54,74 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             binding.tvMaxLimit.visibility = View.GONE
             binding.clContent.visibility = View.VISIBLE
 
-            val finalWidth: Int
-            val finalHeight: Int
+            var finalWidth: Int
+            var finalHeight: Int
             val screenWidth = Resources.getSystem().displayMetrics.widthPixels
             val screenHeight = Resources.getSystem().displayMetrics.heightPixels
 
-            val minWidth = (screenWidth / 3f).toInt() // 最小宽度为屏幕宽度的1/3
             val maxWidth = screenWidth - 70.dp
             val maxHeight = (screenHeight / 3f).toInt() // 限制最大高度为屏幕高度的1/3
 
-            val finalMaxWidth = if (maxWidth >= minWidth) maxWidth else minWidth
+            val minAspectRatio = 1f / 6f
+            val maxAspectRatio = 6f // 宽高比最大6:1
 
-            val minAspectRatio = 1f / 3f
-            val maxAspectRatio = 1 / minAspectRatio
+            // 首先尝试获取有效的宽高信息
+            val effectiveWidth: Int
+            val effectiveHeight: Int
 
             if (attachment.width > 0 && attachment.height > 0) {
+                // 使用attachment中的宽高信息
+                effectiveWidth = attachment.width
+                effectiveHeight = attachment.height
+            } else {
+                // 尝试从文件中获取实际尺寸（支持图片和视频）
+                val mimeType = MediaUtil.getMimeType(context, attachmentPath.toUri()) ?: ""
+                val actualDimensions = MediaUtil.getMediaWidthAndHeight(attachmentPath, mimeType)
+                effectiveWidth = actualDimensions.first
+                effectiveHeight = actualDimensions.second
+            }
 
-                var ratio = attachment.width.toFloat() / attachment.height
+            if (effectiveWidth > 0 && effectiveHeight > 0) {
+                // 有有效尺寸信息，使用智能缩放逻辑
+                var ratio = effectiveWidth.toFloat() / effectiveHeight
                 ratio = max(minAspectRatio, min(maxAspectRatio, ratio))
 
-                // 先按宽度计算
-                var tempWidth = attachment.width.takeIf { it != 0 }?.coerceIn(minWidth, finalMaxWidth) ?: finalMaxWidth
-                var tempHeight = (tempWidth / ratio).toInt()
+                // 根据图片方向和尺寸智能选择限制策略
+                val originalRatio = effectiveWidth.toFloat() / effectiveHeight
+                val isWideImage = originalRatio > 1f // 宽图
 
-                // 如果高度超出限制，则按高度重新计算
-                if (tempHeight > maxHeight) {
-                    tempHeight = maxHeight
-                    tempWidth = (tempHeight * ratio).toInt().coerceIn(minWidth, finalMaxWidth)
+                var tempWidth: Int
+                var tempHeight: Int
+
+                if (isWideImage) {
+                    // 宽图：优先按宽度限制
+                    tempWidth = minOf(effectiveWidth, maxWidth)
+                    tempHeight = (tempWidth / ratio).toInt()
+
+                    // 如果高度超出限制，按高度重新计算
+                    if (tempHeight > maxHeight) {
+                        tempHeight = maxHeight
+                        tempWidth = (tempHeight * ratio).toInt()
+                    }
+                } else {
+                    // 长图：优先按高度限制
+                    tempHeight = minOf(effectiveHeight, maxHeight)
+                    tempWidth = (tempHeight * ratio).toInt()
+
+                    // 如果宽度超出限制，按宽度重新计算
+                    if (tempWidth > maxWidth) {
+                        tempWidth = maxWidth
+                        tempHeight = (tempWidth / ratio).toInt()
+                    }
                 }
 
                 finalWidth = tempWidth
                 finalHeight = tempHeight
             } else {
-                finalWidth = maxWidth
-                finalHeight = 0
+                // 没有有效尺寸信息，使用默认比例
+                val defaultRatio = if (isVideo) 16f / 9f else 4f / 3f
+                finalWidth = minOf(maxWidth, (maxHeight * defaultRatio).toInt())
+                finalHeight = (finalWidth / defaultRatio).toInt()
             }
 
             val layoutParams = binding.imageView.layoutParams
@@ -92,7 +129,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             layoutParams.height = finalHeight
             binding.imageView.layoutParams = layoutParams
 
-            val progress = FileUtil.progressMap[message.id]
+            val progress = message.getAttachmentProgress()
             val isFileValid = FileUtil.isFileValid(attachmentPath)
             if (isFileValid) {
                 loadImage(attachmentPath, finalWidth, finalHeight)
@@ -138,5 +175,6 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             )
         }
     }
+
 }
 

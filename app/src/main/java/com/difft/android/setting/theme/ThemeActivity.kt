@@ -8,7 +8,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.UserManager
 import com.difft.android.databinding.ActivityThemeBinding
-import com.difft.android.base.widget.DialogXUtil
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -53,8 +52,6 @@ class ThemeActivity : BaseActivity() {
                         }
                     }
                 }
-                DialogXUtil.initDialog(this@ThemeActivity, themeData.theme)
-
                 updateSelectedTheme(themeData.theme)
             }
         }
@@ -78,9 +75,9 @@ class ThemeActivity : BaseActivity() {
         }
 
         themeDataList = mutableListOf<ThemeData>().apply {
-            this.add(ThemeData(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM, getString(com.difft.android.chat.R.string.me_theme_system),false))
-            this.add(ThemeData(AppCompatDelegate.MODE_NIGHT_NO, getString(com.difft.android.chat.R.string.me_theme_light),false))
-            this.add(ThemeData(AppCompatDelegate.MODE_NIGHT_YES, getString(com.difft.android.chat.R.string.me_theme_dark),false))
+            this.add(ThemeData(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM, getString(com.difft.android.chat.R.string.me_theme_system), false))
+            this.add(ThemeData(AppCompatDelegate.MODE_NIGHT_NO, getString(com.difft.android.chat.R.string.me_theme_light), false))
+            this.add(ThemeData(AppCompatDelegate.MODE_NIGHT_YES, getString(com.difft.android.chat.R.string.me_theme_dark), false))
         }
 
         val currentTheme = userManager.getUserData()?.theme ?: AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM

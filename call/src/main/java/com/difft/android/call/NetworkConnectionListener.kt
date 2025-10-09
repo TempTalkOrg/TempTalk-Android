@@ -8,7 +8,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Build
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.network.NetUtil
+import com.difft.android.call.util.NetUtil
 
 class NetworkConnectionListener(private val context: Context, private val onNetworkLost: (() -> Boolean) -> Unit) {
 

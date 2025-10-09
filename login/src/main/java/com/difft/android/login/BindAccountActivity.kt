@@ -20,7 +20,8 @@ import com.difft.android.login.ui.CountryPickerActivity
 import com.difft.android.base.widget.setTopMargin
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
 import javax.inject.Inject
@@ -50,7 +51,12 @@ class BindAccountActivity : BaseActivity() {
     lateinit var bindRepo: BindRepo
 
     private val activityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode != Activity.RESULT_CANCELED) {
+        if (it.resultCode == Activity.RESULT_OK) {
+            // 绑定成功，将结果传递给调用方
+            setResult(Activity.RESULT_OK)
+            finish()
+        } else if (it.resultCode != Activity.RESULT_CANCELED) {
+            // 其他情况（如验证失败），不设置RESULT_OK
             finish()
         }
     }
@@ -226,25 +232,27 @@ class BindAccountActivity : BaseActivity() {
 
     private fun showAlreadyLinkedDialog(nonce: String) {
         if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
-            MessageDialog.show(
-                R.string.login_email_already_linked,
-                R.string.login_email_already_linked_tips,
-                com.difft.android.chat.R.string.chat_dialog_ok,
-                com.difft.android.chat.R.string.chat_dialog_cancel
-            ).setOkButton { _, _ ->
-                verifyAccount(nonce)
-                false
-            }
+            ComposeDialogManager.showMessageDialog(
+                context = this,
+                title = getString(R.string.login_email_already_linked),
+                message = getString(R.string.login_email_already_linked_tips),
+                confirmText = getString(com.difft.android.chat.R.string.chat_dialog_ok),
+                cancelText = getString(com.difft.android.chat.R.string.chat_dialog_cancel),
+                onConfirm = {
+                    verifyAccount(nonce)
+                }
+            )
         } else {
-            MessageDialog.show(
-                R.string.login_phone_number_already_linked,
-                R.string.login_phone_number_already_linked_tips,
-                com.difft.android.chat.R.string.chat_dialog_ok,
-                com.difft.android.chat.R.string.chat_dialog_cancel
-            ).setOkButton { _, _ ->
-                verifyAccount(nonce)
-                false
-            }
+            ComposeDialogManager.showMessageDialog(
+                context = this,
+                title = getString(R.string.login_phone_number_already_linked),
+                message = getString(R.string.login_phone_number_already_linked_tips),
+                confirmText = getString(com.difft.android.chat.R.string.chat_dialog_ok),
+                cancelText = getString(com.difft.android.chat.R.string.chat_dialog_cancel),
+                onConfirm = {
+                    verifyAccount(nonce)
+                }
+            )
         }
     }
 

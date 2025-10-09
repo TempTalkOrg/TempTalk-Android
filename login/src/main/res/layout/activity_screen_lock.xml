@@ -1,101 +1,175 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <ScrollView
+        android:id="@+id/root"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical">
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/iv_logo"
-            android:layout_width="wrap_content"
-            android:layout_height="94dp"
-            android:layout_marginTop="80dp"
-            android:src="@drawable/login_logo_no_padding"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_settings_enter_passcode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:text="@string/settings_enter_passcode"
-            android:textColor="@color/t.primary"
-            android:textSize="@dimen/login_title_size"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/iv_logo" />
-
-        <androidx.appcompat.widget.AppCompatEditText
-            android:id="@+id/et_passcode1"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="48dp"
-            android:layout_marginTop="32dp"
-            android:backgroundTint="@color/line"
-            android:gravity="center"
-            android:inputType="numberPassword"
-            android:letterSpacing="0.2"
-            android:maxLength="10"
-            android:textColor="@color/t.primary"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            app:layout_constraintTop_toBottomOf="@+id/tv_settings_enter_passcode"
-            tools:text="123">
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
 
-            <requestFocus />
-        </androidx.appcompat.widget.AppCompatEditText>
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_logo"
+                android:layout_width="wrap_content"
+                android:layout_height="94dp"
+                android:layout_marginTop="80dp"
+                android:src="@drawable/login_logo_no_padding"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_error_tips"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:textColor="@color/t.error"
-            android:textSize="12sp"
-            android:visibility="gone"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/et_passcode1"
-            tools:text="@string/settings_passcode_attempts_delay"
-            tools:visibility="visible" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:text="@string/settings_enter_passcode"
+                android:textColor="@color/t.primary"
+                android:textSize="@dimen/login_title_size"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/iv_logo" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/btn_submit"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="48dp"
-            android:background="@drawable/login_handle_zone_bg"
-            android:clickable="false"
-            android:enabled="false"
-            android:gravity="center"
-            android:text="@string/settings_passcode_submit"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="@dimen/login_next_size"
-            app:layout_constraintTop_toBottomOf="@+id/tv_error_tips" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_error_tips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:paddingHorizontal="16dp"
+                android:textColor="@color/t.error"
+                android:textSize="14sp"
+                android:visibility="invisible"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/ll_passcode"
+                tools:text="@string/settings_passcode_attempts_delay"
+                tools:visibility="visible" />
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_forget_passcode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_forget_passcode"
-            android:textColor="@color/t.third"
-            android:textSize="14sp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/btn_submit" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
-</ScrollView>
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp">
+
+                <!-- Passcode Input Layout -->
+                <LinearLayout
+                    android:id="@+id/ll_passcode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    tools:visibility="visible">
+
+                    <androidx.appcompat.widget.AppCompatEditText
+                        android:id="@+id/et_passcode1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="48dp"
+                        android:backgroundTint="@color/line"
+                        android:gravity="center"
+                        android:inputType="numberPassword"
+                        android:letterSpacing="0.2"
+                        android:maxLength="10"
+                        android:textColor="@color/t.primary"
+                        android:textSize="32sp"
+                        android:textStyle="bold"
+                        tools:text="123" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btn_submit"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:layout_marginTop="48dp"
+                        android:background="@drawable/login_handle_zone_bg"
+                        android:clickable="false"
+                        android:enabled="false"
+                        android:gravity="center"
+                        android:text="@string/settings_passcode_submit"
+                        android:textAllCaps="false"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/login_next_size"
+                        app:layout_constraintTop_toBottomOf="@+id/tv_error_tips" />
+
+                </LinearLayout>
+
+                <com.difft.android.base.widget.PatternLockView
+                    android:id="@+id/pattern_lock_view"
+                    android:layout_width="232dp"
+                    android:layout_height="232dp"
+                    android:layout_gravity="center"
+                    android:layout_marginBottom="80dp"
+                    android:visibility="gone"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    tools:visibility="visible" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- Switch Mode and Forget Options -->
+            <LinearLayout
+                android:id="@+id/ll_options"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/btn_submit">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_switch_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_switch_to_pattern"
+                    android:textColor="@color/t.third"
+                    android:textSize="14sp"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <View
+                    android:id="@+id/v_separator"
+                    android:layout_width="1dp"
+                    android:layout_height="12dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@color/t.third"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_forget_passcode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/t.third"
+                    android:textSize="14sp"
+                    android:text="@string/settings_forget_passcode_or_pattern" />
+
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/ib_back"
+        android:layout_width="wrap_content"
+        android:layout_height="52dp"
+        android:background="@null"
+        android:padding="10dp"
+        android:src="@drawable/chat_contact_detail_ic_back"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/t.primary"
+        tools:visibility="visible" />
+</androidx.constraintlayout.widget.ConstraintLayout>

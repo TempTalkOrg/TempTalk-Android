@@ -26,21 +26,18 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.R
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.canDownloadOrCopyFile
 import com.difft.android.chat.message.isAttachmentMessage
-import difft.android.messageserialization.model.AttachmentStatus
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
-import com.kongzue.dialogx.dialogs.BottomDialog
-import com.kongzue.dialogx.interfaces.OnBindView
-import util.DimensionUnit
-import util.dp
 import org.thoughtcrime.securesms.animation.AnimationCompleteListener
 import org.thoughtcrime.securesms.components.menu.ActionItem
 import org.thoughtcrime.securesms.util.ThemeUtil
@@ -48,6 +45,8 @@ import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.util.WindowUtil
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
+import util.DimensionUnit
+import util.dp
 
 class ConversationReactionOverlay : FrameLayout {
     //    private final Rect emojiViewGlobalRect = new Rect();
@@ -125,62 +124,62 @@ class ConversationReactionOverlay : FrameLayout {
         initAnimators()
     }
 
-    private var moreEmojiReactionDialog: BottomDialog? = null
     private fun showMoreEmojiReactionDialog() {
-        moreEmojiReactionDialog = BottomDialog.build()
-            .setBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg2))
-            .setCustomView(object : OnBindView<BottomDialog?>(R.layout.layout_more_emoji_dialog) {
-                override fun onBind(dialog: BottomDialog?, v: View) {
-                    val rvMostUse = v.findViewById<RecyclerView>(R.id.rv_most_use)
-                    val tvOthers = v.findViewById<TextView>(R.id.tv_others)
-                    val rvOthers = v.findViewById<RecyclerView>(R.id.rv_other)
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = activity!!,
+            layoutId = R.layout.layout_more_emoji_dialog,
+            onDismiss = { /* Dialog dismissed */ },
+            onViewCreated = { v ->
+                val rvMostUse = v.findViewById<RecyclerView>(R.id.rv_most_use)
+                val tvOthers = v.findViewById<TextView>(R.id.tv_others)
+                val rvOthers = v.findViewById<RecyclerView>(R.id.rv_other)
 
-                    val emojis = selectedConversationModel?.mostUseEmojis
+                val emojis = selectedConversationModel?.mostUseEmojis
 
-                    if (!emojis.isNullOrEmpty()) {
-                        var mostUseEmojis: List<String>? = null
-                        var otherEmojis: List<String>? = null
-                        if (emojis.size > 7) {
-                            mostUseEmojis = emojis.subList(0, 7)
-                            otherEmojis = emojis.subList(7, emojis.size)
-                        } else {
-                            mostUseEmojis = emojis
-                        }
+                if (!emojis.isNullOrEmpty()) {
+                    var mostUseEmojis: List<String>? = null
+                    var otherEmojis: List<String>? = null
+                    if (emojis.size > 7) {
+                        mostUseEmojis = emojis.subList(0, 7)
+                        otherEmojis = emojis.subList(7, emojis.size)
+                    } else {
+                        mostUseEmojis = emojis
+                    }
 
-                        if (mostUseEmojis.isNotEmpty()) {
-                            val rvMostUseAdapter = object : ReactionEmojisAdapter(messageRecord!!) {
-                                override fun onEmojiSelected(emoji: String, position: Int, remove: Boolean) {
-                                    moreEmojiReactionDialog?.hide()
-                                    onReactionSelectedListener?.onReactionSelected(messageRecord!!, emoji, remove)
-                                }
+                    if (mostUseEmojis.isNotEmpty()) {
+                        val rvMostUseAdapter = object : ReactionEmojisAdapter(messageRecord!!) {
+                            override fun onEmojiSelected(emoji: String, position: Int, remove: Boolean) {
+                                onReactionSelectedListener?.onReactionSelected(messageRecord!!, emoji, remove)
+                                dialog?.dismiss()
                             }
-
-                            rvMostUse.layoutManager = GridLayoutManager(context, 7)
-                            rvMostUse.adapter = rvMostUseAdapter
-                            rvMostUseAdapter.submitList(mostUseEmojis)
                         }
 
-                        if (!otherEmojis.isNullOrEmpty()) {
-                            tvOthers.visibility = View.VISIBLE
-                            rvOthers.visibility = View.VISIBLE
+                        rvMostUse.layoutManager = GridLayoutManager(context, 7)
+                        rvMostUse.adapter = rvMostUseAdapter
+                        rvMostUseAdapter.submitList(mostUseEmojis)
+                    }
 
-                            val rvOthersAdapter = object : ReactionEmojisAdapter(messageRecord!!) {
-                                override fun onEmojiSelected(emoji: String, position: Int, remove: Boolean) {
-                                    moreEmojiReactionDialog?.hide()
-                                    onReactionSelectedListener?.onReactionSelected(messageRecord!!, emoji, remove)
-                                }
+                    if (!otherEmojis.isNullOrEmpty()) {
+                        tvOthers.visibility = View.VISIBLE
+                        rvOthers.visibility = View.VISIBLE
+
+                        val rvOthersAdapter = object : ReactionEmojisAdapter(messageRecord!!) {
+                            override fun onEmojiSelected(emoji: String, position: Int, remove: Boolean) {
+                                onReactionSelectedListener?.onReactionSelected(messageRecord!!, emoji, remove)
+                                dialog?.dismiss()
                             }
-                            rvOthers.layoutManager = GridLayoutManager(context, 7)
-                            rvOthers.adapter = rvOthersAdapter
-                            rvOthersAdapter.submitList(otherEmojis)
-                        } else {
-                            tvOthers.visibility = View.GONE
-                            rvOthers.visibility = View.GONE
                         }
+                        rvOthers.layoutManager = GridLayoutManager(context, 7)
+                        rvOthers.adapter = rvOthersAdapter
+                        rvOthersAdapter.submitList(otherEmojis)
+                    } else {
+                        tvOthers.visibility = View.GONE
+                        rvOthers.visibility = View.GONE
                     }
                 }
-            })
-            .show()
+            }
+        )
     }
 
     fun show(
@@ -703,13 +702,13 @@ class ConversationReactionOverlay : FrameLayout {
     private fun getMenuActionItems(rootView: View, data: ChatMessage): List<ActionItem> {
         val items: MutableList<ActionItem> = ArrayList()
         if (selectedConversationModel?.isForForward == true) {
-            if (canDownload(data)) {
+            if (data.canDownloadOrCopyFile()) {
                 items.add(ActionItem(R.drawable.symbol_save_android_24, resources.getString(R.string.chat_message_action_download), action = { handleActionItemClicked(Action.SAVE, rootView) }))
             }
         } else {
             if (data.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
                 items.add(ActionItem(R.drawable.chat_message_action_quote, resources.getString(R.string.chat_message_action_quote), action = { handleActionItemClicked(Action.QUOTE, rootView) }))
-                if (data is TextChatMessage && hasTextContent(data)) {
+                if (data is TextChatMessage && (hasTextContent(data) || data.canDownloadOrCopyFile())) {
                     items.add(ActionItem(R.drawable.chat_message_action_copy, resources.getString(R.string.chat_message_action_copy), action = { handleActionItemClicked(Action.COPY, rootView) }))
                 }
                 if (data is TextChatMessage && hasTextContent(data)) {
@@ -739,7 +738,7 @@ class ConversationReactionOverlay : FrameLayout {
                         items.add(ActionItem(R.drawable.chat_message_action_voice2text_off, resources.getString(R.string.chat_message_action_voice2text_off), action = { handleActionItemClicked(Action.SPEECH_TO_TEXT_OFF, rootView) }))
                     }
                 }
-                if (canDownload(data)) {
+                if (data.canDownloadOrCopyFile()) {
                     items.add(ActionItem(R.drawable.symbol_save_android_24, resources.getString(R.string.chat_message_action_download), action = { handleActionItemClicked(Action.SAVE, rootView) }))
                 }
                 if (data is TextChatMessage && data.attachment?.isAudioMessage() != true && data.attachment?.isAudioFile() != true) {
@@ -769,29 +768,6 @@ class ConversationReactionOverlay : FrameLayout {
         return items
     }
 
-    //是否可以下载
-    private fun canDownload(data: ChatMessage): Boolean {
-        if (data is TextChatMessage) {
-            if (data.isAttachmentMessage()
-                && (data.attachment?.isAudioMessage() != true)
-                && (data.attachment?.status == AttachmentStatus.SUCCESS.code || FileUtil.progressMap[data.id] == 100)
-            ) {
-                return true
-            }
-
-            val forwards = data.forwardContext?.forwards
-            if (forwards?.size == 1) {
-                val forward = forwards.firstOrNull()
-                if (forward?.attachments?.isNotEmpty() == true
-                    && forward.attachments?.firstOrNull()?.isAudioMessage() != true
-                    && (forward.attachments?.firstOrNull()?.status == AttachmentStatus.SUCCESS.code || FileUtil.progressMap[forward.attachments?.firstOrNull()?.authorityId.toString()] == 100)
-                ) {
-                    return true
-                }
-            }
-        }
-        return false
-    }
 
     private fun hasTextContent(data: TextChatMessage): Boolean {
         if (data.isAttachmentMessage()) {

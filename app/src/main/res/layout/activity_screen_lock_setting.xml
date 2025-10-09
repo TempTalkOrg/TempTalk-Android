@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg.setting"
+    android:orientation="vertical">
+
+    <!-- Header -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@color/bg1">
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/ib_back"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:padding="10dp"
+            android:src="@drawable/chat_contact_detail_ic_back"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/t.primary" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_title"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:gravity="center"
+            android:text="@string/settings_screen_lock"
+            android:textColor="@color/t.primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="@+id/ib_back"
+            app:layout_constraintLeft_toRightOf="@+id/ib_back"
+            app:layout_constraintTop_toTopOf="@+id/ib_back" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Lock Options -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginRight="16dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:orientation="vertical">
+
+        <!-- Pattern Lock -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_pattern_lock"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:gravity="center_vertical"
+                android:text="@string/settings_pattern_lock"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="@+id/switch_pattern"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/switch_pattern" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_pattern"
+                style="@style/Widget.Chative.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/bg.setting" />
+
+        <!-- Passcode Lock -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_passcode_lock"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:gravity="center_vertical"
+                android:text="@string/settings_passcode_lock"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="@+id/switch_passcode"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/switch_passcode" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_passcode"
+                style="@style/Widget.Chative.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
+
+    <!-- Timeout Setting -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_timeout"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="25dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_screen_lock_time_out"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:gravity="center_vertical"
+            android:text="@string/settings_screen_lock_timeout"
+            android:textColor="@color/t.primary"
+            android:textSize="16sp"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_timeout"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="10dp"
+            android:gravity="center_vertical"
+            android:lineSpacingExtra="5sp"
+            android:textColor="@color/t.third"
+            android:textSize="16sp"
+            app:layout_constraintEnd_toStartOf="@+id/arrow"
+            tools:text="5m" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/arrow"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/chat_ic_arrow_right"
+            android:tint="@color/t.primary"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+    <!-- Pattern Show Path -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_pattern_show_path"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="25dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_pattern_show_path"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:gravity="center_vertical"
+            android:text="@string/settings_pattern_show_path"
+            android:textColor="@color/t.primary"
+            android:textSize="16sp"
+            app:layout_constraintBottom_toBottomOf="@+id/switch_pattern_show_path"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/switch_pattern_show_path" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_pattern_show_path"
+            style="@style/Widget.Chative.Switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>

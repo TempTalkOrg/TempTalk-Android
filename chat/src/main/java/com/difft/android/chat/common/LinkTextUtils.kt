@@ -1,6 +1,7 @@
 package com.difft.android.chat.common
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.text.SpannableString
 import android.text.Spanned
@@ -25,7 +26,8 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.ui.ChatMessageContainerView
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
-import com.kongzue.dialogx.dialogs.MessageDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import java.util.Date
 import java.util.regex.Pattern
 
@@ -278,18 +280,17 @@ object LinkTextUtils {
     private fun handleUrlClick(context: Context, url: String) {
         // 对于http链接，显示风险提示对话框
         if (url.startsWith("http")) {
-            MessageDialog.show(
-                context.getString(com.difft.android.chat.R.string.url_risk_error_title),
-                context.getString(com.difft.android.chat.R.string.url_risk_tips) + url,
-                context.getString(com.difft.android.chat.R.string.url_click_open),
-                context.getString(com.difft.android.chat.R.string.url_click_cancel)
-            )
-                .setCancelable(false)
-                .setOkButton { _, _ ->
+            ComposeDialogManager.showMessageDialog(
+                context = context,
+                title = context.getString(com.difft.android.chat.R.string.url_risk_error_title),
+                message = context.getString(com.difft.android.chat.R.string.url_risk_tips) + url,
+                confirmText = context.getString(com.difft.android.chat.R.string.url_click_open),
+                cancelText = context.getString(com.difft.android.chat.R.string.url_click_cancel),
+                onConfirm = {
                     val linkCategory = LinkDataEntity(LinkDataEntity.CATEGORY_SCHEME, null, null, url.toUri())
                     DeeplinkUtils.emitDeeplink(linkCategory)
-                    false
                 }
+            )
         } else {
             // 非http链接直接处理
             val linkCategory = LinkDataEntity(LinkDataEntity.CATEGORY_SCHEME, null, null, url.toUri())

@@ -49,6 +49,11 @@ class LogoutManagerImpl @Inject constructor(
                 // 只清除登录凭证
                 userManager.update(true) {
                     this.baseAuth = null
+
+                    this.passcode = null
+                    this.passcodeAttempts = 0
+                    this.pattern = null
+                    this.patternAttempts = 0
                 }
                 SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)
             }

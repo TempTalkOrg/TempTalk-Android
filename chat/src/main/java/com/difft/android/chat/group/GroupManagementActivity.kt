@@ -1,20 +1,18 @@
 package com.difft.android.chat.group
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
-import android.widget.Switch
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.SwitchCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RxUtil
-import org.difft.app.database.convertToContactorModels
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import org.difft.app.database.members
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.FriendSourceType
@@ -22,19 +20,19 @@ import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.databinding.ActivityGroupManagementBinding
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.difft.app.database.convertToContactorModels
+import org.difft.app.database.members
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
 
-@SuppressLint("UseSwitchCompatOrMaterialCode")
 @AndroidEntryPoint
 class GroupManagementActivity : BaseActivity() {
 
@@ -178,12 +176,12 @@ class GroupManagementActivity : BaseActivity() {
     }
 
     private fun changeGroupSetting(
-        switch: Switch,
+        switch: SwitchCompat,
         invitationRule: Int? = null,
         publishRule: Int? = null,
         linkInviteSwitch: Boolean? = null
     ) {
-        WaitDialog.show(this@GroupManagementActivity, "")
+        ComposeDialogManager.showWait(this@GroupManagementActivity, "")
         groupRepo.changeGroupSettings(
             groupId, ChangeGroupSettingsReq(
                 invitationRule = invitationRule,
@@ -193,20 +191,20 @@ class GroupManagementActivity : BaseActivity() {
         ).compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status != 0) {
                     showErrorAndRestoreSwitch(it.reason, switch)
                 }
             }, {
                 it.printStackTrace()
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 L.w { "[GroupManagement] changeGroupSetting error:" + it.stackTraceToString() }
                 showErrorAndRestoreSwitch(getString(R.string.operation_failed), switch)
             })
     }
 
-    private fun showErrorAndRestoreSwitch(errorMessage: String?, switch: Switch) {
-        PopTip.show(errorMessage)
+    private fun showErrorAndRestoreSwitch(errorMessage: String?, switch: SwitchCompat) {
+        errorMessage?.let { ToastUtil.show(it) }
 
         switch.setOnCheckedChangeListener(null)
         switch.isChecked = !switch.isChecked

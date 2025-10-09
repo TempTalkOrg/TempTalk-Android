@@ -38,8 +38,23 @@ import com.difft.android.setting.language.LanguageActivity
 import com.difft.android.setting.theme.ThemeActivity
 import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.kongzue.dialogx.dialogs.BottomMenu
-import com.kongzue.dialogx.interfaces.OnMenuItemSelectListener
+import com.difft.android.base.widget.ComposeDialogManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.difft.android.base.widget.ComposeDialog
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.entity.LocalMedia
 import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
@@ -188,20 +203,22 @@ class MeFragment : Fragment() {
             }, { it.printStackTrace() })
     }
 
+    var dialog: ComposeDialog? = null
     private fun showTextSizeDialog() {
         val textSizeList = arrayOf(getString(R.string.me_text_size_default), getString(R.string.me_text_size_lage))
-        var selectMenuIndex = userManager.getUserData()?.textSize ?: 0
-        BottomMenu.show(textSizeList)
-            .setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg3))
-            .setOnMenuItemClickListener(object : OnMenuItemSelectListener<BottomMenu?>() {
-                override fun onOneItemSelect(dialog: BottomMenu?, text: CharSequence, index: Int, select: Boolean) {
-                    dialog?.dismiss()
-                    selectMenuIndex = index
-                    TextSizeUtil.updateTextSize(selectMenuIndex)
+        val currentSelection = userManager.getUserData()?.textSize ?: 0
+
+        dialog = ComposeDialogManager.showBottomDialog(requireActivity()) {
+            TextSizeSelectionDialog(
+                textSizeList = textSizeList,
+                currentSelection = currentSelection,
+                onItemSelected = { index ->
+                    TextSizeUtil.updateTextSize(index)
                     updateTextSizeSettings()
+                    dialog?.dismiss() // 选中后关闭弹窗
                 }
-            })
-            .setSelection(selectMenuIndex)
+            )
+        }
     }
 
     private fun refreshTextSize() {
@@ -268,5 +285,85 @@ class MeFragment : Fragment() {
                 }
 
             }).startActivityPreview(0, false, list)
+    }
+}
+
+/**
+ * 文字大小选择对话框
+ */
+@Composable
+fun TextSizeSelectionDialog(
+    textSizeList: Array<String>,
+    currentSelection: Int,
+    onItemSelected: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    val textColor = Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary))
+    val selectedColor = Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_info))
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        // 选项列表
+        textSizeList.forEachIndexed { index, text ->
+            TextSizeOptionItem(
+                text = text,
+                isSelected = index == currentSelection,
+                textColor = textColor,
+                selectedColor = selectedColor,
+                onClick = {
+                    onItemSelected(index)
+                }
+            )
+
+            // 分隔线（除了最后一个）
+            if (index < textSizeList.size - 1) {
+                HorizontalDivider(
+                    color = textColor.copy(alpha = 0.1f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 文字大小选项项
+ */
+@Composable
+fun TextSizeOptionItem(
+    text: String,
+    isSelected: Boolean,
+    textColor: Color,
+    selectedColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 文字
+        Text(
+            text = text,
+            fontSize = 16.sp,
+            color = if (isSelected) selectedColor else textColor,
+            modifier = Modifier.weight(1f)
+        )
+
+        // 选中图标
+        if (isSelected) {
+            Icon(
+                painter = painterResource(id = com.difft.android.chat.R.drawable.chat_ic_selected),
+                contentDescription = "Selected",
+                tint = selectedColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }

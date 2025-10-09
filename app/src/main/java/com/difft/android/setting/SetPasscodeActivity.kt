@@ -3,11 +3,6 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
-import android.graphics.Typeface
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.isVisible
@@ -16,15 +11,10 @@ import com.difft.android.R
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivitySetPasscodeBinding
 import com.difft.android.login.PasscodeUtil
-import com.difft.android.setting.repo.SettingRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
 import dagger.hilt.android.AndroidEntryPoint
 import org.thoughtcrime.securesms.util.ViewUtil
 import javax.inject.Inject
@@ -57,7 +47,6 @@ class SetPasscodeActivity : BaseActivity() {
                 } else if (mBinding.llStep2.isVisible) {
                     mBinding.llStep1.visibility = View.VISIBLE
                     mBinding.llStep2.visibility = View.GONE
-                    mBinding.llSuccess.visibility = View.GONE
 
                     mBinding.etPasscode1.requestFocus()
                     mBinding.etPasscode2.clearFocus()
@@ -87,7 +76,6 @@ class SetPasscodeActivity : BaseActivity() {
         mBinding.btnNext.setOnClickListener {
             mBinding.llStep1.visibility = View.GONE
             mBinding.llStep2.visibility = View.VISIBLE
-            mBinding.llSuccess.visibility = View.GONE
 
             mBinding.etPasscode1.clearFocus()
             mBinding.etPasscode2.requestFocus()
@@ -96,44 +84,6 @@ class SetPasscodeActivity : BaseActivity() {
         mBinding.btnConfirm.setOnClickListener {
             syncAndSavePasscode()
         }
-
-        mBinding.tvPasscodeSuccessTips.text = createPasscodeSuccessSpannableText()
-
-        mBinding.btnGotIt.setOnClickListener {
-            finish()
-        }
-    }
-
-    private fun createPasscodeSuccessSpannableText(): SpannableString {
-        val successTips = getString(R.string.settings_passcode_success_tips)
-        val forgetTips = getString(R.string.settings_passcode_forget_tips)
-        val fullText = successTips + forgetTips
-
-        val spannableString = SpannableString(fullText)
-
-        // Apply different color to the first part (success tips)
-        spannableString.setSpan(
-            ForegroundColorSpan(getColor(com.difft.android.base.R.color.t_secondary)),
-            0,
-            successTips.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-
-        // Apply different color and bold to the second part (forget tips)
-        spannableString.setSpan(
-            ForegroundColorSpan(getColor(com.difft.android.base.R.color.t_primary)),
-            successTips.length,
-            fullText.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-        spannableString.setSpan(
-            StyleSpan(Typeface.BOLD),
-            successTips.length,
-            fullText.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-
-        return spannableString
     }
 
     private fun syncAndSavePasscode() {
@@ -151,13 +101,10 @@ class SetPasscodeActivity : BaseActivity() {
 
             PasscodeUtil.disableScreenLock = true
 
-            mBinding.clTitle.visibility = View.GONE
-            mBinding.tvScreenLock.visibility = View.GONE
-            mBinding.llStep1.visibility = View.GONE
-            mBinding.llStep2.visibility = View.GONE
-            mBinding.llSuccess.visibility = View.VISIBLE
+            ToastUtil.showLong(getString(R.string.settings_passcode_success_title))
+            finish()
         } else {
-            TipDialog.show(getString(R.string.settings_passcode_error_tips))
+            ToastUtil.showLong(getString(R.string.settings_passcode_error_tips))
         }
     }
 }

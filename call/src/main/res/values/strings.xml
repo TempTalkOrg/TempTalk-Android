@@ -54,6 +54,6 @@
     <string name="call_chat_header_started_call">%s started a call</string>
     <string name="call_chat_header_1v1_calling">%s is calling</string>
     <string name="call_params_url_exception_tip">The server URL parameter is abnormal.</string>
-
-
+    <string name="call_params_startcall_exception_tip">Abnormal conference connection parameters.</string>
+    <string name="call_service_node_dashboard_title">Call service settings</string>
 </resources>

@@ -551,9 +551,7 @@
         <item quantity="other">正在保存 %1$d 附件到存储…</item>
     </plurals>
     <string name="StorageUtil__s_s">%1$s/%2$s</string>
-    <plurals name="ConversationFragment_error_while_saving_attachments_to_sd_card">
-        <item quantity="other">保存附件到存储时出错！</item>
-    </plurals>
+    <string name="ConversationFragment_error_while_saving_attachments_to_sd_card">保存附件到存储时出错！</string>
     <string name="SaveAttachmentTask_saved_to_album">已保存到系统相册</string>
     <string name="SaveAttachmentTask_saved_to_audio">已保存到系统音频文件夹</string>
     <string name="SaveAttachmentTask_saved_to_downloads">已保存到系统下载文件夹</string>

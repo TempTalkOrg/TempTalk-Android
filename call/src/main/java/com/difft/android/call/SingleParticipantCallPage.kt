@@ -44,6 +44,7 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.call.CallRole
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.data.BarrageMessageConfig
@@ -71,13 +72,12 @@ fun SingleParticipantCallPage(
     autoHideTimeout: Long,
     callConfig: CallConfig,
     conversationId: String?,
-    callerId: String,
     callRole: CallRole?,
     handleInviteUsersClick: () -> Unit = {}
 ){
     val participants by viewModel.participants.collectAsState(initial = emptyList())
-    val isUserSharingScreen by viewModel.isParticipantSharedScreen.collectAsState()
-    val isShowUsersEnabled by viewModel.showUsersEnabled.collectAsState()
+    val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
+    val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
     val callStatus by viewModel.callStatus.collectAsState()
 
     val videoTrackMap by room.localParticipant::videoTrackPublications.flow.collectAsState(initial = emptyList())
@@ -145,7 +145,13 @@ fun SingleParticipantCallPage(
 
     // 显示弹幕
     BarrageMessageView(viewModel, config = BarrageMessageConfig(true, callConfig.chatPresets, displayDurationMillis = autoHideTimeout), { message, topic ->
-        viewModel.sendBarrageData(message, topic)
+        viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
+            if(status){
+                viewModel.showCallBarrageMessage(room.localParticipant, message)
+            } else {
+                L.e {"[Call] Failed to send barrage message status = $status."}
+            }
+        })
     })
 
     if(isUserSharingScreen && isShowUsersEnabled) {
@@ -169,7 +175,7 @@ fun OneVOneSelfVideoView(
     val screenWidth = configuration.screenWidthDp.dp.value // 获取屏幕宽度（dp）
     val screenHeight = configuration.screenHeightDp.dp.value // 获取屏幕高度（dp）
 
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
 
     var dragViewOffsetX: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(screenWidth.toInt() - videoViewWith.value.toInt() - 12).toFloat()) }
     var dragViewOffsetY: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(screenHeight.toInt() - videoViewHeight.value.toInt() - 40).toFloat()) }

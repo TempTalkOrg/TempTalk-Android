@@ -7,11 +7,8 @@ import androidx.lifecycle.LifecycleOwner
 
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.R
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
 import io.reactivex.rxjava3.core.Single
 import org.signal.libsignal.protocol.ecc.Curve
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
@@ -20,7 +17,7 @@ import org.thoughtcrime.securesms.util.TextSecurePreferences
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import javax.inject.Inject
 import javax.inject.Singleton
-
+import com.difft.android.base.widget.ToastUtil
 @Singleton
 class LinkDeviceUtils @Inject constructor(
     private val encryptionDataManager: EncryptionDataManager
@@ -31,13 +28,13 @@ class LinkDeviceUtils @Inject constructor(
      */
     fun linkDevice(activity: Activity, ephemeralId: String?, publicKeyEncoded: String?, needFinish: Boolean = false) {
         if (!TextUtils.isEmpty(ephemeralId) && !TextUtils.isEmpty(publicKeyEncoded)) {
-            MessageDialog.show(
-                activity.getString(R.string.link_device),
-                activity.getString(R.string.link_device_tips),
-                activity.getString(R.string.link_new_device),
-                activity.getString(R.string.link_device_cancel)
-            )
-                .setOkButton { _, _ ->
+            ComposeDialogManager.showMessageDialog(
+                context = activity,
+                title = activity.getString(R.string.link_device),
+                message = activity.getString(R.string.link_device_tips),
+                confirmText = activity.getString(R.string.link_new_device),
+                cancelText = activity.getString(R.string.link_device_cancel),
+                onConfirm = {
                     Single.fromCallable {
                         val accountManager = ApplicationDependencies.getSignalServiceAccountManager()
                         val verificationCode = accountManager.newDeviceVerificationCode
@@ -65,23 +62,18 @@ class LinkDeviceUtils @Inject constructor(
                             TextSecurePreferences.setMultiDevice(activity, false)
 
                             if (needFinish) {
-                                TipDialog.show(e.message, WaitDialog.TYPE.ERROR, 2000).dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-                                    override fun onDismiss(dialog: WaitDialog?) {
-                                        activity.finish()
-                                    }
-                                }
+                                e.message?.let { ToastUtil.showLong(it) }
+                                activity.finish()
                             } else {
-                                TipDialog.show(e.message, WaitDialog.TYPE.ERROR)
+                                e.message?.let { ToastUtil.showLong(it) }
                             }
                         })
-                    false
-                }
-                .setCancelButton { _, _ ->
+                },
+                onCancel = {
                     if (needFinish) {
                         activity.finish()
                     }
-                    false
-                }
+                })
         }
     }
 

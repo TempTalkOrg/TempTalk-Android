@@ -30,7 +30,6 @@ import com.difft.android.messageserialization.db.store.DBMessageStore
 import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.kongzue.dialogx.dialogs.PopTip
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.CompletableSubject
@@ -51,7 +50,7 @@ import com.difft.android.websocket.api.util.CallMessageCreator
 import java.util.ArrayList
 import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 class LCallToChatControllerImpl @Inject constructor(
     @ChativeHttpClientModule.Call
     private val httpClient: ChativeHttpClient,
@@ -74,7 +73,7 @@ class LCallToChatControllerImpl @Inject constructor(
         globalServices.myId
     }
 
-    override fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: () -> Unit) {
+    override fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: (Boolean) -> Unit) {
 
         LCallManager.showWaitDialog(context)
 
@@ -94,9 +93,7 @@ class LCallToChatControllerImpl @Inject constructor(
 
         val startCallParams = LCallManager.createStartCallParams(body)
 
-        val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
-
-        val intent = CallIntent.Builder(application, LCallActivity::class.java)
+        val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
             .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .withAction(CallIntent.Action.JOIN_CALL)
             .withRoomName(roomName)
@@ -106,12 +103,43 @@ class LCallToChatControllerImpl @Inject constructor(
             .withConversationId(conversationId)
             .withStartCallParams(startCallParams)
             .withAppToken(SecureSharedPrefsUtil.getToken())
-            .withCallServerUrls(speedTestServerUrls)
-            .build()
 
-        application.startActivity(intent)
+        val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
 
-        onComplete()
+        if(speedTestServerUrls.isEmpty()) {
+            callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
+                .compose(RxUtil.getSingleSchedulerComposer())
+                .doAfterTerminate {
+                    LCallManager.dismissWaitDialog()
+                }
+                .autoDispose(autoDisposeCompletable)
+                .subscribe({
+                    if (it.status == 0) {
+                        L.d { "[Call] joinCall getCallServerUrl success, response data:${it.data}" }
+                        val data = it.data
+                        val serviceUrls = data?.serviceUrls
+                        if(data != null && serviceUrls != null && serviceUrls.isNotEmpty()) {
+                            val intent = callIntentBuilder.withCallServerUrls(serviceUrls).build()
+                            application.startActivity(intent)
+                            onComplete(true)
+                        } else {
+                            L.e { "[Call] call server url data is null" }
+                            onComplete(false)
+                        }
+                    } else {
+                        L.e { "[Call] joinCall getCallServerUrl failed, status:${it.status}" }
+                        onComplete(false)
+                    }
+                }, {
+                    L.e { "[Call] joinCall getCallServerUrl failed, error:${it.message}" }
+                    onComplete(false)
+                })
+        }else {
+            val intent = callIntentBuilder.withCallServerUrls(speedTestServerUrls).build()
+            application.startActivity(intent)
+            onComplete(true)
+            LCallManager.dismissWaitDialog()
+        }
     }
 
     override fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit) {
@@ -153,12 +181,12 @@ class LCallToChatControllerImpl @Inject constructor(
                     }
                 } else {
                     L.e { "[Call] rejectCall, response status fail, reason:${it.reason}" }
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
                 it.printStackTrace()
                 L.e { "[Call] rejectCall, request fail, error:${it.stackTraceToString()}" }
-                PopTip.show(it.message)
+                it.message?.let { message -> ToastUtil.show(message) }
             })
 
     }
@@ -202,12 +230,12 @@ class LCallToChatControllerImpl @Inject constructor(
                 }
             } else {
                 L.e { "[Call] cancelCall, response status fail, reason:${it.reason}" }
-                PopTip.show(it.reason)
+                it.reason?.let { message -> ToastUtil.show(message) }
             }
         }, {
             it.printStackTrace()
             L.e { "[Call] cancelCall, request fail, error:${it.stackTraceToString()}" }
-            PopTip.show(it.message)
+            it.message?.let { message -> ToastUtil.show(message) }
         })
 
     }
@@ -270,7 +298,7 @@ class LCallToChatControllerImpl @Inject constructor(
             }, {
                 it.printStackTrace()
                 L.e { "[Call] hangUpCall, request fail, error:${it.stackTraceToString()}" }
-                PopTip.show(it.message)
+                it.message?.let { message -> ToastUtil.show(message) }
             })
 
     }
@@ -306,12 +334,12 @@ class LCallToChatControllerImpl @Inject constructor(
                     }
                 } else {
                     L.e { "[Call] syncJoinedMessage, response status fail, reason:${it.reason}" }
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
                 it.printStackTrace()
                 L.e { "[Call] syncJoinedMessage, request fail, error:${it.stackTraceToString()}" }
-                PopTip.show(it.message)
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 

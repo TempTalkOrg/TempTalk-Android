@@ -5,14 +5,14 @@ import android.os.AsyncTask;
 
 import androidx.annotation.CallSuper;
 
-import com.kongzue.dialogx.dialogs.WaitDialog;
+import com.difft.android.base.widget.ComposeDialog;
+import com.difft.android.base.widget.ComposeDialogManager;
 
 import java.lang.ref.WeakReference;
 
 public abstract class ProgressDialogAsyncTask<Params, Progress, Result> extends AsyncTask<Params, Progress, Result> {
 
     private final WeakReference<Context> contextReference;
-    private WaitDialog progress;
     private final String message;
 
     public ProgressDialogAsyncTask(Context context, String message) {
@@ -23,14 +23,14 @@ public abstract class ProgressDialogAsyncTask<Params, Progress, Result> extends 
 
     @Override
     protected void onPreExecute() {
-//        final Context context = contextReference.get();
-//        if (context != null) progress = WaitDialog.show(message);
+        final Context context = contextReference.get();
+        if (context != null)  ComposeDialogManager.INSTANCE.showWait(context);
     }
 
     @CallSuper
     @Override
     protected void onPostExecute(Result result) {
-        if (progress != null) progress.doDismiss();
+        ComposeDialogManager.dismissWait();
     }
 
     protected Context getContext() {

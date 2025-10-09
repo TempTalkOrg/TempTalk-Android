@@ -40,9 +40,7 @@ import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.responses.MuteStatus
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
@@ -53,7 +51,7 @@ import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 const val KEY_GROUP_ID = "groupId"
 const val KEY_GROUP_NAME = "groupName"
 const val EXTRA_SELECTED_MEMBER_IDS = "extra_selected_member_ids"
@@ -203,7 +201,7 @@ class GroupInfoActivity : BaseActivity() {
                         if (role < GROUP_ROLE_MEMBER || groupInfo?.invitationRule == 2) {
                             gotoMembersActivity(GroupSelectMemberActivity.TYPE_ADD_MEMBER)
                         } else {
-                            PopTip.show(getString(R.string.group_permission_denied))
+                            ToastUtil.show(getString(R.string.group_permission_denied))
                         }
                     }
 
@@ -211,7 +209,7 @@ class GroupInfoActivity : BaseActivity() {
                         if (role < GROUP_ROLE_MEMBER || groupInfo?.anyoneRemove == true) {
                             gotoMembersActivity(GroupSelectMemberActivity.TYPE_REMOVE_MEMBER)
                         } else {
-                            PopTip.show(getString(R.string.group_permission_denied))
+                            ToastUtil.show(getString(R.string.group_permission_denied))
                         }
                     }
 
@@ -364,8 +362,13 @@ class GroupInfoActivity : BaseActivity() {
 
             binding.leaveButton.setText(R.string.group_disband)
             binding.leaveContainer.setOnClickListener {
-                MessageDialog.show(R.string.group_disband, R.string.group_disband_tips, R.string.group_disband_disband, R.string.group_leave_cancel)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(R.string.group_disband),
+                    message = getString(R.string.group_disband_tips),
+                    confirmText = getString(R.string.group_disband_disband),
+                    cancelText = getString(R.string.group_leave_cancel),
+                    onConfirm = {
                         groupRepo.deleteGroup(groupId)
                             .compose(RxUtil.getSingleSchedulerComposer())
                             .to(RxUtil.autoDispose(this))
@@ -375,18 +378,22 @@ class GroupInfoActivity : BaseActivity() {
                                 }
                             }, {
                                 it.printStackTrace()
-                                TipDialog.show(R.string.chat_net_error)
+                                ToastUtil.showLong(R.string.chat_net_error)
                             })
-                        true
                     }
+                )
             }
         } else {
             binding.relGroupManagement.visibility = View.GONE
             binding.leaveButton.setText(R.string.group_leave)
             binding.leaveContainer.setOnClickListener {
-                MessageDialog.show(R.string.group_leave, R.string.group_leave_notice, R.string.group_leave_leave, R.string.group_leave_cancel)
-                    .setOkButton { _, _ ->
-                        L.i { "BH_Lin: leave group=$groupId" }
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(R.string.group_leave),
+                    message = getString(R.string.group_leave_notice),
+                    confirmText = getString(R.string.group_leave_leave),
+                    cancelText = getString(R.string.group_leave_cancel),
+                    onConfirm = {
                         groupRepo.leaveGroup(
                             groupId,
                             AddOrRemoveMembersReq(mutableListOf(globalServices.myId))
@@ -400,10 +407,10 @@ class GroupInfoActivity : BaseActivity() {
                             }, {
                                 it.printStackTrace()
                                 L.i { "BH_Lin: leave group error it=${it.message}" }
-                                TipDialog.show(R.string.chat_net_error)
+                                ToastUtil.showLong(R.string.chat_net_error)
                             })
-                        true
                     }
+                )
             }
         }
 

@@ -91,8 +91,4 @@ dependencies {
     implementation(project(":selector"))
     implementation(libs.picture.selector.ucrop)
     implementation(libs.picture.selector.compress)
-
-    // 测试依赖已通过base模块提供
-
-    implementation(libs.keyboard.visibility.event)
 }

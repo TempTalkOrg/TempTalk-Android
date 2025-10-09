@@ -17,7 +17,6 @@ import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.widget.DialogXUtil
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallEngine
 import com.difft.android.call.LCallManager
@@ -105,16 +104,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-
-        launch(Dispatchers.IO) {
-            val userData = userManager.getUserData()
-
-            withContext(Dispatchers.Main) {
-                if (userData != null) {
-                    initDialogX(userData.theme)
-                }
-            }
-        }
     }
 
     override fun attachBaseContext(context: Context) {
@@ -144,15 +133,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
                     }
                 }
-                DialogXUtil.initDialog(this@TempTalkApplication, theme)
             }
         }
     }
-
-    private fun initDialogX(theme: Int? = null) {
-        DialogXUtil.initDialog(this, theme)
-    }
-
 
     private fun initRxJavaPlugins() {
         if (!com.difft.android.BuildConfig.DEBUG) {
@@ -215,8 +198,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                         withContext(Dispatchers.Main) {
                             if (userData != null) {
-                                checkAndShowScreenLock(userData)
-                                ScreenShotUtil.setScreenShotEnable(activity, userData.passcode.isNullOrEmpty())
+                                checkAndShowScreenLock(activity, userData)
+                                ScreenShotUtil.setScreenShotEnable(activity, userData.passcode.isNullOrEmpty() && userData.pattern.isNullOrEmpty())
                             }
                         }
                     }
@@ -253,17 +236,17 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }, { e -> e.printStackTrace() })
     }
 
-    private fun checkAndShowScreenLock(userData: UserData) {
+    private fun checkAndShowScreenLock(activity: Activity, userData: UserData) {
 //        L.i { "[screenLock] checkAndShowScreenLock:" + PasscodeUtil.disableScreenLock }
         if (!userData.baseAuth.isNullOrEmpty()
             && !LCallActivity.isInCalling()
             && !LIncomingCallActivity.isActivityShowing()
             && !ScreenLockUtil.appIsForegroundBeforeHandleDeeplink
             && !PasscodeUtil.disableScreenLock
-            && (!userData.passcode.isNullOrEmpty())
+            && (!userData.passcode.isNullOrEmpty() || !userData.pattern.isNullOrEmpty())
             && (userData.passcodeTimeout == 0 || System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds)
         ) {
-            ScreenLockActivity.startActivity()
+            ScreenLockActivity.startActivity(activity)
         }
     }
 
@@ -283,7 +266,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun initCallEngine() {
-        LCallEngine.init(this, globalConfigsManager, this)
+        LCallEngine.init(this, this)
     }
 
     private fun monitorMainThreadBlocking() {

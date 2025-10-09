@@ -32,12 +32,11 @@ import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import difft.android.messageserialization.model.MENTIONS_TYPE_ALL
 import difft.android.messageserialization.model.MENTIONS_TYPE_ME
-import com.kongzue.dialogx.dialogs.PopTip
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
 import java.util.concurrent.TimeUnit
-
+import com.difft.android.base.widget.ToastUtil
 abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolean = false) : ListAdapter<ListItem, RecyclerView.ViewHolder>(
     object : DiffUtil.ItemCallback<ListItem>() {
         override fun areItemsTheSame(oldItem: ListItem, newItem: ListItem): Boolean {
@@ -347,13 +346,18 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 binding.callBarDuration.setOnClickListener {
                     if (!LCallActivity.isInCalling()) {
                         L.i { "[call] CallBar Joining call for roomId:${roomId}." }
-                        LCallManager.joinCall(activity, roomId)
+                        LCallManager.joinCall(activity, callData) { status ->
+                            if(!status) {
+                                L.e { "[Call] CallBar join call failed." }
+                                ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
+                            }
+                        }
                     } else {
                         if (LCallActivity.getCurrentRoomId() == roomId) {
                             L.i { "[call] CallBar Bringing back current call for roomId:${roomId}." }
                             LCallManager.bringInCallScreenBack(ApplicationHelper.instance.applicationContext)
                         } else {
-                            PopTip.show(com.difft.android.call.R.string.call_newcall_tip)
+                            ToastUtil.show(com.difft.android.call.R.string.call_newcall_tip)
                         }
                     }
                 }

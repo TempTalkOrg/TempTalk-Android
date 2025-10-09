@@ -213,7 +213,7 @@
                 app:layout_constraintStart_toEndOf="@+id/button_media"
                 app:layout_goneMarginEnd="12dp">
 
-                <androidx.appcompat.widget.AppCompatEditText
+                <com.difft.android.chat.widget.PasteAwareEditText
                     android:id="@+id/edittext_input"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"

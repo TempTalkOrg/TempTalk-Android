@@ -55,15 +55,15 @@ import com.difft.android.network.BaseResponse
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.GetConversationSetResponseBody
 import com.difft.android.base.widget.sideBar.SectionDecoration
-import com.kongzue.dialogx.dialogs.FullScreenDialog
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
-import com.kongzue.dialogx.interfaces.OnBindView
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.fragment.app.FragmentActivity
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBRoomModel
@@ -106,9 +107,7 @@ class SelectChatsUtils @Inject constructor() {
     @Inject
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
 
-    private var mChatSelectDialog: FullScreenDialog? = null
-    private val activeJobs = mutableListOf<Job>()
-    private var currentWaitDialog: WaitDialog? = null
+    private var mChatSelectDialog: ChatSelectBottomSheetFragment? = null
 
     private fun clearDialog() {
         mChatSelectDialog?.dismiss()
@@ -116,54 +115,39 @@ class SelectChatsUtils @Inject constructor() {
         dismissWaitDialog()
     }
 
-    private fun launchWithJob(block: suspend CoroutineScope.() -> Unit): Job {
-        return appScope.launch {
-            block()
-        }.also { job ->
-            activeJobs.add(job)
-            // 协程完成时自动从列表中移除
-            job.invokeOnCompletion {
-                activeJobs.remove(job)
-            }
-        }
-    }
+    // 获取当前Dialog的CoroutineScope，如果Dialog存在则使用其lifecycleScope，否则使用appScope作为fallback
+    private val dialogScope: CoroutineScope
+        get() = mChatSelectDialog?.lifecycleScope ?: appScope
 
     private fun showWaitDialog(activity: Activity, message: String = "") {
-        currentWaitDialog?.doDismiss()
-        currentWaitDialog = WaitDialog.show(activity, message).setCancelable(false)
+        ComposeDialogManager.showWait(activity, message, cancelable = false)
     }
 
     private fun dismissWaitDialog() {
-        currentWaitDialog?.doDismiss()
-        currentWaitDialog = null
-    }
-
-    /**
-     * 用户主动关闭对话框时调用，取消所有正在执行的任务
-     */
-    private fun cancelAllTasks() {
-        // 取消所有活跃的协程
-        activeJobs.forEach { it.cancel() }
-        activeJobs.clear()
+        ComposeDialogManager.dismissWait()
     }
 
     /**
      * 任务成功完成后的统一处理
      * @param message 成功提示消息的资源ID
      */
-    private fun handleTaskSuccess(message: Int) {
+    private suspend fun handleTaskSuccess(message: Int) {
         L.i { "[SelectChatsUtils] forward message success" }
-        PopTip.show(message)
-        clearDialog()
-        cancelAllTasks()
+        withContext(Dispatchers.Main) {
+            ToastUtil.show(message)
+            clearDialog()
+        }
     }
 
     /**
      * 任务失败后的统一处理
      */
-    private fun handleTaskError() {
-        dismissWaitDialog()
-        PopTip.show(R.string.operation_failed)
+    private suspend fun handleTaskError(e: Exception) {
+        L.e { "[SelectChatsUtils] forward message failed:" + e.stackTraceToString() }
+        withContext(Dispatchers.Main) {
+            dismissWaitDialog()
+            ToastUtil.show(R.string.operation_failed)
+        }
     }
 
     companion object {
@@ -172,7 +156,7 @@ class SelectChatsUtils @Inject constructor() {
         const val ITEM_TYPE_CONTACT = 3
     }
 
-    private var searchKey: String = ""
+    var searchKey: String = ""
 
     fun showChatSelectAndSendDialog(
         context: Activity,
@@ -187,7 +171,7 @@ class SelectChatsUtils @Inject constructor() {
             if (data.isGroup) {
                 val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.id))
                 if (group != null && !GroupUtil.canSpeak(group, globalServices.myId)) {
-                    PopTip.show(context.getString(R.string.group_only_moderators_can_speak_tip))
+                    ToastUtil.show(context.getString(R.string.group_only_moderators_can_speak_tip))
                     return@showChatSelectDialog
                 }
             }
@@ -207,235 +191,34 @@ class SelectChatsUtils @Inject constructor() {
         context: Activity,
         onSelected: (ChatsContact?) -> Unit
     ) {
-        FullScreenDialog.build(object :
-            OnBindView<FullScreenDialog>(R.layout.chat_layout_forward_select_chat) {
-            override fun onBind(dialog: FullScreenDialog, v: View) {
-                val tvClose = v.findViewById<AppCompatTextView>(R.id.tv_close)
-                tvClose.setOnClickListener {
-                    onSelected(null)
-                    dialog.dismiss()
-                    cancelAllTasks()
+        val fragment = ChatSelectBottomSheetFragment(
+            onSelected = { data ->
+                onSelected(data)
+                // 选择会话后不关闭弹窗，只有取消时才关闭
+                if (data == null) {
                     clearDialog()
                 }
+            },
+            isContactOnly = false,
+            selectChatsUtils = this
+        )
 
-                val btnClear = v.findViewById<AppCompatImageButton>(R.id.button_clear)
-                val etSearch = v.findViewById<AppCompatEditText>(R.id.edittext_search_input)
-
-                btnClear.setOnClickListener {
-                    etSearch.text = null
-                }
-                resetButtonClear(btnClear)
-
-                etSearch.addTextChangedListener {
-                    searchKey = it.toString().trim()
-
-                    search()
-
-                    resetButtonClear(btnClear)
-                }
-
-                val recentChatsAdapter = object : ChatsContactSelectAdapter() {
-                    override fun onItemClicked(data: ChatsContact?, position: Int) {
-                        onSelected(data)
-                    }
-                }
-
-
-                val tvNoResult = v.findViewById<AppCompatTextView>(R.id.tv_no_result)
-                val recyclerViewRecentChats =
-                    v.findViewById<RecyclerView>(R.id.recyclerview_recent_chats)
-                recyclerViewRecentChats.apply {
-                    this.layoutManager = LinearLayoutManager(context)
-                    this.adapter = recentChatsAdapter
-                }
-
-                // 使用协程监听数据流变化
-                launchWithJob {
-                    combine(_roomsFlow, _groupsFlow, _contactsFlow) { chats, groups, contacts ->
-                        val chatsList = chats.map { chat ->
-                            if (chat.roomType == 1) {
-                                ChatsContact(
-                                    chat.roomId,
-                                    chat.roomName.toString(),
-                                    chat.roomAvatarJson,
-                                    null,
-                                    true,
-                                    ITEM_TYPE_CHAT,
-                                    chat.roomAvatarJson
-                                )
-                            } else {
-                                ChatsContact(
-                                    chat.roomId,
-                                    chat.roomName.toString(),
-                                    chat.roomAvatarJson,
-                                    ContactorUtil.getFirstLetter(chat.roomName),
-                                    false,
-                                    ITEM_TYPE_CHAT,
-                                    chat.roomAvatarJson
-                                )
-                            }
-                        }
-
-                        val groupsList = groups.filter { it.status == 0 }
-                            .map { group ->
-                                ChatsContact(
-                                    group.gid,
-                                    group.name,
-                                    null,
-                                    null,
-                                    true,
-                                    ITEM_TYPE_GROUP,
-                                    group.avatar
-                                )
-                            }
-
-                        val contactsList = contacts.sortedWith(PinyinComparator()).map { contact ->
-                            ChatsContact(
-                                contact.id,
-                                contact.getDisplayNameForUI(),
-                                contact.avatar,
-                                contact.getDisplayNameForUI().getFirstLetter(),
-                                false,
-                                ITEM_TYPE_CONTACT,
-                                null
-                            )
-                        }
-
-                        mutableListOf<ChatsContact>().apply {
-                            addAll(chatsList)
-                            addAll(groupsList)
-                            addAll(contactsList)
-                        }
-                    }.collect { combinedList ->
-                        withContext(Dispatchers.Main) {
-                            if (combinedList.isEmpty()) {
-                                tvNoResult.visibility = View.VISIBLE
-                                recyclerViewRecentChats.visibility = View.GONE
-                            } else {
-                                tvNoResult.visibility = View.GONE
-                                recyclerViewRecentChats.visibility = View.VISIBLE
-                                recentChatsAdapter.submitList(combinedList) {
-                                    recyclerViewRecentChats.scrollToPosition(0)
-                                }
-                                addGroupDecoration(context, recyclerViewRecentChats, combinedList)
-                            }
-                        }
-                    }
-                }
-
-                search()
-            }
-        })
-            .setBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1))
-            .setDialogLifecycleCallback(object :
-                DialogLifecycleCallback<FullScreenDialog>() {
-                override fun onDismiss(dialog: FullScreenDialog?) {
-                    super.onDismiss(dialog)
-                    L.i { "onDismiss" }
-                    searchKey = ""
-                }
-            })
-            .setCancelable(false)
-            .setAllowInterceptTouch(false).run {
-                mChatSelectDialog = this
-                show(context)
-            }
+        mChatSelectDialog = fragment
+        fragment.show((context as FragmentActivity).supportFragmentManager, "ChatSelectDialog")
     }
 
     fun showContactSelectDialog(
         context: Activity,
         onSelected: (ChatsContact?) -> Unit
     ) {
-        FullScreenDialog.build(object :
-            OnBindView<FullScreenDialog>(R.layout.chat_layout_forward_select_chat) {
-            override fun onBind(dialog: FullScreenDialog, v: View) {
-                v.findViewById<TextView>(R.id.title).text = context.getString(R.string.select_contact)
-                val tvClose = v.findViewById<AppCompatTextView>(R.id.tv_close)
-                tvClose.setOnClickListener {
-                    onSelected(null)
-                    dialog.dismiss()
-                }
+        val fragment = ChatSelectBottomSheetFragment(
+            onSelected = onSelected,
+            isContactOnly = true,
+            selectChatsUtils = this
+        )
 
-                val btnClear = v.findViewById<AppCompatImageButton>(R.id.button_clear)
-                val etSearch = v.findViewById<AppCompatEditText>(R.id.edittext_search_input)
-
-                btnClear.setOnClickListener {
-                    etSearch.text = null
-                }
-                resetButtonClear(btnClear)
-
-                etSearch.addTextChangedListener {
-                    searchKey = it.toString().trim()
-
-                    search()
-
-                    resetButtonClear(btnClear)
-                }
-
-                val recentChatsAdapter = object : ChatsContactSelectAdapter(true) {
-                    override fun onItemClicked(data: ChatsContact?, position: Int) {
-                        onSelected(data)
-                        dialog.dismiss()
-                    }
-                }
-
-
-                val tvNoResult = v.findViewById<AppCompatTextView>(R.id.tv_no_result)
-                val recyclerViewRecentChats =
-                    v.findViewById<RecyclerView>(R.id.recyclerview_recent_chats)
-                recyclerViewRecentChats.apply {
-                    this.layoutManager = LinearLayoutManager(context)
-                    this.adapter = recentChatsAdapter
-                }
-
-                // 使用协程监听联系人数据流变化
-                launchWithJob {
-                    _contactsFlow.collect { contacts ->
-                        val contactsList = contacts.sortedWith(PinyinComparator()).map { contact ->
-                            ChatsContact(
-                                contact.id,
-                                contact.getDisplayNameForUI(),
-                                contact.avatar,
-                                contact.getDisplayNameForUI().getFirstLetter(),
-                                false,
-                                ITEM_TYPE_CONTACT,
-                                null
-                            )
-                        }
-
-                        withContext(Dispatchers.Main) {
-                            if (contactsList.isEmpty()) {
-                                tvNoResult.visibility = View.VISIBLE
-                                recyclerViewRecentChats.visibility = View.GONE
-                            } else {
-                                tvNoResult.visibility = View.GONE
-                                recyclerViewRecentChats.visibility = View.VISIBLE
-                                recentChatsAdapter.submitList(contactsList) {
-                                    recyclerViewRecentChats.scrollToPosition(0)
-                                }
-                                addGroupDecoration(context, recyclerViewRecentChats, contactsList)
-                            }
-                        }
-                    }
-                }
-
-                search()
-            }
-        })
-            .setBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1))
-            .setDialogLifecycleCallback(object :
-                DialogLifecycleCallback<FullScreenDialog>() {
-                override fun onDismiss(dialog: FullScreenDialog?) {
-                    super.onDismiss(dialog)
-                    L.i { "onDismiss" }
-                    searchKey = ""
-                }
-            })
-            .setCancelable(false)
-            .setAllowInterceptTouch(false).run {
-                mChatSelectDialog = this
-                show(context)
-            }
+        mChatSelectDialog = fragment
+        fragment.show((context as FragmentActivity).supportFragmentManager, "ContactSelectDialog")
     }
 
 
@@ -452,7 +235,7 @@ class SelectChatsUtils @Inject constructor() {
 
 
     fun search() {
-        launchWithJob {
+        dialogScope.launch(Dispatchers.IO) {
             // 并发查询所有数据
             val roomsDeferred = async { queryRooms() }
             val groupsDeferred = async { queryGroups() }
@@ -466,7 +249,7 @@ class SelectChatsUtils @Inject constructor() {
         }
     }
 
-    private fun resetButtonClear(btnClear: AppCompatImageButton) {
+    fun resetButtonClear(btnClear: AppCompatImageButton) {
         btnClear.animate().apply {
             cancel()
             val toAlpha = if (!TextUtils.isEmpty(searchKey)) 1.0f else 0f
@@ -474,9 +257,9 @@ class SelectChatsUtils @Inject constructor() {
         }
     }
 
-    private val _roomsFlow = MutableStateFlow<List<RoomModel>>(emptyList())
-    private val _groupsFlow = MutableStateFlow<List<GroupModel>>(emptyList())
-    private val _contactsFlow = MutableStateFlow<List<ContactorModel>>(emptyList())
+    val _roomsFlow = MutableStateFlow<List<RoomModel>>(emptyList())
+    val _groupsFlow = MutableStateFlow<List<GroupModel>>(emptyList())
+    val _contactsFlow = MutableStateFlow<List<ContactorModel>>(emptyList())
 
     private suspend fun queryRooms(): List<RoomModel> = withContext(Dispatchers.IO) {
         try {
@@ -549,85 +332,85 @@ class SelectChatsUtils @Inject constructor() {
         chatsContact: ChatsContact,
         content: String,
         title: String? = null,
-        logFile: File? = null,
+        file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
         card: Card? = null
     ) {
-        MessageDialog.show(context.getString(R.string.chat_send_to), "", context.getString(R.string.chat_send), context.getString(R.string.chat_send_cancel))
-            .setCustomView(object : OnBindView<MessageDialog?>(R.layout.chat_layout_forward_dialog) {
-                override fun onBind(dialog: MessageDialog?, v: View) {
-                    val avatarView = v.findViewById<AvatarView>(R.id.imageview_avatar)
-                    val groupAvatarView = v.findViewById<GroupAvatarView>(R.id.group_avatar)
+        ComposeDialogManager.showMessageDialog(
+            context = context,
+            title = context.getString(R.string.chat_send_to),
+            message = "",
+            confirmText = context.getString(R.string.chat_send),
+            cancelText = context.getString(R.string.chat_send_cancel),
+            layoutId = R.layout.chat_layout_forward_dialog,
+            onViewCreated = { v ->
+                val avatarView = v.findViewById<AvatarView>(R.id.imageview_avatar)
+                val groupAvatarView = v.findViewById<GroupAvatarView>(R.id.group_avatar)
 
-                    val textViewName = v.findViewById<AppCompatTextView>(R.id.textViewName)
-                    val textContent = v.findViewById<AppCompatTextView>(R.id.textContent)
-                    etMessage = v.findViewById(R.id.et_message)
+                val textViewName = v.findViewById<AppCompatTextView>(R.id.textViewName)
+                val textContent = v.findViewById<AppCompatTextView>(R.id.textContent)
+                etMessage = v.findViewById(R.id.et_message)
 
-                    if (chatsContact.isGroup) {
-                        groupAvatarView.visibility = View.VISIBLE
-                        groupAvatarView.setAvatar(chatsContact.avatarJson?.getAvatarData())
-                    } else {
-                        avatarView.visibility = View.VISIBLE
-                        val contactAvatar = chatsContact.avatar?.getContactAvatarData()
-                        avatarView.setAvatar(contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, chatsContact.firstLetters, chatsContact.id)
-                    }
-                    textViewName.text = chatsContact.name
-                    val contentText = title ?: content
-                    textContent.text = contentText
+                if (chatsContact.isGroup) {
+                    groupAvatarView.visibility = View.VISIBLE
+                    groupAvatarView.setAvatar(chatsContact.avatarJson?.getAvatarData())
+                } else {
+                    avatarView.visibility = View.VISIBLE
+                    val contactAvatar = chatsContact.avatar?.getContactAvatarData()
+                    avatarView.setAvatar(contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, chatsContact.firstLetters, chatsContact.id)
                 }
-            })
-            .setBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1))
-            .setOkButton { dialog, v ->
+                textViewName.text = chatsContact.name
+                val contentText = title ?: content
+                textContent.text = contentText
+            },
+            onConfirm = {
                 val message = etMessage?.text.toString().trim()
 
                 // 显示全局 WaitDialog，设置为不可取消
                 showWaitDialog(context)
 
-                if (logFile != null) {
-                    launchWithJob {
-                        try {
-                            sendLogFile(context, Uri.fromFile(logFile), chatsContact.id, chatsContact.isGroup)
-                            handleTaskSuccess(R.string.chat_sent)
-                        } catch (_: Exception) {
-                            handleTaskError()
-                        }
+                // 收集所有需要发送的任务
+                val sendTasks = mutableListOf<suspend () -> Unit>()
+
+                // 添加主要内容发送任务
+                if (file != null) {
+                    sendTasks.add {
+                        sendFile(context, Uri.fromFile(file), chatsContact.id, chatsContact.isGroup)
                     }
                 } else if (forwardContexts != null && forwardContexts.isEmpty().not()) {
-                    val forWhat = if (chatsContact.isGroup) For.Group(chatsContact.id) else For.Account(chatsContact.id)
-                    launchWithJob {
-                        try {
-                            val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
-                            val response = getConversationConfigs(context, listOf(forWhat.id))
-                            val mode = response.data?.conversations?.find { body -> body.conversation == forWhat.id }?.confidentialMode ?: 0
-                            processForwardContextsSequentially(context, forwardContexts, content, chatsContact, archiveTime = time.toInt(), confidentialMode = mode)
-                            handleTaskSuccess(R.string.chat_sent)
-                        } catch (_: Exception) {
-                            handleTaskError()
-                        }
+                    sendTasks.add {
+                        val forWhat = if (chatsContact.isGroup) For.Group(chatsContact.id) else For.Account(chatsContact.id)
+                        val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
+                        val response = getConversationConfigs(context, listOf(forWhat.id))
+                        val mode = response.data?.conversations?.find { body -> body.conversation == forWhat.id }?.confidentialMode ?: 0
+                        processForwardContextsSequentially(context, forwardContexts, content, chatsContact, archiveTime = time.toInt(), confidentialMode = mode)
                     }
                 } else {
-                    launchWithJob {
-                        try {
-                            sendTextPush(context, content, chatsContact.id, chatsContact.isGroup, card = card)
-                            handleTaskSuccess(R.string.chat_sent)
-                        } catch (_: Exception) {
-                            handleTaskError()
-                        }
+                    sendTasks.add {
+                        sendTextPush(context, content, chatsContact.id, chatsContact.isGroup, card = card)
                     }
                 }
 
+                // 添加额外消息发送任务
                 if (!TextUtils.isEmpty(message)) {
-                    launchWithJob {
-                        try {
-                            sendTextPush(context, message, chatsContact.id, chatsContact.isGroup)
-                            handleTaskSuccess(R.string.chat_sent)
-                        } catch (_: Exception) {
-                            handleTaskError()
-                        }
+                    sendTasks.add {
+                        sendTextPush(context, message, chatsContact.id, chatsContact.isGroup)
                     }
                 }
-                false
+
+                // 顺序执行所有发送任务
+                dialogScope.launch(Dispatchers.IO) {
+                    try {
+                        sendTasks.forEach { task ->
+                            task()
+                        }
+                        handleTaskSuccess(R.string.chat_sent)
+                    } catch (e: Exception) {
+                        handleTaskError(e)
+                    }
+                }
             }
+        )
     }
 
     private fun sendToWithoutShowDialog(
@@ -642,7 +425,7 @@ class SelectChatsUtils @Inject constructor() {
         if (forwardContext != null) {
             val list = checkForwardAttachments(forwardContext)
             if (list.isNotEmpty()) {
-                launchWithJob {
+                dialogScope.launch(Dispatchers.IO) {
                     try {
                         givePermissionForAttachments(
                             context,
@@ -653,12 +436,12 @@ class SelectChatsUtils @Inject constructor() {
                             forwardContext
                         )
                         handleTaskSuccess(R.string.chat_saved)
-                    } catch (_: Exception) {
-                        handleTaskError()
+                    } catch (e: Exception) {
+                        handleTaskError(e)
                     }
                 }
             } else {
-                launchWithJob {
+                dialogScope.launch(Dispatchers.IO) {
                     try {
                         sendTextPush(
                             context,
@@ -670,24 +453,24 @@ class SelectChatsUtils @Inject constructor() {
                             sharedContactName = forwardContext.sharedContactName
                         )
                         handleTaskSuccess(R.string.chat_saved)
-                    } catch (_: Exception) {
-                        handleTaskError()
+                    } catch (e: Exception) {
+                        handleTaskError(e)
                     }
                 }
             }
         } else {
-            launchWithJob {
+            dialogScope.launch(Dispatchers.IO) {
                 try {
                     sendTextPush(context, content, chatsContact.id, chatsContact.isGroup)
                     handleTaskSuccess(R.string.chat_sent)
-                } catch (_: Exception) {
-                    handleTaskError()
+                } catch (e: Exception) {
+                    handleTaskError(e)
                 }
             }
         }
     }
 
-    private fun addGroupDecoration(activity: Activity, recyclerView: RecyclerView, list: List<ChatsContact>) {
+    fun addGroupDecoration(activity: Activity, recyclerView: RecyclerView, list: List<ChatsContact>) {
         for (i in 0 until recyclerView.itemDecorationCount) {
             recyclerView.removeItemDecorationAt(i)
         }
@@ -971,15 +754,14 @@ class SelectChatsUtils @Inject constructor() {
         }
     }
 
-    private fun sendLogFile(context: Activity, attachmentUri: Uri, accountID: String, isGroup: Boolean = false) {
-        val forWhat: For
-        if (isGroup) {
-            forWhat = For.Group(accountID)
+    private fun sendFile(context: Activity, attachmentUri: Uri, accountID: String, isGroup: Boolean = false) {
+        val forWhat: For = if (isGroup) {
+            For.Group(accountID)
         } else {
-            forWhat = For.Account(accountID)
+            For.Account(accountID)
         }
 
-        val timeStamp = System.currentTimeMillis()
+        val timeStamp = getSafeTimestamp()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
         val fileName = FileUtils.getFileName(attachmentUri.path).replace(" ", "")
@@ -989,6 +771,7 @@ class SelectChatsUtils @Inject constructor() {
             FileUtils.copy(attachmentUri.path, filePath)
 
             val mimeType = MediaUtil.getMimeType(com.difft.android.base.utils.application, filePath.toUri()) ?: ""
+            val mediaWidthAndHeight = MediaUtil.getMediaWidthAndHeight(filePath, mimeType)
             val fileSize = FileUtils.getLength(filePath)
 
             val attachment = Attachment(
@@ -1001,8 +784,8 @@ class SelectChatsUtils @Inject constructor() {
                 "".toByteArray(),
                 fileName,
                 0,
-                0,
-                0,
+                mediaWidthAndHeight.first,
+                mediaWidthAndHeight.second,
                 filePath,
                 AttachmentStatus.LOADING.code
             )
@@ -1046,5 +829,210 @@ class SelectChatsUtils @Inject constructor() {
             L.e { "[SelectChatsUtils] getConversationConfigs error: ${e.stackTraceToString()}" }
             throw e
         }
+    }
+}
+
+/**
+ * 聊天选择底部弹窗Fragment
+ */
+class ChatSelectBottomSheetFragment(
+    private val onSelected: (ChatsContact?) -> Unit,
+    private val isContactOnly: Boolean = false,
+    private val selectChatsUtils: SelectChatsUtils
+) : BottomSheetDialogFragment() {
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.chat_layout_forward_select_chat, container, false)
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        // 设置底部弹窗为全屏显示
+        val dialog = dialog
+        if (dialog != null) {
+            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            if (bottomSheet != null) {
+                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
+                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+
+                // 设置底部弹窗高度为全屏
+                val layoutParams = bottomSheet.layoutParams
+                layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+                bottomSheet.layoutParams = layoutParams
+            }
+        }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        // 设置背景色
+        view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1))
+
+        if (isContactOnly) {
+            view.findViewById<TextView>(R.id.title).text = getString(R.string.select_contact)
+        }
+
+        val tvClose = view.findViewById<AppCompatTextView>(R.id.tv_close)
+        tvClose.setOnClickListener {
+            onSelected(null)
+            dismiss()
+        }
+
+        val btnClear = view.findViewById<AppCompatImageButton>(R.id.button_clear)
+        val etSearch = view.findViewById<AppCompatEditText>(R.id.edittext_search_input)
+
+        btnClear.setOnClickListener {
+            etSearch.text = null
+        }
+        selectChatsUtils.resetButtonClear(btnClear)
+
+        etSearch.addTextChangedListener {
+            selectChatsUtils.searchKey = it.toString().trim()
+            selectChatsUtils.search()
+            selectChatsUtils.resetButtonClear(btnClear)
+        }
+
+        val recentChatsAdapter = object : ChatsContactSelectAdapter(isContactOnly) {
+            override fun onItemClicked(data: ChatsContact?, position: Int) {
+                onSelected(data)
+                // 只有联系人选择对话框才在选择后自动关闭
+                if (isContactOnly) {
+                    dismiss()
+                }
+                // 聊天选择对话框在选择后保持打开状态，等待发送确认对话框显示
+            }
+        }
+
+        val tvNoResult = view.findViewById<AppCompatTextView>(R.id.tv_no_result)
+        val recyclerViewRecentChats = view.findViewById<RecyclerView>(R.id.recyclerview_recent_chats)
+        recyclerViewRecentChats.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = recentChatsAdapter
+        }
+
+        // 使用Fragment的lifecycleScope监听数据流变化，确保Fragment销毁时协程也会取消
+        lifecycleScope.launch {
+            if (isContactOnly) {
+                selectChatsUtils._contactsFlow.collect { contacts ->
+                    val contactsList = contacts.sortedWith(PinyinComparator()).map { contact ->
+                        ChatsContact(
+                            contact.id,
+                            contact.getDisplayNameForUI(),
+                            contact.avatar,
+                            contact.getDisplayNameForUI().getFirstLetter(),
+                            false,
+                            SelectChatsUtils.ITEM_TYPE_CONTACT,
+                            null
+                        )
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        // 检查Fragment是否仍然attached，避免崩溃
+                        if (!isAdded) return@withContext
+
+                        if (contactsList.isEmpty()) {
+                            tvNoResult.visibility = View.VISIBLE
+                            recyclerViewRecentChats.visibility = View.GONE
+                        } else {
+                            tvNoResult.visibility = View.GONE
+                            recyclerViewRecentChats.visibility = View.VISIBLE
+                            recentChatsAdapter.submitList(contactsList) {
+                                recyclerViewRecentChats.scrollToPosition(0)
+                            }
+                            selectChatsUtils.addGroupDecoration(requireActivity(), recyclerViewRecentChats, contactsList)
+                        }
+                    }
+                }
+            } else {
+                combine(selectChatsUtils._roomsFlow, selectChatsUtils._groupsFlow, selectChatsUtils._contactsFlow) { chats, groups, contacts ->
+                    val chatsList = chats.map { chat ->
+                        if (chat.roomType == 1) {
+                            ChatsContact(
+                                chat.roomId,
+                                chat.roomName.toString(),
+                                chat.roomAvatarJson,
+                                null,
+                                true,
+                                SelectChatsUtils.ITEM_TYPE_CHAT,
+                                chat.roomAvatarJson
+                            )
+                        } else {
+                            ChatsContact(
+                                chat.roomId,
+                                chat.roomName.toString(),
+                                chat.roomAvatarJson,
+                                ContactorUtil.getFirstLetter(chat.roomName),
+                                false,
+                                SelectChatsUtils.ITEM_TYPE_CHAT,
+                                chat.roomAvatarJson
+                            )
+                        }
+                    }
+
+                    val groupsList = groups.filter { it.status == 0 }
+                        .map { group ->
+                            ChatsContact(
+                                group.gid,
+                                group.name,
+                                null,
+                                null,
+                                true,
+                                SelectChatsUtils.ITEM_TYPE_GROUP,
+                                group.avatar
+                            )
+                        }
+
+                    val contactsList = contacts.sortedWith(PinyinComparator()).map { contact ->
+                        ChatsContact(
+                            contact.id,
+                            contact.getDisplayNameForUI(),
+                            contact.avatar,
+                            contact.getDisplayNameForUI().getFirstLetter(),
+                            false,
+                            SelectChatsUtils.ITEM_TYPE_CONTACT,
+                            null
+                        )
+                    }
+
+                    mutableListOf<ChatsContact>().apply {
+                        addAll(chatsList)
+                        addAll(contactsList)
+                        addAll(groupsList)
+                    }
+                }.collect { combinedList ->
+                    withContext(Dispatchers.Main) {
+                        // 检查Fragment是否仍然attached，避免崩溃
+                        if (!isAdded) return@withContext
+
+                        if (combinedList.isEmpty()) {
+                            tvNoResult.visibility = View.VISIBLE
+                            recyclerViewRecentChats.visibility = View.GONE
+                        } else {
+                            tvNoResult.visibility = View.GONE
+                            recyclerViewRecentChats.visibility = View.VISIBLE
+                            recentChatsAdapter.submitList(combinedList) {
+                                recyclerViewRecentChats.scrollToPosition(0)
+                            }
+                            selectChatsUtils.addGroupDecoration(requireActivity(), recyclerViewRecentChats, combinedList)
+                        }
+                    }
+                }
+            }
+        }
+
+        selectChatsUtils.search()
+    }
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        super.onDismiss(dialog)
+        L.i { "onDismiss" }
+        selectChatsUtils.searchKey = ""
     }
 }

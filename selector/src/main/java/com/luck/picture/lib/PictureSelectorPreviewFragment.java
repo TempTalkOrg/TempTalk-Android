@@ -38,8 +38,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator;
 import androidx.viewpager2.widget.MarginPageTransformer;
 import androidx.viewpager2.widget.ViewPager2;
 
-import com.kongzue.dialogx.dialogs.MessageDialog;
-import com.kongzue.dialogx.dialogs.PopTip;
+import com.difft.android.base.widget.ComposeDialogManager;
 import com.luck.picture.lib.adapter.PicturePreviewAdapter;
 import com.luck.picture.lib.adapter.holder.BasePreviewHolder;
 import com.luck.picture.lib.adapter.holder.PreviewGalleryAdapter;
@@ -84,7 +83,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
+import com.difft.android.base.widget.ToastUtil;
 /**
  * @author：luck
  * @date：2021/11/18 10:13 下午
@@ -1411,12 +1410,17 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
                     content = getString(R.string.ps_prompt_image_content);
                 }
 
-                MessageDialog.show(
-                        getString(R.string.ps_prompt),
-                        content,
-                        getString(R.string.ps_confirm),
-                        getString(R.string.ps_cancel)
-                ).setOkButtonClickListener((dialog, v) -> {
+                ComposeDialogManager.showMessageDialogForJava(
+                    getActivity(),
+                    getString(R.string.ps_prompt),
+                    content,
+                    getString(R.string.ps_confirm),
+                    getString(R.string.ps_cancel),
+                    true,
+                    true,
+                    new kotlin.jvm.functions.Function0<kotlin.Unit>() {
+                        @Override
+                        public kotlin.Unit invoke() {
                             String path = media.getAvailablePath();
                             if (PictureMimeType.isHasHttp(path)) {
                                 showLoading();
@@ -1434,15 +1438,18 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
                                         } else {
                                             errorMsg = getString(R.string.ps_save_image_error);
                                         }
-                                        PopTip.show(errorMsg);
+                                        ToastUtil.INSTANCE.show(errorMsg);
                                     } else {
                                         new PictureMediaScannerConnection(requireActivity(), realPath);
-                                        PopTip.show(getString(R.string.ps_save_success));
+                                        ToastUtil.INSTANCE.show(getString(R.string.ps_save_success));
                                     }
                                 }
                             });
-                            return false;
+                            return kotlin.Unit.INSTANCE;
                         }
+                    },
+                    null,
+                    null
                 );
             }
         }

@@ -2,18 +2,16 @@ package org.thoughtcrime.securesms.dependencies
 
 import android.app.Application
 import com.difft.android.base.utils.EnvironmentHelper
-import difft.android.messageserialization.MessageStore
-import difft.android.messageserialization.attachment.AttachmentStore
-import com.difft.android.messageserialization.db.store.attachment.AttachmentManager
+import com.difft.android.websocket.api.SignalServiceAccountManager
+import com.difft.android.websocket.internal.configuration.SignalServiceConfiguration
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import difft.android.messageserialization.MessageStore
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies.init
 import org.thoughtcrime.securesms.jobmanager.JobManager
 import org.thoughtcrime.securesms.video.exo.SimpleExoPlayerPool
-import com.difft.android.websocket.api.SignalServiceAccountManager
-import com.difft.android.websocket.internal.configuration.SignalServiceConfiguration
 
 /**
  * Location for storing and retrieving application-scoped singletons. Users must call
@@ -55,9 +53,6 @@ object ApplicationDependencies {
     fun getMessageStore(): MessageStore = messageStoreInstance
 
     @JvmStatic
-    fun getAttachmentStore(): AttachmentStore = attachmentStoreInstance
-
-    @JvmStatic
     fun getExoPlayerPool(): SimpleExoPlayerPool = exoPlayerPoolInstance
 
     @JvmStatic
@@ -76,11 +71,6 @@ object ApplicationDependencies {
     private val messageStoreInstance: MessageStore by lazy {
         val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
         entryPoint.messageStore
-    }
-
-    private val attachmentStoreInstance: AttachmentStore by lazy {
-        val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
-        entryPoint.attachmentStore
     }
 
     private val exoPlayerPoolInstance: SimpleExoPlayerPool by lazy {
@@ -105,7 +95,6 @@ object ApplicationDependencies {
     interface DependenciesEntryPoint {
         val chatConfig: SignalServiceConfiguration
         val messageStore: MessageStore
-        val attachmentStore: AttachmentManager
         val environmentHelper: EnvironmentHelper
     }
 }

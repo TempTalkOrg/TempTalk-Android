@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -16,13 +15,11 @@ import android.os.PowerManager
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import autodispose2.autoDispose
-import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.call.CallActionType
@@ -45,8 +42,7 @@ import com.difft.android.call.util.ThemeUtil
 import difft.android.messageserialization.For
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.OnBindView
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -294,26 +290,23 @@ object LCallManager {
     }
 
 
-    fun joinCall(context: Context, roomId: String?) {
-        val callListData = getCallListData()
-        if (!roomId.isNullOrEmpty() && callListData?.containsKey(roomId) == true) {
-            callListData[roomId]?.let {
-                val id = it.roomId
-                val callType = CallType.fromString(it.type.toString()) ?: CallType.ONE_ON_ONE
-                val callerId = it.caller.uid
-                val conversationId = it.conversation
-                val callName = it.callName
-                if (id.isNotEmpty() && !callerId.isNullOrEmpty()) {
-                    callToChatController.joinCall(
-                        context = context,
-                        roomId = id,
-                        roomName = callName,
-                        callerId = callerId,
-                        callType = callType,
-                        conversationId = conversationId
-                    ) {
-
-                    }
+    fun joinCall(context: Context, callData: CallData, onComplete: (Boolean) -> Unit) {
+        callData.let {
+            val id = it.roomId
+            val callType = CallType.fromString(it.type.toString()) ?: CallType.ONE_ON_ONE
+            val callerId = it.caller.uid
+            val conversationId = it.conversation
+            val callName = it.callName
+            if (id.isNotEmpty() && !callerId.isNullOrEmpty()) {
+                callToChatController.joinCall(
+                    context = context,
+                    roomId = id,
+                    roomName = callName,
+                    callerId = callerId,
+                    callType = callType,
+                    conversationId = conversationId
+                ) { status ->
+                    onComplete(status)
                 }
             }
         }
@@ -707,24 +700,25 @@ object LCallManager {
     }
 
     fun showWaitDialog(context: Context) {
-        WaitDialog.show("")
-            .setBackgroundColor(Color.TRANSPARENT)
-            .setCustomView(object : OnBindView<WaitDialog?>(R.layout.layout_call_wait_dialog) {
-                override fun onBind(dialog: WaitDialog?, v: View) {
-                    val binding = LayoutCallWaitDialogBinding.bind(v)
-                    val loadingAnimFile = if (ThemeUtil.isSystemInDarkTheme(context)) {
-                        LOADING_ANIM_DARK
-                    } else {
-                        LOADING_ANIM_LIGHT
-                    }
-                    binding.callLoadingProcess.setAnimation(loadingAnimFile)
-                    binding.callLoadingProcess.playAnimation()
-                }
-            })
+        ComposeDialogManager.showWait(
+            context = context,
+            message = "",
+            cancelable = false,
+            layoutId = R.layout.layout_call_wait_dialog
+        ) { view ->
+            val binding = LayoutCallWaitDialogBinding.bind(view)
+            val loadingAnimFile = if (ThemeUtil.isSystemInDarkTheme(context)) {
+                LOADING_ANIM_DARK
+            } else {
+                LOADING_ANIM_LIGHT
+            }
+            binding.callLoadingProcess.setAnimation(loadingAnimFile)
+            binding.callLoadingProcess.playAnimation()
+        }
     }
 
     fun dismissWaitDialog() {
-        WaitDialog.dismiss()
+        ComposeDialogManager.dismissWait()
     }
 
 
@@ -741,7 +735,6 @@ object LCallManager {
             }
         }
     }
-
 
     fun createStartCallParams(params: StartCallRequestBody): ByteArray {
         val params = LivekitTemptalk.TTStartCall.newBuilder().apply {

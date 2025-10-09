@@ -9,7 +9,7 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.databinding.ActivityEnterCodeBinding
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -49,12 +49,12 @@ class InviteCodeActivity : BaseActivity() {
     }
 
     private fun queryByInviteCode(inviteCode: String) {
-        WaitDialog.show(this@InviteCodeActivity,"")
+        ComposeDialogManager.showWait(this@InviteCodeActivity,"")
         inviteRepo.queryByInviteCode(inviteCode)
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
                     it.data?.uid?.let { uid ->
                         ContactDetailActivity.startActivity(this, uid, sourceType = FriendSourceType.RANDOM_CODE, avatar = it.data?.avatar, joinedAt = it.data?.joinedAt)
@@ -64,7 +64,7 @@ class InviteCodeActivity : BaseActivity() {
                     mBinding.tvError.text = it.reason
                 }
             }, {
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 it.printStackTrace()
                 mBinding.tvError.text = it.message
             })

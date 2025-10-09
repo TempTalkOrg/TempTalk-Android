@@ -134,7 +134,7 @@ class DownloadAttachmentJob private constructor(
                         totalBytesRead += bytesRead
                         val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt()
                         val currentTime = System.currentTimeMillis()
-                        if ((currentTime - lastEmitTime >= 500)) {
+                        if ((currentTime - lastEmitTime >= 200)) {
                             L.d { "[DownloadAttachmentJob]===download progress======$totalBytesRead===${downLoadResponseBody.contentLength()}===$progress%" }
                             FileUtil.emitProgressUpdate(messageId, progress)
                             lastEmitTime = currentTime

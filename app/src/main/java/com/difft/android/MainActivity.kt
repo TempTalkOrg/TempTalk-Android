@@ -1,12 +1,13 @@
 package com.difft.android
 
+import android.content.ClipData
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
-import android.view.LayoutInflater
-import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
@@ -19,16 +20,14 @@ import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.DeeplinkUtils
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.data.PushCustomContent
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.login.LoginActivity
 import com.google.gson.Gson
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
-import com.kongzue.dialogx.interfaces.OnBindView
 import com.tencent.wcdb.core.Database
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -36,8 +35,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.DatabaseRecoveryPreferences
 import org.difft.app.database.WCDB.Companion.DATABASE_NAME
-import util.ScreenLockUtil
 import org.thoughtcrime.securesms.util.AppForegroundObserver
+import util.ScreenLockUtil
 import javax.inject.Inject
 
 
@@ -161,14 +160,50 @@ class MainActivity : BaseActivity() {
      * 跳转到IndexActivity
      */
     private fun navigateToIndexActivity() {
-        startActivity(Intent(this@MainActivity, IndexActivity::class.java).apply {
-            if (this@MainActivity.intent?.action == Intent.ACTION_SEND) {
-                data = intent.data
-                this.putExtras(intent)
-                this.action = intent.action
-                this.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val newIntent = Intent(this@MainActivity, IndexActivity::class.java)
+        
+        if (this.intent?.action == Intent.ACTION_SEND) {
+            try {
+                newIntent.action = intent.action
+                newIntent.type = intent.type
+                
+                // Handle text sharing
+                intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
+                    newIntent.putExtra(Intent.EXTRA_TEXT, text)
+                }
+                
+                // Use original Intent's ClipData if exists (more reliable)
+                if (intent.clipData != null) {
+                    L.d { "[MainActivity] Using original Intent's ClipData for URI permission transfer" }
+                    newIntent.clipData = intent.clipData
+                    newIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } else {
+                    // If no ClipData, try to create from EXTRA_STREAM
+                    val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                    }
+                    
+                    uri?.let { 
+                        L.d { "[MainActivity] Creating ClipData from EXTRA_STREAM" }
+                        val clipData = ClipData.newUri(contentResolver, "shared_content", it)
+                        newIntent.clipData = clipData
+                        newIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        
+                        // Keep EXTRA_STREAM for compatibility
+                        newIntent.putExtra(Intent.EXTRA_STREAM, it)
+                    }
+                }
+                
+            } catch (e: Exception) {
+                L.e { "[MainActivity] Exception handling share Intent: ${e.stackTraceToString()}" }
+                e.printStackTrace()
             }
-        })
+        }
+        
+        startActivity(newIntent)
         finish()
     }
 
@@ -176,24 +211,26 @@ class MainActivity : BaseActivity() {
      * 执行数据库恢复
      */
     private suspend fun performDatabaseRecovery() {
-        var messageDialog: MessageDialog? = null
+        var messageDialog: ComposeDialog? = null
+        var progressBar: ProgressBar? = null
+        var messageText: TextView? = null
+
         try {
-            // 创建自定义进度视图
-            val progressView = LayoutInflater.from(this@MainActivity).inflate(R.layout.view_database_recovery_progress, null)
-            val progressBar = progressView.findViewById<ProgressBar>(R.id.pb_recovery_progress)
-            val messageText = progressView.findViewById<TextView>(R.id.tv_recovery_message)
-
-            // 设置初始进度
-            progressBar.progress = 0
-            messageText.text = getString(R.string.database_recovery_progress, 0)
-
             // 创建MessageDialog并设置自定义视图
-            messageDialog = MessageDialog.show(getString(R.string.database_recovery_title), null)
-                .setCustomView(object : OnBindView<MessageDialog>(progressView) {
-                    override fun onBind(dialog: MessageDialog, v: View) {
-                    }
-                })
-                .setCancelable(false)
+            messageDialog = ComposeDialogManager.showMessageDialog(
+                context = this@MainActivity,
+                title = getString(R.string.database_recovery_title),
+                message = "",
+                cancelable = false,
+                showCancel = false,
+                layoutId = R.layout.view_database_recovery_progress,
+                onViewCreated = { view ->
+                    progressBar = view.findViewById<ProgressBar>(R.id.pb_recovery_progress)
+                    messageText = view.findViewById<TextView>(R.id.tv_recovery_message)
+                    progressBar?.progress = 0
+                    messageText?.text = getString(R.string.database_recovery_progress, 0)
+                }
+            )
 
             withContext(Dispatchers.IO) {
                 val path = getDatabasePath(DATABASE_NAME).absolutePath
@@ -209,7 +246,7 @@ class MainActivity : BaseActivity() {
                     Handler(Looper.getMainLooper()).post {
                         if (percentage >= 1.0) {
                             L.i { "[MainActivity][WCDB] Database recovery completed successfully" }
-                            messageDialog.dismiss()
+                            messageDialog?.dismiss()
 
                             recoveryPreferences.clearRecoveryFlag()
 
@@ -234,23 +271,15 @@ class MainActivity : BaseActivity() {
 
             if (failureCount >= 3) {
                 L.w { "[MainActivity][WCDB] Database recovery failed too many times, clearing all data and requiring re-login" }
-                TipDialog.show(getString(R.string.database_recovery_failed), WaitDialog.TYPE.ERROR, 3000)
-                    .dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-                    override fun onDismiss(dialog: WaitDialog?) {
-                        logoutManager.doLogout()
-                    }
-                }
+                ToastUtil.showLong(getString(R.string.database_recovery_failed))
+                logoutManager.doLogout()
             } else {
                 // 增加失败计数，但清除恢复标记让下次重新检测
                 L.i { "[MainActivity][WCDB] Database recovery failed, attempt ${failureCount + 1}/3" }
                 recoveryPreferences.incrementRecoveryFailureCount()
 
-                TipDialog.show(getString(R.string.database_recovery_retry_tip, failureCount + 1), WaitDialog.TYPE.WARNING, 2000)
-                    .dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-                    override fun onDismiss(dialog: WaitDialog?) {
-                        navigateToIndexActivity()
-                    }
-                }
+                ToastUtil.showLong(getString(R.string.database_recovery_retry_tip, failureCount + 1))
+                navigateToIndexActivity()
             }
         }
     }

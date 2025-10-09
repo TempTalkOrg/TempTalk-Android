@@ -17,17 +17,14 @@ import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ActivityScanBinding
 import com.difft.android.network.UrlManager
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
+import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.thoughtcrime.securesms.util.ServiceUtil
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class ScanActivity : BaseActivity(), QRCodeView.Delegate {
 
@@ -124,12 +121,8 @@ class ScanActivity : BaseActivity(), QRCodeView.Delegate {
     }
 
     private fun showResultContent(result: String?) {
-        TipDialog.show(result, WaitDialog.TYPE.SUCCESS, 4000).dialogLifecycleCallback =
-            object : DialogLifecycleCallback<WaitDialog?>() {
-                override fun onDismiss(dialog: WaitDialog?) {
-                    finish()
-                }
-            }
+        result?.let { ToastUtil.showLong(it) }
+        finish()
     }
 
     override fun onCameraAmbientBrightnessChanged(isDark: Boolean) {
@@ -154,28 +147,25 @@ class ScanActivity : BaseActivity(), QRCodeView.Delegate {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onCameraPermissionForScanResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(R.string.tip),
-                    getString(R.string.no_permission_camera_tip),
-                    getString(R.string.notification_go_to_settings),
-                    getString(R.string.notification_ignore)
-                )
-                    .setCancelable(false)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(R.string.tip),
+                    message = getString(R.string.no_permission_camera_tip),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = {
                         PermissionUtil.launchSettings(this)
-                        false
-                    }.setCancelButton { _, _ ->
+                    },
+                    onCancel = {
                         ToastUtils.showToast(
                             this, getString(R.string.not_granted_necessary_permissions)
                         )
-                        false
-                    }.setDialogLifecycleCallback(object :
-                        DialogLifecycleCallback<MessageDialog>() {
-                        override fun onDismiss(dialog: MessageDialog?) {
-                            super.onDismiss(dialog)
-                            finish()
-                        }
-                    })
+                    },
+                    onDismiss = {
+                        finish()
+                    }
+                )
             }
         }
     }

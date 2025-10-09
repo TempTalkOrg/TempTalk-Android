@@ -12,8 +12,8 @@ import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.chat.widget.ImageAndVideoMessageView
-import difft.android.messageserialization.model.AttachmentStatus
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 
 open class ImageContentAdapter : MessageContentAdapter() {
@@ -49,9 +49,7 @@ open class ImageContentAdapter : MessageContentAdapter() {
             viewHolder.coverView.visibility = View.GONE
         }
 
-        val shouldShowFail = (!message.isMine || message.id.last().digitToIntOrNull() != DEFAULT_DEVICE_ID) &&
-                (FileUtil.progressMap[message.id]?.let { it == -1 } ?: (message.attachment?.status == AttachmentStatus.FAILED.code))
-        viewHolder.failView.visibility = if (shouldShowFail) View.VISIBLE else View.GONE
+        viewHolder.failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
     override fun createViewHolder(viewGroup: ViewGroup): ContentViewHolder {

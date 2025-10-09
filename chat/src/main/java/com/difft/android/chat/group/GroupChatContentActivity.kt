@@ -35,9 +35,7 @@ import com.difft.android.create
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -49,9 +47,11 @@ import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.chat.ui.ChatMessageListFragment
+import com.difft.android.chat.ui.ChatMessageListProvider
 @AndroidEntryPoint
-class GroupChatContentActivity : BaseActivity() {
+class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
     companion object {
         const val INTENT_EXTRA_GROUP_ID = "INTENT_EXTRA_GROUP_ID"
 
@@ -104,7 +104,7 @@ class GroupChatContentActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.setBackgroundDrawable(ChatBackgroundDrawable(this, mBinding.root))
+        window.setBackgroundDrawable(ChatBackgroundDrawable(this, mBinding.root, true))
 
         lifecycleScope.launch {
             onCreateForShowingMessages()
@@ -115,7 +115,7 @@ class GroupChatContentActivity : BaseActivity() {
         ScreenShotUtil.setScreenShotEnable(this, false)
 
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
-            PopTip.show("No groupID detected. Finishing Activity.")
+            ToastUtil.show("No groupID detected. Finishing Activity.")
             finish()
             return
         }
@@ -179,7 +179,7 @@ class GroupChatContentActivity : BaseActivity() {
 
                 is RecordingState.TooShort -> {
                     L.i { "[VoiceRecorder] Recording too short" }
-                    TipDialog.show(R.string.chat_voice_recording_too_short)
+                    ToastUtil.showLong(R.string.chat_voice_recording_too_short)
                     mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
 
@@ -194,7 +194,7 @@ class GroupChatContentActivity : BaseActivity() {
 
                 is RecordingState.TooLarge -> {
                     L.i { "[VoiceRecorder] Recording file too large" }
-                    TipDialog.show(R.string.chat_voice_max_size_limit)
+                    ToastUtil.showLong(R.string.chat_voice_max_size_limit)
                     mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
             }
@@ -356,21 +356,28 @@ class GroupChatContentActivity : BaseActivity() {
     }
 
     private fun showAudioPermissionDialog() {
-        MessageDialog.show(
-            getString(R.string.tip),
-            getString(R.string.no_permission_voice_tip),
-            getString(R.string.notification_go_to_settings),
-            getString(R.string.notification_ignore)
-        )
-            .setCancelable(false)
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.tip),
+            message = getString(R.string.no_permission_voice_tip),
+            confirmText = getString(R.string.notification_go_to_settings),
+            cancelText = getString(R.string.notification_ignore),
+            cancelable = false,
+            onConfirm = {
                 PermissionUtil.launchSettings(this)
-                false
-            }.setCancelButton { _, _ ->
+            },
+            onCancel = {
                 ToastUtils.showToast(
                     this, getString(R.string.not_granted_necessary_permissions)
                 )
-                false
             }
+        )
+    }
+
+    override fun getChatMessageListFragment(): ChatMessageListFragment? {
+        // 在NavHostFragment中查找GroupChatFragment，然后获取其中的ChatMessageListFragment
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container_view_content)
+        val groupChatFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
+        return groupChatFragment?.childFragmentManager?.findFragmentById(R.id.fragment_container_view_message_list) as? ChatMessageListFragment
     }
 }

@@ -7,10 +7,8 @@ import android.content.Intent
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
-import com.difft.android.base.call.LCallConstants.CALL_NOTIFICATION_OPERATION_ACCEPT
 import com.difft.android.base.call.LCallConstants.CALL_NOTIFICATION_OPERATION_REJECT
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.application
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -40,15 +38,6 @@ class InComingNewCallActionReceiver: BroadcastReceiver() {
                         LCallManager.stopIncomingCallService(roomId, tag = "reject: local reject call")
                     }
                     callToChatController.rejectCall(callerId, CallRole.CALLEE, callType, roomId, conversationId){}
-                }
-            }
-            CALL_NOTIFICATION_OPERATION_ACCEPT -> {
-                val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_ROOM_ID)
-                if (roomId != null) {
-                    L.i { "[Call] InComingNewCallActionReceiver onReceive, CALL_NOTIFICATION_OPERATION_ACCEPT roomId:$roomId" }
-                    LCallManager.joinCall(application, roomId)
-                } else {
-                    L.e { "[Call] InComingNewCallActionReceiver missing roomId for accept action" }
                 }
             }
         }

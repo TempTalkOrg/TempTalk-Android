@@ -16,11 +16,7 @@ import com.difft.android.databinding.ActivityPrivacySettingBinding
 import com.difft.android.login.data.RenewIdentityKeyRequestBody
 import com.difft.android.login.repo.LoginRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.util.TextInfo
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import util.TimeUtils
 import org.signal.libsignal.protocol.IdentityKeyPair
@@ -35,6 +31,7 @@ import java.util.Locale
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
+import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class PrivacySettingActivity : BaseActivity() {
@@ -63,14 +60,12 @@ class PrivacySettingActivity : BaseActivity() {
         initView()
     }
 
-    override fun onResume() {
-        super.onResume()
-
-        checkAndUpdatePasscodeView()
-    }
-
     private fun initView() {
         mBinding.ibBack.setOnClickListener { finish() }
+
+        mBinding.clScreenLock.setOnClickListener {
+            ScreenLockSettingActivity.startActivity(this)
+        }
 
         mBinding.clRenewIdentityKey.visibility = View.VISIBLE
         mBinding.tvRenewKeyTips.visibility = View.VISIBLE
@@ -90,17 +85,17 @@ class PrivacySettingActivity : BaseActivity() {
         }
 
         mBinding.clRenewIdentityKey.setOnClickListener {
-            MessageDialog.show(
-                com.difft.android.chat.R.string.me_renew_identity_key,
-                com.difft.android.chat.R.string.me_renew_identity_key_tips,
-                com.difft.android.chat.R.string.me_renew_identity_key_generate,
-                com.difft.android.chat.R.string.me_renew_identity_key_cancle
-            )
-                .setOkButton { _, _ ->
+            ComposeDialogManager.showMessageDialog(
+                context = this,
+                title = getString(com.difft.android.chat.R.string.me_renew_identity_key),
+                message = getString(com.difft.android.chat.R.string.me_renew_identity_key_tips),
+                confirmText = getString(com.difft.android.chat.R.string.me_renew_identity_key_generate),
+                cancelText = getString(com.difft.android.chat.R.string.me_renew_identity_key_cancle),
+                confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(this, com.difft.android.base.R.color.t_error)),
+                onConfirm = {
                     renewIdentityKey()
-                    false
                 }
-                .okTextInfo = TextInfo().apply { fontColor = ContextCompat.getColor(this@PrivacySettingActivity, com.difft.android.base.R.color.t_error) }
+            )
         }
 
         mBinding.llDeleteAccount.visibility = View.VISIBLE
@@ -109,41 +104,8 @@ class PrivacySettingActivity : BaseActivity() {
         }
     }
 
-    private fun checkAndUpdatePasscodeView() {
-        mBinding.tvSecurityTips.text = getString(R.string.settings_screen_lock_tips, PackageUtil.getAppName())
-        userManager.getUserData()?.let {
-            mBinding.cbScreenLock.setOnCheckedChangeListener(null)
-            mBinding.cbScreenLock.isChecked = it.passcode.isNullOrEmpty() == false
-            mBinding.cbScreenLock.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    SetPasscodeActivity.startActivity(this)
-                } else {
-                    deletePasscode()
-                }
-            }
-
-            if (it.passcode.isNullOrEmpty()) {
-                mBinding.clTimeout.visibility = View.GONE
-            } else {
-                mBinding.clTimeout.visibility = View.VISIBLE
-                mBinding.tvTimeout.text = if (it.passcodeTimeout == 0) getString(R.string.settings_screen_lock_timeout_instant) else TimeUtils.millis2FitTimeSpan(it.passcodeTimeout.seconds.inWholeMilliseconds, 3, false)
-                mBinding.clTimeout.setOnClickListener {
-                    SetPasscodeTimeoutActivity.startActivity(this)
-                }
-            }
-        }
-    }
-
-    private fun deletePasscode() {
-        userManager.update {
-            this.passcode = null
-            this.passcodeAttempts = 0
-        }
-        checkAndUpdatePasscodeView()
-    }
-
     private fun renewIdentityKey() {
-        WaitDialog.show(this@PrivacySettingActivity, "")
+        ComposeDialogManager.showWait(this@PrivacySettingActivity, "")
         val registrationId = KeyHelper.generateRegistrationId(false)
         val newIdentityKeyPair: IdentityKeyPair = IdentityKeyUtil.generateIdentityKeyPair()
 
@@ -159,7 +121,7 @@ class PrivacySettingActivity : BaseActivity() {
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
                     val currentTimeMillis = System.currentTimeMillis()
 
@@ -180,34 +142,26 @@ class PrivacySettingActivity : BaseActivity() {
                             mBinding.tvRenewKeyTips.text = getString(R.string.settings_new_key_tips, timeTips)
                         }
                     }
-                    TipDialog.build()
-                        .setMessageContent(com.difft.android.chat.R.string.operation_successful)
-                        .setTipType(WaitDialog.TYPE.SUCCESS)
-                        .setCancelable(true)
-                        .show()
+                    ToastUtil.show(com.difft.android.chat.R.string.operation_successful)
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
                 it.printStackTrace()
                 if (it is HttpException) {
                     when (it.code()) {
                         413 -> {
-                            TipDialog.build()
-                                .setMessageContent(R.string.settings_new_key_times_limit_tips)
-                                .setTipType(WaitDialog.TYPE.WARNING)
-                                .setCancelable(true)
-                                .show()
+                            ToastUtil.show(R.string.settings_new_key_times_limit_tips)
                         }
 
                         else -> {
-                            PopTip.show(it.message)
+                            it.message?.let { message -> ToastUtil.show(message) }
                         }
                     }
                 } else {
-                    PopTip.show(it.message)
+                    it.message?.let { message -> ToastUtil.show(message) }
                 }
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
             })
 
     }

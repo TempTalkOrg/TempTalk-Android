@@ -14,14 +14,13 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.PrivateConfigsRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class ChatSettingsActivity : BaseActivity() {
 
@@ -57,7 +56,7 @@ class ChatSettingsActivity : BaseActivity() {
                 privateConfigs = PrivateConfigsRequestBody(saveToPhotos = newValue)
             )
 
-            WaitDialog.show(this@ChatSettingsActivity, "")
+            ComposeDialogManager.showWait(this@ChatSettingsActivity, "")
             lifecycleScope.launch {
                 try {
                     val response = withContext(Dispatchers.IO) {
@@ -67,17 +66,17 @@ class ChatSettingsActivity : BaseActivity() {
                         ).blockingGet()
                     }
 
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     if (response.isSuccess()) {
                         userManager.update { saveToPhotos = newValue }
                     } else {
                         mBinding.switchSaveToPhotos.isChecked = !newValue
-                        PopTip.show(response.reason)
+                        response.reason?.let { message -> ToastUtil.show(message) }
                     }
                 } catch (e: Exception) {
                     L.e { "[ChatSettingsActivity] set saveToPhotos failed: ${e.stackTraceToString()}" }
-                    WaitDialog.dismiss()
-                    PopTip.show(e.message)
+                    ComposeDialogManager.dismissWait()
+                    e.message?.let { message -> ToastUtil.show(message) }
                     mBinding.switchSaveToPhotos.isChecked = !newValue
                 }
             }

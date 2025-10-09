@@ -15,9 +15,12 @@ data class UserData(
     var mostUseEmojis: String? = null,
     var syncedContacts: Boolean = false,//是否已经同步过联系人
     var syncedGroupAndMembers: Boolean = false,//是否已经同步过群和成员信息
-    var passcode: String? = null, //hash:salt
+    var passcode: String? = null, //passcode hash:salt
     var passcodeTimeout: Int = 300,//默认值300s
     var passcodeAttempts: Int = 0,//密码已经尝试的次数
+    var pattern: String? = null, //手势图案 hash:salt
+    var patternShowPath: Boolean = true, //是否显示手势路径
+    var patternAttempts: Int = 0,//手势已经尝试的次数
     var lastUseTime: Long = 0,
     var checkIgnoreBatteryOptimizations: String? = null,
     var previousSuccessConnectedChatWebsocketHost: String? = null,

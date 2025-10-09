@@ -29,8 +29,7 @@ import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.responses.ConversationSetResponseBody
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
@@ -40,7 +39,7 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBContactorModel
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class ChatHeaderFragment : CommonHeaderFragment() {
     private val chatViewModel: ChatMessageViewModel by activityViewModels()
@@ -202,25 +201,25 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 source = it.source
             }
         }
-        WaitDialog.show(requireActivity(), "")
+        ComposeDialogManager.showWait(requireActivity(), "")
         ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source)
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(activity as LifecycleOwner))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
-                    PopTip.show(R.string.contact_request_sent)
+                    ToastUtil.show(R.string.contact_request_sent)
                     ContactorUtil.sendFriendRequestMessage(requireActivity(), chatViewModel.forWhat)
 //                    dbRoomStore.findOrCreateRoomModel(For.Account(chatViewModel.forWhat.id))
 //                        .compose(RxUtil.getSingleSchedulerComposer())
 //                        .to(RxUtil.autoDispose(activity as LifecycleOwner))
 //                        .subscribe()
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }) {
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             }
     }
 }

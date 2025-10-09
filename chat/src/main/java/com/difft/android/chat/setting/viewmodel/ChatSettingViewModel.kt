@@ -16,8 +16,7 @@ import difft.android.messageserialization.For
 import com.difft.android.network.requests.ConversationSetRequestBody
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.ConversationSetResponseBody
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +24,7 @@ import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.subjects.BehaviorSubject
 import io.reactivex.rxjava3.subjects.CompletableSubject
 import java.util.concurrent.TimeUnit
-
+import com.difft.android.base.widget.ToastUtil
 @HiltViewModel(assistedFactory = ChatSettingViewModelFactory::class)
 class ChatSettingViewModel @AssistedInject constructor(
     @Assisted
@@ -42,16 +41,16 @@ class ChatSettingViewModel @AssistedInject constructor(
     }
 
     fun updateSelectedOption(activity: Activity, time: Long) {
-        WaitDialog.show(activity, "")
+        ComposeDialogManager.showWait(activity, "")
         messageArchiveManager.updateMessageArchiveTime(conversation, time)
             .compose(RxUtil.getCompletableTransformer())
             .autoDispose(autoDisposeCompletable)
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
             }, {
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 it.printStackTrace()
-                PopTip.show(it.message)
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 
@@ -88,7 +87,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                         updateConversationSetResponseBody(conversationSet)
                     }
                     if (!TextUtils.isEmpty(successTips)) {
-                        PopTip.show(successTips)
+                        successTips?.let { message -> ToastUtil.show(message) }
                         if (needFinishActivity) {
                             Observable.just(Unit)
                                 .delay(2000, TimeUnit.MILLISECONDS)
@@ -104,12 +103,12 @@ class ChatSettingViewModel @AssistedInject constructor(
                         }
                     }
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }) {
                 it.printStackTrace()
                 L.w { "[ChatSettings] setConversationConfigs error:" + it.stackTraceToString() }
-                PopTip.show(activity.getString(R.string.operation_failed))
+                ToastUtil.show(activity.getString(R.string.operation_failed))
             }
     }
 
@@ -136,10 +135,10 @@ class ChatSettingViewModel @AssistedInject constructor(
                         }
                     }
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }) {
-//                PopTip.show(it.message)
+//                ToastUtil.show(it.message)
             }
     }
 
@@ -157,10 +156,10 @@ class ChatSettingViewModel @AssistedInject constructor(
 //                if (it.status == 0) {
 ////                    ContactorUtil.createFriendRequestSentMessage(contactID)
 //                } else {
-//                    PopTip.show(it.reason)
+//                    ToastUtil.show(it.reason)
 //                }
 //            }) {
-//                PopTip.show(it.message)
+//                ToastUtil.show(it.message)
 //            }
 //    }
 

@@ -61,7 +61,7 @@ fun MainPageWithTopStatusView(
     viewModel: LCallViewModel,
     isInPipMode:Boolean,
     isOneVOneCall: Boolean,
-    isOverlayVisible: Boolean = true,
+    showTopStatusViewEnabled: Boolean = true,
     isUserSharingScreen: Boolean,
     callConfig: CallConfig,
     callIntent: CallIntent,
@@ -71,11 +71,11 @@ fun MainPageWithTopStatusView(
     val configuration = LocalConfiguration.current
     val coroutineScope = rememberCoroutineScope()
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val callDuration by viewModel.callDuration.observeAsState("00:00")
+    val callDuration by viewModel.timerManager.callDurationText.collectAsState("00:00")
     val callStatus by viewModel.callStatus.collectAsState()
-    val countDownEnabled by viewModel.countDownEnabled.collectAsState(false)
-    val currentCallType by viewModel.callTypeStateFlow.collectAsState()
-    val whoSharedScreen by viewModel.whoSharedScreen.collectAsState()
+    val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
+    val callType by viewModel.callType.collectAsState()
+    val screenSharingUser by viewModel.screenSharingUser.collectAsState()
 
     var screenShareUserName: String? by remember { mutableStateOf(null) }
     var rotationAngle by remember { mutableFloatStateOf(0f) }
@@ -98,9 +98,9 @@ fun MainPageWithTopStatusView(
         }
     }
 
-    LaunchedEffect(whoSharedScreen) {
+    LaunchedEffect(screenSharingUser) {
         coroutineScope.launch {
-            whoSharedScreen?.let {
+            screenSharingUser?.let {
                 it.identity?.value?.let { identityId ->
                     screenShareUserName = "${LCallManager.getDisplayNameById(identityId)}"
                 }
@@ -118,7 +118,7 @@ fun MainPageWithTopStatusView(
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if(isOneVOneCall && !isUserSharingScreen || isOverlayVisible){
+        if((isOneVOneCall && !isUserSharingScreen) || showTopStatusViewEnabled){
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -191,7 +191,7 @@ fun MainPageWithTopStatusView(
                         ){
                             if(callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED) {
                                 if(isUserSharingScreen){
-                                    whoSharedScreen?.let { participant ->
+                                    screenSharingUser?.let { participant ->
                                         participant.identity?.value?.let { identityId ->
                                             screenShareUserName?.let{ it->
                                                 Text(
@@ -248,7 +248,7 @@ fun MainPageWithTopStatusView(
                             }else {
                                 if( callStatus == CallStatus.RECONNECTING ||
                                     (callIntent.action != CallIntent.Action.START_CALL && callStatus != CallStatus.DISCONNECTED) ||
-                                    (currentCallType != CallType.ONE_ON_ONE.type && callStatus != CallStatus.DISCONNECTED)
+                                    (callType != CallType.ONE_ON_ONE.type && callStatus != CallStatus.DISCONNECTED)
                                 ) {
                                     val painter = when {
                                         callStatus == CallStatus.RECONNECT_FAILED -> painterResource(id = R.drawable.gg_spinner_alt)

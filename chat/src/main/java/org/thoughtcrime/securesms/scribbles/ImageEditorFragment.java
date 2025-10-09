@@ -31,13 +31,17 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.difft.android.base.log.lumberjack.L;
 import com.difft.android.chat.R;
-import com.kongzue.dialogx.dialogs.MessageDialog;
-import com.kongzue.dialogx.dialogs.WaitDialog;
+import com.difft.android.base.widget.ComposeDialogManager;
+
+import kotlin.Unit;
+
+import com.difft.android.base.widget.ComposeDialog;
 
 import util.FontUtil;
 import util.concurrent.TTExecutors;
 import util.concurrent.SimpleTask;
 import util.logging.Log;
+
 import org.signal.imageeditor.core.Bounds;
 import org.signal.imageeditor.core.ColorableRenderer;
 import org.signal.imageeditor.core.ImageEditorView;
@@ -545,7 +549,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
             }
         }
 
-        WaitDialog.show(requireActivity(), "");
+        ComposeDialogManager.INSTANCE.showWait(requireActivity());
         mainImage.getFlags().setChildrenVisible(false);
 
         SimpleTask.run(getLifecycle(), () -> {
@@ -569,7 +573,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
         }, result -> {
             mainImage.getFlags().reset();
             renderFaceBlurs(result);
-            WaitDialog.dismiss();
+            ComposeDialogManager.dismissWait();
             imageEditorHud.showBlurToast();
         });
     }
@@ -586,16 +590,22 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
     @Override
     public void onCancel() {
         if (hasMadeAnEditThisSession) {
-            MessageDialog.show(
-                    R.string.MediaReviewImagePageFragment__discard_changes,
-                    R.string.MediaReviewImagePageFragment__youll_lose_any_changes,
-                    R.string.MediaReviewImagePageFragment__discard,
-                    android.R.string.cancel
-            ).setOkButton((dialog, v) -> {
-                imageEditorHud.setMode(ImageEditorHudV2.Mode.NONE);
-                controller.onCancelEditing();
-                return false;
-            });
+            ComposeDialogManager.showMessageDialogForJava(
+                    requireActivity(),
+                    getString(R.string.MediaReviewImagePageFragment__discard_changes),
+                    getString(R.string.MediaReviewImagePageFragment__youll_lose_any_changes),
+                    getString(R.string.MediaReviewImagePageFragment__discard),
+                    getString(android.R.string.cancel),
+                    true, // showCancel
+                    true, // cancelable
+                    () -> {
+                        imageEditorHud.setMode(ImageEditorHudV2.Mode.NONE);
+                        controller.onCancelEditing();
+                        return Unit.INSTANCE;
+                    },
+                    null, // onCancel
+                    null  // onDismiss
+            );
         } else {
             imageEditorHud.setMode(ImageEditorHudV2.Mode.NONE);
             controller.onCancelEditing();
@@ -616,11 +626,11 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
     @Override
     public void onSave() {
-        SaveAttachmentTask.showWarningDialog(requireContext(), (dialog, view) -> {
+        SaveAttachmentTask.showWarningDialog(requireContext(), () -> {
             if (StorageUtil.canWriteToMediaStore()) {
                 performSaveToDisk();
             }
-            return false;
+            return Unit.INSTANCE;
         });
     }
 

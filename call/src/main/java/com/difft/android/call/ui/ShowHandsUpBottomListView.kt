@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.HandUpUserInfo
@@ -76,7 +77,13 @@ fun ShowHandsUpBottomListView(viewModel: LCallViewModel, handUpUserInfo: HandUpU
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null){
                     viewModel.participants.value.firstOrNull { it.identity?.value == handUpUserInfo.userId }
                         ?.let { participant ->
-                            viewModel.setHandsUpEnable(false, participant)
+                            viewModel.rtm.sendRaiseHandsRtmMessage(false, participant, onComplete = { status ->
+                                if(status){
+                                    viewModel.callUiController.setHandsUpEnable(false)
+                                }else {
+                                    L.e { "[call] ShowHandsUpBottomListView Error sending raise hand: $status" }
+                                }
+                            })
                         }
                 },
                 text = "Lower",

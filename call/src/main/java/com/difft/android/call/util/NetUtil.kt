@@ -1,5 +1,8 @@
 package com.difft.android.call.util
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.SpeedResponseStatus
 import com.difft.android.call.data.UrlSpeedResponse
@@ -46,5 +49,22 @@ object NetUtil {
         val endTime = System.currentTimeMillis()
 
         return UrlSpeedResponse(status, endTime - startTime)
+    }
+
+
+
+    @Suppress("DEPRECATION")
+    fun checkNet(context: Context): Boolean {
+        return try {
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (e: Exception) {
+            false
+        }
     }
 }

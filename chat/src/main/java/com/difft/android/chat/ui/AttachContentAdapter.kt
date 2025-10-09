@@ -13,6 +13,7 @@ import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.chat.widget.AttachMessageView
 import difft.android.messageserialization.model.AttachmentStatus
 
@@ -58,9 +59,7 @@ open class AttachContentAdapter : MessageContentAdapter() {
             viewHolder.coverView.visibility = View.GONE
         }
 
-        val shouldShowFail = (!message.isMine || message.id.last().digitToIntOrNull() != DEFAULT_DEVICE_ID) &&
-                (FileUtil.progressMap[message.id]?.let { it == -1 } ?: (message.attachment?.status == AttachmentStatus.FAILED.code))
-        viewHolder.failView.visibility = if (shouldShowFail) View.VISIBLE else View.GONE
+        viewHolder.failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
 

@@ -16,6 +16,13 @@
             android:taskAffinity="com.difft.android.call.task"
             android:theme="@style/Theme.Livekitandroid.NoActionBar" />
 
+        <activity
+            android:name=".node.LCallServerNodeActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
+            android:exported="false"
+            android:resizeableActivity="true"
+        />
+
         <service
             android:name=".service.ForegroundService"
             android:exported="false"

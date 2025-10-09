@@ -14,7 +14,7 @@ import java.util.ArrayList
 import java.util.Optional
 
 interface LCallToChatController {
-    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: () -> Unit)
+    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: (Boolean) -> Unit)
 
     fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit)
 

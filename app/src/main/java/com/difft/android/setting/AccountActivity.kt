@@ -4,26 +4,27 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.databinding.ActivityAccountBinding
 import com.difft.android.login.BindAccountActivity
+import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.setting.repo.SettingRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.util.TextInfo
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.util.Util
 import javax.inject.Inject
 
@@ -64,37 +65,61 @@ class AccountActivity : BaseActivity() {
         }
 
         mBinding.clLogout.setOnClickListener {
+            val phone = userManager.getUserData()?.phoneNumber
+            val email = userManager.getUserData()?.email
             if (phone.isNullOrEmpty() && email.isNullOrEmpty()) {
-                MessageDialog.show(R.string.me_logout_ok, R.string.me_logout_no_account_linked_tips, R.string.me_logout_continue, R.string.me_logout_cancel)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(R.string.me_logout_ok),
+                    message = getString(R.string.me_logout_no_account_linked_tips),
+                    confirmText = getString(R.string.me_logout_continue),
+                    cancelText = getString(R.string.me_logout_cancel),
+                    confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(this, com.difft.android.base.R.color.t_error)),
+                    onConfirm = {
                         DeleteAccountActivity.startActivity(this)
-                        false
                     }
-                    .okTextInfo = TextInfo().apply { fontColor = ContextCompat.getColor(this@AccountActivity, com.difft.android.base.R.color.t_error) }
+                )
             } else {
                 showLogoutDialog()
             }
         }
+
+        updateEmailAndPhoneUI()
     }
 
     private fun showLogoutDialog() {
-        MessageDialog.show(R.string.me_logout_ok, R.string.me_logout_tips, R.string.me_logout_ok, R.string.me_logout_cancel)
-            .setOkButton { _, _ ->
-                WaitDialog.show(this@AccountActivity, "")
-                chatHttpClient.httpService.fetchLogout(SecureSharedPrefsUtil.getBasicAuth())
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({
-                        WaitDialog.dismiss()
-                        logoutManager.doLogout()
-                    }, {
-                        WaitDialog.dismiss()
-                        L.e { "request Logout fail:" + it.stackTraceToString() }
-                        logoutManager.doLogout()
-                    })
-                false
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.me_logout_ok),
+            message = getString(R.string.me_logout_tips),
+            confirmText = getString(R.string.me_logout_ok),
+            cancelText = getString(R.string.me_logout_cancel),
+            onConfirm = {
+                performLogout()
+            },
+            confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(this, com.difft.android.base.R.color.t_error))
+        )
+    }
+
+    private fun performLogout() {
+        lifecycleScope.launch {
+            ComposeDialogManager.showWait(this@AccountActivity, "")
+            try {
+                withContext(Dispatchers.IO) {
+                    chatHttpClient.httpService.fetchLogout(SecureSharedPrefsUtil.getBasicAuth()).blockingGet()
+                }
+                withContext(Dispatchers.Main) {
+                    ComposeDialogManager.dismissWait()
+                    logoutManager.doLogout()
+                }
+            } catch (e: Exception) {
+                L.e { "request Logout fail:" + e.stackTraceToString() }
+                withContext(Dispatchers.Main) {
+                    ComposeDialogManager.dismissWait()
+                    logoutManager.doLogout()
+                }
             }
-            .okTextInfo = TextInfo().apply { fontColor = ContextCompat.getColor(this@AccountActivity, com.difft.android.base.R.color.t_error) }
+        }
     }
 
     override fun onResume() {
@@ -102,68 +127,72 @@ class AccountActivity : BaseActivity() {
         initEmailAndPhone()
     }
 
-    private var email: String? = null
-    private var phone: String? = null
-
     private fun initEmailAndPhone() {
-        settingRepo.getProfile(SecureSharedPrefsUtil.getToken())
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { info ->
-                        email = info.emailMasked
-                        phone = info.phoneMasked
-                        if (!info.emailMasked.isNullOrEmpty()) {
-                            if (isAllAsterisks(info.emailMasked)) { //兼容旧版本，如果全是*，使用本地缓存的
-                                userManager.getUserData()?.email?.let { email ->
-                                    mBinding.tvEmail.text = maskString(email)
-                                } ?: run {
-                                    mBinding.tvEmail.text = info.emailMasked
-                                }
-                            } else {
-                                mBinding.tvEmail.text = info.emailMasked
-                            }
-                            mBinding.clEmail.setOnClickListener {
-                                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_CHANGE_EMAIL)
-                            }
-                        } else {
-                            mBinding.tvEmail.text = getString(R.string.me_account_not_linked)
-                            mBinding.clEmail.setOnClickListener {
-                                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_BIND_EMAIL)
-                            }
-                        }
-                        if (!info.phoneMasked.isNullOrEmpty()) {
-                            if (isAllAsterisks(info.phoneMasked)) { //兼容旧版本，如果全是*，使用本地缓存的
-                                userManager.getUserData()?.phoneNumber?.let { phone ->
-                                    mBinding.tvPhone.text = maskString(phone)
-                                } ?: run {
-                                    mBinding.tvPhone.text = info.phoneMasked
-                                }
-                            } else {
-                                mBinding.tvPhone.text = info.phoneMasked
-                            }
-                            mBinding.clPhone.setOnClickListener {
-                                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_CHANGE_PHONE)
-                            }
-                        } else {
-                            mBinding.tvPhone.text = getString(R.string.me_account_not_linked)
-                            mBinding.clPhone.setOnClickListener {
-                                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_BIND_PHONE)
-                            }
-                        }
-                    }
-                } else {
-                    PopTip.show(it.reason)
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    settingRepo.getProfile(SecureSharedPrefsUtil.getToken()).blockingGet()
                 }
-            }) {
-                it.printStackTrace()
-                PopTip.show(it.message)
+
+                withContext(Dispatchers.Main) {
+                    if (result.status == 0) {
+                        result.data?.let { info ->
+                            userManager.update {
+                                this.email = info.emailMasked
+                                this.phoneNumber = info.phoneMasked
+                            }
+                            updateEmailAndPhoneUI()
+                        }
+                    } else {
+                        result.reason?.let { message -> ToastUtil.show(message) }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    e.printStackTrace()
+                    e.message?.let { message -> ToastUtil.show(message) }
+                }
             }
+        }
     }
 
-    private fun isAllAsterisks(input: String): Boolean {
-        return input.matches(Regex("\\*+"))
+    private fun updateEmailAndPhoneUI() {
+        val emailMasked = userManager.getUserData()?.email
+        val phoneMasked = userManager.getUserData()?.phoneNumber
+
+        // Email UI 更新
+        if (!emailMasked.isNullOrEmpty()) {
+            mBinding.tvEmail.text = if (emailMasked.contains("*")) {
+                emailMasked
+            } else {
+                maskString(emailMasked)
+            }
+            mBinding.clEmail.setOnClickListener {
+                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_CHANGE_EMAIL)
+            }
+        } else {
+            mBinding.tvEmail.text = getString(R.string.me_account_not_linked)
+            mBinding.clEmail.setOnClickListener {
+                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_BIND_EMAIL)
+            }
+        }
+
+        // Phone UI 更新
+        if (!phoneMasked.isNullOrEmpty()) {
+            mBinding.tvPhone.text = if (phoneMasked.contains("*")) {
+                phoneMasked
+            } else {
+                maskString(phoneMasked)
+            }
+            mBinding.clPhone.setOnClickListener {
+                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_CHANGE_PHONE)
+            }
+        } else {
+            mBinding.tvPhone.text = getString(R.string.me_account_not_linked)
+            mBinding.clPhone.setOnClickListener {
+                BindAccountActivity.startActivity(this, BindAccountActivity.TYPE_BIND_PHONE)
+            }
+        }
     }
 
     private fun maskString(input: String): String {

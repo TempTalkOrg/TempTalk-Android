@@ -17,12 +17,10 @@ import com.difft.android.databinding.ActivityDeleteAccountBinding
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.util.TextInfo
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class DeleteAccountActivity : BaseActivity() {
 
@@ -67,9 +65,13 @@ class DeleteAccountActivity : BaseActivity() {
 
 
         mBinding.btnDone.setOnClickListener {
-            MessageDialog
-                .show(R.string.me_delete_dialog_title, R.string.me_delete_dialog_content, R.string.me_delete_dialog_ok, R.string.me_delete_dialog_cancel)
-                .setOkButton { _, _ ->
+            ComposeDialogManager.showMessageDialog(
+                context = this,
+                title = getString(R.string.me_delete_dialog_title),
+                message = getString(R.string.me_delete_dialog_content),
+                confirmText = getString(R.string.me_delete_dialog_ok),
+                cancelText = getString(R.string.me_delete_dialog_cancel),
+                onConfirm = {
                     mBinding.btnDone.isLoading = true
                     chatHttpClient.httpService.fetchDeleteAccount(SecureSharedPrefsUtil.getBasicAuth())
                         .compose(RxUtil.getSingleSchedulerComposer())
@@ -79,16 +81,16 @@ class DeleteAccountActivity : BaseActivity() {
                             if (it.status == 0) {
                                 logoutManager.doLogout()
                             } else {
-                                TipDialog.show(it.reason)
+                                it.reason?.let { message -> ToastUtil.showLong(message) }
                             }
                         }, {
                             mBinding.btnDone.isLoading = false
-                            TipDialog.show(it.message)
+                            it.message?.let { message -> ToastUtil.showLong(message) }
                             it.printStackTrace()
                         })
-                    false
-                }
-                .okTextInfo = TextInfo().apply { fontColor = ContextCompat.getColor(this@DeleteAccountActivity, com.difft.android.base.R.color.t_error) }
+                },
+                confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(this, com.difft.android.base.R.color.t_error))
+            )
         }
     }
 }

@@ -14,7 +14,8 @@ object ScreenShotUtil {
         }
 
         //设置屏幕锁的情况下，不允许截图
-        val hasScreenLock = !globalServices.userManager.getUserData()?.passcode.isNullOrEmpty()
+        val userData = globalServices.userManager.getUserData()
+        val hasScreenLock = userData?.let { !it.passcode.isNullOrEmpty() || !it.pattern.isNullOrEmpty() } ?: false
         if (hasScreenLock) {
             activity?.window?.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
             return

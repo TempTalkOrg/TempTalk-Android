@@ -33,9 +33,7 @@ import com.difft.android.chat.databinding.ChatActivityGroupSelectMemberBinding
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.base.widget.sideBar.GroupMemberDecoration
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +44,7 @@ import org.difft.app.database.models.DBGroupModel
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import java.util.Collections
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupSelectMemberActivity : BaseActivity() {
     companion object {
@@ -235,7 +233,7 @@ class GroupSelectMemberActivity : BaseActivity() {
 
         L.i { "[GroupSelectMemberActivity] currentSelectedIds:$currentSelectedIds" }
 
-        WaitDialog.show(this@GroupSelectMemberActivity, "")
+        ComposeDialogManager.showWait(this@GroupSelectMemberActivity, "")
 
         lifecycleScope.launch {
             try {
@@ -254,16 +252,16 @@ class GroupSelectMemberActivity : BaseActivity() {
                     }
                 }
 
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (response.status == 0) {
                     finish()
                 } else {
-                    TipDialog.show(response.reason)
+                    response.reason?.let { ToastUtil.showLong(it) }
                 }
             } catch (e: Exception) {
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 e.printStackTrace()
-                TipDialog.show(R.string.chat_net_error)
+                ToastUtil.showLong(R.string.chat_net_error)
             }
         }
     }
@@ -290,7 +288,7 @@ class GroupSelectMemberActivity : BaseActivity() {
             }
 
             TYPE_ADD_MEMBER -> {
-                WaitDialog.show(this@GroupSelectMemberActivity, "")
+                ComposeDialogManager.showWait(this@GroupSelectMemberActivity, "")
 
                 lifecycleScope.launch {
                     try {
@@ -311,23 +309,23 @@ class GroupSelectMemberActivity : BaseActivity() {
                             }
                         }
 
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                         when (response.status) {
                             0 -> finish()
-                            2 -> TipDialog.show(getString(R.string.invite_only_moderators_can_add))
+                            2 -> ToastUtil.showLong(getString(R.string.invite_only_moderators_can_add))
                             10125 -> {
                                 response.data?.strangers?.let { strangers ->
                                     val content = strangers.joinToString(separator = ", ") { s -> s.name.toString() }
-                                    PopTip.show(getString(R.string.group_not_your_friend, content))
+                                    ToastUtil.show(getString(R.string.group_not_your_friend))
                                 }
                             }
 
-                            else -> TipDialog.show(response.reason)
+                            else -> response.reason?.let { ToastUtil.showLong(it) }
                         }
                     } catch (e: Exception) {
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                         e.printStackTrace()
-                        TipDialog.show(R.string.chat_net_error)
+                        ToastUtil.showLong(R.string.chat_net_error)
                     }
                 }
             }

@@ -23,6 +23,7 @@ import org.difft.app.database.getContactorsFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ComposeDialogManager
 import org.difft.app.database.search
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarUtil
@@ -49,9 +50,6 @@ import com.luck.picture.lib.pictureselector.ImageFileCropEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import com.google.gson.Gson
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
 import com.luck.picture.lib.config.SelectModeConfig
@@ -72,7 +70,7 @@ import org.thoughtcrime.securesms.util.MediaUtil
 import java.io.File
 import java.util.Collections
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class CreateGroupActivity : BaseActivity() {
     private val TAG: String = "CreateGroupActivity"
@@ -119,7 +117,7 @@ class CreateGroupActivity : BaseActivity() {
 
     private fun createGeneralGroup(groupName: String) {
         val list = selectedMap.mapNotNull { it.key }
-        WaitDialog.show(this@CreateGroupActivity, "")
+        ComposeDialogManager.showWait(this@CreateGroupActivity, "")
         mAvatarFilePath?.let { path ->
             httpClient.httpService
                 .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
@@ -171,7 +169,7 @@ class CreateGroupActivity : BaseActivity() {
                 }) {
                     it.printStackTrace()
                     L.e { "[${TAG}]create group avatar error:${it.stackTraceToString()}" }
-                    PopTip.show(R.string.chat_net_error)
+                    ToastUtil.show(R.string.chat_net_error)
                 }
         } ?: run {
             val request = CreateGroupReq(groupName, list)
@@ -184,7 +182,7 @@ class CreateGroupActivity : BaseActivity() {
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
                     it.data?.gid?.let { it1 ->
                         GroupChatContentActivity.startActivity(this, it1)
@@ -194,14 +192,14 @@ class CreateGroupActivity : BaseActivity() {
                 } else if (it.status == 10125) {
                     it.data?.strangers?.let { strangers ->
                         val content = strangers.map { s -> s.name }.joinToString(separator = ", ")
-                        PopTip.show(getString(R.string.group_not_your_friend, content))
+                        ToastUtil.show(getString(R.string.group_not_your_friend))
                     }
                 }
             }, { error ->
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 error.printStackTrace()
                 L.e { "[${TAG}]createGeneralGroup - error=${error.stackTraceToString()}" }
-                PopTip.show(R.string.chat_net_error)
+                ToastUtil.show(R.string.chat_net_error)
             })
     }
 
@@ -369,22 +367,22 @@ class CreateGroupActivity : BaseActivity() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onPicturePermissionForAvatarResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(com.difft.android.chat.R.string.tip),
-                    getString(com.difft.android.chat.R.string.no_permission_picture_tip),
-                    getString(com.difft.android.chat.R.string.notification_go_to_settings),
-                    getString(com.difft.android.chat.R.string.notification_ignore)
-                )
-                    .setCancelable(false)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(com.difft.android.chat.R.string.tip),
+                    message = getString(com.difft.android.chat.R.string.no_permission_picture_tip),
+                    confirmText = getString(com.difft.android.chat.R.string.notification_go_to_settings),
+                    cancelText = getString(com.difft.android.chat.R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = {
                         PermissionUtil.launchSettings(this)
-                        false
-                    }.setCancelButton { _, _ ->
+                    },
+                    onCancel = {
                         ToastUtils.showToast(
                             this, getString(com.difft.android.chat.R.string.not_granted_necessary_permissions)
                         )
-                        false
                     }
+                )
             }
         }
     }

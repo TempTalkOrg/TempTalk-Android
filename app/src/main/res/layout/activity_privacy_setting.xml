@@ -64,6 +64,7 @@
         android:orientation="vertical">
 
         <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_screen_lock"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:paddingStart="16dp"
@@ -78,70 +79,21 @@
                 android:text="@string/settings_screen_lock"
                 android:textColor="@color/t.primary"
                 android:textSize="16sp"
-                app:layout_constraintBottom_toBottomOf="@+id/cb_screen_lock"
+                app:layout_constraintBottom_toBottomOf="@+id/iv_screen_lock_arrow"
                 app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toTopOf="@+id/cb_screen_lock" />
-
-            <androidx.appcompat.widget.AppCompatCheckBox
-                android:id="@+id/cb_screen_lock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:buttonTint="@color/event_checkbox_color_selector"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintRight_toRightOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/bg.setting" />
-
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/cl_timeout"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="12dp"
-            android:visibility="gone"
-            tools:visibility="visible">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_screen_lock_time_out"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:background="@null"
-                android:gravity="center_vertical"
-                android:text="@string/settings_screen_lock_timeout"
-                android:textColor="@color/t.primary"
-                android:textSize="16sp"
-                app:layout_constraintStart_toStartOf="parent" />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_timeout"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_centerVertical="true"
-                android:layout_marginEnd="10dp"
-                android:gravity="center_vertical"
-                android:lineSpacingExtra="5sp"
-                android:textColor="@color/t.third"
-                android:textSize="16sp"
-                app:layout_constraintEnd_toStartOf="@+id/arrow"
-                tools:text="5m" />
+                app:layout_constraintTop_toTopOf="@+id/iv_screen_lock_arrow" />
 
             <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/arrow"
+                android:id="@+id/iv_screen_lock_arrow"
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:src="@drawable/chat_ic_arrow_right"
-                android:tint="@color/t.primary"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
         </androidx.constraintlayout.widget.ConstraintLayout>
+
     </LinearLayout>
 
     <androidx.appcompat.widget.AppCompatTextView
@@ -153,11 +105,11 @@
         android:paddingStart="32dp"
         android:paddingEnd="28dp"
         android:src="@drawable/chat_contact_detail_ic_back"
+        android:text="@string/settings_screen_lock_tips"
         android:textColor="@color/t.secondary"
         android:textSize="12sp"
         app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/ib_back"
-        tools:text="@string/settings_screen_lock_tips" />
+        app:layout_constraintTop_toBottomOf="@+id/ib_back" />
 
     <LinearLayout
         android:id="@+id/cl_renew_identity_key"

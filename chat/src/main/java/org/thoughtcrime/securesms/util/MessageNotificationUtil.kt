@@ -52,7 +52,6 @@ import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.responses.MuteStatus
-import com.kongzue.dialogx.dialogs.PopTip
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.rx3.awaitFirst
@@ -61,7 +60,7 @@ import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
-
+import com.difft.android.base.widget.ToastUtil
 @Singleton
 class MessageNotificationUtil @Inject constructor(
     @ApplicationContext
@@ -381,6 +380,7 @@ class MessageNotificationUtil @Inject constructor(
         val messageList = messageMap.getOrPut(forWhat.id) { mutableListOf() }
         if (isRecall) { //删除被recall的消息通知
             val index = messageList.indexOfFirst { it.timestamp == message.systemShowTimestamp }
+            L.i { "[MessageNotificationUtil] delete notification for ${forWhat.id} timestamp:${message.systemShowTimestamp} index:${index} messageList:${messageList.size}" }
             if (index != -1) {
                 messageList.removeAt(index)
             }
@@ -439,6 +439,13 @@ class MessageNotificationUtil @Inject constructor(
             .setOnlyAlertOnce(false)
 
         nm.notify(notificationID, builder.build())
+
+        // Clear all empty message lists from messageMap
+        messageMap.entries.removeAll { it.value.isEmpty() }
+
+        if (messageMap.isEmpty()) {
+            nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
+        }
     }.onFailure {
         L.e { "showNotification failed: ${it.stackTraceToString()}" }
     }
@@ -730,7 +737,7 @@ class MessageNotificationUtil @Inject constructor(
             }
         } catch (e: Exception) {
             L.i { "[MessageNotificationUtil] openNotificationSettings fail:" + e.stackTraceToString() }
-            PopTip.show(R.string.notification_settings_open_fail)
+            ToastUtil.show(R.string.notification_settings_open_fail)
         }
     }
 

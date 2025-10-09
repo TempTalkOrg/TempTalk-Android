@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:background="@color/bg2"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:paddingHorizontal="12dp">
 
 
     <androidx.appcompat.widget.AppCompatTextView
@@ -37,6 +37,7 @@
         android:id="@+id/rv_other"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
         android:orientation="horizontal"
         tools:listitem="@layout/layout_item_reaction_emoji" />
 

@@ -182,6 +182,17 @@ data class CallConfig(
     val createCallMsg: Boolean = false,
     val countdownTimer: CountdownTimer,
     val denoise: DeNoiseConfig? = null,
+    val callServers: CallServers? = null
+)
+
+data class CallServers(
+    val clusters: List<CallClusterInfo>?,
+)
+
+data class CallClusterInfo(
+    val id: String,
+    val global_url: String?,
+    val mainland_url: String?
 )
 
 @Immutable

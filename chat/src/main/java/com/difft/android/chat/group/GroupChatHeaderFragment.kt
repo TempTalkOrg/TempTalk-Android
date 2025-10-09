@@ -21,7 +21,6 @@ import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.ui.ChatMessageViewModel
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.kongzue.dialogx.dialogs.PopTip
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
@@ -31,7 +30,7 @@ import kotlinx.coroutines.rx3.asObservable
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class GroupChatHeaderFragment : CommonHeaderFragment() {
@@ -89,13 +88,13 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                         if (role < GROUP_ROLE_MEMBER || group.invitationRule == 2) {
                             gotoMembersActivity(group.gid)
                         } else {
-                            PopTip.show(getString(R.string.group_permission_denied))
+                            ToastUtil.show(getString(R.string.group_permission_denied))
                         }
                     }
 
                     binding.buttonCall.setOnClickListener {
                         if (!GroupUtil.canSpeak(group, globalServices.myId)) {
-                            PopTip.show(getString(R.string.group_only_moderators_can_speak_tip))
+                            ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
                             return@setOnClickListener
                         }
                         chatViewModel.startCall(requireActivity(), group.name)

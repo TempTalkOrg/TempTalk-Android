@@ -112,7 +112,6 @@ dependencies {
 
     // 第三方UI组件
     api(libs.mn.password.edit.text)
-    api(libs.dialogx)
 
     // 刷新布局
     api(libs.bundles.smart.refresh)
@@ -130,6 +129,7 @@ dependencies {
     // 其他
     api(libs.libphonenumber)
     implementation("net.java.dev.jna:jna:5.17.0@aar")
+    api(libs.keyboard.visibility.event)
 
     // Protobuf
     api(libs.protobuf.javalite)
