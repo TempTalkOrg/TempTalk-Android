@@ -51,11 +51,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
         skipPartiallyExpanded = true,
     )
     val context = LocalContext.current
-    val showToolBarBottomViewEnable by viewModel.showToolBarBottomViewEnable.collectAsState(false)
-    val isParticipantSharedScreen by viewModel.isParticipantSharedScreen.collectAsState(false)
+    val showToolBarBottomViewEnable by viewModel.callUiController.showToolBarBottomViewEnable.collectAsState(false)
+    val isParticipantSharedScreen by viewModel.callUiController.isShareScreening.collectAsState(false)
     val deNoiseEnable by viewModel.deNoiseEnable.collectAsState(true)
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
-    val handsUpEnabled by viewModel.handsUpEnabled.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
+    val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
 
     val itemSpace = if (isOneVOneCall) 50.dp else 32.dp
 
@@ -154,9 +154,15 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null){
                                         L.i { "[call] ShowItemsBottomView onClick raise hand" }
                                         viewModel.callStatus.value.let { status ->
-                                            if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED)
-                                                viewModel.setHandsUpEnable(!handsUpEnabled, viewModel.room.localParticipant)
-                                            else
+                                            if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
+                                                viewModel.rtm.sendRaiseHandsRtmMessage(!handsUpEnabled, viewModel.room.localParticipant, onComplete = { status ->
+                                                    if(status){
+                                                        viewModel.callUiController.setHandsUpEnable(!handsUpEnabled)
+                                                    } else {
+                                                        L.e { "[call] ShowItemsBottomView Error sending raise hand: $status" }
+                                                    }
+                                                })
+                                            } else
                                                 (context.getActivity() as? LCallActivity)?.let {
                                                     it.showStyledPopTip(it.getString(R.string.call_connecting_retry_tip))
                                                 }
@@ -284,7 +290,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                 uncheckedTrackColor = colorResource(id = com.difft.android.base.R.color.gray_600)
                             ),
                             onCheckedChange = {
-                                viewModel.setDeNoiseEnable(it)
+                                viewModel.audioDeviceManager.switchDeNoiseEnable(it)
                                 deNoiseCallBack(it)
                             }
                         )

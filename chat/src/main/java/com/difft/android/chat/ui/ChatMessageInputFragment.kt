@@ -98,10 +98,7 @@ import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
 import com.luck.picture.lib.config.SelectModeConfig
@@ -138,7 +135,7 @@ import org.thoughtcrime.securesms.util.visible
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class ChatMessageInputFragment : DisposableManageFragment() {
@@ -657,6 +654,11 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             binding.quoteZone.visibility = View.GONE
         }
 
+        // 设置文件粘贴监听器
+        binding.edittextInput.setOnFilePasteListener { uri, mimeType ->
+            handleFilePaste(uri, mimeType)
+        }
+
         binding.edittextInput.doOnTextChanged { text, start, before, count ->
             currentDraft = currentDraft.copy(
                 content = text?.toString(),
@@ -703,7 +705,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 val utf8Bytes = text.toString().toByteArray(Charsets.UTF_8)
                 if (utf8Bytes.size > MAX_BYTES_LIMIT) {
                     val truncatedString = text.toString().utf8Substring(MAX_BYTES_LIMIT_FOR_CUT_STRING)
-                    PopTip.show(requireContext().getString(R.string.chat_exceed_bytes_limit))
+                    ToastUtil.show(requireContext().getString(R.string.chat_exceed_bytes_limit))
                     binding.edittextInput.setText(truncatedString)
                     binding.edittextInput.setSelection(binding.edittextInput.text?.length ?: 0)
                 }
@@ -768,7 +770,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             if (isGroup) { //判断是否仅协调人可发言
                 val group = chatUIData?.group
                 if (group != null && !GroupUtil.canSpeak(group, globalServices.myId)) {
-                    PopTip.show(getString(R.string.group_only_moderators_can_speak_tip))
+                    ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
                     return@setOnClickListener
                 }
             }
@@ -908,14 +910,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 //                if (chatViewModel.forWhat is For.Group) {
 //                    val group = chatUIData?.group ?: return@setOnClickListener
 //                    if (!GroupUtil.canSpeak(group, globalServices.myId)) {
-//                        PopTip.show(getString(R.string.group_only_moderators_can_speak_tip))
+//                        ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
 //                        return@setOnClickListener
 //                    }
 //                    if (LCallActivity.isInCalling()) {
 //                        if (LCallActivity.getConversationId() == chatViewModel.forWhat.id) {
 //                            LCallManager.bringInCallScreenBack(requireActivity())
 //                        } else {
-//                            PopTip.show(R.string.call_is_calling_tip)
+//                            ToastUtil.show(R.string.call_is_calling_tip)
 //                        }
 //                    } else {
 //                        val callData = LCallManager.getCallDataByConversationId(chatViewModel.forWhat.id)
@@ -932,7 +934,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 //                        if (LCallActivity.getConversationId() == chatViewModel.forWhat.id) {
 //                            LCallManager.bringInCallScreenBack(requireActivity())
 //                        } else {
-//                            PopTip.show(R.string.call_is_calling_tip)
+//                            ToastUtil.show(R.string.call_is_calling_tip)
 //                        }
 //                    } else {
 //                        //判断当前是否有livekit会议，有则join会议
@@ -1325,17 +1327,16 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }
 
     private fun showRecallDialog(message: ChatMessage) {
-        MessageDialog.show(
-            requireActivity().getString(R.string.chat_message_action_recall),
-            requireActivity().getString(R.string.chat_recall_tips),
-            requireActivity().getString(R.string.chat_recall_dialog_yes),
-            requireActivity().getString(R.string.chat_recall_dialog_cancel)
-        )
-            .setOkButton { dialog, v ->
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = requireActivity().getString(R.string.chat_message_action_recall),
+            message = requireActivity().getString(R.string.chat_recall_tips),
+            confirmText = requireActivity().getString(R.string.chat_recall_dialog_yes),
+            cancelText = requireActivity().getString(R.string.chat_recall_dialog_cancel),
+            onConfirm = {
                 recallMessage(message.id)
-                dialog?.dismiss()
-                false
             }
+        )
     }
 
     private fun sendTextPush(content: String?, isScreenShot: Boolean = false, timeStamp: Long = System.currentTimeMillis()) {
@@ -1417,13 +1418,13 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         showLoading: Boolean = false
     ) {
         if (showLoading) {
-            WaitDialog.show(requireActivity(), "")
+            ComposeDialogManager.showWait(requireActivity(), "")
         }
         ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source, action)
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
                     if (action == "accept") {
                         isFriend = true
@@ -1432,11 +1433,11 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         ContactorUtil.emitFriendStatusUpdate(chatViewModel.forWhat.id, true)
                     }
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }) {
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             }
     }
 
@@ -1642,7 +1643,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                             .compose(RxUtil.getSchedulerComposer())
                             .to(RxUtil.autoDispose(this@ChatMessageInputFragment))
                             .subscribe({
-                                TipDialog.show(getString(R.string.max_support_file_size_50))
+                                ToastUtil.showLong(getString(R.string.max_support_file_size_50))
                             }, {})
                     }
                 }
@@ -1667,22 +1668,22 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onPicturePermissionForMessageResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(R.string.tip),
-                    getString(R.string.no_permission_picture_tip),
-                    getString(R.string.notification_go_to_settings),
-                    getString(R.string.notification_ignore)
-                )
-                    .setCancelable(false)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = requireActivity(),
+                    title = getString(R.string.tip),
+                    message = getString(R.string.no_permission_picture_tip),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = {
                         PermissionUtil.launchSettings(requireContext())
-                        false
-                    }.setCancelButton { _, _ ->
+                    },
+                    onCancel = {
                         ToastUtils.showToast(
                             requireContext(), getString(R.string.not_granted_necessary_permissions)
                         )
-                        false
                     }
+                )
             }
         }
     }
@@ -1700,7 +1701,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }
 
     private fun showUnsupportedFile() {
-        TipDialog.show(R.string.unsupported_file_type, WaitDialog.TYPE.WARNING)
+        ToastUtil.showLong(R.string.unsupported_file_type)
     }
 
     private suspend fun copyValidFileOrNull(uri: Uri): File? = runCatching {
@@ -1709,4 +1710,34 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }.onFailure {
         L.e { "copyUriToFile failed: ${it.stackTraceToString()}" }
     }.getOrNull()
+
+
+    private fun handleFilePaste(uri: Uri, mimeType: String) {
+        // Handle file paste - similar to fileActivityLauncher callback
+        viewLifecycleOwner.lifecycleScope.launch {
+            val file = withContext(Dispatchers.IO) { copyValidFileOrNull(uri) }
+
+            if (file == null) {
+                showUnsupportedFile()
+                return@launch
+            }
+
+            val path = file.absolutePath
+
+            if (MediaUtil.isImageType(mimeType) || MediaUtil.isVideoType(mimeType)) {
+                val localMedia = LocalMedia().apply {
+                    this.realPath = path
+                    this.mimeType = mimeType
+                    this.fileName = FileUtils.getFileName(path)
+                }
+                val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
+                    putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, arrayListOf(localMedia))
+                }
+                mediaSelectActivityLauncher.launch(intent)
+            } else {
+                prepareSendAttachmentPush(path.toUri(), mimeType)
+            }
+        }
+    }
+
 }

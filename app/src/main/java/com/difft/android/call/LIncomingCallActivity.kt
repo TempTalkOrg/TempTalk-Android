@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -32,12 +33,10 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.databinding.CallActivityIncomingCallBinding
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class LIncomingCallActivity : AppCompatActivity() {
@@ -69,6 +68,8 @@ class LIncomingCallActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
 
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+
         initializeActivityState()
 
         registerIncomingCallReceiver()
@@ -89,7 +90,7 @@ class LIncomingCallActivity : AppCompatActivity() {
 
     private fun initializeActivityState() {
         isActivityShowing = true
-        LCallManager.isIncomingCalling  = true
+        LCallManager.isIncomingCalling = true
         callIntent = getCallIntent()
         currentRoomId = callIntent.roomId
     }
@@ -112,12 +113,11 @@ class LIncomingCallActivity : AppCompatActivity() {
     private fun handleCallNotificationAction() {
         if (callIntent.action == CallIntent.Action.ACCEPT_CALL) {
             L.i { "[Call] LIncomingCallActivity handleCallNotificationAction ACCEPT_CALL roomId:${callIntent.roomId}" }
-            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId){
-                hangUpTheCall("accept: join the call")
+            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId) { status ->
+                handleJoinCallResponse(status)
             }
         }
     }
-
 
     private fun logIntent(callIntent: CallIntent) {
         L.d { "[Call] LIncomingCallActivity logIntent:$callIntent" }
@@ -128,15 +128,16 @@ class LIncomingCallActivity : AppCompatActivity() {
     }
 
 
-    private fun handleCallControlMessage(controlMessage: LCallManager.ControlMessage?){
+    private fun handleCallControlMessage(controlMessage: LCallManager.ControlMessage?) {
         if (controlMessage == null) return
-        when(controlMessage.actionType){
+        when (controlMessage.actionType) {
             CallActionType.REJECT, CallActionType.JOINED, CallActionType.CALLEND, CallActionType.CANCEL -> {
-                if(controlMessage.roomId == callIntent.roomId){
+                if (controlMessage.roomId == callIntent.roomId) {
                     L.i { "[Call] handleControlMessage: actionType:${controlMessage.actionType} roomId:${controlMessage.roomId}" }
                     hangUpTheCall("LIncomingCallActivity hangUpTheCall actionType:${controlMessage.actionType}")
                 }
             }
+
             else -> {}
         }
     }
@@ -159,10 +160,10 @@ class LIncomingCallActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.let {
                 val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_ROOM_ID)
-                if(it.`package` == ApplicationHelper.instance.packageName){
+                if (it.`package` == ApplicationHelper.instance.packageName) {
                     when (intent.action) {
                         LCallConstants.CALL_OPERATION_INVITED_DESTROY -> {
-                            if(!roomId.isNullOrEmpty() && roomId == callIntent.roomId) {
+                            if (!roomId.isNullOrEmpty() && roomId == callIntent.roomId) {
                                 L.i { "[Call] LIncomingCallActivity inComingCallReceiver: action CALL_OPERATION_INVITED_DESTROY" }
                                 finishAndRemoveTask()
                             }
@@ -172,7 +173,6 @@ class LIncomingCallActivity : AppCompatActivity() {
             }
         }
     }
-
 
 
     private fun initUI() {
@@ -203,23 +203,19 @@ class LIncomingCallActivity : AppCompatActivity() {
         binding.tipMessage.text = tipMessage
 
         binding.acceptCallBtn.setOnClickListener {
-            if(!LCallActivity.isInCalling()){
+            if (!LCallActivity.isInCalling()) {
                 L.i { "[Call] LIncomingCallActivity initUI: acceptCallBtn click: callIntent:$callIntent" }
-                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId){
-                    hangUpTheCall("accept: join the call")
+                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId) { status ->
+                    handleJoinCallResponse(status)
                 }
-            }else{
-                PopTip.show(R.string.call_newcall_tip)
-                    .dialogLifecycleCallback = object : DialogLifecycleCallback<PopTip?>() {
-                    override fun onDismiss(dialog: PopTip?) {
-                        hangUpTheCall("reject: local reject the new call")
-                    }
-                }
+            } else {
+                ToastUtil.show(R.string.call_newcall_tip)
+                hangUpTheCall("reject: local reject the new call")
             }
         }
         binding.rejectCallBtn.setOnClickListener {
-            callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId){
-                if(callType == CallType.ONE_ON_ONE){
+            callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId) {
+                if (callType == CallType.ONE_ON_ONE) {
                     LCallManager.removeCallData(callIntent.roomId)
                 }
                 hangUpTheCall("reject: local reject the call")
@@ -324,7 +320,7 @@ class LIncomingCallActivity : AppCompatActivity() {
     @SuppressLint("MissingSuperCall")
     override fun onBackPressed() {
         L.i { "[Call] LIncomingCallActivity onBackPressed" }
-        if(!enterPipModeIfPossible(tag = "onBackPressed")){
+        if (!enterPipModeIfPossible(tag = "onBackPressed")) {
             super.onBackPressed()
         }
     }
@@ -333,7 +329,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         L.i { "[Call] LIncomingCallActivity onNewIntent" }
         CallIntent(intent).roomId?.let { roomId ->
-            if(isActivityShowing && roomId.isNotEmpty() && currentRoomId != roomId) {
+            if (isActivityShowing && roomId.isNotEmpty() && currentRoomId != roomId) {
                 Toast.makeText(this, R.string.call_newcall_tip, Toast.LENGTH_SHORT).show()
             }
         }
@@ -387,5 +383,15 @@ class LIncomingCallActivity : AppCompatActivity() {
             return true
         }
         return false
+    }
+
+    private fun handleJoinCallResponse(status: Boolean) {
+        if(!status) {
+            L.e { "[Call] LIncomingActivity join call failed." }
+            ToastUtil.show(R.string.call_join_failed_tip)
+            hangUpTheCall("accept: join the call failed")
+        }else {
+            hangUpTheCall("accept: join the call")
+        }
     }
 }

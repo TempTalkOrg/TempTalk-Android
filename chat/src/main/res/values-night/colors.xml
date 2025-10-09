@@ -3,7 +3,7 @@
     <color name="reactions_screen_dark_shade_color">@color/transparent_black_70</color>
     <color name="reactions_screen_light_shade_color">#df5e5e5e</color>
     <color name="reactions_status_bar_shade">#191919</color>
-    <color name="reactions_item_bg_color">@color/white20</color>
-    <color name="reactions_item_selected_bg_color">@color/white20</color>
+    <color name="reactions_item_bg_color">@color/transparent_white_20</color>
+    <color name="reactions_item_selected_bg_color">@color/transparent_white_20</color>
     <color name="audio_progress_bg">#1AFFFFFF</color>
 </resources>

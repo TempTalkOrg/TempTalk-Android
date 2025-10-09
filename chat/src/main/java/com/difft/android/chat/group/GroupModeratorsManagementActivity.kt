@@ -16,18 +16,14 @@ import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.ChangeRolepReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupModeratorsManagementActivity : BaseActivity() {
 
@@ -135,62 +131,58 @@ class GroupModeratorsManagementActivity : BaseActivity() {
     }
 
     private fun changeMemberRole(role: Int) {
-        WaitDialog.show(this@GroupModeratorsManagementActivity, "")
+        ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
         groupRepo.changeMemberRole(groupId, selectedIds.first(), ChangeRolepReq(role))
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
-                    TipDialog.show(getString(R.string.operation_successful))
+                    ToastUtil.showLong(getString(R.string.operation_successful))
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
                 it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 
     private fun showTransferDialog() {
         val name = groupInfo?.members?.find { it.id == selectedIds.first() }?.displayName
-        MessageDialog.show(
-            getString(R.string.tip),
-            getString(R.string.group_transfer_owner_tips, name),
-            getString(R.string.chat_dialog_ok),
-            getString(R.string.chat_dialog_cancel)
-        )
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.tip),
+            message = getString(R.string.group_transfer_owner_tips, name),
+            confirmText = getString(R.string.chat_dialog_ok),
+            cancelText = getString(R.string.chat_dialog_cancel),
+            onConfirm = {
                 transferOwner()
-                false
             }
+        )
     }
 
     private fun transferOwner() {
-        WaitDialog.show(this@GroupModeratorsManagementActivity, "")
+        ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
         groupRepo.changeGroupSettings(
             groupId, ChangeGroupSettingsReq(owner = selectedIds.first())
         )
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
-                    TipDialog.show(getString(R.string.operation_successful)).dialogLifecycleCallback =
-                        object : DialogLifecycleCallback<WaitDialog?>() {
-                            override fun onDismiss(dialog: WaitDialog?) {
-                                setResult(RESULT_OK)
-                                finish()
-                            }
-                        }
+                    ToastUtil.showLong(getString(R.string.operation_successful))
+                    setResult(RESULT_OK)
+                    finish()
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
                 it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 }

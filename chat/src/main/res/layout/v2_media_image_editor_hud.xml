@@ -395,12 +395,11 @@
 
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/image_editor_hud_blur_toggle"
+                style="@style/Widget.Chative.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked="false"
-                android:saveEnabled="false"
-                app:thumbTint="@color/switch_thumb_selector"
-                app:trackTint="@color/switch_track_selector" />
+                android:saveEnabled="false" />
         </LinearLayout>
 
         <!-- Delete -->

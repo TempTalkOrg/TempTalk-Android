@@ -16,13 +16,15 @@ import androidx.annotation.Nullable;
 
 import com.difft.android.base.log.lumberjack.L;
 import com.difft.android.chat.R;
-import com.kongzue.dialogx.dialogs.MessageDialog;
-import com.kongzue.dialogx.dialogs.PopTip;
-import com.kongzue.dialogx.interfaces.OnDialogButtonClickListener;
+import com.difft.android.base.widget.ComposeDialogManager;
+
+import kotlin.jvm.functions.Function0;
+import kotlin.Unit;
 
 import util.MapUtil;
 import util.StreamUtil;
 import util.logging.Log;
+
 import org.signal.libsignal.protocol.util.Pair;
 import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.providers.MyBlobProvider;
@@ -42,6 +44,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import com.difft.android.base.widget.ToastUtil;
 
 public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTask.Attachment, Void, Pair<Integer, SaveAttachmentTask.Attachment>> {
     private static final String TAG = Log.tag(SaveAttachmentTask.class);
@@ -391,26 +395,26 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
                 } else {
                     L.w(() -> "Failed to save attachment to storage, null attachment");
                 }
-                PopTip.show(context.getResources().getQuantityText(R.plurals.ConversationFragment_error_while_saving_attachments_to_sd_card, attachmentCount));
+                ToastUtil.INSTANCE.show(context.getResources().getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card));
                 break;
             case SUCCESS:
                 if (attachment != null) {
                     if (attachment.shouldShowToast) {
                         L.i(() -> "Success to save attachment to storage:" + attachment.uri);
                         if (attachment.contentType.startsWith("video/") || attachment.contentType.startsWith("image/")) {
-                            PopTip.show(R.string.SaveAttachmentTask_saved_to_album);
+                            ToastUtil.INSTANCE.show(R.string.SaveAttachmentTask_saved_to_album);
                         } else if (attachment.contentType.startsWith("audio/")) {
-                            PopTip.show(R.string.SaveAttachmentTask_saved_to_audio);
+                            ToastUtil.INSTANCE.show(R.string.SaveAttachmentTask_saved_to_audio);
                         } else {
-                            PopTip.show(R.string.SaveAttachmentTask_saved_to_downloads);
+                            ToastUtil.INSTANCE.show(R.string.SaveAttachmentTask_saved_to_downloads);
                         }
                     }
                 } else {
-                    PopTip.show(R.string.SaveAttachmentTask_saved_to_downloads);
+                    ToastUtil.INSTANCE.show(R.string.SaveAttachmentTask_saved_to_downloads);
                 }
                 break;
             case WRITE_ACCESS_FAILURE:
-                PopTip.show(R.string.ConversationFragment_unable_to_write_to_sd_card_exclamation);
+                ToastUtil.INSTANCE.show(R.string.ConversationFragment_unable_to_write_to_sd_card_exclamation);
                 break;
         }
     }
@@ -452,17 +456,23 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
         }
     }
 
-    public static void showWarningDialog(Context context, OnDialogButtonClickListener<MessageDialog> onAcceptListener) {
+    public static void showWarningDialog(Context context, Function0<Unit> onAcceptListener) {
         showWarningDialog(context, onAcceptListener, 1);
     }
 
-    public static void showWarningDialog(Context context, OnDialogButtonClickListener<MessageDialog> onAcceptListener, int count) {
-        MessageDialog.show(
+    public static void showWarningDialog(Context context, Function0<Unit> onAcceptListener, int count) {
+        ComposeDialogManager.showMessageDialogForJava(
+                context,
                 context.getString(R.string.ConversationFragment_save_to_sd_card),
                 context.getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning, count, count),
                 context.getString(R.string.chat_dialog_ok),
-                context.getString(R.string.chat_dialog_cancel)
-        ).setOkButton(onAcceptListener);
+                context.getString(R.string.chat_dialog_cancel),
+                true, // showCancel
+                false, // cancelable
+                onAcceptListener,
+                null, // onCancel
+                null  // onDismiss
+        );
     }
 }
 

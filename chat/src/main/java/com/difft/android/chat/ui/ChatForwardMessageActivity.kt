@@ -39,9 +39,7 @@ import difft.android.messageserialization.model.isVideo
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import com.google.gson.Gson
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.entity.LocalMedia
 import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
@@ -67,6 +65,8 @@ import org.thoughtcrime.securesms.util.WindowUtil
 import com.luck.picture.lib.pictureselector.GlideEngine
 import java.io.File
 import java.util.concurrent.TimeUnit
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.chat.message.getAttachmentProgress
 
 class ChatForwardMessageActivity : BaseActivity() {
 
@@ -218,7 +218,7 @@ class ChatForwardMessageActivity : BaseActivity() {
         when (permissionState) {
             PermissionUtil.PermissionState.Denied -> {
                 L.d { "onMediaPermissionForMessageResult: Denied" }
-                PopTip.show(getString(R.string.not_granted_necessary_permissions))
+                ToastUtil.show(getString(R.string.not_granted_necessary_permissions))
             }
 
             PermissionUtil.PermissionState.Granted -> {
@@ -230,18 +230,19 @@ class ChatForwardMessageActivity : BaseActivity() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onMediaPermissionForMessageResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(R.string.tip),
-                    getString(R.string.no_permission_picture_tip),
-                    getString(R.string.notification_go_to_settings),
-                    getString(R.string.notification_ignore)
-                ).setOkButton { _, _ ->
-                    PermissionUtil.launchSettings(this)
-                    false
-                }.setCancelButton { _, _ ->
-                    PopTip.show(getString(R.string.not_granted_necessary_permissions))
-                    false
-                }
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(R.string.tip),
+                    message = getString(R.string.no_permission_picture_tip),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    onConfirm = {
+                        PermissionUtil.launchSettings(this)
+                    },
+                    onCancel = {
+                        ToastUtil.show(getString(R.string.not_granted_necessary_permissions))
+                    }
+                )
             }
         }
         pendingSaveAttachmentMessage = null
@@ -256,7 +257,7 @@ class ChatForwardMessageActivity : BaseActivity() {
 
         attachment?.let {
             val attachmentPath = FileUtil.getMessageAttachmentFilePath(data.id) + it.fileName
-            val progress = FileUtil.progressMap[data.id]
+            val progress = data.getAttachmentProgress()
 
             if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
                 val saveAttachment = SaveAttachmentTask.Attachment(
@@ -271,7 +272,7 @@ class ChatForwardMessageActivity : BaseActivity() {
                 SaveAttachmentTask(this).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
             } else {
                 L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
-                PopTip.show(resources.getQuantityText(R.plurals.ConversationFragment_error_while_saving_attachments_to_sd_card, 1))
+                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
             }
         }
     }
@@ -297,7 +298,7 @@ class ChatForwardMessageActivity : BaseActivity() {
             if (data is TextChatMessage) {
                 if (data.isAttachmentMessage()) {
                     val attachment = data.attachment ?: return
-                    if (attachment.status == AttachmentStatus.FAILED.code) {
+                    if (attachment.status == AttachmentStatus.FAILED.code || data.getAttachmentProgress() == -1) {
                         downloadAttachment(attachment.id, attachment)
                         return
                     }
@@ -473,7 +474,7 @@ class ChatForwardMessageActivity : BaseActivity() {
     private fun openPreview(message: TextChatMessage) {
         val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
         if (!FileUtil.isFileValid(filePath)) {
-            TipDialog.show(R.string.file_load_error)
+            ToastUtil.showLong(R.string.file_load_error)
             return
         }
         val list = arrayListOf<LocalMedia>().apply {

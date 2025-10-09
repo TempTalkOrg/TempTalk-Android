@@ -22,12 +22,21 @@
     <string name="login_error_not_exist">Code expired or does not exist, please check</string>
     <string name="login_error_verification_failed">Verification failed</string>
     <string name="login_error_too_many_attempts">Too many attempts. Please try again later.</string>
+
+    <!-- Screen Lock Strings -->
     <string name="settings_passcode_submit">Done</string>
-    <string name="settings_enter_passcode">Enter Screen Lock passcode</string>
-    <string name="settings_passcode_error_tips">Passcode does not match.</string>
+    <string name="settings_enter_passcode">Enter passcode</string>
+    <string name="settings_switch_to_pattern">Switch to pattern</string>
+    <string name="settings_forget_passcode_or_pattern">Forgot passcode or pattern?</string>
+    <string name="settings_draw_pattern">Draw Pattern</string>
+    <string name="settings_switch_to_passcode">Switch to passcode</string>
+    <string name="settings_forget_passcode_dialog_title">Forgot your passcode or pattern?</string>
+    <string name="settings_forget_passcode_dialog_tips">You can try the other one if available. If both are forgotten, you’ll need to log in again.</string>
+    <string name="settings_forget_passcode_dialog_logout">Logout</string>
+    <string name="settings_passcode_error_tips">Passcode does not match</string>
+    <string name="settings_pattern_error_tips">Pattern does not match</string>
     <string name="settings_passcode_attempts_delay">Next attempt will be delayed by %ds.</string>
-    <string name="settings_forget_passcode">Forgot passcode?</string>
-    <string name="settings_forget_passcode_dialog_tips">Please delete and reinstall the app.</string>
+    <string name="settings_too_many_attempts_warning">Too many failed attempts. The next incorrect attempt will force a logout.</string>
 
     <string name="login_select_country_code">Select Country Code</string>
 
@@ -52,5 +61,4 @@
     <string name="login_different_dialog_content">A different account has logged in. Previous account data will be deleted.</string>
     <string name="login_different_dialog_ok_text">Delete &amp; Re-login</string>
     <string name="login_different_dialog_cancel_text">Cancel</string>
-
 </resources>

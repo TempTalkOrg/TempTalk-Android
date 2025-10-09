@@ -8,9 +8,6 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.BaseActivity
 import com.difft.android.chat.R
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
 import com.luck.picture.lib.entity.LocalMedia
 import util.getParcelableArrayListExtraCompat
 import util.logging.Log
@@ -18,6 +15,7 @@ import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.v2.review.MediaReviewFragment
 import org.thoughtcrime.securesms.util.FullscreenHelper
 import org.thoughtcrime.securesms.util.WindowUtil
+import com.difft.android.base.widget.ToastUtil
 
 class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
 
@@ -75,13 +73,9 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
     }
 
     override fun onSendError(error: Throwable) {
-        TipDialog.show(R.string.operation_failed, WaitDialog.TYPE.WARNING, 3000)
-            .dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-            override fun onDismiss(dialog: WaitDialog?) {
-                setResult(RESULT_CANCELED)
-                finish()
-            }
-        }
+        ToastUtil.showLong(R.string.operation_failed)
+        setResult(RESULT_CANCELED)
+        finish()
     }
 
     override fun onNoMediaSelected() {

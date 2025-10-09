@@ -48,14 +48,13 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.PrivateConfigsRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
@@ -114,7 +113,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             privateConfigs = PrivateConfigsRequestBody(globalNotification = newType)
                         )
 
-                        WaitDialog.show(this@GroupGlobalNotificationSettingsActivity, "")
+                        ComposeDialogManager.showWait(this@GroupGlobalNotificationSettingsActivity, "")
                         val response = withContext(Dispatchers.IO) {
                             httpClient.httpService.fetchSetProfile(
                                 baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
@@ -122,7 +121,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             ).blockingGet()
                         }
 
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                         if (response.isSuccess()) {
                             // 接口调用成功，更新本地设置
                             userManager.update {
@@ -134,12 +133,12 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             setResult(Activity.RESULT_OK)
                         } else {
                             // 接口调用失败，显示错误信息
-                            PopTip.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                            ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                         }
                     } catch (e: Exception) {
                         L.e { "[GlobalNotificationSettingsActivity] set global notification failed: ${e.stackTraceToString()}" }
-                        WaitDialog.dismiss()
-                        PopTip.show(getString(com.difft.android.chat.R.string.operation_failed))
+                        ComposeDialogManager.dismissWait()
+                        ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
                     }
                 }
             }

@@ -78,7 +78,7 @@ fun ShowParticipantsListView(
 ) {
     val handsUpUserInfo by viewModel.handsUpUserInfo.collectAsState(emptyList())
     var raiseHandExpanded by remember { mutableStateOf(false) }
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val lazyGridState = rememberLazyGridState()
 
     LaunchedEffect(lazyGridState, handsUpUserInfo.size) {
@@ -149,7 +149,7 @@ fun ShowParticipantsListView(
                             )
 
                             Surface(
-                                onClick = { viewModel.setShowUserEnabled(false) },
+                                onClick = { viewModel.callUiController.setShowUsersEnabled(false) },
                                 modifier = Modifier
                                     .constrainAs(closeView) {
                                         end.linkTo(parent.end, margin = 10.dp)

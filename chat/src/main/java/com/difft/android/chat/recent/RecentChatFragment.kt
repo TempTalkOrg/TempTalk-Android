@@ -45,10 +45,9 @@ import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.Disposable
@@ -464,34 +463,39 @@ class RecentChatFragment : DisposableManageFragment() {
             })
     }
 
-    private var inactiveDeviceDialog: MessageDialog? = null
+    private var inactiveDeviceDialog: ComposeDialog? = null
 
     //显示设备非活跃激活提示对话框
     private fun showInactiveDeviceDialog() {
         inactiveDeviceDialog?.dismiss()
         inactiveDeviceDialog = null
 
-        inactiveDeviceDialog = MessageDialog.show(R.string.activate_device_title, R.string.activate_device_tips, R.string.activate_device)
-            .setCancelable(false)
-            .setOkButton { _, _ ->
+        inactiveDeviceDialog = ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.activate_device_title),
+            message = getString(R.string.activate_device_tips),
+            confirmText = getString(R.string.activate_device),
+            cancelable = false,
+            showCancel = false,
+            onConfirm = {
                 recentChatViewModel.activateDevice()
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
                     .subscribe({
                         if (it.status == 0) {
-                            TipDialog.show(R.string.activate_device_success, WaitDialog.TYPE.SUCCESS)
+                            ToastUtil.show(R.string.activate_device_success)
                             inactiveDeviceDialog?.dismiss()
                             inactiveDeviceDialog = null
                         } else {
-                            PopTip.show(it.reason)
+                            it.reason?.let { message -> ToastUtil.show(message) }
                         }
                     }) {
                         it.printStackTrace()
                         L.e { "activate Device fail:" + it.stackTraceToString() }
-                        PopTip.show(it.message)
+                        it.message?.let { message -> ToastUtil.show(message) }
                     }
-                true
             }
+        )
     }
 
 
@@ -558,14 +562,20 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun disbandGroup(group: GroupModel) {
-        MessageDialog.show(R.string.group_disband, R.string.group_disband_tips, R.string.group_disband_disband, R.string.group_leave_cancel)
-            .setOkButton { dialog, v ->
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.group_disband),
+            message = getString(R.string.group_disband_tips),
+            confirmText = getString(R.string.group_disband_disband),
+            cancelText = getString(R.string.group_leave_cancel),
+            cancelable = false,
+            onConfirm = {
                 groupRepo.deleteGroup(group.gid)
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
                     .subscribe({}, { it.printStackTrace() })
-                false
             }
+        )
     }
 
     private fun showItemActionsPop(rootView: View, data: RoomViewData, touchX: Int, touchY: Int) {

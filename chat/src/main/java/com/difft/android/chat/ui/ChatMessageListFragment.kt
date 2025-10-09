@@ -1,7 +1,9 @@
 package com.difft.android.chat.ui
 
 import android.annotation.SuppressLint
+import android.content.ClipData
 import android.content.Context
+import android.content.DialogInterface
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -23,6 +25,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.view.children
@@ -53,6 +56,9 @@ import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ChativePopupView
 import com.difft.android.base.widget.ChativePopupWindow
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
@@ -62,17 +68,29 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.databinding.ChatFragmentMessageListBinding
-import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.canDownloadOrCopyFile
 import com.difft.android.chat.message.generateMessageFromForward
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.widget.AudioAmplitudesHelper
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.chat.widget.AudioWaveProgressBar
 import com.difft.android.chat.widget.VoiceMessageView
+import com.difft.android.network.config.GlobalConfigsManager
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.luck.picture.lib.basic.IBridgeViewLifecycle
+import com.luck.picture.lib.basic.PictureSelector
+import com.luck.picture.lib.entity.LocalMedia
+import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
+import com.luck.picture.lib.language.LanguageConfig
+import com.luck.picture.lib.pictureselector.GlideEngine
+import com.luck.picture.lib.pictureselector.PictureSelectorUtils
+import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
@@ -82,22 +100,6 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import com.difft.android.network.config.GlobalConfigsManager
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.kongzue.dialogx.dialogs.BottomDialog
-import com.kongzue.dialogx.dialogs.FullScreenDialog
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
-import com.kongzue.dialogx.interfaces.OnBindView
-import com.luck.picture.lib.basic.IBridgeViewLifecycle
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
-import com.luck.picture.lib.language.LanguageConfig
-import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
@@ -109,8 +111,6 @@ import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
 import net.yslibrary.android.keyboardvisibilityevent.Unregistrar
 import org.difft.app.database.models.ContactorModel
-import util.TimeFormatter
-import util.concurrent.TTExecutors
 import org.thoughtcrime.securesms.components.reaction.ConversationItemSelection
 import org.thoughtcrime.securesms.components.reaction.ConversationReactionDelegate
 import org.thoughtcrime.securesms.components.reaction.ConversationReactionOverlay
@@ -128,12 +128,13 @@ import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.util.WindowUtil
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
+import util.TimeFormatter
+import util.concurrent.TTExecutors
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.math.abs
-
 
 @AndroidEntryPoint
 class ChatMessageListFragment : Fragment() {
@@ -172,7 +173,7 @@ class ChatMessageListFragment : Fragment() {
                         if (forwards.size == 1) {
                             val forward = forwardContext.forwards?.getOrNull(0) ?: return
                             val attachment = forward.attachments?.getOrNull(0) ?: return
-                            if (attachment.status == AttachmentStatus.FAILED.code || FileUtil.progressMap[attachment.authorityId.toString()] == -1) {
+                            if (attachment.status == AttachmentStatus.FAILED.code || data.getAttachmentProgress() == -1) {
                                 downloadAttachment(attachment.id, attachment, data)
                                 return
                             }
@@ -197,7 +198,7 @@ class ChatMessageListFragment : Fragment() {
                     setConfidentialRecipient(data)
                 } else if (data.isAttachmentMessage()) {
                     val attachment = data.attachment ?: return
-                    if (attachment.status == AttachmentStatus.FAILED.code || FileUtil.progressMap[data.id] == -1) {
+                    if (attachment.status == AttachmentStatus.FAILED.code || data.getAttachmentProgress() == -1) {
                         downloadAttachment(data.id, attachment, data)
                         return
                     }
@@ -207,7 +208,7 @@ class ChatMessageListFragment : Fragment() {
                         if (data.isConfidential()) {
                             val filePath = FileUtil.getMessageAttachmentFilePath(data.id) + data.attachment?.fileName
                             if (!FileUtil.isFileValid(filePath) && !FileUtil.isFileValid("$filePath.encrypt")) {
-                                TipDialog.show(R.string.file_load_error)
+                                ToastUtil.showLong(R.string.file_load_error)
                                 return
                             }
                             showConfidentialAudioDialog(data)
@@ -364,7 +365,7 @@ class ChatMessageListFragment : Fragment() {
                 } else {
                     viewLifecycleOwner.lifecycleScope.launch {
                         if (!chatViewModel.jumpToMessage(quote.id)) {
-                            PopTip.show(getString(R.string.chat_original_message_not_found))
+                            ToastUtil.show(getString(R.string.chat_original_message_not_found))
                         }
                     }
                 }
@@ -656,6 +657,7 @@ class ChatMessageListFragment : Fragment() {
                 val position = chatMessageAdapter.currentList.indexOfFirst {
                     it.id == messageId || (it is TextChatMessage && it.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()?.authorityId.toString() == messageId)
                 }
+//                L.d { "===progressUpdate===${messageId} position:${position}" }
                 chatMessageAdapter.notifyItemChanged(position)
             }, { it.printStackTrace() })
 
@@ -793,7 +795,7 @@ class ChatMessageListFragment : Fragment() {
                     if (firstMentionId != -1L) {
                         viewLifecycleOwner.lifecycleScope.launch {
                             if (!chatViewModel.jumpToMessage(firstMentionId)) {
-                                PopTip.show(getString(R.string.chat_original_message_not_found))
+                                ToastUtil.show(getString(R.string.chat_original_message_not_found))
                             }
                         }
                     }
@@ -873,164 +875,77 @@ class ChatMessageListFragment : Fragment() {
         resendPopupWindow = ChativePopupWindow.showAsDropDown(view, itemList)
     }
 
-    private var mConfidentialAudioDialog: FullScreenDialog? = null
+    private var mConfidentialAudioDialog: ConfidentialAudioBottomSheetFragment? = null
     var voiceMessageView: VoiceMessageView? = null
+    private var currentAudioMessage: TextChatMessage? = null
+
     fun showConfidentialAudioDialog(message: TextChatMessage) {
-        mConfidentialAudioDialog = FullScreenDialog.build(object :
-            OnBindView<FullScreenDialog>(R.layout.chat_layout_confidential_audio_dialog) {
-            override fun onBind(dialog: FullScreenDialog, v: View) {
-                v.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
-                    mConfidentialAudioDialog?.dismiss()
-                }
-                voiceMessageView = v.findViewById(R.id.voice_message_view)
-                voiceMessageView?.setAudioMessage(message)
+        // 检查 Fragment 是否已附加且 Activity 存在
+        if (!isAdded || activity == null) return
 
-                val clVoiceMessageView = v.findViewById<ConstraintLayout>(R.id.cl_voice_message_view)
-                if (message.isMine) {
-                    clVoiceMessageView?.setBackgroundResource(R.drawable.chat_message_content_bg_mine)
-                } else {
-                    clVoiceMessageView?.setBackgroundResource(R.drawable.chat_message_content_bg_others)
-                }
-            }
-        })
-            .setAllowInterceptTouch(false)
-            .setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
-            .show()
+        currentAudioMessage = message
 
-        mConfidentialAudioDialog?.dialogLifecycleCallback =
-            object : DialogLifecycleCallback<FullScreenDialog?>() {
-                override fun onDismiss(dialog: FullScreenDialog?) {
-                    message.attachment?.isPlaying = false
-                    message.attachment?.playProgress = 0
-//                    voiceMessageView?.resetCurrentPlayingMediaPlayer()
-//                    voiceMessageView?.release()
-                    voiceMessageView = null
+        // 使用 Activity 的 FragmentManager
+        val fragmentManager = requireActivity().supportFragmentManager
 
-                    if (!message.isMine) {
-                        chatViewModel.deleteMessage(message.id)
-                    }
-                }
-            }
+        // 设置结果监听器
+        fragmentManager.setFragmentResultListener(
+            "confidential_audio_dialog_result",
+            this
+        ) { _, _ ->
+            onConfidentialAudioDialogDismiss()
+        }
+
+        mConfidentialAudioDialog = ConfidentialAudioBottomSheetFragment.newInstance().apply {
+            show(fragmentManager, "confidential_audio_dialog")
+        }
     }
 
-    private var mConfidentialTextDialog: FullScreenDialog? = null
-    fun showConfidentialTextDialog(message: TextChatMessage) {
-        mConfidentialTextDialog = FullScreenDialog.build(object :
-            OnBindView<FullScreenDialog>(R.layout.chat_layout_confidential_text_dialog) {
-            @SuppressLint("ClickableViewAccessibility")
-            override fun onBind(dialog: FullScreenDialog, v: View) {
-                v.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
-                    mConfidentialTextDialog?.dismiss()
-                }
-                val textView = v.findViewById<TextView>(R.id.textView)
-                val llConfidential = v.findViewById<LinearLayout>(R.id.ll_confidential)
-                val scrollView = v.findViewById<ScrollView>(R.id.sv_confidential)
-                val tvTitle = v.findViewById<TextView>(R.id.tv_title)
+    fun onConfidentialAudioDialogDismiss() {
+        currentAudioMessage?.let { message ->
+            message.attachment?.isPlaying = false
+            message.attachment?.playProgress = 0
+            voiceMessageView = null
 
-                textView.autoLinkMask = 0
-                textView.movementMethod = null
-
-                if (TextSizeUtil.isLager()) {
-                    textView.textSize = 24f
-                } else {
-                    textView.textSize = 16f
-                }
-
-                LinkTextUtils.setMarkdownToTextview(
-                    requireContext(),
-                    message.message.toString(),
-                    textView,
-                    mentions = null
-                )
-
-                textView.post {
-                    val textViewLayout = textView.layout
-                    if (textView.lineCount > 0) {
-                        llConfidential.removeAllViews()
-                        for (i in 0 until textView.lineCount) {
-                            val view = layoutInflater.inflate(
-                                R.layout.chat_item_content_text_confidential_dialog,
-                                llConfidential,
-                                false
-                            )
-
-                            val top = textViewLayout.getLineTop(i)
-                            val bottom = textViewLayout.getLineBottom(i)
-//                            val lineHeight = bottom - top
-                            val lineHeight = if (i == textView.lineCount - 1) {
-                                bottom - top + textView.lineSpacingExtra.toInt()
-                            } else {
-                                bottom - top
-                            }
-                            view.layoutParams.height = lineHeight
-
-                            val tvNumber = view.findViewById<TextView>(R.id.tv_line_number)
-                            val number = (i + 1).toString()
-                            tvNumber.text = number
-
-                            llConfidential.addView(view)
-                        }
-
-                        llConfidential.post {
-                            llConfidential.setOnTouchListener { v, event ->
-                                val itemHeight = llConfidential.getChildAt(0).height
-                                val touchX = event.x.toInt()
-
-                                val regionWidth = v.width / 3
-
-                                when (event.action) {
-                                    MotionEvent.ACTION_DOWN -> {
-                                        setConfidentialRecipient(message)
-                                        if (touchX <= regionWidth) {
-                                            v.parent.requestDisallowInterceptTouchEvent(true)
-                                        } else {
-                                            v.parent.requestDisallowInterceptTouchEvent(false)
-                                        }
-                                    }
-
-                                    MotionEvent.ACTION_MOVE -> {
-                                        val currentY = event.y.toInt()
-                                        val currentPosition = (currentY / itemHeight).coerceIn(0, llConfidential.childCount - 1)
-
-                                        val startLine = (currentPosition - 2).coerceAtLeast(0)
-                                        val endLine = (currentPosition + 2).coerceAtMost(llConfidential.childCount - 1)
-
-                                        llConfidential.children.forEachIndexed { index, view ->
-                                            if (index in startLine..endLine) {
-                                                view.visibility = View.INVISIBLE
-                                            } else {
-                                                view.visibility = View.VISIBLE
-                                            }
-                                        }
-
-                                        if (touchX <= regionWidth) {
-                                            v.parent.requestDisallowInterceptTouchEvent(true)
-                                        } else {
-                                            v.parent.requestDisallowInterceptTouchEvent(false)
-                                        }
-                                    }
-
-                                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                        llConfidential.children.forEach { it.visibility = View.VISIBLE }
-                                        v.parent.requestDisallowInterceptTouchEvent(false)
-                                    }
-                                }
-                                true
-                            }
-
-                            if (isScrollViewScrollable(scrollView)) {
-                                tvTitle.visibility = View.VISIBLE
-                            } else {
-                                tvTitle.visibility = View.GONE
-                            }
-                        }
-                    }
-                }
+            if (!message.isMine) {
+                chatViewModel.deleteMessage(message.id)
             }
-        })
-            .setAllowInterceptTouch(false)
-            .setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
-            .show()
+        }
+        currentAudioMessage = null
+    }
+
+    private var mConfidentialTextDialog: ConfidentialTextBottomSheetFragment? = null
+    private var currentTextMessage: TextChatMessage? = null
+
+    fun showConfidentialTextDialog(message: TextChatMessage) {
+        // 检查 Fragment 是否已附加且 Activity 存在
+        if (!isAdded || activity == null) return
+
+        currentTextMessage = message
+
+        // 使用 Activity 的 FragmentManager
+        val fragmentManager = requireActivity().supportFragmentManager
+
+        // 设置结果监听器
+        fragmentManager.setFragmentResultListener(
+            "confidential_text_dialog_result",
+            this
+        ) { _, _ ->
+            onConfidentialTextDialogDismiss()
+        }
+
+        mConfidentialTextDialog = ConfidentialTextBottomSheetFragment.newInstance().apply {
+            show(fragmentManager, "confidential_text_dialog")
+        }
+    }
+
+    fun onConfidentialTextDialogDismiss() {
+        currentTextMessage?.let { message ->
+            if (!message.isMine) {
+                chatViewModel.deleteMessage(message.id)
+            }
+        }
+        currentTextMessage = null
     }
 
     fun isScrollViewScrollable(scrollView: ScrollView): Boolean {
@@ -1165,32 +1080,76 @@ class ChatMessageListFragment : Fragment() {
         }
 
         private fun copyMessageContent() {
-            val content = data.forwardContext?.forwards?.let { forwards ->
-                if (forwards.size == 1) {
-                    forwards.firstOrNull()?.let { forward ->
-                        forward.card?.content.takeUnless { it.isNullOrEmpty() }
-                            ?: forward.text.takeUnless { it.isNullOrEmpty() }
-                    }
-                } else null
-            } ?: data.card?.content.takeUnless { it.isNullOrEmpty() }
-            ?: data.message.takeUnless { it.isNullOrEmpty() }
+            // Check if it's a file attachment that can be copied
+            if (data.canDownloadOrCopyFile()) {
+                copyFileToClipboard()
+            } else {
+                // Copy text content as before
+                val content = data.forwardContext?.forwards?.let { forwards ->
+                    if (forwards.size == 1) {
+                        forwards.firstOrNull()?.let { forward ->
+                            forward.card?.content.takeUnless { it.isNullOrEmpty() }
+                                ?: forward.text.takeUnless { it.isNullOrEmpty() }
+                        }
+                    } else null
+                } ?: data.card?.content.takeUnless { it.isNullOrEmpty() }
+                ?: data.message.takeUnless { it.isNullOrEmpty() }
 
-            content?.let { Util.copyToClipboard(requireContext(), it) }
+                content?.let { Util.copyToClipboard(requireContext(), it) }
+            }
+        }
+
+
+        private fun copyFileToClipboard() {
+            val attachment = when {
+                data.isAttachmentMessage() -> {
+                    data.attachment
+                }
+
+                data.forwardContext?.forwards?.size == 1 -> {
+                    data.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
+                }
+
+                else -> null
+            }
+
+            attachment?.let { attach ->
+                val messageId = if (data.isAttachmentMessage()) data.id else attach.authorityId.toString()
+                val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attach.fileName
+                val file = File(filePath)
+
+                if (file.exists()) {
+                    // 使用 FileProvider 生成安全的 URI
+                    val uri = FileProvider.getUriForFile(
+                        requireContext(),
+                        "${requireContext().packageName}.provider",
+                        file
+                    )
+                    // Copy file to clipboard
+                    val clipboard = ServiceUtil.getClipboardManager(requireContext())
+                    val clipData = ClipData.newUri(
+                        requireContext().contentResolver,
+                        attach.fileName ?: "file",
+                        uri
+                    )
+                    clipboard.setPrimaryClip(clipData)
+                    ToastUtil.show(getString(R.string.chat_message_action_copied))
+                }
+            }
         }
     }
 
     private fun deleteSaved(data: ChatMessage) {
-        MessageDialog
-            .show(
-                getString(R.string.tip),
-                getString(R.string.chat_message_delete_tips),
-                getString(R.string.chat_dialog_ok),
-                getString(R.string.chat_dialog_cancel)
-            )
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.tip),
+            message = getString(R.string.chat_message_delete_tips),
+            confirmText = getString(R.string.chat_dialog_ok),
+            cancelText = getString(R.string.chat_dialog_cancel),
+            onConfirm = {
                 chatViewModel.deleteMessage(data.id)
-                false
             }
+        )
     }
 
     private var pendingSaveAttachmentMessage: TextChatMessage? = null
@@ -1203,7 +1162,7 @@ class ChatMessageListFragment : Fragment() {
         when (permissionState) {
             PermissionUtil.PermissionState.Denied -> {
                 L.d { "onMediaPermissionForMessageResult: Denied" }
-                PopTip.show(getString(R.string.not_granted_necessary_permissions))
+                ToastUtil.show(getString(R.string.not_granted_necessary_permissions))
             }
 
             PermissionUtil.PermissionState.Granted -> {
@@ -1215,18 +1174,20 @@ class ChatMessageListFragment : Fragment() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onMediaPermissionForMessageResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(R.string.tip),
-                    getString(R.string.no_permission_picture_tip),
-                    getString(R.string.notification_go_to_settings),
-                    getString(R.string.notification_ignore)
-                ).setOkButton { _, _ ->
-                    PermissionUtil.launchSettings(requireContext())
-                    false
-                }.setCancelButton { _, _ ->
-                    PopTip.show(getString(R.string.not_granted_necessary_permissions))
-                    false
-                }
+                ComposeDialogManager.showMessageDialog(
+                    context = requireActivity(),
+                    title = getString(R.string.tip),
+                    message = getString(R.string.no_permission_picture_tip),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = {
+                        PermissionUtil.launchSettings(requireContext())
+                    },
+                    onCancel = {
+                        ToastUtil.show(getString(R.string.not_granted_necessary_permissions))
+                    }
+                )
             }
         }
         pendingSaveAttachmentMessage = null
@@ -1251,7 +1212,7 @@ class ChatMessageListFragment : Fragment() {
 
         attachment?.let {
             val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + it.fileName
-            val progress = FileUtil.progressMap[data.id]
+            val progress = data.getAttachmentProgress()
 
             if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
                 val saveAttachment = SaveAttachmentTask.Attachment(
@@ -1266,35 +1227,33 @@ class ChatMessageListFragment : Fragment() {
                 SaveAttachmentTask(requireContext()).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
             } else {
                 L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
-                PopTip.show(resources.getQuantityText(R.plurals.ConversationFragment_error_while_saving_attachments_to_sd_card, 1))
+                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
             }
         }
     }
 
-    private var mTranslateDialog: BottomDialog? = null
-
     private fun showTranslateDialog(data: TextChatMessage) {
-        mTranslateDialog = BottomDialog.build()
-            .setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg3))
-            .setCustomView(object :
-                OnBindView<BottomDialog?>(R.layout.layout_translate_method_dialog) {
-                override fun onBind(dialog: BottomDialog?, v: View) {
-                    v.findViewById<TextView>(R.id.tv_english).setOnClickListener {
-                        mTranslateDialog?.dismiss()
-                        chatViewModel.translate(data, TranslateTargetLanguage.EN)
-                    }
-
-                    v.findViewById<TextView>(R.id.tv_chinese).setOnClickListener {
-                        mTranslateDialog?.dismiss()
-                        chatViewModel.translate(data, TranslateTargetLanguage.ZH)
-                    }
-
-                    v.findViewById<TextView>(R.id.tv_cancel).setOnClickListener {
-                        mTranslateDialog?.dismiss()
-                    }
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = requireActivity(),
+            layoutId = R.layout.layout_translate_method_dialog,
+            onDismiss = { /* Dialog dismissed */ },
+            onViewCreated = { v ->
+                v.findViewById<TextView>(R.id.tv_english).setOnClickListener {
+                    dialog?.dismiss()
+                    chatViewModel.translate(data, TranslateTargetLanguage.EN)
                 }
-            })
-            .show()
+
+                v.findViewById<TextView>(R.id.tv_chinese).setOnClickListener {
+                    dialog?.dismiss()
+                    chatViewModel.translate(data, TranslateTargetLanguage.ZH)
+                }
+
+                v.findViewById<TextView>(R.id.tv_cancel).setOnClickListener {
+                    dialog?.dismiss()
+                }
+            }
+        )
     }
 
 
@@ -1326,7 +1285,7 @@ class ChatMessageListFragment : Fragment() {
     private fun openPreview(message: TextChatMessage) {
         val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
         if (!FileUtil.isFileValid(filePath)) {
-            TipDialog.show(R.string.file_load_error)
+            ToastUtil.showLong(R.string.file_load_error)
             return
         }
         if (!message.isMine && message.isConfidential()) {
@@ -1365,7 +1324,7 @@ class ChatMessageListFragment : Fragment() {
 
             if (mediaListInfo.first.isEmpty()) {
                 L.w { "media list is empty" }
-                TipDialog.show(R.string.file_load_error)
+                ToastUtil.showLong(R.string.file_load_error)
                 return@launch
             }
 
@@ -1601,6 +1560,11 @@ class ChatMessageListFragment : Fragment() {
                                 (msg is TextChatMessage && msg.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()?.authorityId.toString() == message.id)
                     }
                     chatMessageAdapter.notifyItemChanged(pos)
+
+                    voiceMessageView?.let { view ->
+                        val progressBar = view.findViewById<AudioWaveProgressBar>(R.id.audioWaveProgressBar)
+                        progressBar.setProgress(progress)
+                    }
                 }
 
         }
@@ -1632,5 +1596,275 @@ class ChatMessageListFragment : Fragment() {
                 L.e { "[Call] ChatMessageListFragment callStatusView listener error = ${it.message}" }
                 it.printStackTrace()
             })
+    }
+
+    /**
+     * 机密音频消息对话框
+     */
+    class ConfidentialAudioBottomSheetFragment : BottomSheetDialogFragment() {
+
+        companion object {
+            fun newInstance(): ConfidentialAudioBottomSheetFragment {
+                return ConfidentialAudioBottomSheetFragment()
+            }
+        }
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            return inflater.inflate(R.layout.chat_layout_confidential_audio_dialog, container, false)
+        }
+
+        override fun onStart() {
+            super.onStart()
+
+            // 设置为不可手动关闭
+            isCancelable = false
+
+            // 设置底部弹窗为全屏显示
+            val dialog = dialog
+            if (dialog != null) {
+                // 禁用点击外部区域关闭
+                dialog.setCanceledOnTouchOutside(false)
+
+                val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                if (bottomSheet != null) {
+                    val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
+                    behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                    behavior.skipCollapsed = true
+
+                    // 禁用手势滑动关闭
+                    behavior.isHideable = false
+                    // 禁用拖拽
+                    behavior.isDraggable = false
+
+                    // 设置底部弹窗高度为全屏
+                    val layoutParams = bottomSheet.layoutParams
+                    layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    bottomSheet.layoutParams = layoutParams
+                }
+            }
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+
+            // 设置背景色
+            view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
+
+            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+                dismiss()
+            }
+
+            // 通过接口获取 ChatMessageListFragment
+            val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment() ?: return
+            val currentMessage = chatFragment.currentAudioMessage ?: return
+
+            chatFragment.voiceMessageView = view.findViewById(R.id.voice_message_view)
+            chatFragment.voiceMessageView?.setAudioMessage(currentMessage)
+
+            val clVoiceMessageView = view.findViewById<ConstraintLayout>(R.id.cl_voice_message_view)
+            if (currentMessage.isMine) {
+                clVoiceMessageView?.setBackgroundResource(R.drawable.chat_message_content_bg_mine)
+            } else {
+                clVoiceMessageView?.setBackgroundResource(R.drawable.chat_message_content_bg_others)
+            }
+        }
+
+
+        override fun onDismiss(dialog: DialogInterface) {
+            super.onDismiss(dialog)
+            // 使用现代的 Fragment 结果 API
+            try {
+                requireActivity().supportFragmentManager.setFragmentResult("confidential_audio_dialog_result", Bundle())
+            } catch (e: Exception) {
+                // Fragment 可能已经被销毁，忽略错误
+            }
+        }
+    }
+
+    /**
+     * 机密文本消息对话框
+     */
+    class ConfidentialTextBottomSheetFragment : BottomSheetDialogFragment() {
+
+        companion object {
+            fun newInstance(): ConfidentialTextBottomSheetFragment {
+                return ConfidentialTextBottomSheetFragment()
+            }
+        }
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            return inflater.inflate(R.layout.chat_layout_confidential_text_dialog, container, false)
+        }
+
+        override fun onStart() {
+            super.onStart()
+
+            // 设置为不可手动关闭
+            isCancelable = false
+
+            // 设置底部弹窗为全屏显示
+            val dialog = dialog
+            if (dialog != null) {
+                // 禁用点击外部区域关闭
+                dialog.setCanceledOnTouchOutside(false)
+
+                val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                if (bottomSheet != null) {
+                    val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
+                    behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                    behavior.skipCollapsed = true
+
+                    // 禁用手势滑动关闭
+                    behavior.isHideable = false
+                    // 禁用拖拽
+                    behavior.isDraggable = false
+
+                    // 设置底部弹窗高度为全屏
+                    val layoutParams = bottomSheet.layoutParams
+                    layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    bottomSheet.layoutParams = layoutParams
+                }
+            }
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+
+            // 设置背景色
+            view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
+
+            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+                dismiss()
+            }
+
+            // 通过接口获取 ChatMessageListFragment
+            val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment() ?: return
+            val currentMessage = chatFragment.currentTextMessage ?: return
+            val messageText = currentMessage.message.toString()
+
+            val textView = view.findViewById<TextView>(R.id.textView)
+            val llConfidential = view.findViewById<LinearLayout>(R.id.ll_confidential)
+            val scrollView = view.findViewById<ScrollView>(R.id.sv_confidential)
+            val tvTitle = view.findViewById<TextView>(R.id.tv_title)
+
+            textView.autoLinkMask = 0
+            textView.movementMethod = null
+
+            if (TextSizeUtil.isLager()) {
+                textView.textSize = 24f
+            } else {
+                textView.textSize = 16f
+            }
+
+            LinkTextUtils.setMarkdownToTextview(
+                requireContext(),
+                messageText,
+                textView,
+                mentions = null
+            )
+
+            textView.post {
+                val textViewLayout = textView.layout
+                if (textView.lineCount > 0) {
+                    llConfidential.removeAllViews()
+                    for (i in 0 until textView.lineCount) {
+                        val view = layoutInflater.inflate(
+                            R.layout.chat_item_content_text_confidential_dialog,
+                            llConfidential,
+                            false
+                        )
+
+                        val top = textViewLayout.getLineTop(i)
+                        val bottom = textViewLayout.getLineBottom(i)
+                        val lineHeight = if (i == textView.lineCount - 1) {
+                            bottom - top + textView.lineSpacingExtra.toInt()
+                        } else {
+                            bottom - top
+                        }
+                        view.layoutParams.height = lineHeight
+
+                        val tvNumber = view.findViewById<TextView>(R.id.tv_line_number)
+                        val number = (i + 1).toString()
+                        tvNumber.text = number
+
+                        llConfidential.addView(view)
+                    }
+
+                    llConfidential.post {
+                        llConfidential.setOnTouchListener { v, event ->
+                            val itemHeight = llConfidential.getChildAt(0).height
+                            val touchX = event.x.toInt()
+
+                            val regionWidth = v.width / 3
+
+                            when (event.action) {
+                                MotionEvent.ACTION_DOWN -> {
+                                    chatFragment.setConfidentialRecipient(currentMessage)
+                                    if (touchX <= regionWidth) {
+                                        v.parent.requestDisallowInterceptTouchEvent(true)
+                                    } else {
+                                        v.parent.requestDisallowInterceptTouchEvent(false)
+                                    }
+                                }
+
+                                MotionEvent.ACTION_MOVE -> {
+                                    val currentY = event.y.toInt()
+                                    val currentPosition = (currentY / itemHeight).coerceIn(0, llConfidential.childCount - 1)
+
+                                    val startLine = (currentPosition - 2).coerceAtLeast(0)
+                                    val endLine = (currentPosition + 2).coerceAtMost(llConfidential.childCount - 1)
+
+                                    llConfidential.children.forEachIndexed { index, view ->
+                                        if (index in startLine..endLine) {
+                                            view.visibility = View.INVISIBLE
+                                        } else {
+                                            view.visibility = View.VISIBLE
+                                        }
+                                    }
+
+                                    if (touchX <= regionWidth) {
+                                        v.parent.requestDisallowInterceptTouchEvent(true)
+                                    } else {
+                                        v.parent.requestDisallowInterceptTouchEvent(false)
+                                    }
+                                }
+
+                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                    llConfidential.children.forEach { it.visibility = View.VISIBLE }
+                                    v.parent.requestDisallowInterceptTouchEvent(false)
+                                }
+                            }
+                            true
+                        }
+
+                        if (chatFragment.isScrollViewScrollable(scrollView)) {
+                            tvTitle.visibility = View.VISIBLE
+                        } else {
+                            tvTitle.visibility = View.GONE
+                        }
+                    }
+                }
+            }
+        }
+
+
+        override fun onDismiss(dialog: DialogInterface) {
+            super.onDismiss(dialog)
+            // 使用现代的 Fragment 结果 API
+            try {
+                requireActivity().supportFragmentManager.setFragmentResult("confidential_text_dialog_result", Bundle())
+            } catch (e: Exception) {
+                // Fragment 可能已经被销毁，忽略错误
+            }
+        }
     }
 }

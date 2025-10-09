@@ -23,7 +23,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -60,20 +59,18 @@ fun BarrageMessageView(viewModel: LCallViewModel, config: BarrageMessageConfig, 
     val messages = remember { mutableStateListOf<BarrageMessage>() }
     val visibleMessages = remember { mutableStateListOf<BarrageMessage>() }
     val isInCycle = remember { mutableStateOf(false) }
-    var expanded by remember { mutableStateOf(false) }
-    var selectedItem by remember { mutableStateOf<String?>(null) }
+    val showSimpleBarrageEnabled by viewModel.callUiController.showSimpleBarrageEnabled.collectAsState(false)
 
-    val barrageMessage by viewModel.barrageMessage.collectAsState(null)
-    val isParticipantSharedScreen by viewModel.isParticipantSharedScreen.collectAsState(false)
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
+    val barrageMessage by viewModel.callUiController.barrageMessage.collectAsState(null)
+    val isShareScreening by viewModel.callUiController.isShareScreening.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     // 当点击菜单项时的回调
     fun onClickItem(item: String) {
-        selectedItem = item
-        expanded = false // 关闭菜单
+        viewModel.callUiController.setShowSimpleBarrageEnabled(false)
         sendBarrageMessage(item, RTM_MESSAGE_TOPIC_CHAT)
     }
 
@@ -169,11 +166,11 @@ fun BarrageMessageView(viewModel: LCallViewModel, config: BarrageMessageConfig, 
                 }
             }
 
-            if(!isParticipantSharedScreen) {
+            if(!isShareScreening) {
                 ShowHandsUpTipView(viewModel)
             }
 
-            ShouldShowBarrageInput(viewModel, config, expanded, setExpanded = { value -> expanded = value} , onClickItem = { value -> onClickItem(value) })
+            ShouldShowBarrageInput(viewModel, config, showSimpleBarrageEnabled, setExpanded = { value -> viewModel.callUiController.setShowSimpleBarrageEnabled(value) } , onClickItem = { value -> onClickItem(value) })
         }
 
     }
@@ -183,12 +180,12 @@ fun BarrageMessageView(viewModel: LCallViewModel, config: BarrageMessageConfig, 
 @Composable
 private fun ShouldShowBarrageInput(viewModel: LCallViewModel, config: BarrageMessageConfig, expanded: Boolean, setExpanded:(Boolean) ->Unit, onClickItem: (String) -> Unit) {
 
-    val isOverlayVisible by viewModel.showControlBarEnabled.collectAsState(true)
+    val showBottomToolBarViewEnabled by viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val context = LocalContext.current
-    if(config.isOneVOneCall && !isLandscape || isOverlayVisible) {
+    if((config.isOneVOneCall && !isLandscape) || showBottomToolBarViewEnabled) {
         Spacer(modifier = Modifier.height(4.dp))
         ConstraintLayout {
             val (dropdownMenu, barrageView) = createRefs()

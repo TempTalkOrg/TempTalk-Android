@@ -40,7 +40,6 @@ import androidx.annotation.RequiresPermission;
 import com.annimon.stream.Stream;
 import com.difft.android.base.log.lumberjack.L;
 import com.difft.android.chat.R;
-import com.kongzue.dialogx.dialogs.PopTip;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -53,7 +52,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
+import com.difft.android.base.widget.ToastUtil;
 public class Util {
     private static final String TAG = L.INSTANCE.tag(Util.class);
 
@@ -474,7 +473,7 @@ public class Util {
 
     public static void copyToClipboard(@NonNull Context context, @NonNull CharSequence text) {
         ServiceUtil.getClipboardManager(context).setPrimaryClip(ClipData.newPlainText("text", text));
-        PopTip.show(R.string.chat_message_action_copied);
+        ToastUtil.INSTANCE.show(R.string.chat_message_action_copied);
     }
 
     @SafeVarargs

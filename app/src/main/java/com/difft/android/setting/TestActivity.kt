@@ -60,5 +60,9 @@ class TestActivity : BaseActivity() {
         mBinding.clSendRecoveryEvent.setOnClickListener {
             wcdb.testRecoveryEvent()
         }
+
+        mBinding.clDialogTest.setOnClickListener {
+            DialogTestActivity.startActivity(this@TestActivity)
+        }
     }
 }

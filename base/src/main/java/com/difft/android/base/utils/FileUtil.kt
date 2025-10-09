@@ -151,12 +151,16 @@ object FileUtil {
         }
     }
 
-    val progressMap = hashMapOf<String, Int>()
+    private val progressMap = hashMapOf<String, Int>()
 
     private val mProgressUpdateSubject = BehaviorSubject.create<String>()
     fun emitProgressUpdate(id: String, progress: Int) {
         progressMap[id] = progress
         mProgressUpdateSubject.onNext(id)
+    }
+
+    fun getProgress(id: String): Int? {
+        return progressMap[id]
     }
 
 //    fun removeProgress(id: String) {

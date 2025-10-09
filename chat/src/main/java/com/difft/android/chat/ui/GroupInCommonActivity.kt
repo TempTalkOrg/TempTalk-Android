@@ -26,7 +26,8 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.GroupModel
@@ -100,7 +101,7 @@ class GroupInCommonActivity : BaseActivity() {
         mBinding.edittextSearchInput.addTextChangedListener {
             // Cancel previous search job
             searchJob?.cancel()
-            
+
             // Create new debounced search job
             searchJob = lifecycleScope.launch {
                 delay(300)
@@ -112,7 +113,7 @@ class GroupInCommonActivity : BaseActivity() {
         mBinding.buttonClear.setOnClickListener {
             // Cancel any pending search
             searchJob?.cancel()
-            
+
             mBinding.edittextSearchInput.text = null
             // Immediately search for all groups when clearing
             searchGroups()
@@ -144,47 +145,47 @@ class GroupInCommonActivity : BaseActivity() {
             try {
                 // Get the latest text value at search time
                 val searchQuery = mBinding.edittextSearchInput.text.toString().trim()
-                
+
                 val commonGroups = withContext(Dispatchers.IO) {
                     // Efficient approach: directly query for groups where both users are members
                     val contactGroups = wcdb.groupMemberContactor.getAllObjects(
                         DBGroupMemberContactorModel.id.eq(contactId)
                     ).map { it.gid }.distinct()
-                    
+
                     if (contactGroups.isEmpty()) {
                         return@withContext emptyList()
                     }
-                    
+
                     val myGroups = wcdb.groupMemberContactor.getAllObjects(
                         DBGroupMemberContactorModel.id.eq(globalServices.myId)
                     ).map { it.gid }.distinct()
-                    
-                    val commonGroupIds = contactGroups.intersect(myGroups.toSet())
-                    
+
+                    val commonGroupIds = contactGroups.intersect(myGroups.toSet()).filter { it.matches(Regex("^[0-9a-fA-F]+$")) }.distinct()
+
                     if (commonGroupIds.isEmpty()) {
                         return@withContext emptyList()
                     }
-                    
+
                     // Build query with search condition if provided
                     val baseQuery = DBGroupModel.gid.`in`(*commonGroupIds.toTypedArray())
                         .and(DBGroupModel.status.eq(0))
-                    
+
                     val finalQuery = if (searchQuery.isNotEmpty()) {
                         baseQuery.and(DBGroupModel.name.upper().like("%${searchQuery.uppercase()}%"))
                     } else {
                         baseQuery
                     }
-                    
+
                     // Get full group objects for common groups with search filter
                     wcdb.group.getAllObjects(finalQuery)
                 }
-                
+
                 // Update UI on main thread
                 mGroupsAdapter.submitList(commonGroups) {
                     // Scroll to top after data is updated
                     mBinding.recyclerviewGroup.scrollToPosition(0)
                 }
-                
+
             } catch (e: Exception) {
                 L.e { "[GroupInCommonActivity] Error searching common groups: ${e.stackTraceToString()}" }
                 e.printStackTrace()
@@ -216,24 +217,36 @@ class GroupInCommonActivity : BaseActivity() {
     }
 
     private fun leaveGroup(group: GroupModel) {
-        MessageDialog.show(R.string.group_leave, R.string.group_leave_notice, R.string.group_leave_leave, R.string.group_leave_cancel)
-            .setOkButton { dialog, v ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.group_leave),
+            message = getString(R.string.group_leave_notice),
+            confirmText = getString(R.string.group_leave_leave),
+            cancelText = getString(R.string.group_leave_cancel),
+            cancelable = false,
+            onConfirm = {
                 groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(myID)))
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
                     .subscribe({}, { it.printStackTrace() })
-                false
             }
+        )
     }
 
     private fun disbandGroup(group: GroupModel) {
-        MessageDialog.show(R.string.group_disband, R.string.group_disband_tips, R.string.group_disband_disband, R.string.group_leave_cancel)
-            .setOkButton { dialog, v ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.group_disband),
+            message = getString(R.string.group_disband_tips),
+            confirmText = getString(R.string.group_disband_disband),
+            cancelText = getString(R.string.group_leave_cancel),
+            cancelable = false,
+            onConfirm = {
                 groupRepo.deleteGroup(group.gid)
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
                     .subscribe({}, { it.printStackTrace() })
-                false
             }
+        )
     }
 }

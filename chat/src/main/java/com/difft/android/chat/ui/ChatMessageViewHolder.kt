@@ -15,16 +15,14 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.dp
-import com.difft.android.messageserialization.db.store.formatBase58Id
-import org.difft.app.database.getContactorFromAllTable
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.base.widget.setRightMargin
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.databinding.ChatItemChatMessageListNotifyBinding
@@ -34,8 +32,11 @@ import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.message.shouldShowFail
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import dagger.hilt.android.internal.managers.ViewComponentManager
 import difft.android.messageserialization.For
-import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TranslateStatus
@@ -43,14 +44,11 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import com.difft.android.base.widget.setRightMargin
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import dagger.hilt.android.internal.managers.ViewComponentManager
+import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.ContactorModel
-import util.TimeFormatter
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.Util
-
+import util.TimeFormatter
 
 abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
@@ -223,10 +221,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             )
 
             binding.ivSpeech2textServerTipIcon.setOnClickListener {
-                MessageDialog.show(
-                    ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_title),
-                    ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_info),
-                    ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_ok)
+                ComposeDialogManager.showMessageDialog(
+                    context = binding.root.context,
+                    title = ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_title),
+                    message = ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_info),
+                    confirmText = ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_ok),
+                    showCancel = false
                 )
             }
 
@@ -237,7 +237,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             binding.checkboxSelectForUnpin.setOnCheckedChangeListener { _, b ->
                 if (message.isConfidential()) {
                     binding.checkboxSelectForUnpin.isChecked = message.selectedStatus
-                    PopTip.show(binding.root.context.getString(R.string.chat_confidential_can_not_select))
+                    ToastUtil.show(binding.root.context.getString(R.string.chat_confidential_can_not_select))
                 } else {
                     if (b != message.selectedStatus) {
                         onSelectPinnedMessage?.invoke(message.id, b)
@@ -467,10 +467,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             )
 
             binding.ivSpeech2textServerTipIcon.setOnClickListener {
-                MessageDialog.show(
-                    ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_title),
-                    ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_info),
-                    ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_ok)
+                ComposeDialogManager.showMessageDialog(
+                    context = binding.root.context,
+                    title = ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_title),
+                    message = ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_info),
+                    confirmText = ApplicationHelper.instance.getString(R.string.chat_message_action_voice2text_tip_ok),
+                    showCancel = false
                 )
             }
 
@@ -489,7 +491,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             binding.checkboxSelectForUnpin.setOnCheckedChangeListener { _, b ->
                 if (message.isConfidential()) {
                     binding.checkboxSelectForUnpin.isChecked = message.selectedStatus
-                    PopTip.show(binding.root.context.getString(R.string.chat_confidential_can_not_select))
+                    ToastUtil.show(binding.root.context.getString(R.string.chat_confidential_can_not_select))
                 } else {
                     if (b != message.selectedStatus) {
                         onSelectPinnedMessage?.invoke(message.id, b)
@@ -568,15 +570,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
     }
 
     fun initForwardAttachmentFailView(message: TextChatMessage, failView: View) {
-        failView.visibility = View.GONE
-        if (message.forwardContext?.forwards?.size == 1) {
-            val attachment = message.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
-            if (attachment?.status == AttachmentStatus.FAILED.code) {
-                if (!message.isMine || message.id.last().digitToIntOrNull() != DEFAULT_DEVICE_ID) {
-                    failView.visibility = View.VISIBLE
-                }
-            }
-        }
+        failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
 

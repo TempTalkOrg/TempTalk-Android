@@ -30,8 +30,7 @@ import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
+import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
 import com.luck.picture.lib.config.SelectModeConfig
@@ -42,7 +41,6 @@ import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
-import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.wcdb
@@ -50,7 +48,7 @@ import util.ScreenLockUtil
 import java.io.File
 import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class ContactProfileSettingActivity : BaseActivity() {
 
@@ -282,7 +280,7 @@ class ContactProfileSettingActivity : BaseActivity() {
                 Status.ERROR -> {
                     mBinding.btnDone.isLoading = false
                     it.exception?.errorMsg?.let { error ->
-                        PopTip.show(error)
+                        ToastUtil.show(error)
                     }
                     //如果是一键注册，即便是头像信息上传失败，也进入首页
                     if (intent.from == BUNDLE_VALUE_FROM_SIGN_UP) {
@@ -338,22 +336,22 @@ class ContactProfileSettingActivity : BaseActivity() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onPicturePermissionForAvatarResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(com.difft.android.chat.R.string.tip),
-                    getString(com.difft.android.chat.R.string.no_permission_picture_tip),
-                    getString(com.difft.android.chat.R.string.notification_go_to_settings),
-                    getString(com.difft.android.chat.R.string.notification_ignore)
-                )
-                    .setCancelable(false)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(com.difft.android.chat.R.string.tip),
+                    message = getString(com.difft.android.chat.R.string.no_permission_picture_tip),
+                    confirmText = getString(com.difft.android.chat.R.string.notification_go_to_settings),
+                    cancelText = getString(com.difft.android.chat.R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = {
                         PermissionUtil.launchSettings(this)
-                        false
-                    }.setCancelButton { _, _ ->
+                    },
+                    onCancel = {
                         ToastUtils.showToast(
                             this, getString(com.difft.android.chat.R.string.not_granted_necessary_permissions)
                         )
-                        false
                     }
+                )
             }
         }
     }

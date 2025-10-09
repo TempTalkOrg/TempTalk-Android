@@ -54,5 +54,6 @@
     <string name="call_chat_header_started_call">%s发起了通话</string>
     <string name="call_chat_header_1v1_calling">%s呼叫中</string>
     <string name="call_params_url_exception_tip">服务端URL参数异常</string>
-
+    <string name="call_params_startcall_exception_tip">会议连接参数异常</string>
+    <string name="call_service_node_dashboard_title">会议服务设置</string>
 </resources>

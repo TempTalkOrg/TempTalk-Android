@@ -12,6 +12,7 @@ import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.chat.widget.VoiceMessageView
 import difft.android.messageserialization.model.AttachmentStatus
@@ -41,9 +42,7 @@ open class AudioContentAdapter : MessageContentAdapter() {
             viewHolder.tvCover.setOnClickListener(null)
         }
 
-        val shouldShowFail = (!message.isMine || message.id.last().digitToIntOrNull() != DEFAULT_DEVICE_ID) &&
-                (FileUtil.progressMap[message.id]?.let { it == -1 } ?: (message.attachment?.status == AttachmentStatus.FAILED.code))
-        viewHolder.failView.visibility = if (shouldShowFail) View.VISIBLE else View.GONE
+        viewHolder.failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
     override fun createViewHolder(viewGroup: ViewGroup): ContentViewHolder {

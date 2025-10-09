@@ -36,15 +36,15 @@ import com.difft.android.call.data.BottomCallEndAction
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onClickItem: (BottomCallEndAction) -> Unit) {
-    val showBottomCallEndViewEnable by viewModel.showBottomCallEndViewEnable.collectAsState(false)
+    val showBottomCallEndViewEnable by viewModel.callUiController.showBottomCallEndViewEnable.collectAsState(false)
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
     )
-    val isParticipantSharedScreen by viewModel.isParticipantSharedScreen.collectAsState(false)
+    val isShareScreening by viewModel.callUiController.isShareScreening.collectAsState(false)
 
     if(showBottomCallEndViewEnable){
 
-        viewModel.setShowControlBarEnabled(false)
+        viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
 
         ModalBottomSheet (
             scrimColor = Color.Transparent,
@@ -54,14 +54,14 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
             modifier = Modifier
                 .background(color = Color.Transparent)
                 .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
-                .then(if (isParticipantSharedScreen) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
+                .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
                 .wrapContentHeight(),
             sheetState = sheetState,
             onDismissRequest = {
                 onDismiss()
             },
         ){
-            if(isParticipantSharedScreen) {
+            if(isShareScreening) {
                 HorizontalScreenButtonView(onClickItem = onClickItem)
             }else {
                 VerticalScreenButtonView(onClickItem = onClickItem)

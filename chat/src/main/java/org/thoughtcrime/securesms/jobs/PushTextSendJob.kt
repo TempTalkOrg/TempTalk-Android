@@ -50,6 +50,8 @@ import com.difft.android.websocket.internal.push.NotificationType
 import com.difft.android.websocket.internal.push.OutgoingPushMessage
 import com.difft.android.websocket.internal.push.OutgoingPushMessage.PassThrough
 import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
+import org.difft.app.database.models.DBAttachmentModel
+import org.difft.app.database.toAttachmentModel
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -272,7 +274,10 @@ class PushTextSendJob @AssistedInject constructor(
     private fun updateAttachmentStatus(status: Int) {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
         attachment.status = status
-        ApplicationDependencies.getAttachmentStore().putAttachment(textMessage.id, attachment).blockingAwait()
+
+        val newAttachment = attachment.toAttachmentModel(textMessage.id)
+        wcdb.attachment.deleteObjects(DBAttachmentModel.id.eq(attachment.id).and(DBAttachmentModel.messageId.eq(textMessage.id)))
+        wcdb.attachment.insertObject(newAttachment)
     }
 
     private fun uploadAttachment() {
@@ -355,7 +360,7 @@ class PushTextSendJob @AssistedInject constructor(
                         val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
                             override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
                                 val currentTime = System.currentTimeMillis()
-                                if ((currentTime - lastEmitTime >= 500)) {
+                                if ((currentTime - lastEmitTime >= 200)) {
                                     FileUtil.emitProgressUpdate(textMessage.id, progress)
                                     lastEmitTime = currentTime
                                 }

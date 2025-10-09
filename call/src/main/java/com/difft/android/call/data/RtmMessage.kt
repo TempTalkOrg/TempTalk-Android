@@ -63,7 +63,7 @@ data class CountDownTimerData(
 @Serializable
 data class HandsUpData(
     val topic: String,
-    val hands: List<HandUpUserData>,
+    val hands: List<HandUpUserData>? = null,
     val operatorIdentity: String,
 )
 

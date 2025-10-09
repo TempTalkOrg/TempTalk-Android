@@ -53,7 +53,6 @@ import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
 import com.difft.android.network.BaseResponse
 import com.google.mlkit.nl.translate.TranslateLanguage
-import com.kongzue.dialogx.dialogs.PopTip
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -86,7 +85,7 @@ import util.TimeFormatter
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.create
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 
 @HiltViewModel(assistedFactory = ChatMessageViewModelFactory::class)
 class ChatMessageViewModel @AssistedInject constructor(
@@ -232,19 +231,29 @@ class ChatMessageViewModel @AssistedInject constructor(
                 L.i { "[call] Bringing back current call" }
                 LCallManager.bringInCallScreenBack(activity)
             } else {
-                PopTip.show(R.string.call_is_calling_tip)
+                ToastUtil.show(R.string.call_is_calling_tip)
             }
         } else {
             //判断当前是否有livekit会议，有则join会议
             val callData = LCallManager.getCallDataByConversationId(forWhat.id)
             if (callData != null) {
                 L.i { "[call] Joining existing call with roomId:${callData.roomId}" }
-                LCallManager.joinCall(activity.applicationContext, callData.roomId)
+                LCallManager.joinCall(activity.applicationContext, callData) { status ->
+                    if(!status) {
+                        L.e { "[Call] startCall join call failed." }
+                        ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
+                    }
+                }
                 return
             }
             //否则发起livekit call通话
             L.i { "[call] Starting new call" }
-            callManager.startCall(activity, forWhat, chatRoomName)
+            callManager.startCall(activity, forWhat, chatRoomName) { status ->
+                if(!status) {
+                    L.e { "[Call] start call failed." }
+                    ToastUtil.show(com.difft.android.call.R.string.call_start_failed_tip)
+                }
+            }
         }
     }
 
@@ -355,14 +364,14 @@ class ChatMessageViewModel @AssistedInject constructor(
                             } else {
                                 speechToTextData.convertStatus = SpeechToTextStatus.Invisible
                                 updateSpeechToTextStatus(data.id, speechToTextData)
-                                PopTip.show(R.string.chat_speech_to_text_isblank)
+                                ToastUtil.show(R.string.chat_speech_to_text_isblank)
                             }
                         },
                         onFailure = {
                             L.e { "[speechToTextManager] SpeechToText failed:" + it.message }
                             speechToTextData.convertStatus = SpeechToTextStatus.Invisible
                             updateSpeechToTextStatus(data.id, speechToTextData)
-                            PopTip.show(R.string.chat_speech_to_text_fail)
+                            ToastUtil.show(R.string.chat_speech_to_text_fail)
                         }
                     )
                 }
@@ -438,7 +447,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                 L.e { "[translateManager] Translate failed:" + it.stackTraceToString() }
                 translateData.translateStatus = TranslateStatus.Invisible
                 updateTranslateStatus(data.id, translateData)
-                PopTip.show(R.string.chat_translate_fail)
+                ToastUtil.show(R.string.chat_translate_fail)
             }
         )
     }

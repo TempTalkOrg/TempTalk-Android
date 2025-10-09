@@ -26,8 +26,8 @@ import androidx.viewpager2.widget.ViewPager2
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
-import com.kongzue.dialogx.dialogs.BottomDialog
-import com.kongzue.dialogx.interfaces.OnBindView
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import com.luck.picture.lib.entity.LocalMedia
 import util.FileUtils
 import util.logging.Log
@@ -548,38 +548,36 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
         sharedViewModel.onEditVideoDuration(context = requireContext(), totalDurationUs = duration, startTimeUs = minValue, endTimeUs = maxValue, touchEnabled = end)
     }
 
-    private var qualitySelectorDialog: BottomDialog? = null
-
     private fun showQualitySelectorDialog() {
-
         val standardQuality = sharedViewModel.state.value?.quality == SentMediaQuality.STANDARD
 
-        qualitySelectorDialog = BottomDialog.build()
-            .setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg3))
-            .setCustomView(object : OnBindView<BottomDialog?>(R.layout.layout_media_quality_select_dialog) {
-                override fun onBind(dialog: BottomDialog?, v: View) {
-                    val btnStandard = v.findViewById<TextView>(R.id.btn_standard)
-                    val btnHigh = v.findViewById<TextView>(R.id.btn_high)
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = requireActivity(),
+            layoutId = R.layout.layout_media_quality_select_dialog,
+            onDismiss = { /* Dialog dismissed */ },
+            onViewCreated = { v ->
+                val btnStandard = v.findViewById<TextView>(R.id.btn_standard)
+                val btnHigh = v.findViewById<TextView>(R.id.btn_high)
 
-                    if (standardQuality) {
-                        btnStandard.setBackgroundResource(R.drawable.media_quality_select_background)
-                        btnHigh.setBackgroundResource(0)
-                    } else {
-                        btnStandard.setBackgroundResource(0)
-                        btnHigh.setBackgroundResource(R.drawable.media_quality_select_background)
-                    }
-
-                    btnStandard.setOnClickListener {
-                        qualitySelectorDialog?.dismiss()
-                        sharedViewModel.setSentMediaQuality(SentMediaQuality.STANDARD)
-                    }
-
-                    btnHigh.setOnClickListener {
-                        qualitySelectorDialog?.dismiss()
-                        sharedViewModel.setSentMediaQuality(SentMediaQuality.HIGH)
-                    }
+                if (standardQuality) {
+                    btnStandard.setBackgroundResource(R.drawable.media_quality_select_background)
+                    btnHigh.setBackgroundResource(0)
+                } else {
+                    btnStandard.setBackgroundResource(0)
+                    btnHigh.setBackgroundResource(R.drawable.media_quality_select_background)
                 }
-            })
-            .show()
+
+                btnStandard.setOnClickListener {
+                    dialog?.dismiss()
+                    sharedViewModel.setSentMediaQuality(SentMediaQuality.STANDARD)
+                }
+
+                btnHigh.setOnClickListener {
+                    dialog?.dismiss()
+                    sharedViewModel.setSentMediaQuality(SentMediaQuality.HIGH)
+                }
+            }
+        )
     }
 }

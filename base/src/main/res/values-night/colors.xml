@@ -41,7 +41,7 @@
     <color name="bg.modal" tools:ignore="ResourceName">#2B3139</color>
     <color name="bg.popup" tools:ignore="ResourceName">#1E2329</color>
     <color name="bg.blue" tools:ignore="ResourceName">#003366</color>
-<!--    <color name="bg.dark" tools:ignore="ResourceName">#000000</color>-->
+    <color name="bg.sky" tools:ignore="ResourceName">#003366</color>
 
     <color name="bg.setting" tools:ignore="ResourceName">#181A20</color>
     <color name="bg.setting.item" tools:ignore="ResourceName">#1E2329</color>

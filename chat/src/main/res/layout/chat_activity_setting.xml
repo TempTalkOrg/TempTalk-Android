@@ -210,8 +210,9 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch_stick"
+                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:background="@color/bg.setting.item"
@@ -221,8 +222,7 @@
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        tools:ignore="UseSwitchCompatOrMaterialXml" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -233,8 +233,9 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch2mute1on1"
+                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@color/bg.setting.item"

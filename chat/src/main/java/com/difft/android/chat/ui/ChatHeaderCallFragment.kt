@@ -13,6 +13,7 @@ import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.repo.LCallHttpService
@@ -124,7 +125,12 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
                                         binding.buttonJoinCall.text = ResUtils.getString(R.string.call_join)
                                         binding.buttonJoinCall.setOnClickListener {
                                             L.i { "[Call] ChatHeaderCallFragment onclick button joinCall roomId:${callData.roomId}" }
-                                            LCallManager.joinCall(requireActivity(), callData.roomId)
+                                            LCallManager.joinCall(requireActivity(), callData) { status ->
+                                                if(!status) {
+                                                    L.e { "[Call] ChatHeaderCallFragment join call failed." }
+                                                    ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
+                                                }
+                                            }
                                         }
                                         binding.buttonJoinCall.visibility = View.VISIBLE
                                         binding.callBarView.visibility = View.VISIBLE

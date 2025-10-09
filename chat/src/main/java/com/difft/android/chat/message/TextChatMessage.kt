@@ -1,7 +1,10 @@
 package com.difft.android.chat.message
 
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
+import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.widget.AudioMessageManager
 import difft.android.messageserialization.model.Attachment
+import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.Card
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
@@ -81,4 +84,58 @@ fun TextChatMessage.shouldDecrypt(): Boolean {
 
 fun TextChatMessage.canAutoSaveAttachment(): Boolean {
     return !isConfidential() && isAttachmentMessage() && (this.attachment?.isImage() == true || this.attachment?.isVideo() == true)
+}
+
+fun TextChatMessage.getAttachmentProgress(): Int? {
+    // Get the attachment ID to check progress for
+    val attachmentId = getAttachmentIdForProgress()
+    return FileUtil.getProgress(attachmentId)
+}
+
+/**
+ * Determines the appropriate attachment ID to use for progress tracking.
+ * For single forward messages, uses the forward attachment ID if available,
+ * otherwise falls back to the message ID.
+ */
+private fun TextChatMessage.getAttachmentIdForProgress(): String {
+    return forwardContext?.forwards
+        ?.takeIf { it.size == 1 }
+        ?.firstOrNull()
+        ?.attachments
+        ?.firstOrNull()
+        ?.authorityId
+        ?.toString()
+        ?: this.id
+}
+
+fun TextChatMessage.shouldShowFail(): Boolean {
+    // Only show fail for non-mine messages or messages from different device
+    if (this.isMine && this.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID) {
+        return false
+    }
+
+    // Check if progress indicates failure
+    val progress = getAttachmentProgress()
+    if (progress == -1) return true
+
+    // If no progress info, check attachment status
+    if (progress == null) {
+        val attachment = getRelevantAttachment()
+        return attachment?.status == AttachmentStatus.FAILED.code
+    }
+
+    return false
+}
+
+/**
+ * Gets the relevant attachment for this message.
+ * For single forward messages, returns the forward attachment, otherwise returns the message attachment.
+ */
+private fun TextChatMessage.getRelevantAttachment(): Attachment? {
+    val forwards = forwardContext?.forwards
+    return if (forwards?.size == 1) {
+        forwards.firstOrNull()?.attachments?.firstOrNull()
+    } else {
+        this.attachment
+    }
 }

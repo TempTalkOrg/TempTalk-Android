@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <!-- 标题 -->
+    <TextView
+        android:id="@+id/tv_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:gravity="center"
+        android:text="@string/settings_bind_account_choice_title"
+        android:textColor="@color/t.primary"
+        android:textSize="16sp" />
+
+    <!-- 内容描述 -->
+    <TextView
+        android:id="@+id/tv_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:lineSpacingExtra="4dp"
+        android:paddingHorizontal="16dp"
+        android:text="@string/settings_bind_account_choice_message"
+        android:textColor="@color/t.secondary"
+        android:textSize="14sp" />
+
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginBottom="20dp"
+        android:orientation="horizontal">
+        <!-- 绑定邮箱按钮 -->
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/btn_bind_email"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/login_bind_email"
+            android:textColor="@color/t.info"
+            android:textSize="16sp" />
+
+        <!-- 绑定手机号按钮 -->
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/btn_bind_phone"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/login_bind_phone_number"
+            android:textColor="@color/t.info"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+
+</LinearLayout>

@@ -37,6 +37,7 @@ fun AboutPageView(
     buildTime: String,
     onCheckForUpdateClick: () -> Unit,
     joinDesktopClick: () -> Unit,
+    callServerUrlNodeClick: () -> Unit,
     isInsider: Boolean
 ) {
     Column(
@@ -58,6 +59,7 @@ fun AboutPageView(
                 buildTime = buildTime,
                 onCheckForUpdateClick = onCheckForUpdateClick,
                 joinDesktopClick = joinDesktopClick,
+                callServerUrlNodeClick = callServerUrlNodeClick,
                 isInsider = isInsider
             )
         }
@@ -126,6 +128,7 @@ fun SettingsScreen(
     buildTime: String,
     onCheckForUpdateClick: () -> Unit,
     joinDesktopClick: () -> Unit,
+    callServerUrlNodeClick: () -> Unit,
     isInsider: Boolean
 ) {
     Column(
@@ -185,7 +188,23 @@ fun SettingsScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(25.dp))
+        if(isInsider) {
+            Spacer(modifier = Modifier.height(25.dp))
+
+            Column(
+                modifier = Modifier.background(
+                    colorResource(id = com.difft.android.base.R.color.bg_setting_item),
+                    shape = RoundedCornerShape(8.dp)
+                )
+            ) {
+                ClickableSettingsItem(
+                    title = stringResource(com.difft.android.call.R.string.call_service_node_dashboard_title),
+                    click = callServerUrlNodeClick
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -199,6 +218,7 @@ private fun DefaultAboutPageView() {
         buildTime = "12:00 PM",
         onCheckForUpdateClick = {},
         joinDesktopClick = {},
+        callServerUrlNodeClick = {},
         isInsider = false
     )
 }

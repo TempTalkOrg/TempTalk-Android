@@ -31,8 +31,7 @@ import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.requests.ConversationSetRequestBody
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -57,7 +56,7 @@ import org.thoughtcrime.securesms.util.AppIconBadgeManager
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.minutes
-
+import com.difft.android.base.widget.ToastUtil
 @HiltViewModel
 class RecentChatViewModel @Inject constructor(
     private val dbRoomStore: DBRoomStore,
@@ -286,10 +285,10 @@ class RecentChatViewModel @Inject constructor(
                     if (it.status == 0) {
 //                        saveMuteStatus(setting.conversation, it.data?.muteStatus ?: 0)
                     } else {
-                        PopTip.show(it.reason)
+                        it.reason?.let { message -> ToastUtil.show(message) }
                     }
                 }) {
-                    PopTip.show(it.message)
+                    it.message?.let { message -> ToastUtil.show(message) }
                 }
 
         )
@@ -305,7 +304,7 @@ class RecentChatViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Main) {
             //allRecentRoomsStateFlow.value = allRecentRoomsStateFlow.value.map { it.copy(unreadMessageNum = 0) }
 
-            WaitDialog.show(activity, "")
+            ComposeDialogManager.showWait(activity, "")
 
             withContext(Dispatchers.IO) {
                 wcdb.room.allObjects.filter { it.unreadMessageNum > 0 }.forEach {
@@ -313,7 +312,7 @@ class RecentChatViewModel @Inject constructor(
                 }
             }
 
-            WaitDialog.dismiss()
+            ComposeDialogManager.dismissWait()
 
             delay(1000)
             SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)

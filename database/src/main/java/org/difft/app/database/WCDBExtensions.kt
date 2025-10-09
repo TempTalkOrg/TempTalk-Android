@@ -164,7 +164,6 @@ fun WCDB.getCommonGroupsCount(userId1: String, userId2: String): Int {
     val user1Groups = groupMemberContactor.getAllObjects(
         DBGroupMemberContactorModel.id.eq(userId1)
     ).map { it.gid }.distinct()
-
     if (user1Groups.isEmpty()) {
         return 0
     }
@@ -175,14 +174,16 @@ fun WCDB.getCommonGroupsCount(userId1: String, userId2: String): Int {
     ).map { it.gid }.distinct()
 
     val commonGroupIds = user1Groups.intersect(user2Groups.toSet())
+    val commonGroupIdsClean = commonGroupIds.filter { it.matches(Regex("^[0-9a-fA-F]+$")) }.distinct()
+    L.i { "[getCommonGroupsCount] user1Groups:${user1Groups.size} user2Groups:${user2Groups.size} commonGroupIds:${commonGroupIds.size} commonGroupIdsClean:${commonGroupIdsClean.size}" }
 
-    if (commonGroupIds.isEmpty()) {
+    if (commonGroupIdsClean.isEmpty()) {
         return 0
     }
 
     // Finally, count only active groups
     return group.getAllObjects(
-        DBGroupModel.gid.`in`(*commonGroupIds.toTypedArray())
+        DBGroupModel.gid.`in`(*commonGroupIdsClean.toTypedArray())
             .and(DBGroupModel.status.eq(0))
     ).size
 }

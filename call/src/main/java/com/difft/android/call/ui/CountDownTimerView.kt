@@ -46,10 +46,10 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    val countDownEnabled by viewModel.countDownEnabled.collectAsState(false)
-    val countDownDuration by viewModel.countDownDuration.collectAsState(0L)
+    val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
+    val countDownSeconds by viewModel.timerManager.countDownSeconds.collectAsState(0L)
     val countDownShakeAnim = remember { Animatable(0f) }
-    val speakerCountDownDurationStr by viewModel.speakerCountDownDurationStr.observeAsState("00:00")
+    val speakerCountDownDurationStr by viewModel.callUiController.countDownDurationStr.collectAsState("00:00")
 
     val countDownEndColor = Color(0xFFF84135)
     val countDownStartColor = Color(0xFF82C1FC)
@@ -58,12 +58,12 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
     val shakingThreshold = callConfig.countdownTimer.shakingThreshold / 1000L
 
     LaunchedEffect(speakerCountDownDurationStr) {
-        if(countDownEnabled && countDownDuration> shakingThreshold && countDownShakeAnim.isRunning){
+        if(countDownEnabled && countDownSeconds> shakingThreshold && countDownShakeAnim.isRunning){
             countDownShakeAnim.stop()
             countDownShakeAnim.snapTo(0f)
         }
         if(countDownEnabled && preCountDownDurationStr != speakerCountDownDurationStr){
-            when(viewModel.countDownDuration.value) {
+            when(countDownSeconds) {
                 shakingThreshold -> {
                     coroutineScope.launch {
                         countDownShakeAnim.animateTo(
@@ -97,7 +97,7 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
         verticalAlignment = Alignment.CenterVertically,
     ){
         Image(
-            painter = painterResource(id = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownDuration, callConfig.countdownTimer.warningThreshold) || countDownShakeAnim.isRunning) R.drawable.call_countdown_stopwatch else R.drawable.call_countdown_startwatch),
+            painter = painterResource(id = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer.warningThreshold) || countDownShakeAnim.isRunning) R.drawable.call_countdown_stopwatch else R.drawable.call_countdown_startwatch),
             contentDescription = "image description",
             contentScale = ContentScale.None
         )
@@ -108,7 +108,7 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
                 fontWeight = FontWeight(400),
-                color = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownDuration, callConfig.countdownTimer.warningThreshold) || countDownShakeAnim.isRunning) countDownEndColor else countDownStartColor,
+                color = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer.warningThreshold) || countDownShakeAnim.isRunning) countDownEndColor else countDownStartColor,
             )
         )
 

@@ -3,6 +3,7 @@ package com.difft.android
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -42,7 +43,10 @@ import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.openExternalBrowser
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.LCallManager
+import com.difft.android.call.util.NetUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.ScreenShotUtil
 import com.difft.android.chat.contacts.ContactsFragment
@@ -71,10 +75,7 @@ import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
+import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -488,12 +489,18 @@ class IndexActivity : BaseActivity() {
                 .to(RxUtil.autoDispose(this))
                 .subscribe { it ->
                     if (!it) {
-                        MessageDialog.show(getString(R.string.app_sign_error_title), getString(R.string.app_sign_error_tips), getString(R.string.app_close_application), getString(R.string.app_ignore))
-                            .setCancelable(false)
-                            .setOkButton { _, _ ->
+                        ComposeDialogManager.showMessageDialog(
+                            context = this@IndexActivity,
+                            title = getString(R.string.app_sign_error_title),
+                            message = getString(R.string.app_sign_error_tips),
+                            confirmText = getString(R.string.app_close_application),
+                            cancelText = getString(R.string.app_ignore),
+                            cancelable = false,
+                            onConfirm = {
                                 Process.killProcess(Process.myPid())
                                 exitProcess(0)
                             }
+                        )
                     }
                 }
         }
@@ -510,18 +517,18 @@ class IndexActivity : BaseActivity() {
                     SecurityLib.checkEmulator()
                 }
                 if (!emulatorSafe) {
-                    MessageDialog.show(
-                        getString(R.string.app_sign_error_title), getString(
-                            R.string.emulator_risk_tips
-                        ), getString(
-                            R.string.app_close_application
-                        ), getString(R.string.app_ignore)
-                    )
-                        .setCancelable(false)
-                        .setOkButton { _, _ ->
+                    ComposeDialogManager.showMessageDialog(
+                        context = this@IndexActivity,
+                        title = getString(R.string.app_sign_error_title),
+                        message = getString(R.string.emulator_risk_tips),
+                        confirmText = getString(R.string.app_close_application),
+                        cancelText = getString(R.string.app_ignore),
+                        cancelable = false,
+                        onConfirm = {
                             Process.killProcess(Process.myPid())
                             exitProcess(0)
                         }
+                    )
                 }
             }
         }
@@ -537,16 +544,18 @@ class IndexActivity : BaseActivity() {
                     SecurityLib.checkRoot()
                 }
                 if (!rootSafe) {
-                    MessageDialog.show(
-                        getString(R.string.app_sign_error_title),
-                        getString(R.string.root_risk_tips),
-                        getString(R.string.app_close_application),
-                        getString(R.string.app_ignore)
-                    ).setCancelable(false)
-                        .setOkButton { _, _ ->
+                    ComposeDialogManager.showMessageDialog(
+                        context = this@IndexActivity,
+                        title = getString(R.string.app_sign_error_title),
+                        message = getString(R.string.root_risk_tips),
+                        confirmText = getString(R.string.app_close_application),
+                        cancelText = getString(R.string.app_ignore),
+                        cancelable = false,
+                        onConfirm = {
                             Process.killProcess(Process.myPid())
                             exitProcess(0)
                         }
+                    )
                 }
             }
         }
@@ -560,17 +569,17 @@ class IndexActivity : BaseActivity() {
     private fun showStartMessageServiceTipsDialog() {
         val messageServiceTipsShowedVersion = userManager.getUserData()?.messageServiceTipsShowedVersion
         if (messageServiceTipsShowedVersion == PackageUtil.getAppVersionName()) return
-        MessageDialog.show(
-            getString(R.string.tip),
-            getString(R.string.notification_no_google_tip),
-            getString(R.string.notification_go_to_settings),
-            getString(R.string.notification_ignore)
-        )
-            .setCancelable(false)
-            .setOkButton { _, _ ->
-                NotificationSettingsActivity.startActivity(this)
-                false
+        ComposeDialogManager.showMessageDialog(
+            context = this@IndexActivity,
+            title = getString(R.string.tip),
+            message = getString(R.string.notification_no_google_tip),
+            confirmText = getString(R.string.notification_go_to_settings),
+            cancelText = getString(R.string.notification_ignore),
+            cancelable = false,
+            onConfirm = {
+                NotificationSettingsActivity.startActivity(this@IndexActivity)
             }
+        )
         userManager.update {
             this.messageServiceTipsShowedVersion = PackageUtil.getAppVersionName()
         }
@@ -608,7 +617,7 @@ class IndexActivity : BaseActivity() {
                         if (!TextUtils.isEmpty(pi) && ValidatorUtil.isPi(pi.toString())) {
                             inviteUtils.queryByInviteCode(this, pi ?: "")
                         } else {
-                            TipDialog.show(R.string.invalid_link)
+                            ToastUtil.showLong(R.string.invalid_link)
                         }
                     } else if (uri.host?.equals("group") == true) {
                         //chative://group/join?inviteCode=xHJ6Pw7n
@@ -616,16 +625,16 @@ class IndexActivity : BaseActivity() {
                         if (!TextUtils.isEmpty(inviteCode) && ValidatorUtil.isInviteCode(inviteCode.toString())) {
                             inviteUtils.joinGroupByInviteCode(inviteCode ?: "", this)
                         } else {
-                            TipDialog.show(R.string.invalid_link)
+                            ToastUtil.showLong(R.string.invalid_link)
                         }
                     } else {
-                        TipDialog.show(R.string.invalid_link)
+                        ToastUtil.showLong(R.string.invalid_link)
                     }
                 } else if (uri.scheme?.equals("http") == true || uri.scheme?.equals("https") == true) {
                     val url = uri.toString()
                     this.openExternalBrowser(url)
                 } else {
-                    TipDialog.show(R.string.not_supported_link)
+                    ToastUtil.showLong(R.string.not_supported_link)
                 }
             }
 
@@ -675,7 +684,7 @@ class IndexActivity : BaseActivity() {
                         updateManager.showInstallDialog(this, file, false)
                     }
                 } else {
-                    TipDialog.show(ResUtils.getString(com.difft.android.R.string.status_upgrade_install_failed), WaitDialog.TYPE.ERROR)
+                    ToastUtil.showLong(ResUtils.getString(com.difft.android.R.string.status_upgrade_install_failed))
                 }
             }
 
@@ -683,14 +692,14 @@ class IndexActivity : BaseActivity() {
                 if (!TextUtils.isEmpty(apkFilePath) && File(apkFilePath).exists()) {
                     File(apkFilePath).delete()
                 }
-                TipDialog.show(ResUtils.getString(com.difft.android.R.string.status_upgrade_downolad_failed), WaitDialog.TYPE.ERROR)
+                ToastUtil.showLong(ResUtils.getString(com.difft.android.R.string.status_upgrade_downolad_failed))
             }
 
             UpdateManager.STATUS_VERIFY_FAILED -> {
                 if (!TextUtils.isEmpty(apkFilePath) && File(apkFilePath).exists()) {
                     File(apkFilePath).delete()
                 }
-                TipDialog.show(ResUtils.getString(com.difft.android.R.string.status_upgrade_verify_failed), WaitDialog.TYPE.ERROR)
+                ToastUtil.showLong(ResUtils.getString(com.difft.android.R.string.status_upgrade_verify_failed))
             }
         }
     }
@@ -711,9 +720,9 @@ class IndexActivity : BaseActivity() {
 
     private var checkNotificationPermissionIgnore = false
     private var checkNotificationFullScreenPermissionIgnore = false
-    private var checkNotificationPermissionDialog: MessageDialog? = null
-    private var checkNotificationFullScreenPermissionDialog: MessageDialog? = null
-    private var checkIgnoreBatteryOptimizationsDialog: MessageDialog? = null
+    private var checkNotificationPermissionDialog: ComposeDialog? = null
+    private var checkNotificationFullScreenPermissionDialog: ComposeDialog? = null
+    private var checkIgnoreBatteryOptimizationsDialog: ComposeDialog? = null
 
     /**
      * 每次更新版本需要进行检查提醒
@@ -723,24 +732,22 @@ class IndexActivity : BaseActivity() {
 
         if (!messageNotificationUtil.hasNotificationPermission()) {
             if (checkNotificationPermissionDialog == null) {
-                checkNotificationPermissionDialog = MessageDialog.show(
-                    getString(R.string.tip),
-                    getString(R.string.notification_no_permission_tip1, PackageUtil.getAppName()),
-                    getString(R.string.notification_go_to_settings),
-                    getString(R.string.notification_ignore)
-                )
-                    .setOkButton { _, _ ->
-                        messageNotificationUtil.openNotificationSettings(this)
-                        false
-                    }.setCancelButton { _, _ ->
+                checkNotificationPermissionDialog = ComposeDialogManager.showMessageDialog(
+                    context = this@IndexActivity,
+                    title = getString(R.string.tip),
+                    message = getString(R.string.notification_no_permission_tip1, PackageUtil.getAppName()),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    onConfirm = {
+                        messageNotificationUtil.openNotificationSettings(this@IndexActivity)
+                    },
+                    onCancel = {
                         checkNotificationPermissionIgnore = true
-                        false
-                    }.setDialogLifecycleCallback(object : DialogLifecycleCallback<MessageDialog>() {
-                        override fun onDismiss(dialog: MessageDialog?) {
-                            super.onDismiss(dialog)
-                            checkNotificationPermissionDialog = null
-                        }
-                    })
+                    },
+                    onDismiss = {
+                        checkNotificationPermissionDialog = null
+                    }
+                )
             }
         } else {
             checkNotificationPermissionDialog?.dismiss()
@@ -753,24 +760,22 @@ class IndexActivity : BaseActivity() {
 
         if (!messageNotificationUtil.hasFullScreenNotificationPermission()) {
             if (checkNotificationFullScreenPermissionDialog == null) {
-                checkNotificationFullScreenPermissionDialog = MessageDialog.show(
-                    getString(R.string.tip),
-                    getString(R.string.notification_no_permission_tip2, PackageUtil.getAppName()),
-                    getString(R.string.notification_go_to_settings),
-                    getString(R.string.notification_ignore)
-                )
-                    .setOkButton { _, _ ->
-                        messageNotificationUtil.openFullScreenNotificationSettings(this)
-                        false
-                    }.setCancelButton { _, _ ->
+                checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
+                    context = this@IndexActivity,
+                    title = getString(R.string.tip),
+                    message = getString(R.string.notification_no_permission_tip2, PackageUtil.getAppName()),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    onConfirm = {
+                        messageNotificationUtil.openFullScreenNotificationSettings(this@IndexActivity)
+                    },
+                    onCancel = {
                         checkNotificationFullScreenPermissionIgnore = true
-                        false
-                    }.setDialogLifecycleCallback(object : DialogLifecycleCallback<MessageDialog>() {
-                        override fun onDismiss(dialog: MessageDialog?) {
-                            super.onDismiss(dialog)
-                            checkNotificationFullScreenPermissionDialog = null
-                        }
-                    })
+                    },
+                    onDismiss = {
+                        checkNotificationFullScreenPermissionDialog = null
+                    }
+                )
             }
         } else {
             checkNotificationFullScreenPermissionDialog?.dismiss()
@@ -787,29 +792,26 @@ class IndexActivity : BaseActivity() {
                 if (checkIgnoreBatteryOptimizations == PackageUtil.getAppVersionName()) return
 
                 if (checkIgnoreBatteryOptimizationsDialog == null) {
-                    checkIgnoreBatteryOptimizationsDialog = MessageDialog.show(
-                        getString(R.string.tip),
-                        getString(R.string.battery_optimizations_tips, PackageUtil.getAppName()),
-                        getString(R.string.notification_go_to_settings),
-                        getString(R.string.notification_ignore)
-                    )
-                        .setOkButton { _, _ ->
+                    checkIgnoreBatteryOptimizationsDialog = ComposeDialogManager.showMessageDialog(
+                        context = this@IndexActivity,
+                        title = getString(R.string.tip),
+                        message = getString(R.string.battery_optimizations_tips, PackageUtil.getAppName()),
+                        confirmText = getString(R.string.notification_go_to_settings),
+                        cancelText = getString(R.string.notification_ignore),
+                        onConfirm = {
                             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                             intent.data = Uri.parse("package:$packageName")
                             startActivity(intent)
-                            false
-                        }
-                        .setCancelButton { _, _ ->
+                        },
+                        onCancel = {
                             userManager.update {
                                 this.checkIgnoreBatteryOptimizations = PackageUtil.getAppVersionName()
                             }
-                            false
-                        }.setDialogLifecycleCallback(object : DialogLifecycleCallback<MessageDialog>() {
-                            override fun onDismiss(dialog: MessageDialog?) {
-                                super.onDismiss(dialog)
-                                checkIgnoreBatteryOptimizationsDialog = null
-                            }
-                        })
+                        },
+                        onDismiss = {
+                            checkIgnoreBatteryOptimizationsDialog = null
+                        }
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -833,12 +835,9 @@ class IndexActivity : BaseActivity() {
                     }
 
                     else -> {
-                        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-                        }
+                        // Get URI from ClipData first
+                        val uri = getUriFromIntent(intent)
+                        
                         if (uri == null) {
                             val extraText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
                             selectChatsUtils.showChatSelectAndSendDialog(
@@ -860,6 +859,28 @@ class IndexActivity : BaseActivity() {
                 e.printStackTrace()
             }
         }
+    }
+
+    private fun getUriFromIntent(intent: Intent): Uri? {
+        // Try to get URI from ClipData first (more reliable)
+        intent.clipData?.let { clipData ->
+            if (clipData.itemCount > 0) {
+                val uri = clipData.getItemAt(0).uri
+                L.d { "[IndexActivity] Got URI from ClipData: $uri" }
+                return uri
+            }
+        }
+        
+        // Fallback to EXTRA_STREAM
+        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        }
+        
+        L.d { "[IndexActivity] Got URI from EXTRA_STREAM: $uri" }
+        return uri
     }
 
     private fun copyUriToFile(uri: Uri): File {
@@ -897,7 +918,9 @@ class IndexActivity : BaseActivity() {
 
     private fun fetchCallServiceUrlAndCache() {
         lifecycleScope.launch(Dispatchers.IO) {
-            LCallManager.fetchCallServiceUrlAndCache()
+            if(NetUtil.checkNet(this@IndexActivity)){
+                LCallManager.fetchCallServiceUrlAndCache()
+            }
         }
     }
 }

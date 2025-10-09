@@ -22,12 +22,20 @@
     <string name="login_error_not_exist">登录码过期或不存在，请检查</string>
     <string name="login_error_verification_failed">验证失败</string>
     <string name="login_error_too_many_attempts">尝试次数过多，请稍后再试。</string>
+
+    <!-- Screen Lock Strings -->
     <string name="settings_passcode_submit">确认</string>
-    <string name="settings_enter_passcode">请输入屏幕锁密码</string>
-    <string name="settings_passcode_error_tips">密码不匹配。</string>
+    <string name="settings_enter_passcode">输入数字密码</string>
+    <string name="settings_switch_to_pattern">切换到手势密码</string>
+    <string name="settings_forget_passcode_or_pattern">忘记密码？</string>
+    <string name="settings_draw_pattern">绘制手势密码</string>
+    <string name="settings_switch_to_passcode">切换到数字密码</string>
+    <string name="settings_forget_passcode_dialog_tips">您可以尝试使用另一种解锁方式。若两者都忘记，则需要重新登录。</string>
+    <string name="settings_forget_passcode_dialog_logout">退出登录</string>
+    <string name="settings_passcode_error_tips">数字密码不匹配</string>
+    <string name="settings_pattern_error_tips">手势密码不匹配</string>
     <string name="settings_passcode_attempts_delay">下一次尝试需要等待%d秒。</string>
-    <string name="settings_forget_passcode">忘记解锁码？</string>
-    <string name="settings_forget_passcode_dialog_tips">请删除并重装应用。</string>
+    <string name="settings_too_many_attempts_warning">密码错误次数过多，再次错误将强制退出登录。</string>
 
     <string name="login_select_country_code">选择国家编码</string>
 

@@ -8,15 +8,31 @@
     <string name="settings_screen_lock">Screen lock</string>
     <string name="settings_screen_lock_timeout">Timeout</string>
     <string name="settings_screen_lock_timeout_instant">Instant</string>
-    <string name="settings_screen_lock_tips">Unlock screen using a passcode. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to %s. It also prevents content previews from appearing in the app switcher.</string>
-    <string name="settings_passcode_tips">Enter a passcode (4–10 digits).\nYou will be asked to enter this passcode the next time you unlock %s</string>
-    <string name="settings_passcode_confirm_again">Please enter again to confirm your passcode.</string>
+    <string name="settings_screen_lock_tips">Unlock TempTalk’s screen using a passcode or pattern. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to TempTalk. It also prevents content previews from appearing in the app switcher.</string>
+    <string name="settings_pattern_lock">Pattern</string>
+    <string name="settings_passcode_lock">Passcode</string>
+    <string name="settings_pattern_show_path">Pattern Path</string>
+    <string name="settings_pattern_draw_title">Create your pattern</string>
+    <string name="settings_pattern_draw_subtitle">Draw an unlock pattern</string>
+    <string name="settings_pattern_confirm_title">Confirm your pattern</string>
+    <string name="settings_pattern_confirm_subtitle">Draw the pattern again</string>
+    <string name="settings_pattern_too_short">Too short. Connect at least 4 dots</string>
+    <string name="settings_pattern_not_match">Patterns don’t match. Please try again.</string>
+    <string name="settings_pattern_success_title">Pattern lock enabled</string>
+    <string name="settings_passcode_success_title">Passcode lock enabled</string>
+    <string name="settings_pattern_disabled_title">Pattern lock disabled</string>
+    <string name="settings_passcode_disabled_title">Passcode lock disabled</string>
+    <string name="settings_passcode_tips">Enter a passcode (4–10 digits).\nYou will be asked to enter this passcode the next time you unlock %1$s.</string>
+    <string name="settings_passcode_confirm_again">Please enter again to confirm.</string>
     <string name="settings_passcode_confirm">Confirm</string>
     <string name="settings_passcode_error_tips">Passcode does not match.</string>
-    <string name="settings_passcode_success">Success!</string>
-    <string name="settings_passcode_success_tips">Safely save this code.</string>
-    <string name="settings_passcode_forget_tips">If you forget your passcode, you’ll need to log out or reinstall the app.</string>
-    <string name="settings_passcode_got_it">I understand</string>
+    <string name="settings_passcode_forget_tips">If you forget your passcode or pattern, try the other one. If you forget both, you’ll need to log in again.</string>
+    <string name="settings_bind_account_prompt_title">Bind Email and Phone</string>
+    <string name="settings_bind_account_prompt_message">Regain access via phone or email if you forget your passcode and pattern.</string>
+    <string name="settings_bind_account_prompt_bind">Bind</string>
+    <string name="settings_bind_account_prompt_not_now">Not now</string>
+    <string name="settings_bind_account_choice_title">Bind Email or Phone</string>
+    <string name="settings_bind_account_choice_message">To avoid being locked out if you forget your passcode, please link your email or phone before enabling screen lock.</string>
 
     <string name="settings_new_key_tips">%sAll your data, including messages, are encrypted with this key.</string>
     <string name="settings_new_key_time_info">🔐 %s\n</string>
@@ -72,7 +88,7 @@
     <string name="language_restart">Restart</string>
 
     <string name="status_upgrade_downolad_failed">Update package download failed</string>
-    <string name="status_upgrade_downloading">Update package is downloading in the background</string>
+    <string name="status_upgrade_downloading">Update downloading…</string>
     <string name="status_upgrade_install_failed">Update package install failed</string>
     <string name="status_upgrade_filename_error">File name contains illegal characters</string>
     <string name="status_upgrade_download_success">Update package downloaded successfully. Do you want to install it?</string>

@@ -14,6 +14,7 @@ import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.databinding.VoiceMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canAutoSaveAttachment
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isAudioFile
@@ -57,7 +58,7 @@ class VoiceMessageView @JvmOverloads constructor(
 
         binding.progressBar.visibility = View.GONE
 
-        val progress = FileUtil.progressMap[audioMessage.id]
+        val progress = audioMessage.getAttachmentProgress()
         val isFileValid = FileUtil.isFileValid(attachmentPath) || FileUtil.isFileValid("$attachmentPath.encrypt")
 
         if (isFileValid && (audioMessage.isMine || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {

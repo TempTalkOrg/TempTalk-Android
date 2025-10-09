@@ -6,7 +6,7 @@ composeCompiler = "1.5.11"
 
 # Android
 compileSdk = "36"
-targetSdk = "34"
+targetSdk = "36"
 minSdk = "24"
 jvmTarget = "17"
 androidGradlePlugin = "8.7.2"
@@ -58,7 +58,6 @@ lottie = "5.2.0"
 
 # UI
 circleImage = "3.0.1"
-dialogX = "0.0.49"
 binding = "1.2.0"
 keyboardVisibilityEvent = "3.0.0-RC3"
 
@@ -224,7 +223,6 @@ lottie = { module = "com.airbnb.android:lottie", version.ref = "lottie" }
 
 # UI Components
 circle-imageview = { module = "de.hdodenhof:circleimageview", version.ref = "circleImage" }
-dialogx = { module = "com.github.kongzue.DialogX:DialogX", version.ref = "dialogX" }
 binding = { module = "com.hi-dhl:binding", version.ref = "binding" }
 keyboard-visibility-event = { module = "net.yslibrary.keyboardvisibilityevent:keyboardvisibilityevent", version.ref = "keyboardVisibilityEvent" }
 

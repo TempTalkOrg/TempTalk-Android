@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.data.BarrageMessageConfig
@@ -71,9 +72,9 @@ fun MultiParticipantCallPage(
     handleInviteUsersClick: () -> Unit = {},
 ) {
     val participants by viewModel.participants.collectAsState(initial = emptyList())
-    val isShowUsersEnabled by viewModel.showUsersEnabled.collectAsState()
-    val isUserSharingScreen by viewModel.isParticipantSharedScreen.collectAsState()
-    val whoSharedScreen by viewModel.whoSharedScreen.collectAsState()
+    val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
+    val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
+    val whoSharedScreen by viewModel.screenSharingUser.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -126,7 +127,13 @@ fun MultiParticipantCallPage(
 
     // 显示弹幕
     BarrageMessageView(viewModel, config = BarrageMessageConfig(false, callConfig.chatPresets, displayDurationMillis = autoHideTimeout), { message, topic ->
-        viewModel.sendBarrageData(message, topic)
+        viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
+            if(status){
+                viewModel.showCallBarrageMessage(room.localParticipant, message)
+            }else {
+                L.e {"[Call] Failed to send barrage message status = $status."}
+            }
+        })
     })
 
     if(isUserSharingScreen) {
@@ -179,8 +186,8 @@ fun MultiParticipantItem(
 
     var expanded by remember { mutableStateOf(false) }
 
-    val showControlBarEnabled by viewModel.showControlBarEnabled.collectAsState(true)
-
+    val showTopStatusViewEnabled by viewModel.callUiController.showTopStatusViewEnabled.collectAsState(true)
+    val showBottomToolBarViewEnabled by viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
 
     fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
         setExpanded(false) // 关闭菜单
@@ -195,7 +202,8 @@ fun MultiParticipantItem(
     }
 
     fun handleClickScreen() {
-        viewModel.showControlBarEnabled.value = !showControlBarEnabled
+        viewModel.callUiController.setShowTopStatusViewEnabled(!showTopStatusViewEnabled)
+        viewModel.callUiController.setShowBottomToolBarViewEnabled(!showBottomToolBarViewEnabled)
     }
 
     // monitor video muted state

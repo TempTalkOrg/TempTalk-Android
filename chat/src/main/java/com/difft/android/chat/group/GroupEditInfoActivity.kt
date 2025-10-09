@@ -8,12 +8,10 @@ import com.difft.android.chat.databinding.ChatActivityGroupEditInfoBinding
 import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
 import dagger.hilt.android.AndroidEntryPoint
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupEditInfoActivity : BaseActivity() {
     val binding: ChatActivityGroupEditInfoBinding by viewbind()
@@ -53,14 +51,14 @@ class GroupEditInfoActivity : BaseActivity() {
                         if (it.second.status == 0) {
                             finish()
                         } else {
-                            TipDialog.show(it.second.reason)
+                            it.second.reason?.let { message -> ToastUtil.showLong(message) }
                         }
                     }, {
                         it.printStackTrace()
-                        TipDialog.show(R.string.chat_net_error)
+                        ToastUtil.showLong(R.string.chat_net_error)
                     })
             } else {
-                PopTip.show(R.string.chat_group_name_too_long)
+                ToastUtil.show(R.string.chat_group_name_too_long)
             }
         }
     }

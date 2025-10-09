@@ -53,15 +53,14 @@ import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.network.group.ChangeSelfSettingsInGroupReq
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupNotificationSettingsActivity : BaseActivity() {
 
@@ -122,23 +121,23 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                     useGlobal = isDefaultEnabled // 开关开启时传 true，关闭时传 false
                 )
 
-                WaitDialog.show(this@GroupNotificationSettingsActivity, "")
+                ComposeDialogManager.showWait(this@GroupNotificationSettingsActivity, "")
                 val response = withContext(Dispatchers.IO) {
                     groupRepo.changeSelfSettingsInGroup(groupId, currentUserId, request)
                 }
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
 
                 if (response.status == 0) {
                     // 接口调用成功
                     L.i { "[GroupNotificationSettingsActivity] Update group notification settings success: useGlobal=$isDefaultEnabled" }
                 } else {
                     // 接口调用失败，显示错误信息
-                    PopTip.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                    ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                 }
             } catch (e: Exception) {
                 L.e { "[GroupNotificationSettingsActivity] Update group notification settings failed: ${e.stackTraceToString()}" }
-                WaitDialog.dismiss()
-                PopTip.show(getString(com.difft.android.chat.R.string.operation_failed))
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
             }
         }
     }
@@ -153,11 +152,11 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                     useGlobal = false // 选项切换时，useGlobal 传 false
                 )
 
-                WaitDialog.show(this@GroupNotificationSettingsActivity, "")
+                ComposeDialogManager.showWait(this@GroupNotificationSettingsActivity, "")
                 val response = withContext(Dispatchers.IO) {
                     groupRepo.changeSelfSettingsInGroup(groupId, currentUserId, request)
                 }
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
 
                 if (response.status == 0) {
                     // 接口调用成功，执行回调更新UI状态
@@ -165,12 +164,12 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                     L.i { "[GroupNotificationSettingsActivity] Update group notification settings success: notification=$notification, useGlobal=false" }
                 } else {
                     // 接口调用失败，显示错误信息
-                    PopTip.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                    ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                 }
             } catch (e: Exception) {
                 L.e { "[GroupNotificationSettingsActivity] Update group notification settings failed: ${e.stackTraceToString()}" }
-                WaitDialog.dismiss()
-                PopTip.show(getString(com.difft.android.chat.R.string.operation_failed))
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
             }
         }
     }

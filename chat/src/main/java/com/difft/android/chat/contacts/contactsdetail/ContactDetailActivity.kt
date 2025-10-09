@@ -40,8 +40,7 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +52,7 @@ import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.thoughtcrime.securesms.util.Util
 import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 const val BUNDLE_KEY_SOURCE_TYPE = "BUNDLE_KEY_CONTACT_SOURCE_TYPE"
 const val BUNDLE_KEY_SOURCE = "BUNDLE_KEY_CONTACT_SOURCE"
 
@@ -268,23 +267,33 @@ class ContactDetailActivity : BaseActivity() {
                             L.i { "[call] ContactDetailActivity bringing back the current call." }
                             LCallManager.bringInCallScreenBack(this@ContactDetailActivity)
                         } else {
-                            PopTip.show(R.string.call_is_calling_tip)
+                            ToastUtil.show(R.string.call_is_calling_tip)
                         }
                     } else {
                         //判断当前是否有livekit会议，有则join会议
                         val callData = LCallManager.getCallDataByConversationId(contactId)
                         if (callData != null) {
                             L.i { "[call] ContactDetailActivity join call, roomId:${callData.roomId}." }
-                            LCallManager.joinCall(this@ContactDetailActivity, callData.roomId)
+                            LCallManager.joinCall(this@ContactDetailActivity, callData) { status ->
+                                if(!status) {
+                                    L.e { "[Call] ContactDetailActivity join call failed." }
+                                    ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
+                                }
+                            }
                             return@launch
                         }
                         //否则发起livekit call通话
                         L.i { "[call] ContactDetailActivity start call." }
-                        callManager.startCall(this@ContactDetailActivity, For.Account(contactId), chatRoomName)
+                        callManager.startCall(this@ContactDetailActivity, For.Account(contactId), chatRoomName) { status ->
+                            if(!status) {
+                                L.e { "[Call] ContactDetailActivity start call failed." }
+                                ToastUtil.show(com.difft.android.call.R.string.call_start_failed_tip)
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     L.e { "[call] ContactDetailActivity start call error:${e.message}" }
-                    PopTip.show("start call error")
+                    ToastUtil.show("start call error")
                 }
             }
         }
@@ -435,7 +444,7 @@ class ContactDetailActivity : BaseActivity() {
     private var isFriend = true
 
     private fun requestAddFriend() {
-        WaitDialog.show(this@ContactDetailActivity, "")
+        ComposeDialogManager.showWait(this@ContactDetailActivity, "")
         ContactorUtil.fetchAddFriendRequest(this, SecureSharedPrefsUtil.getToken(), contactId, intent.sourceType, intent.source)
             .concatMap {
                 if (it.status == 0) {
@@ -448,15 +457,15 @@ class ContactDetailActivity : BaseActivity() {
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
-                    PopTip.show(R.string.contact_request_sent)
+                    ToastUtil.show(R.string.contact_request_sent)
                 } else {
-                    PopTip.show(it.reason)
+                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }) {
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             }
     }
 }

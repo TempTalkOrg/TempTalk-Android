@@ -39,5 +39,6 @@ enum class CallStatus {
     RECONNECTING,
     RECONNECT_FAILED,
     RECONNECTED,
-    UNKNOWN
+    UNKNOWN,
+    SWITCHING_SERVER
 }

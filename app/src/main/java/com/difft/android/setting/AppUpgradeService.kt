@@ -11,11 +11,10 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlUtil
-import com.kongzue.dialogx.dialogs.TipDialog
 import io.reactivex.rxjava3.subjects.CompletableSubject
 import java.io.File
 import java.io.FileOutputStream
-
+import com.difft.android.base.widget.ToastUtil
 class AppUpgradeService : Service() {
 
     private val autoDisposeCompletable = CompletableSubject.create()
@@ -41,12 +40,10 @@ class AppUpgradeService : Service() {
     }
 
     private fun downloadApkAndInstall(url: String, filepath: String, apkHash: String, isForce: Boolean = false){
-
+        ToastUtil.showLong(R.string.status_upgrade_downloading)
+        
         val newFile =File(filepath)
         ChativeHttpClient(this, UrlUtil.getBaseUrl(url)!!, null, false).httpService.getResponseBody(url, emptyMap(), emptyMap())
-            .doOnSubscribe {
-                TipDialog.show(R.string.status_upgrade_downloading)
-            }
             .doOnNext { response ->
                 FileOutputStream(filepath).use { outputStream ->
                     outputStream.write(response.bytes())

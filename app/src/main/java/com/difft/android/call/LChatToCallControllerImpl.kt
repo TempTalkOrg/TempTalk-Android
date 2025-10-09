@@ -39,7 +39,6 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.PopTip
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.CompletableSubject
 import kotlinx.coroutines.CoroutineScope
@@ -52,7 +51,7 @@ import com.difft.android.websocket.api.util.CallMessageCreator
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import java.util.ArrayList
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 class LChatToCallControllerImpl @Inject constructor(
     @ChativeHttpClientModule.Call
     private val httpClient: ChativeHttpClient,
@@ -94,7 +93,8 @@ class LChatToCallControllerImpl @Inject constructor(
     override fun startCall(
         activity: Activity,
         forWhat: For,
-        chatRoomName: String?
+        chatRoomName: String?,
+        onComplete: (Boolean) -> Unit
     ) {
         LCallManager.showWaitDialog(activity)
 
@@ -134,6 +134,9 @@ class LChatToCallControllerImpl @Inject constructor(
                             createCallMsg = callConfig.createCallMsg,
                             createdAt = createCallMessageTime
                         ).compose(RxUtil.getSingleSchedulerComposer())
+                            .doAfterTerminate {
+                                LCallManager.dismissWaitDialog()
+                            }
                             .to(RxUtil.autoDispose(activity as LifecycleOwner))
                             .subscribe({ callEncryptResult ->
                                 val collapseId = MD5Utils.md5AndHexStr(System.currentTimeMillis().toString() + mySelfId + DEFAULT_DEVICE_ID)
@@ -153,7 +156,7 @@ class LChatToCallControllerImpl @Inject constructor(
                                 val startCallParams = LCallManager.createStartCallParams(body)
                                 val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
 
-                                val intent = CallIntent.Builder(application, LCallActivity::class.java)
+                                val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
                                     .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     .withAction(CallIntent.Action.START_CALL)
                                     .withRoomName(chatRoomName)
@@ -163,18 +166,48 @@ class LChatToCallControllerImpl @Inject constructor(
                                     .withConversationId(forWhat.id)
                                     .withStartCallParams(startCallParams)
                                     .withAppToken(SecureSharedPrefsUtil.getToken())
-                                    .withCallServerUrls(speedTestServerUrls)
-                                    .build()
 
-                                activity.startActivity(intent)
+                                if(speedTestServerUrls.isEmpty()) {
+                                    callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
+                                        .compose(RxUtil.getSingleSchedulerComposer())
+                                        .autoDispose(autoDisposeCompletable)
+                                        .subscribe({
+                                            if (it.status == 0) {
+                                                L.d { "[Call] startCall getCallServerUrl success, response data:${it.data}" }
+                                                val data = it.data
+                                                val serviceUrls = data?.serviceUrls
+                                                if(data != null && serviceUrls != null && serviceUrls.isNotEmpty()) {
+                                                    val intent = callIntentBuilder.withCallServerUrls(serviceUrls).build()
+                                                    application.startActivity(intent)
+                                                    onComplete(true)
+                                                } else {
+                                                    L.e { "[Call] startCall call server url data is null" }
+                                                    onComplete(false)
+                                                }
+                                            } else {
+                                                L.e { "[Call] startCall getCallServerUrl failed, status:${it.status}" }
+                                                onComplete(false)
+                                            }
+                                        }, {
+                                            L.e { "[Call] startCall getCallServerUrl failed, error:${it.message}" }
+                                            onComplete(false)
+                                        })
+                                } else {
+                                    val intent = callIntentBuilder.withCallServerUrls(speedTestServerUrls).build()
+                                    activity.startActivity(intent)
+                                    onComplete(true)
+                                }
                             },{
                                 L.e { "[Call] startCall, error:${it.message}" }
+                                onComplete(false)
                             })
                     }
                 }
             }
         },{
             L.e { "[Call] startCall, queryContactWithID error:"+it.message }
+            onComplete(false)
+            LCallManager.dismissWaitDialog()
         })
     }
 
@@ -495,7 +528,7 @@ class LChatToCallControllerImpl @Inject constructor(
     override fun inviteCall(context: Context, roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?){
 
         if(roomId.isEmpty() || inviteMembers.isEmpty()){
-            PopTip.show("roomId or invite members is empty")
+            ToastUtil.show("roomId or invite members is empty")
             return
         }
         L.d { "[Call] inviteCall, params roomId:$roomId, roomName:$roomName callType:$callType" }
@@ -554,10 +587,10 @@ class LChatToCallControllerImpl @Inject constructor(
                                 }.joinToString(",")
 
                                 withContext(Dispatchers.Main){
-                                    PopTip.show("Invite failed for: $inviteFailedNames")
+                                    ToastUtil.show("Invite failed for: $inviteFailedNames")
                                 }
                             }
-                        } ?: PopTip.show(R.string.call_invite_fail_tip)
+                        } ?: ToastUtil.show(R.string.call_invite_fail_tip)
                     }
 
                     11001 -> {
@@ -568,21 +601,21 @@ class LChatToCallControllerImpl @Inject constructor(
                                     LCallManager.getDisplayNameById(staleData.uid)
                                 }.joinToString(",")
                                 withContext(Dispatchers.Main){
-                                    PopTip.show("Invite failed for: $inviteFailedNames")
+                                    ToastUtil.show("Invite failed for: $inviteFailedNames")
                                 }
                             }
-                        } ?: PopTip.show(R.string.call_invite_fail_tip)
+                        } ?: ToastUtil.show(R.string.call_invite_fail_tip)
                     }
 
                     else -> {
                         L.e { "[Call] inviteCall, invite failed, response: status:${it.status}, reason:${it.reason}, data:${it.data}" }
-                        PopTip.show(R.string.call_invite_fail_tip)
+                        ToastUtil.show(R.string.call_invite_fail_tip)
                     }
                 }
             }, {
                 it.printStackTrace()
                 L.e { "[Call] inviteCall, request fail, error:${it.stackTraceToString()}" }
-                PopTip.show(it.message)
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 

@@ -16,13 +16,12 @@ import com.difft.android.network.NetworkException
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.CreateGroupReq
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import io.reactivex.rxjava3.core.Observable
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 class MessageTestUtil @Inject constructor(
     private var groupRepo: GroupRepo,
     private var pushTextSendJobFactory: PushTextSendJobFactory
@@ -32,7 +31,7 @@ class MessageTestUtil @Inject constructor(
     private val testMemberIds = listOf("+74463043388")
 
     fun createTestGroups(activity: Activity, memberIds: List<String>? = null, count: Long = 20) {
-        WaitDialog.show(activity, "")
+        ComposeDialogManager.showWait(activity, "")
         val startNameNumber = wcdb.group.allObjects
             .filter { it.name?.startsWith(testGroupNamePrefix) == true }
             .maxByOrNull { it.name }?.name
@@ -56,17 +55,17 @@ class MessageTestUtil @Inject constructor(
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(activity as LifecycleOwner))
             .subscribe({
-                WaitDialog.dismiss()
-                PopTip.show("create success")
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("create success")
             }, {
                 it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 
     fun disbandOrLeaveTestGroups(activity: Activity) {
-        WaitDialog.show(activity, "")
+        ComposeDialogManager.showWait(activity, "")
         val testGroups = wcdb.group.allObjects.filter { it.name?.startsWith(testGroupNamePrefix) == true }
         L.d { "[test] disband or leave testGroups:" + testGroups.joinToString { it.name } }
         Observable.interval(0, 200, TimeUnit.MILLISECONDS)
@@ -91,19 +90,19 @@ class MessageTestUtil @Inject constructor(
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(activity as LifecycleOwner))
             .subscribe({
-                WaitDialog.dismiss()
-                PopTip.show("disband or leave success")
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("disband or leave success")
             }, {
                 it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 
     fun sendTestMessageToAllTestGroups(activity: Activity, content: String = "test", isConfidential: Boolean = false) {
         val testGroups = wcdb.group.allObjects.filter { it.name.startsWith(testGroupNamePrefix) }
         L.d { "[test] sendTestMessageToAllTestGroups testGroups:" + testGroups.joinToString { it.name } }
-        WaitDialog.show(activity, "")
+        ComposeDialogManager.showWait(activity, "")
         Observable.interval(0, 200, TimeUnit.MILLISECONDS)
             .take(testGroups.size.toLong())
             .flatMap {
@@ -114,12 +113,12 @@ class MessageTestUtil @Inject constructor(
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(activity as LifecycleOwner))
             .subscribe({
-                WaitDialog.dismiss()
-                PopTip.show("send success")
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("send success")
             }, {
                 it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
+                ComposeDialogManager.dismissWait()
+                it.message?.let { message -> ToastUtil.show(message) }
             })
     }
 

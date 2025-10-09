@@ -39,7 +39,7 @@ import com.difft.android.call.R
 @Composable
 fun ShowHandsUpTipView(viewModel: LCallViewModel) {
 
-    val showHandsUpEnabled by viewModel.showHandsUpEnabled.collectAsState(false)
+    val showHandsUpEnabled by viewModel.callUiController.showHandsUpEnabled.collectAsState(false)
     val handsUpUserInfo by viewModel.handsUpUserInfo.collectAsState(emptyList())
 
     val shouldShowTip = handsUpUserInfo.isNotEmpty()
@@ -56,10 +56,10 @@ fun ShowHandsUpTipView(viewModel: LCallViewModel) {
                 .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    if(viewModel.isParticipantSharedScreen.value){
-                        viewModel.setShowUserEnabled(!viewModel.showUsersEnabled.value)
+                    if(viewModel.callUiController.isShareScreening.value){
+                        viewModel.callUiController.setShowUsersEnabled(!viewModel.callUiController.showUsersEnabled.value)
                     }else{
-                        viewModel.setShowHandsUpBottomViewEnabled(!showHandsUpEnabled)
+                        viewModel.callUiController.setShowHandsUpBottomViewEnabled(!showHandsUpEnabled)
                     }
                 },
                 verticalArrangement = Arrangement.Center,

@@ -7,7 +7,6 @@ import android.text.TextUtils
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.widget.AppCompatTextView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import autodispose2.androidx.lifecycle.autoDispose
@@ -42,11 +41,8 @@ import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.responses.MuteStatus
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.BottomDialog
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.interfaces.OnBindView
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
@@ -59,7 +55,7 @@ import org.difft.app.database.models.DBContactorModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class SingleChatSettingActivity : BaseActivity() {
 
@@ -123,7 +119,7 @@ class SingleChatSettingActivity : BaseActivity() {
                         if (contact.isPresent) {
                             CreateGroupActivity.startActivity(this, arrayListOf(contact.get().id))
                         } else {
-                            TipDialog.show(getString(R.string.contact_not_in_list))
+                            ToastUtil.showLong(getString(R.string.contact_not_in_list))
                         }
                     }, { error ->
                         error.printStackTrace()
@@ -317,8 +313,13 @@ class SingleChatSettingActivity : BaseActivity() {
     }
 
     private fun showRemoveDialog() {
-        MessageDialog.show(getString(R.string.contact_remove_dialog_title), getString(R.string.contact_remove_dialog_tips), getString(R.string.contact_remove_dialog_yes), getString(R.string.contact_remove_dialog_cancel))
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.contact_remove_dialog_title),
+            message = getString(R.string.contact_remove_dialog_tips),
+            confirmText = getString(R.string.contact_remove_dialog_yes),
+            cancelText = getString(R.string.contact_remove_dialog_cancel),
+            onConfirm = {
                 ContactorUtil.fetchRemoveFriend(this@SingleChatSettingActivity, token, contactId)
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
@@ -326,50 +327,51 @@ class SingleChatSettingActivity : BaseActivity() {
                         if (it.status == 0) {
                             wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contactId))
                             dbMessageStore.removeRoomAndMessages(contactId)
-                            PopTip.show(getString(R.string.contact_removed))
+                            ToastUtil.show(getString(R.string.contact_removed))
                             ContactorUtil.emitContactsUpdate(listOf(contactId))
                             mBinding.relRemove.visibility = View.GONE
                             startActivity(Intent(this@SingleChatSettingActivity, activityProvider.getActivityClass(ActivityType.INDEX)))
                         } else {
-                            PopTip.show(it.reason)
+                            it.reason?.let { message -> ToastUtil.show(message) }
                         }
                     }) {
-                        PopTip.show(it.message)
+                        it.message?.let { message -> ToastUtil.show(message) }
                         it.printStackTrace()
                     }
-                false
             }
+        )
     }
 
     private fun showBlockDialog() {
-        BottomDialog.build()
-            .setBackgroundColor(ContextCompat.getColor(this, com.difft.android.base.R.color.bg3))
-            .setCustomView(object : OnBindView<BottomDialog?>(R.layout.layout_block_dialog) {
-                override fun onBind(dialog: BottomDialog?, v: View) {
-                    val tvBlockTips = v.findViewById<AppCompatTextView>(R.id.tv_block_tips)
-                    val tvBlock = v.findViewById<AppCompatTextView>(R.id.tv_block)
-//                    val tvBlockAndReport = v.findViewById<AppCompatTextView>(R.id.tv_block_and_report)
-                    val tvCancel = v.findViewById<AppCompatTextView>(R.id.tv_cancel)
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = this,
+            layoutId = R.layout.layout_block_dialog,
+            onDismiss = { /* Dialog dismissed */ },
+            onViewCreated = { v ->
+                val tvBlockTips = v.findViewById<AppCompatTextView>(R.id.tv_block_tips)
+                val tvBlock = v.findViewById<AppCompatTextView>(R.id.tv_block)
+//                val tvBlockAndReport = v.findViewById<AppCompatTextView>(R.id.tv_block_and_report)
+                val tvCancel = v.findViewById<AppCompatTextView>(R.id.tv_cancel)
 
-                    tvBlockTips.text = getString(R.string.contact_block_users_tips, PackageUtil.getAppName())
+                tvBlockTips.text = getString(R.string.contact_block_users_tips, PackageUtil.getAppName())
 
-                    tvBlock.setOnClickListener {
-                        chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
-                        dialog?.dismiss()
-                    }
-
-//                    tvBlockAndReport.setOnClickListener {
-//                        chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
-////                        chatSettingViewModel.reportContact(this@SingleChatSettingActivity, contactId)
-//                        dialog?.dismiss()
-//                    }
-
-                    tvCancel.setOnClickListener {
-                        dialog?.dismiss()
-                    }
+                tvBlock.setOnClickListener {
+                    dialog?.dismiss()
+                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
                 }
-            })
-            .show()
+
+//                tvBlockAndReport.setOnClickListener {
+//                    dialog?.dismiss()
+//                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
+////                    chatSettingViewModel.reportContact(this@SingleChatSettingActivity, contactId)
+//                }
+
+                tvCancel.setOnClickListener {
+                    dialog?.dismiss()
+                }
+            }
+        )
     }
 
     private fun pinChattingRoom(isPinned: Boolean) {

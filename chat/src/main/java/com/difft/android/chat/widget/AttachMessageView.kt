@@ -9,6 +9,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutAttachMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canAutoSaveAttachment
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import difft.android.messageserialization.model.AttachmentStatus
 import com.hi.dhl.binding.viewbind
@@ -46,7 +47,7 @@ class AttachMessageView @JvmOverloads constructor(
             binding.attachmentSize.visibility = View.VISIBLE
             binding.attachmentSize.text = FileUtil.readableFileSize(attachment.size.toLong())
 
-            val progress = FileUtil.progressMap[message.id]
+            val progress = message.getAttachmentProgress()
             val isFileValid = FileUtil.isFileValid(attachmentPath)
 
             if (isFileValid) {

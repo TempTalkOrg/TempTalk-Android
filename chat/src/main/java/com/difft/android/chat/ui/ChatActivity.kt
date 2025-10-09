@@ -35,9 +35,7 @@ import com.difft.android.chat.widget.RecordingState
 import com.difft.android.create
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -47,9 +45,9 @@ import org.thoughtcrime.securesms.components.reaction.MotionEventRelay
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
-class ChatActivity : BaseActivity() {
+class ChatActivity : BaseActivity(), ChatMessageListProvider {
 
     companion object {
         const val BUNDLE_KEY_CONTACT_ID = "BUNDLE_KEY_CONTACT_ID"
@@ -122,7 +120,7 @@ class ChatActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.setBackgroundDrawable(ChatBackgroundDrawable(this, mBinding.root))
+        window.setBackgroundDrawable(ChatBackgroundDrawable(this, mBinding.root, true))
 
         lifecycleScope.launch {
             onCreatForShowingMessages(savedInstanceState)
@@ -135,7 +133,7 @@ class ChatActivity : BaseActivity() {
         ScreenShotUtil.setScreenShotEnable(this, false)
         //        setContentView(R.layout.chat_activity_chat)
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
-            PopTip.show("No contactID detected. Finishing Activity.")
+            ToastUtil.show("No contactID detected. Finishing Activity.")
             finish()
             return
         }
@@ -148,12 +146,12 @@ class ChatActivity : BaseActivity() {
             .to(RxUtil.autoDispose(this))
             .subscribe({
                 if (it.status == 0) {
-                    PopTip.show(getString(R.string.contact_added))
+                    ToastUtil.show(getString(R.string.contact_added))
 
                     //                    ContactorUtil.createFriendRequestAcceptMessage(it.data ?: "", contactID)
                 } else {
                     it.reason?.let { reason ->
-                        PopTip.show(reason)
+                        ToastUtil.show(reason)
                     }
                 }
             }, {})
@@ -211,7 +209,7 @@ class ChatActivity : BaseActivity() {
 
                 is RecordingState.TooShort -> {
                     L.i { "[VoiceRecorder] Recording too short" }
-                    TipDialog.show(R.string.chat_voice_recording_too_short)
+                    ToastUtil.showLong(R.string.chat_voice_recording_too_short)
                     mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
 
@@ -226,7 +224,7 @@ class ChatActivity : BaseActivity() {
 
                 is RecordingState.TooLarge -> {
                     L.i { "[VoiceRecorder] Recording file too large" }
-                    TipDialog.show(R.string.chat_voice_max_size_limit)
+                    ToastUtil.showLong(R.string.chat_voice_max_size_limit)
                     mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
             }
@@ -369,22 +367,22 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun showAudioPermissionDialog() {
-        MessageDialog.show(
-            getString(R.string.tip),
-            getString(R.string.no_permission_voice_tip),
-            getString(R.string.notification_go_to_settings),
-            getString(R.string.notification_ignore)
-        )
-            .setCancelable(false)
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.tip),
+            message = getString(R.string.no_permission_voice_tip),
+            confirmText = getString(R.string.notification_go_to_settings),
+            cancelText = getString(R.string.notification_ignore),
+            cancelable = false,
+            onConfirm = {
                 PermissionUtil.launchSettings(this)
-                false
-            }.setCancelButton { _, _ ->
+            },
+            onCancel = {
                 ToastUtils.showToast(
                     this, getString(R.string.not_granted_necessary_permissions)
                 )
-                false
             }
+        )
     }
 
     private fun registerCallStatusViewListener() {
@@ -397,5 +395,9 @@ class ChatActivity : BaseActivity() {
                 L.e { "[Call] ChatActivity callStatusView listener error = ${it.message}" }
                 it.printStackTrace()
             })
+    }
+
+    override fun getChatMessageListFragment(): ChatMessageListFragment? {
+        return supportFragmentManager.findFragmentById(R.id.fragment_container_view_contents) as? ChatMessageListFragment
     }
 }

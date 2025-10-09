@@ -17,7 +17,6 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ConversationSetRequestBody
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +24,7 @@ import kotlinx.coroutines.launch
 import org.difft.app.database.WCDB
 import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class ContactSetRemarkActivity : BaseActivity() {
 
@@ -100,11 +99,11 @@ class ContactSetRemarkActivity : BaseActivity() {
                         }
                         finish()
                     } else {
-                        PopTip.show(it.reason)
+                        it.reason?.let { message -> ToastUtil.show(message) }
                     }
                 }) {
                     mBinding.btnSave.isLoading = false
-                    PopTip.show(it.message)
+                    it.message?.let { message -> ToastUtil.show(message) }
                 }
 
         }

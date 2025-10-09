@@ -54,7 +54,7 @@ import io.livekit.android.audio.AudioSwitchHandler
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
-    isOverlayVisible: Boolean = true,
+    showBottomToolBarViewEnabled: Boolean = true,
     isUserSharingScreen: Boolean = false,
     audioSwitchHandler: AudioSwitchHandler? = null,
     endCallAction: (callType: String, callEndType: LCallManager.CallEndType) -> Unit
@@ -62,8 +62,8 @@ fun MainPageWithBottomControlView(
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val micEnabled by viewModel.micEnabled.collectAsState(false)
     val videoEnabled by viewModel.cameraEnabled.collectAsState(false)
-    val currentAudioDevice by viewModel.currentAudioDevice.collectAsState(audioSwitchHandler?.selectedAudioDevice)
-    val currentCallType by viewModel.callTypeStateFlow.collectAsState()
+    val currentAudioDevice by viewModel.currentAudioDevice.collectAsState()
+    val currentCallType by viewModel.callType.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -76,7 +76,7 @@ fun MainPageWithBottomControlView(
         verticalArrangement = Arrangement.Bottom,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if(isOneVOneCall && !isUserSharingScreen || isOverlayVisible) {
+        if(isOneVOneCall && !isUserSharingScreen || showBottomToolBarViewEnabled) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,7 +186,7 @@ fun MainPageWithBottomControlView(
                                                     if(audioSwitchHandler.availableAudioDevices.size>2){
                                                         showAudioDeviceDialog = !showAudioDeviceDialog
                                                     }else{
-                                                        viewModel.switchToNextAudioDevice(audioSwitchHandler)
+                                                        viewModel.audioDeviceManager.switchToNext()
                                                     }
                                                 }
                                             }
@@ -200,7 +200,7 @@ fun MainPageWithBottomControlView(
                                             setExpanded = { value -> showAudioDeviceDialog = value},
                                             onClickItem = { item ->
                                                 item.let {
-                                                    viewModel.setCurrentAudioDevice(item)
+                                                    viewModel.audioDeviceManager.select(item)
                                                     showAudioDeviceDialog = false
                                                 }
                                             }
@@ -224,7 +224,7 @@ fun MainPageWithBottomControlView(
                                                 {
                                                     //展开参会人列表
                                                     L.i { "[call] LCallActivity onClick Users" }
-                                                    viewModel.setShowUserEnabled(!viewModel.showUsersEnabled.value)
+                                                    viewModel.callUiController.setShowUsersEnabled(!viewModel.callUiController.showUsersEnabled.value)
                                                 }
                                             )
                                             if(participants.isNotEmpty()){
@@ -264,7 +264,7 @@ fun MainPageWithBottomControlView(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null
                                         ) {
-                                            viewModel.setShowToolBarBottomViewEnable(true)
+                                            viewModel.callUiController.setShowToolBarBottomViewEnable(true)
                                         },
                                     horizontalArrangement = Arrangement.spacedBy(
                                         10.000000953674316.dp,
@@ -368,7 +368,7 @@ fun MainPageWithBottomControlView(
                                                         interactionSource = remember { MutableInteractionSource() },
                                                         indication = null
                                                     ) {
-                                                        viewModel.setShowBottomCallEndViewEnable(true)
+                                                        viewModel.callUiController.setShowBottomCallEndViewEnable(true)
                                                     },
                                                 horizontalArrangement = Arrangement.End,
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -459,7 +459,7 @@ fun MainPageWithBottomControlView(
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null
                                                 ) {
-                                                    viewModel.setShowBottomCallEndViewEnable(true)
+                                                    viewModel.callUiController.setShowBottomCallEndViewEnable(true)
                                                 },
                                             horizontalArrangement = Arrangement.End,
                                             verticalAlignment = Alignment.CenterVertically,

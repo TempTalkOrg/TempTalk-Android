@@ -193,7 +193,7 @@
             android:name=".login.ScreenLockActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
@@ -202,8 +202,19 @@
             android:exported="false" />
 
         <activity
-            android:name=".call.LIncomingCallActivity"
+            android:name=".setting.ScreenLockSettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
+            android:name=".setting.SetPatternActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+
+        <activity
+            android:name=".call.LIncomingCallActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
             android:exported="false"
             android:launchMode="singleInstance"
             android:showOnLockScreen="true"
@@ -213,6 +224,11 @@
 
         <activity
             android:name=".setting.TestActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
+            android:name=".setting.DialogTestActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 

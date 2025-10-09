@@ -133,4 +133,10 @@
         <item name="android:gravity">center_vertical</item>
         <item name="android:includeFontPadding">false</item>
     </style>
+
+    <!-- Switch 公共主题 (兼容AppCompat) -->
+    <style name="Widget.Chative.Switch" parent="Widget.AppCompat.CompoundButton.Switch">
+        <item name="thumbTint">@color/material_switch_thumb_tint</item>
+        <item name="trackTint">@color/material_switch_track_tint</item>
+    </style>
 </resources>

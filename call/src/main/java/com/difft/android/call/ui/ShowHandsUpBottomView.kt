@@ -39,12 +39,12 @@ fun ShowHandsUpBottomView(viewModel: LCallViewModel, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = false,
     )
-    val showHandsUpEnabled by viewModel.showHandsUpEnabled.collectAsState(false)
+    val showHandsUpEnabled by viewModel.callUiController.showHandsUpEnabled.collectAsState(false)
     val handsUpUserInfo by viewModel.handsUpUserInfo.collectAsState(emptyList())
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
-    val isParticipantSharedScreen by viewModel.isParticipantSharedScreen.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
+    val isShareScreening by viewModel.callUiController.isShareScreening.collectAsState(false)
 
-    if(showHandsUpEnabled && !isInPipMode && !isParticipantSharedScreen) {
+    if(showHandsUpEnabled && !isInPipMode && !isShareScreening) {
         ModalBottomSheet (
             modifier = Modifier
                 .fillMaxWidth()

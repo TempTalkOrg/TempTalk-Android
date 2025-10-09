@@ -8,9 +8,7 @@ import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -57,7 +55,7 @@ fun ScreenShareSpeakerView(
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val activeSpeaker by viewModel.primarySpeaker.collectAsState(shareScreenUser)
     val context = LocalContext.current
 
@@ -85,7 +83,7 @@ fun ScreenShareSpeakerView(
         }
     }
 
-    val countDownEnabled by viewModel.countDownEnabled.collectAsState(false)
+    val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
 
     LaunchedEffect(isLandscape) {
         if(isLandscape){

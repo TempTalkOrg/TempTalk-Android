@@ -11,7 +11,8 @@ import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.databinding.ActivityLanguageBinding
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.system.exitProcess
 
@@ -39,9 +40,13 @@ class LanguageActivity : BaseActivity() {
                 val ok = ResUtils.getLocaleStringResource(this@LanguageActivity, languageData.locale, R.string.language_restart)
                 val cancel = ResUtils.getLocaleStringResource(this@LanguageActivity, languageData.locale, R.string.language_restart_later)
 
-                MessageDialog
-                    .show(title, content, ok, cancel)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this@LanguageActivity,
+                    title = title,
+                    message = content,
+                    confirmText = ok,
+                    cancelText = cancel,
+                    onConfirm = {
                         LanguageUtils.saveLanguage(this@LanguageActivity, languageData.locale)
 
                         this@LanguageActivity.packageManager.getLaunchIntentForPackage(this@LanguageActivity.packageName)?.apply {
@@ -50,13 +55,13 @@ class LanguageActivity : BaseActivity() {
                         }
                         android.os.Process.killProcess(android.os.Process.myPid())
                         exitProcess(0)
-                    }
-                    .setCancelButton { _, _ ->
+                    },
+                    onCancel = {
                         LanguageUtils.locale = LanguageUtils.getLanguage(this@LanguageActivity)
                         LanguageUtils.saveLanguage(this@LanguageActivity, languageData.locale)
                         mAdapter.submitList(LanguageUtils.getLanguageList(this@LanguageActivity))
-                        false
                     }
+                )
             }
         }
     }
