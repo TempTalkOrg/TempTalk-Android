@@ -64,6 +64,7 @@ dependencies {
     // Call specific dependencies
     implementation(libs.accompanist.systemuicontroller)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.accompanist.permissions)
     implementation(libs.livekit.android)
     implementation(libs.livekit.android.camerax)
     implementation(libs.denoise.filter)

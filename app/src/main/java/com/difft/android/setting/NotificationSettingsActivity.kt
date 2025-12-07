@@ -14,7 +14,6 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.group.GroupGlobalNotificationSettingsActivity
 import com.difft.android.databinding.ActivityNotificationSettingsBinding
@@ -149,15 +148,7 @@ class NotificationSettingsActivity : BaseActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         // 当用户从设置页返回时，会回调到这里
-        checkDndPermissionAndSync()
-    }
-
-    private fun checkDndPermissionAndSync() {
-        val isGranted = messageNotificationUtil.isNotificationPolicyAccessGranted()
-        if (isGranted != isCriticalAlertSettingsOpened) {
-            LCallManager.syncCriticalAlertSettingStatusAsync(isGranted)
-        }
-        isCriticalAlertSettingsOpened = isGranted
+        isCriticalAlertSettingsOpened = messageNotificationUtil.isNotificationPolicyAccessGranted()
     }
 
 }

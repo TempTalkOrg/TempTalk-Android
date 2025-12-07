@@ -286,7 +286,7 @@ object ContactorUtil {
                 fetchAndSaveFlow.emit(true)
             }
         } else {
-            if (globalServices.userManager.getUserData()?.syncedContacts == false) {
+            if (globalServices.userManager.getUserData()?.syncedContactsV2 == false) {
                 coroutineScope.launch {
                     fetchAndSaveFlow.emit(false)
                 }
@@ -324,7 +324,7 @@ object ContactorUtil {
 
                         // 检查是否需要跳过处理
                         val currentVersion = globalServices.userManager.getUserData()?.directoryVersionForContactors ?: 0
-                        val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContacts ?: false
+                        val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContactsV2 ?: false
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors total count:" + contacts.size + " - directoryVersion:$directoryVersion, currentVersion:$currentVersion, isSyncedContacts:$isSyncedContacts, forceRefresh:$forceRefresh" }
 
@@ -385,7 +385,7 @@ object ContactorUtil {
 
                         // 更新状态
                         globalServices.userManager.update {
-                            this.syncedContacts = true
+                            this.syncedContactsV2 = true
                         }
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors complete" + contacts.size }

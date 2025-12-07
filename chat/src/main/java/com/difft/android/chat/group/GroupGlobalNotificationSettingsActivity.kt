@@ -41,7 +41,8 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.AppTheme
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.SecureSharedPrefsUtil
@@ -80,7 +81,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            AppTheme(backgroundColorResId = com.difft.android.base.R.color.bg_setting) {
+            DifftTheme(useSecondaryBackground = true) {
                 MainContent()
             }
         }
@@ -97,7 +98,10 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
         Column(
             Modifier.fillMaxSize()
         ) {
-            ToolBar()
+            TitleBar(
+                titleText = getString(com.difft.android.chat.R.string.notification),
+                onBackClick = { finish() }
+            )
 
             ItemViews(currentType) { newType ->
                 // 调用接口同步设置到服务端
@@ -136,59 +140,6 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                     }
                 }
             }
-        }
-    }
-
-    @Preview
-    @Composable
-    private fun ToolBar() {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.Companion.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier
-                .height(Dp(52F))
-                .fillMaxWidth()
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier.Companion
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackPressedDispatcher.onBackPressed()
-                    },
-                imageVector = ImageVector.Companion.vectorResource(id = com.difft.android.chat.R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = getString(com.difft.android.chat.R.string.notification),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Companion.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        LocalContext.current, R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.Companion.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
         }
     }
 

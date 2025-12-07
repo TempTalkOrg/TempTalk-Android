@@ -38,13 +38,19 @@ class IndexIndicator @JvmOverloads constructor(
                 ?.setImageDrawable(src)
         }
 
-        updateSize()
+        // Initialize with current text size (no subscription needed)
+        updateSize(TextSizeUtil.isLarger)
     }
 
-    fun updateSize() {
+    /**
+     * Update size based on text size parameter.
+     * Called by parent Activity/Fragment when text size changes.
+     */
+    fun updateSize(isLarger: Boolean) {
         val text = findViewById<AppCompatTextView>(R.id.textview_label)
         val icon = findViewById<AppCompatImageView>(R.id.imageview_icon)
-        if (TextSizeUtil.isLager()) {
+
+        if (isLarger) {
             text.textSize = 21f
             icon.layoutParams.width = 35.dp
             icon.layoutParams.height = 35.dp

@@ -11,7 +11,11 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.R
+import kotlinx.coroutines.launch
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
@@ -164,7 +168,15 @@ class MeFragment : Fragment() {
         binding.clTextSize.setOnClickListener {
             showTextSizeDialog()
         }
-        updateTextSizeSettings()
+
+        // Collect text size changes at Fragment level using StateFlow
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TextSizeUtil.textSizeState.collect { textSize ->
+                    updateTextSizeSettings(textSize == TextSizeUtil.TEXT_SIZE_LAGER)
+                }
+            }
+        }
 
         //测试环境显示测试页面入口
         if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT)) {
@@ -214,23 +226,19 @@ class MeFragment : Fragment() {
                 currentSelection = currentSelection,
                 onItemSelected = { index ->
                     TextSizeUtil.updateTextSize(index)
-                    updateTextSizeSettings()
+                    // updateTextSize will emit to textSizeChange, which will trigger the subscription
                     dialog?.dismiss() // 选中后关闭弹窗
                 }
             )
         }
     }
 
-    private fun refreshTextSize() {
+    private fun refreshTextSize(isLarger: Boolean) {
         val textViews = findAllTextViews(binding.root)
         textViews.forEach { textView ->
-            if (TextSizeUtil.isLager()) {
-                textView.textSize = 24f
-            } else {
-                textView.textSize = 16f
-            }
+            textView.textSize = if (isLarger) 24f else 16f
         }
-        binding.tvProfile.textSize = if (TextSizeUtil.isLager()) 21f else 14f
+        binding.tvProfile.textSize = if (isLarger) 21f else 14f
     }
 
     private fun findAllTextViews(root: View): List<TextView> {
@@ -254,9 +262,9 @@ class MeFragment : Fragment() {
         return textViews
     }
 
-    private fun updateTextSizeSettings() {
-        binding.tvTextSize.text = if (TextSizeUtil.isLager()) getString(R.string.me_text_size_lage) else getString(R.string.me_text_size_default)
-        refreshTextSize()
+    private fun updateTextSizeSettings(isLarger: Boolean) {
+        binding.tvTextSize.text = if (isLarger) getString(R.string.me_text_size_lage) else getString(R.string.me_text_size_default)
+        refreshTextSize(isLarger)
     }
 
 

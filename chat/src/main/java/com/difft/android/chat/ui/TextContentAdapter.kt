@@ -17,6 +17,8 @@ import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.disposables.Disposable
 
 
 open class TextContentAdapter : MessageContentAdapter() {
@@ -44,11 +46,7 @@ open class TextContentAdapter : MessageContentAdapter() {
         textView.autoLinkMask = 0
         textView.movementMethod = null
 
-        if (TextSizeUtil.isLager()) {
-            textView.textSize = 24f
-        } else {
-            textView.textSize = 16f
-        }
+        textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
         val content = message.message.toString()
 

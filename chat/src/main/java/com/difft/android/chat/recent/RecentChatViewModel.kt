@@ -9,6 +9,8 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils.getString
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.SharedPrefsUtil
@@ -24,6 +26,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.DraftRepository
 import com.difft.android.network.BaseResponse
+import difft.android.messageserialization.model.Draft
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -41,14 +44,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
+import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
-import org.difft.app.database.observeTable
 import org.difft.app.database.updateRoomUnreadState
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.AppIconBadgeManager
@@ -77,17 +82,27 @@ class RecentChatViewModel @Inject constructor(
         httpClient.getService(LCallHttpService::class.java)
     }
 
+    // ✅ 只查询room数据，draft独立管理
     private val latestRoomModelsFlow: Flow<List<RoomModel>> by lazy {
-        observeTable({ wcdb.room }) {
-            val newRooms = getAllObjects(
-                DBRoomModel.roomId.notEq("server")
-                    .and(DBRoomModel.roomName.notNull())
-                    .and(DBRoomModel.roomName.notEq(""))
-                    .and(DBRoomModel.lastActiveTime.notEq(0L))
-            )
-            L.i { "[ChatList] latestRoomModelsFlow receive new room flow size: ${newRooms.size}" }
-            newRooms
-        }.sampleAfterFirst(500)
+        merge(
+            WCDBUpdateService.roomTableUpdated,
+            updateTime.map { }  // 每分钟触发查询，作为兜底机制
+        )
+            .onStart { emit(Unit) }  // 初始化时立即触发一次
+            .map {
+                withContext(Dispatchers.IO) {
+                    val newRooms = wcdb.room.getAllObjects(
+                        DBRoomModel.roomId.notEq("server")
+                            .and(DBRoomModel.roomName.notNull())
+                            .and(DBRoomModel.roomName.notEq(""))
+                            .and(DBRoomModel.lastActiveTime.notEq(0L))
+                    )
+                    L.i { "[ChatList] latestRoomModelsFlow queried ${newRooms.size} rooms" }
+                    newRooms
+                }
+            }
+            .sampleAfterFirst(500)
+            .flowOn(Dispatchers.IO)
     }
 
     private val updateTime by lazy {
@@ -109,14 +124,14 @@ class RecentChatViewModel @Inject constructor(
     @Inject
     fun initLoadAndKeepObserving() {
         L.i { "[ChatList] initLoadAndKeepObserving" }
+        // ✅ 分开处理：room变化时查询room，draft变化时查询draft
         combine(
             latestRoomModelsFlow,
-            updateTime,
             draftRepository.allDraftsFlow.onStart { emit(emptyMap()) }
-        ) { roomModels, _, allDrafts ->
+        ) { roomModels, allDrafts ->
             Pair(roomModels, allDrafts)
         }.sampleAfterFirst(500).onEach { (roomModels, allDrafts) ->
-            L.i { "[ChatList] combine conversations: ${roomModels.size}" }
+            L.i { "[ChatList] Processing conversations: ${roomModels.size}, drafts: ${allDrafts.size}" }
 
             val finalRoomList = buildList {
                 // 添加常规房间数据
@@ -312,6 +327,7 @@ class RecentChatViewModel @Inject constructor(
             withContext(Dispatchers.IO) {
                 wcdb.room.allObjects.filter { it.unreadMessageNum > 0 }.forEach {
                     it.updateRoomUnreadState(it.lastActiveTime)
+                    RoomChangeTracker.trackRoom(it.roomId, RoomChangeType.REFRESH)
                 }
             }
 

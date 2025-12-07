@@ -12,7 +12,9 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.launch
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
 import com.difft.android.base.fragment.DisposableManageFragment
@@ -363,12 +365,14 @@ class RecentChatFragment : DisposableManageFragment() {
                 }
             }, { it.printStackTrace() })
 
-        TextSizeUtil.textSizeChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mAdapter.notifyDataSetChanged()
-            }, { it.printStackTrace() })
+        // Collect text size changes at Fragment level and notify adapter
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TextSizeUtil.textSizeState.collect {
+                    mAdapter.notifyDataSetChanged()
+                }
+            }
+        }
     }
 
     override fun onResume() {

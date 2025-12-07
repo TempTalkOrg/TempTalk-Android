@@ -128,6 +128,7 @@ object GroupUtil {
                     group.publishRule = groupInfo?.publishRule
                     group.linkInviteSwitch = groupInfo?.linkInviteSwitch
                     group.privateChat = groupInfo?.privateChat ?: false
+                    group.criticalAlert = groupInfo?.criticalAlert ?: false
 
                     val includeRemarkMap = wcdb.groupMemberContactor.getAllObjects(
                         DBGroupMemberContactorModel.gid.eq(groupID)

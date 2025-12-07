@@ -1,5 +1,6 @@
 package com.difft.android.call
 
+import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -8,6 +9,7 @@ import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
+import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallDataCaller
@@ -632,6 +634,11 @@ class LCallViewModel (
      * Enables or disables the local participant's microphone with optional publish mute control.
      */
     fun setMicEnabled(enabled: Boolean, publishMuted: Boolean = false, isShowBarrage: Boolean = true) {
+        if (!PermissionUtil.arePermissionsGranted(ApplicationHelper.instance, arrayOf(Manifest.permission.RECORD_AUDIO))) {
+            L.e { "[call] LCallViewModel setMicEnabled no permission" }
+            return
+        }
+
         viewModelScope.launch {
             try {
                 if (room.localParticipant.audioTrackPublications.isEmpty()) {
@@ -790,11 +797,21 @@ class LCallViewModel (
     }
 
     /**
+     * Determines whether barrage (floating comments/messages) should be shown for a remote participant.
+     * */
+    private fun shouldShowBarrageForRemoteParticipant(participant: Participant): Boolean {
+        val participantUid = LCallManager.getUidByIdentity(participant.identity?.value)
+        return participantUid != null && participantUid != mySelfId
+    }
+
+    /**
      * Handles the event when a participant's track is muted, displaying appropriate UI messages and updating participant ordering.
      */
     private fun onTrackMuted(event: RoomEvent.TrackMuted) {
         if (event.publication.source == Track.Source.MICROPHONE && event.publication.muted && event.publication.subscribed && event.participant is RemoteParticipant) {
-            showCallBarrageMessage(event.participant, getString(R.string.call_barrage_message_close_mic))
+            if (shouldShowBarrageForRemoteParticipant(event.participant)) {
+                showCallBarrageMessage(event.participant, getString(R.string.call_barrage_message_close_mic))
+            }
         }
         if (event.participant is RemoteParticipant && event.publication.source == Track.Source.CAMERA && event.publication.muted) participantManager.resortParticipants()
     }
@@ -804,7 +821,9 @@ class LCallViewModel (
      */
     private fun onTrackUnmuted(event: RoomEvent.TrackUnmuted) {
         if (event.publication.source == Track.Source.MICROPHONE && event.participant is RemoteParticipant) {
-            showCallBarrageMessage(event.participant, getString(R.string.call_barrage_message_open_mic))
+            if (shouldShowBarrageForRemoteParticipant(event.participant)) {
+                showCallBarrageMessage(event.participant, getString(R.string.call_barrage_message_open_mic))
+            }
         }
         if (event.participant is RemoteParticipant && event.publication.source == Track.Source.CAMERA) participantManager.resortParticipants()
     }
@@ -1059,11 +1078,11 @@ class LCallViewModel (
     /**
      * Handles the sending of a critical alert notification to the server.
      */
-    fun handleCriticalAlert(uid: String, callback: ((Boolean) -> Unit)? = null) {
+    fun handleCriticalAlert(uid: String ?= null, gid: String ?= null, callback: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
             val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).httpClient()
             val auth = SecureSharedPrefsUtil.getBasicAuth()
-            val request = CriticalAlertRequestBody(uid)
+            val request = CriticalAlertRequestBody(destination = uid, gid = gid)
             withContext(Dispatchers.IO) {
                 chatHttpClient.httpService.sendCriticalAlert(auth, request)
                     .subscribe({
@@ -1112,21 +1131,29 @@ class LCallViewModel (
     }
 
     /**
-     * Checks the critical alert status for a given call intent and updates the UI accordingly.
-     * This method specifically handles one-on-one calls where the user is the caller.
-     * It retrieves the critical alert setting status from the call manager and updates the UI on the main thread.
+     * Checks the critical alert status for a specific conversation based on the provided call intent.
      */
     private fun checkCriticalAlertStatusById(callIntent: CallIntent) {
-        if(callIntent.callType == CallType.ONE_ON_ONE.type && callIntent.callRole == CallRole.CALLER.type) {
+        if (callIntent.callType == CallType.GROUP.type) {
             callIntent.conversationId?.let { conversationId ->
                 viewModelScope.launch(Dispatchers.IO) {
-                    val status = LCallManager.getUserCriticalAlertSettingStatus(conversationId)
+                    val group = callToChatController.getSingleGroupInfo(com.difft.android.base.utils.application, conversationId)
+                    val status = group.orElse(null)?.criticalAlert ?: false
                     withContext(Dispatchers.Main) {
-                        // Update the UI with the critical alert status
                         callUiController.setCriticalAlertEnable(status)
                     }
                 }
             }
         }
     }
+
+    fun is1v1ShowCriticalAlertEnable(callStatus: CallStatus): Boolean {
+        return callType.value == CallType.ONE_ON_ONE.type && callRole == CallRole.CALLER && callStatus == CallStatus.CALLING
+    }
+
+    fun isGroupShowCriticalAlertEnable(isCriticalAlertEnable: Boolean): Boolean {
+        return callType.value == CallType.GROUP.type && isCriticalAlertEnable
+    }
+
+    fun isRequestingPermission() = callUiController.isRequestingPermission.value
 }

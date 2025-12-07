@@ -90,6 +90,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
                         centerVerticallyTo(parent)
                     }
                     .size(16.dp),
+                tint = Color.White
             )
         }
 

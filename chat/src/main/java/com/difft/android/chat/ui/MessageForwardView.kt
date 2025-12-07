@@ -29,6 +29,8 @@ import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import com.hi.dhl.binding.viewbind
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.disposables.Disposable
 import util.TimeUtils
 
 class MessageForwardView @JvmOverloads constructor(
@@ -90,11 +92,7 @@ class MessageForwardView @JvmOverloads constructor(
                 binding.tvForwardContent.autoLinkMask = 0
                 binding.tvForwardContent.movementMethod = null
 
-                if (TextSizeUtil.isLager()) {
-                    binding.tvForwardContent.textSize = 24f
-                } else {
-                    binding.tvForwardContent.textSize = 16f
-                }
+                binding.tvForwardContent.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
                 if (!TextUtils.isEmpty(forward.text)) {
                     binding.tvForwardContent.visibility = View.VISIBLE

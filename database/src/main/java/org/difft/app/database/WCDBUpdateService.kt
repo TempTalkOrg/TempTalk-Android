@@ -8,14 +8,16 @@ import com.difft.android.base.utils.sampleAfterFirst
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.tencent.wcdb.base.Value
-import com.tencent.wcdb.core.Table
 import com.tencent.wcdb.winq.Order
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -26,94 +28,30 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
 
 /**
- * Observes database table updates with rate limiting.
- *
- * This function:
- * - Immediately emits the first update after subscription
- * - Subsequently throttles updates to at most one every 500ms
- * - Drops intermediate updates during the throttling interval, only emitting the latest
- * - Executes the provided [queryAction] after each emission
- *
- * Use this function for UI updates or when frequent database changes need to be rate-limited.
- *
- * @param queryAction The database query to execute after each update
- * @return A Flow emitting the query results with rate limiting applied
- */
-fun <T, R> Table<T>.observe(
-    queryAction: suspend Table<T>.() -> R
-) = observeRealtime(queryAction).sampleAfterFirst(500)
-
-/**
- * Observes database table updates with rate limiting.
- *
- * This function:
- * - Immediately emits the first update after subscription
- * - Subsequently throttles updates to at most one every 500ms
- * - Drops intermediate updates during the throttling interval, only emitting the latest
- * - Emits Unit values that signal when table updates have occurred
- *
- * Use this function for UI updates or when frequent database changes need to be rate-limited.
- *
- * @return A Flow that emits Unit values when the table is updated, with rate limiting applied
- */
-fun <T> Table<T>.observe(): Flow<Unit> = observeRealtime().sampleAfterFirst(500)
-
-
-/**
- * This object don't take part in complex business logic it only used to update database or for logging
+ * Service for updating database and notifying UI changes.
+ * Uses direct notification mechanism instead of SQL listener for better reliability.
  */
 object WCDBUpdateService :
     CoroutineScope by CoroutineScope(CoroutineName("WCDBUpdateService") + Dispatchers.IO + SupervisorJob()) {
-    
+
     private var isUpdatingRoomsStarted = false
+
+    // Room table update notification
+    private val _roomTableUpdated = MutableSharedFlow<Unit>(
+        replay = 0,
+        extraBufferCapacity = 10,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val roomTableUpdated: SharedFlow<Unit> = _roomTableUpdated.asSharedFlow()
+
     fun start() {
         launch {
-            startLoggingSql()
-            startNotifyingTableUpdates()
             updatingRooms()
             cleanEmptyRooms()
             updateSavedMessageExpire()
             deleteOldRecallMessages()
 //            clearInvalidGroupMembers()
         }
-    }
-
-    private fun startLoggingSql() {
-        wcdb.sqlPreExecutionEvents
-            .onEach { (sql, info) ->
-                //log the SQL statement with the string-based `info`
-                L.d { "SQL (pre-exec): $sql Info: $info" }
-            }
-            .launchIn(this)
-    }
-
-    private fun startNotifyingTableUpdates() {
-        wcdb.sqlPostExecutionEvents
-            .onEach { (sql, perfInfo) ->
-//                // 1) (Optional) Log or use performance metrics
-//                L.d {
-//                    "Performance: $sql\n cost=${perfInfo.costInNanoseconds}ns, " +
-//                            "tablePageRead=${perfInfo.tablePageReadCount}, " +
-//                            "tablePageWrite=${perfInfo.tablePageWriteCount}, etc..."
-//                }
-                // 2) If it's an INSERT, UPDATE, or DELETE, find the table name
-                if (
-                    sql.contains("INSERT INTO", ignoreCase = true) ||
-                    sql.contains("UPDATE", ignoreCase = true) ||
-                    sql.contains("DELETE FROM", ignoreCase = true) ||
-                    sql.contains("INSERT OR REPLACE INTO", ignoreCase = true)
-                ) {
-                    val tableName = wcdb.extractTableNameFromSQL(sql)
-                    L.d { "Post-Exec Update on Table: $tableName" }
-
-                    // 3) Notify ObservableTable
-                    tableName?.lowercase()?.let { name ->
-                        wcdb.tablesMap[name]?.notifyUpdate()
-                    }
-                }
-
-            }
-            .launchIn(this)
     }
 
     private fun cleanEmptyRooms() {
@@ -126,7 +64,7 @@ object WCDBUpdateService :
         )
     }
 
-    //更新saved(收藏)里面的旧消息为不过期
+    // 更新saved(收藏)里面的旧消息为不过期
     private fun updateSavedMessageExpire() {
         wcdb.message.updateValue(
             0L,
@@ -141,7 +79,7 @@ object WCDBUpdateService :
             return
         }
         isUpdatingRoomsStarted = true
-        
+
         L.i { "[WCDBUpdateService] Starting room updates listener" }
         RoomChangeTracker.roomChanges
             .sampleAfterFirst(500)
@@ -157,10 +95,23 @@ object WCDBUpdateService :
                 coroutineScope {
                     changesByRoom.forEach { (roomId, roomChanges) ->
                         val roomObject = roomObjects[roomId] ?: return@forEach
-                        L.i { "[Message][WCDBUpdateService] updating room:$roomId, changes:$roomChanges" }
 
                         launch {
                             try {
+                                L.i { "[Message][WCDBUpdateService] updating room:$roomId, changes:$roomChanges" }
+
+                                // ✅ 检查是否需要重新查询数据
+                                val needsDataUpdate = roomChanges.any {
+                                    it.type != RoomChangeType.REFRESH
+                                }
+
+                                if (!needsDataUpdate) {
+                                    // 只是 REFRESH 类型，数据已经更新，跳过数据查询
+                                    L.d { "[Message][WCDBUpdateService] Room $roomId: REFRESH only, skipping data queries" }
+                                    return@launch
+                                }
+
+                                // 以下是需要重新查询数据的逻辑
                                 if (roomChanges.any { it.type == RoomChangeType.MESSAGE }) {
                                     // 获取最新消息
                                     val previewMessage = wcdb.message.getFirstObject(
@@ -227,6 +178,9 @@ object WCDBUpdateService :
                                 if (roomObject.roomName.isNullOrEmpty()) {
                                     roomObject.updateRoomNameAndAvatar()
                                 }
+
+                                L.d { "[WCDBUpdateService] Room $roomId updated successfully" }
+
                             } catch (e: Exception) {
                                 e.printStackTrace()
                                 L.e { "[Message][WCDBUpdateService] Error updating room:$roomId: ${e.stackTraceToString()}" }
@@ -235,6 +189,10 @@ object WCDBUpdateService :
                         }
                     }
                 }
+
+                // ✅ Batch处理完成后统一emit，触发UI刷新
+                _roomTableUpdated.tryEmit(Unit)
+                L.i { "[WCDBUpdateService] Batch processing completed, notification emitted" }
             }
             .catch { e ->
                 e.printStackTrace()

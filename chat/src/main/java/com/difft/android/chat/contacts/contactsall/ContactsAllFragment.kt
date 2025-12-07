@@ -6,8 +6,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.utils.RxUtil
+import kotlinx.coroutines.launch
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
@@ -92,12 +96,14 @@ class ContactsAllFragment : Fragment() {
 
         initData()
 
-        TextSizeUtil.textSizeChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mAdapter.notifyDataSetChanged()
-            }, { it.printStackTrace() })
+        // Collect text size changes at Fragment level and notify adapter
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TextSizeUtil.textSizeState.collect {
+                    mAdapter.notifyDataSetChanged()
+                }
+            }
+        }
         return binding.root
     }
 

@@ -14,8 +14,6 @@ import com.difft.android.base.log.lumberjack.L;
 
 import org.thoughtcrime.securesms.jobmanager.ConstraintObserver;
 
-import util.concurrent.TTExecutors;
-
 /**
  * Observes the charging state of the device and notifies the JobManager system when appropriate.
  */
@@ -37,26 +35,13 @@ public class ChargingConstraintObserver implements ConstraintObserver {
         Intent intent = application.registerReceiver(new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                // 使用 goAsync() 避免主线程阻塞
-                // 将整个执行器调用也放到异步处理中，避免在主线程上调用 execute()
-                final PendingResult pendingResult = goAsync();
+                boolean wasCharging = charging;
 
-                // 使用一个专用的后台线程来调度任务，避免在主线程上调用 ThreadPoolExecutor.execute()
-                new Thread(() -> {
-                    try {
-                        boolean wasCharging = charging;
+                charging = isCharging(intent);
 
-                        charging = isCharging(intent);
-
-                        if (charging && !wasCharging) {
-                            notifier.onConstraintMet(REASON);
-                        }
-                    } catch (Exception e) {
-                        L.e(() -> REASON + " Error processing charging constraint: " + e.getMessage());
-                    } finally {
-                        pendingResult.finish();
-                    }
-                }, "ChargingObserver-Worker").start();
+                if (charging && !wasCharging) {
+                    notifier.onConstraintMet(REASON);
+                }
             }
         }, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
 

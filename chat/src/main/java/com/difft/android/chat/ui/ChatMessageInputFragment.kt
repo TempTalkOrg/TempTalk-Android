@@ -24,7 +24,9 @@ import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.launch
 import autodispose2.androidx.lifecycle.autoDispose
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
@@ -461,6 +463,15 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 if (it) binding.reactionsShade.visibility = View.VISIBLE else binding.reactionsShade.visibility = View.GONE
             }, { it.printStackTrace() })
 
+        // Collect text size changes at Fragment level using StateFlow
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TextSizeUtil.textSizeState.collect { textSize ->
+                    updateInputViewSize(textSize == TextSizeUtil.TEXT_SIZE_LAGER)
+                }
+            }
+        }
+
         SendMessageUtils.sendMessage
             .compose(RxUtil.getSchedulerComposer())
             .to(RxUtil.autoDispose(this))
@@ -598,16 +609,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }, { it.printStackTrace() })
     }
 
-    private fun updateInputViewSize() {
+    private fun updateInputViewSize(isLarger: Boolean? = null) {
         val message: String = binding.edittextInput.text.toString().trim()
         if (message.isEmpty()) {
             binding.edittextInput.textSize = 12f
         } else {
-            if (TextSizeUtil.isLager()) {
-                binding.edittextInput.textSize = 21f
-            } else {
-                binding.edittextInput.textSize = 16f
-            }
+            // Use provided value, otherwise get current value directly
+            val textSizeLarger = isLarger ?: TextSizeUtil.isLarger
+            binding.edittextInput.textSize = if (textSizeLarger) 21f else 16f
         }
     }
 

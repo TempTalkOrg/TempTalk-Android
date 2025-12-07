@@ -591,8 +591,18 @@ class LCallToChatControllerImpl @Inject constructor(
             return null
         }
 
-        val publicKeyInfo = publicKeyInfos.firstOrNull { it.uid == userId }?.identityKey
-        return publicKeyInfo
+        val publicKeyInfo = publicKeyInfos.firstOrNull { it.uid == userId }
+        if (publicKeyInfo == null) {
+            L.e { "[Call] geTheirPublicKey Error: $userId not found in public key list" }
+            return null
+        }
+
+        if (publicKeyInfo.identityKey.isBlank()) {
+            L.e { "[Call] geTheirPublicKey Error: $userId identityKey is empty or blank" }
+            return null
+        }
+
+        return publicKeyInfo.identityKey
     }
 
     override fun restoreIncomingCallActivityIfIncoming() {

@@ -82,8 +82,9 @@ data class RoomChange(
 )
 
 enum class RoomChangeType {
-    MESSAGE,
-    CONTACT,
-    GROUP_MEMBER,
-    GROUP
+    MESSAGE,       // 消息变化，需要重新查询消息预览
+    CONTACT,       // 联系人变化，需要重新查询联系人信息
+    GROUP_MEMBER,  // 群成员变化，需要重新查询群成员
+    GROUP,         // 群组变化，需要重新查询群信息
+    REFRESH,       // 只需要刷新UI，数据已更新（置顶、免打扰、已读状态、草稿等）
 }

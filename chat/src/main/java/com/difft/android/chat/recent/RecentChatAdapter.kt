@@ -179,21 +179,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
 
     @SuppressLint("ClickableViewAccessibility")
     fun bind(searchKey: String, data: RoomViewData, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
-        if (TextSizeUtil.isLager()) {
-            binding.textviewLabel.textSize = 24f
-            binding.textviewTimer.textSize = 24f
-            binding.textviewDate.textSize = 21f
-            binding.textviewAt.textSize = 21f
-            binding.textviewDetail.textSize = 21f
-            binding.textviewMissedNumber.textSize = 12f
-        } else {
-            binding.textviewLabel.textSize = 16f
-            binding.textviewTimer.textSize = 16f
-            binding.textviewDate.textSize = 14f
-            binding.textviewAt.textSize = 14f
-            binding.textviewDetail.textSize = 14f
-            binding.textviewMissedNumber.textSize = 10f
-        }
+        updateTextSizes(TextSizeUtil.isLarger)
 
         if (isForSearch && searchKey.isNotEmpty()) {
             binding.textviewLabel.setHighLightText(data.roomName.toString(), searchKey)
@@ -296,6 +282,24 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             true
         }
         updateCallBarDuration(data)
+    }
+
+    private fun updateTextSizes(isLarger: Boolean) {
+        if (isLarger) {
+            binding.textviewLabel.textSize = 24f
+            binding.textviewTimer.textSize = 24f
+            binding.textviewDate.textSize = 21f
+            binding.textviewAt.textSize = 21f
+            binding.textviewDetail.textSize = 21f
+            binding.textviewMissedNumber.textSize = 12f
+        } else {
+            binding.textviewLabel.textSize = 16f
+            binding.textviewTimer.textSize = 16f
+            binding.textviewDate.textSize = 14f
+            binding.textviewAt.textSize = 14f
+            binding.textviewDetail.textSize = 14f
+            binding.textviewMissedNumber.textSize = 10f
+        }
     }
 
     private fun applyDraftStyle(content: String, context: Context): SpannableString {

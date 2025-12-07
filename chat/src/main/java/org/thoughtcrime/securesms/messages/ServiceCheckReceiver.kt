@@ -12,7 +12,13 @@ import javax.inject.Inject
 /**
  * 定时检查广播接收器
  *
- * 由 AlarmManager 每 5 分钟触发一次（Doze 模式下系统延长到 9-15 分钟）
+ * 由 AlarmManager 定期触发，用于检查并恢复 MessageForegroundService 的运行状态
+ *
+ * 触发间隔：
+ * - 有精确闹钟权限：3 分钟（非 Doze）/ ~9 分钟（Doze，系统延长）
+ * - 无精确闹钟权限：3 分钟（非 Doze）/ 30分钟-2小时（Doze，系统维护窗口）
+ *
+ * 注意：每次触发后会重新调度下一次闹钟，保持常驻检查
  */
 @AndroidEntryPoint
 class ServiceCheckReceiver : BroadcastReceiver() {

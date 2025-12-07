@@ -106,6 +106,7 @@ mnPasswordEditText = "V1.0.4"
 
 accompanistSystemuicontroller = "0.36.0"
 coil = "3.0.4"
+accompanistPermissions = "0.37.3"
 livekitAndroid = "2.20.3.6"
 denoiseFilter = "1.0.4"
 kotlinxSerializationCore = "1.5.0"
@@ -277,6 +278,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil = { module = "io.coil-kt.coil3:coil", version.ref = "coil" }
 coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
+accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
 livekit-android = { module = "org.difft.android.libraries:livekit-android", version.ref = "livekitAndroid" }
 livekit-android-camerax = { module = "org.difft.android.libraries:livekit-android-camerax", version.ref = "livekitAndroid" }
 denoise-filter = { module = "org.difft.android.libraries:denoise-filter", version.ref = "denoiseFilter" }

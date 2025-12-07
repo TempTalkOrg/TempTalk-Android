@@ -13,7 +13,7 @@ data class UserData(
     var contactRequestStatus: String? = null,
     var directoryVersionForContactors: Int = 0,
     var mostUseEmojis: String? = null,
-    var syncedContacts: Boolean = false,//是否已经同步过联系人
+    var syncedContactsV2: Boolean = false,//是否已经同步过联系人
     var syncedGroupAndMembers: Boolean = false,//是否已经同步过群和成员信息
     var passcode: String? = null, //passcode hash:salt
     var passcodeTimeout: Int = 300,//默认值300s

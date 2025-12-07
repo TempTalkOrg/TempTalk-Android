@@ -69,16 +69,13 @@ import kotlin.collections.contains
 fun SingleParticipantCallPage(
     viewModel: LCallViewModel,
     room: Room,
-    muteOtherEnabled: Boolean = false,
     autoHideTimeout: Long,
     callConfig: CallConfig,
     conversationId: String?,
     callRole: CallRole?,
-    handleInviteUsersClick: () -> Unit = {}
 ){
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
-    val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
     val callStatus by viewModel.callStatus.collectAsState()
 
     val videoTrackMap by room.localParticipant::videoTrackPublications.flow.collectAsState(initial = emptyList())
@@ -159,12 +156,6 @@ fun SingleParticipantCallPage(
                 }
             })
         })
-
-    if(isUserSharingScreen && isShowUsersEnabled) {
-        // 显示参与者小列表
-        ShowParticipantsListView(viewModel, participants, muteOtherEnabled, handleInviteUsersClick)
-    }
-
 }
 
 

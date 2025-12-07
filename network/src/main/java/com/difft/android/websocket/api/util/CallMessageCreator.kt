@@ -102,7 +102,21 @@ class CallMessageCreator @Inject constructor(
         }
 
         if (publicKeyInfos.isNullOrEmpty()) {
-            L.w { "[Call][NewSignalServiceMessageSender] publicKeyInfos is null" }
+            L.w { "[Call] publicKeyInfos is null" }
+            return@fromCallable EMPTY_CALL_ENCRYPT_RESULT
+        }
+
+        // Filter out PublicKeyInfo with empty identityKey to prevent rust encryption exception
+        publicKeyInfos = publicKeyInfos.filter { info ->
+            val isValid = info.identityKey.isNotBlank()
+            if (!isValid) {
+                L.w { "[Call] Filtering out PublicKeyInfo with empty identityKey for uid: ${info.uid}" }
+            }
+            isValid
+        }
+
+        if (publicKeyInfos.isEmpty()) {
+            L.e { "[Call] No valid public key info available after filtering (all identityKeys were empty)" }
             return@fromCallable EMPTY_CALL_ENCRYPT_RESULT
         }
 
@@ -113,7 +127,7 @@ class CallMessageCreator @Inject constructor(
         }
 
         if (encInfos.isNullOrEmpty()) {
-            L.w { "[Call][NewSignalServiceMessageSender] call encInfos is null" }
+            L.w { "[Call] call encInfos is null" }
             return@fromCallable EMPTY_CALL_ENCRYPT_RESULT
         }
 

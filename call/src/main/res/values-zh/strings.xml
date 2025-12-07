@@ -93,8 +93,16 @@
     <string name="call_rating_question_other_2">我无法接听来电</string>
     <string name="call_pip_no_permission_tip_title">悬浮窗权限申请</string>
     <string name="call_pip_permission_tip_content">进入画中画模式前，建议开启悬浮窗权限，以获得更流畅的体验。</string>
-    <string name="call_pip_permission_button_cancel">暂不</string>
-    <string name="call_pip_permission_button_setting">去设置</string>
+    <string name="call_permission_button_not_now">暂不</string>
+    <string name="call_permission_button_setting_go">去设置</string>
     <string name="call_pip_permission_setting_failed">无法跳转，请在系统设置中手动开启悬浮窗权限。</string>
+    <string name="call_permission_button_setting_cancel">取消</string>
+    <string name="call_microphone_permission_deny_title">麦克风权限已关闭</string>
+    <string name="call_camera_permission_deny_title">相机权限已关闭</string>
+    <string name="call_microphone_permission_deny_content">请前往系统设置中开启麦克风权限，否则语音功能无法使用。</string>
+    <string name="call_camera_permission_deny_content">请前往系统设置中开启相机权限，否则视频功能无法使用。</string>
+    <string name="call_microphone_permission_setting_failed">无法跳转，请在系统设置中手动开启麦克风权限。</string>
+    <string name="call_camera_permission_setting_failed">无法跳转，请在系统设置中手动开启相机权限。</string>
+    <string name="call_permission_button_setting_cancel_tip">缺少必要权限</string>
 
 </resources>

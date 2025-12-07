@@ -268,6 +268,7 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
         super.onResume()
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
+        messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 
     override fun onPause() {

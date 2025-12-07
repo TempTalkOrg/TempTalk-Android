@@ -354,6 +354,12 @@ class GroupUpdater @Inject constructor(
                     )
                 }
             }
+
+            GroupNotifyDetailType.GroupCriticalAlertChange.value -> {
+                message.data?.group?.criticalAlert?.let {
+                    updateGroupCriticalAlert(groupID, it, groupVersion)
+                }
+            }
         }
 
         // Create and save notify message if needed
@@ -554,5 +560,18 @@ class GroupUpdater @Inject constructor(
     private suspend fun getExpiresTime(forWhat: For): Int {
         val option = messageArchiveManager.getMessageArchiveTime(forWhat).await()
         return option.toInt()
+    }
+
+    private suspend fun updateGroupCriticalAlert(groupID: String, criticalAlert: Boolean, version: Int) {
+        L.i { "[GroupUpdater] Update group CriticalAlert: $criticalAlert" }
+        val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID))
+        if (group != null) {
+            group.criticalAlert = criticalAlert
+            group.version = version
+            wcdb.group.updateObject(group, arrayOf(DBGroupModel.criticalAlert, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
+            GroupUtil.emitSingleGroupUpdate(group)
+        } else {
+            createNewGroupIfNotExist(groupID)
+        }
     }
 }

@@ -50,7 +50,7 @@
     <string name="call_button_group_alert_end_text">End for all</string>
     <string name="call_toolbar_noise_suppression_text">Mic Noise Suppression</string>
     <string name="call_toolbar_bottom_invite_text">Invite</string>
-    <string name="call_toolbar_bottom_raise_hand_text">Raise hand</string>
+    <string name="call_toolbar_bottom_raise_hand_text">Raise</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>
     <string name="call_toolbar_bottom_critical_alert_text">Critical Alert</string>
     <string name="call_join_failed_tip">Failed to join the call, please try again.</string>
@@ -93,8 +93,16 @@
     <string name="call_rating_question_other_2">I could not answer the call</string>
     <string name="call_pip_no_permission_tip_title">Floating window permission request</string>
     <string name="call_pip_permission_tip_content">Before entering Picture-in-Picture mode, please enable the floating window permission for a smoother experience.</string>
-    <string name="call_pip_permission_button_cancel">Not now</string>
-    <string name="call_pip_permission_button_setting">Go to Settings</string>
+    <string name="call_permission_button_not_now">Not now</string>
+    <string name="call_permission_button_setting_go">Go to Settings</string>
     <string name="call_pip_permission_setting_failed">Unable to open settings. Please enable floating window permission manually.</string>
+    <string name="call_permission_button_setting_cancel">Cancel</string>
+    <string name="call_microphone_permission_deny_title">Microphone Permission Disabled</string>
+    <string name="call_camera_permission_deny_title">Camera Permission Disabled</string>
+    <string name="call_microphone_permission_deny_content">Please go to system settings and enable the microphone permission, otherwise voice features will not be available.</string>
+    <string name="call_camera_permission_deny_content">Please go to system settings and enable the camera permission, otherwise video features will not be available.</string>
+    <string name="call_microphone_permission_setting_failed">Unable to open settings. Please enable microphone permission manually.</string>
+    <string name="call_camera_permission_setting_failed">Unable to open settings. Please enable camera permission manually.</string>
+    <string name="call_permission_button_setting_cancel_tip">Lack of necessary permissions</string>
 
 </resources>

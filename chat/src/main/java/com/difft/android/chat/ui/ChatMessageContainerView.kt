@@ -17,6 +17,10 @@ class ChatMessageContainerView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // First, always reset all paddings to ensure clean state for RecyclerView reuse
+        // This prevents padding from previous item from affecting current item
+        resetAllPaddingsToDefault()
+
         // First measure to get initial sizes
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
 
@@ -26,14 +30,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
 
         // Check if time view is not visible or has zero width
         if (timeView.visibility != VISIBLE || timeViewWidth == 0) {
-            // Reset all paddings to default when no time view is displayed
-            val paddingChanged = resetAllPaddingsToDefault()
-
-            // Re-measure if padding changed
-            if (paddingChanged) {
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-            }
-
+            // Already reset, just return
             return
         }
 
@@ -225,6 +222,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
         // Recursively find all TextViews in the forward view
         fun findTextViewsRecursive(view: View) {
             if (view is TextView && view.isVisible && view.text.isNotEmpty()) {
+                // isVisible and isNotEmpty() are sufficient to identify TextViews with actual content
                 textViews.add(view)
             } else if (view is ViewGroup) {
                 for (i in 0 until view.childCount) {
@@ -274,24 +272,25 @@ class ChatMessageContainerView @JvmOverloads constructor(
                         val finalPadding = maxOf(8.dp, neededPadding) // Ensure minimum padding
 
                         if (forwardContainer.paddingEnd != finalPadding) {
-//                            forwardContainer.setPaddingRelative(
-//                                forwardContainer.paddingStart,
-//                                forwardContainer.paddingTop,
-//                                finalPadding,
-//                                forwardContainer.paddingBottom
-//                            )
+                            forwardContainer.setPaddingRelative(
+                                forwardContainer.paddingStart,
+                                forwardContainer.paddingTop,
+                                finalPadding,
+                                forwardContainer.paddingBottom
+                            )
                             true
                         } else false
                     } else false
                 } ?: false
             } else {
-                // Fallback if no text views found
-                val defaultInlinePadding = timeViewWidth + 3.dp
-                if (forwardContainer.paddingEnd != defaultInlinePadding) {
+                // No text views found - assume this is a media message (image/video)
+                // For media messages, don't add extra padding as the media itself takes full width
+                val defaultPadding = 0.dp
+                if (forwardContainer.paddingEnd != defaultPadding) {
                     forwardContainer.setPaddingRelative(
                         forwardContainer.paddingStart,
                         forwardContainer.paddingTop,
-                        defaultInlinePadding,
+                        defaultPadding,
                         forwardContainer.paddingBottom
                     )
                     true
