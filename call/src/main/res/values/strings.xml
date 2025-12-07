@@ -34,8 +34,8 @@
     <string name="call_barrage_message_screensharing">starts sharing 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
     <string name="call_barrage_message_critical_alert_success">set a critical alert</string>
-    <string name="call_barrage_message_critical_alert_failed">failed to send a critical alert. Please try again.</string>
-    <string name="call_barrage_message_critical_alert_limited">sent too frequently. Please try again later.</string>
+    <string name="call_barrage_message_critical_alert_failed">Failed to send a critical alert. Please try again.</string>
+    <string name="call_barrage_message_critical_alert_limited">Send too frequently. Please try again later.</string>
     <string name="call_attendees">Attendees</string>
     <string name="call_barrage_broadcast_message_tip">Send to all</string>
     <string name="call_other_network_poor_tip">The other party\'s network connection is poor.</string>

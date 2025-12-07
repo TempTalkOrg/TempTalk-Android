@@ -3,6 +3,7 @@ package com.difft.android.call
 import android.content.Context
 import android.util.Log
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.call.BuildConfig.*
 import com.difft.android.call.data.ServerNode
 import com.difft.android.call.data.ServerUrlSpeedInfo
@@ -22,10 +23,11 @@ import kotlinx.coroutines.launch
 
 
 object LCallEngine {
-
     private const val SPEED_TEST_INTERVAL = 5 * 60 * 1000L
     private const val ERROR_RESET_THRESHOLD = 15 * 60 * 1000L
     private const val MAX_ERROR_COUNT = 3
+
+    private lateinit var environmentHelper: EnvironmentHelper
 
     private var speedTestJob: Job? = null
 
@@ -48,8 +50,10 @@ object LCallEngine {
         private set
 
 
-    fun init(context: Context, scope: CoroutineScope) {
-        LiveKit.loggingLevel = if (DEBUG) LoggingLevel.VERBOSE else LoggingLevel.DEBUG
+    fun init(context: Context, scope: CoroutineScope, environmentHelper: EnvironmentHelper) {
+        this.environmentHelper = environmentHelper
+        LiveKit.loggingLevel = if (DEBUG) LoggingLevel.VERBOSE else if(environmentHelper.isInsiderChannel()) LoggingLevel.VERBOSE else LoggingLevel.DEBUG
+
         LiveKit.enableWebRTCLogging = false
 
         registerNetworkConnectionListener(context, scope)
@@ -57,7 +61,7 @@ object LCallEngine {
         LKLog.registerLogCallback(object : LKLog.LogCallback {
             override fun onLog(level: LoggingLevel, message: String?, throwable: Throwable?) {
                 val lLevel = when (level ) {
-                    LoggingLevel.VERBOSE -> Log.VERBOSE
+                    LoggingLevel.VERBOSE -> { if (environmentHelper.isInsiderChannel()) Log.INFO else Log.VERBOSE }
 
                     // current log more information, treat debug as info
                     LoggingLevel.DEBUG -> Log.INFO

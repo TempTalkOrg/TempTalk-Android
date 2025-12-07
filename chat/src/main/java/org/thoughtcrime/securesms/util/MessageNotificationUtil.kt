@@ -891,11 +891,65 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
+    /**
+     * 检查是否有通知权限（仅检查POST_NOTIFICATIONS权限，Android 13+）
+     * 注意：这个方法只检查权限本身，不检查通知是否被用户关闭
+     * 建议使用 [canShowNotifications] 进行更全面的检查
+     */
     fun hasNotificationPermission(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val res: Int = context.checkCallingOrSelfPermission(permission)
             if (res != PackageManager.PERMISSION_GRANTED) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    /**
+     * 全面检查通知是否可用
+     * 包括：
+     * 1. Android 13+ 的 POST_NOTIFICATIONS 权限
+     * 2. 系统通知总开关（areNotificationsEnabled）
+     * 3. 检查消息通知渠道和渠道组的有效性
+     *
+     * @param checkChannel 是否检查消息通知渠道的有效性，默认为true（全面检查）
+     * @return true表示通知可以正常显示，false表示通知被阻止
+     */
+    fun canShowNotifications(checkChannel: Boolean = true): Boolean {
+        // 1. 检查POST_NOTIFICATIONS权限（Android 13+）
+        if (!hasNotificationPermission()) {
+            L.w { "[MessageNotificationUtil] canShowNotifications: no POST_NOTIFICATIONS permission" }
+            return false
+        }
+
+        // 2. 检查系统通知总开关
+        if (!isNotificationsEnabled()) {
+            L.w { "[MessageNotificationUtil] canShowNotifications: notifications are disabled by system" }
+            return false
+        }
+
+        // 3. 可选：检查消息通知渠道和渠道组是否有效
+        if (checkChannel && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 3.1 检查渠道组是否被阻止（API 28+）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val channelGroup = nm.getNotificationChannelGroup(CHANNEL_CONFIG_MESSAGE_GROUP)
+                if (channelGroup?.isBlocked == true) {
+                    L.w { "[MessageNotificationUtil] canShowNotifications: MESSAGE channel group is blocked" }
+                    return false
+                }
+            }
+
+            // 3.2 检查单个渠道是否被阻止
+            val messageChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_MESSAGE)
+            if (messageChannel == null) {
+                L.w { "[MessageNotificationUtil] canShowNotifications: MESSAGE channel does not exist" }
+                return false
+            }
+            if (messageChannel.importance == NotificationManager.IMPORTANCE_NONE) {
+                L.w { "[MessageNotificationUtil] canShowNotifications: MESSAGE channel is blocked (importance=NONE)" }
                 return false
             }
         }

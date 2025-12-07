@@ -627,9 +627,11 @@ class LCallActivity : AppCompatActivity() {
     }
 
     private fun endCallAndClearResources() {
-        inCallEnding = true
-        viewModel.doExitClear()
-        finishAndRemoveTask()
+        runOnUiThread {
+            inCallEnding = true
+            viewModel.doExitClear()
+            finishAndRemoveTask()
+        }
     }
 
     override fun getResources(): Resources {

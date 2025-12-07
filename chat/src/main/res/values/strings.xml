@@ -725,7 +725,25 @@
 
     <string name="background_connection">Background connection</string>
     <string name="background_connection_enabled">Background connection enabled</string>
-    <string name="background_connection_tips">Keep a low-impact background connection to Yelling for reliable notifications.</string>
+    <string name="background_connection_tips">Keep a low-impact background connection to Yelling for reliable notifications.Before enabling, please ensure the following settings are in normal status:</string>
+
+    <!-- Background Connection Checks -->
+    <string name="background_restriction_check">Background Restriction</string>
+    <string name="background_restriction_restricted">Restricted</string>
+    <string name="background_restriction_unrestricted">Normal</string>
+
+    <string name="battery_optimization_check">Battery Optimization</string>
+    <string name="battery_optimization_ignored">Normal</string>
+    <string name="battery_optimization_not_ignored">Restricted</string>
+
+    <string name="data_saver_check">Background Data</string>
+    <string name="data_saver_restricted">Restricted</string>
+    <string name="data_saver_unrestricted">Normal</string>
+
+    <string name="auto_start_check">Auto-start Permission</string>
+    <string name="auto_start_need_check">Need to Check</string>
+
+    <string name="background_connection_check_failed">Please ensure the following settings are in normal status before enabling background connection</string>
 
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>

@@ -57,14 +57,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 L.i { "[fcm] customContent is null, title:${title} content:${content}, ignore" }
             }
 
-            // 将 schedulePendingMessageWork 移到后台线程执行，避免主线程阻塞
-            appScope.launch(Dispatchers.IO) {
-                try {
-                    entryPoint.pendingMessageHelper.schedulePendingMessageWork(this@MyFirebaseMessagingService)
-                } catch (e: Exception) {
-                    L.e { "[fcm] Failed to schedule pending message work: ${e.stackTraceToString()}" }
-                }
-            }
+            // 主动拉取和处理消息
+            entryPoint.pendingMessageHelper.schedulePendingMessageWork()
         } catch (e: Exception) {
             L.i { "[fcm] onMessageReceived error - $e , ${remoteMessage.data}" }
             e.printStackTrace()
