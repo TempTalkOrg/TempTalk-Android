@@ -46,7 +46,6 @@ import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
-import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
@@ -129,9 +128,7 @@ fun SingleParticipantCallPage(
         else -> {
             if (callRole == CallRole.CALLER ) {
                 conversationId?.let {
-                    val statusTip = if (callStatus == CallStatus.CALLING) ApplicationHelper.instance.getString(R.string.call_status_calling)
-                    else null
-                    CalleeParticipantItem(userId = it, statusTip = statusTip)
+                    CalleeParticipantItem(userId = it)
                 }
             }
         }

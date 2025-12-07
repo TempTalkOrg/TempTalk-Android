@@ -13,7 +13,8 @@ data class PushCustomContent(
     val mutableContent: Int,
     val notifyType: Int,
     val passthrough: String?,
-    val uid: String?
+    val uid: String?,
+    val critical: Int
 ) {
     val passthroughData: Passthrough?
         get() = passthrough?.let {

@@ -210,21 +210,21 @@ class NewSignalServiceMessageSender @Inject constructor(
                         )
                     }
                 } catch (e: InvalidUnidentifiedAccessHeaderException) {
-                    L.e { "[Message] [sendMessage][$timestamp] InvalidUnidentifiedAccessHeaderException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] InvalidUnidentifiedAccessHeaderException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: UnregisteredUserException) {
-                    L.e { "[Message] [sendMessage][$timestamp] UnregisteredUserException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] UnregisteredUserException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: MismatchedDevicesException) {
-                    L.e { "[Message] [sendMessage][$timestamp] MismatchedDevicesException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] MismatchedDevicesException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: StaleDevicesException) {
-                    L.e { "[Message] [sendMessage][$timestamp] StaleDevicesException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] StaleDevicesException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: WebSocketUnavailableException) {
-                    L.e { "[Message] [sendMessage][$timestamp] Pipe unavailable, falling back... (${e.javaClass.simpleName}: ${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] Pipe unavailable, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
                 } catch (e: IOException) {
-                    L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.message})" }
+                    L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
                 }
                 val response = socket.sendMessageNew(newOutgoingMessage, recipient)
                 if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
@@ -244,17 +244,28 @@ class NewSignalServiceMessageSender @Inject constructor(
                     )
                 }
             } catch (afe: NonSuccessfulResponseCodeException) {
-                L.e { "[Message] [sendMessage][$timestamp] NonSuccessfulResponseCodeException. (${afe.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] NonSuccessfulResponseCodeException. (${afe.stackTraceToString()})" }
                 throw afe
             } catch (ike: InvalidKeyException) {
-                L.e { "[Message] [sendMessage][$timestamp] Invalid key exception. (${ike.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] Invalid key exception. (${ike.stackTraceToString()})" }
             } catch (mde: MismatchedDevicesException) {
-                L.e { "[Message] [sendMessage][$timestamp] Handling mismatched devices.(${mde.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] Handling mismatched devices.(${mde.stackTraceToString()})" }
             } catch (ste: StaleDevicesException) {
-                L.e { "[Message] [sendMessage][$timestamp] Handling stale devices.(${ste.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] Handling stale devices.(${ste.stackTraceToString()})" }
             } catch (re: RustEncryptionException) {
-                val error = "[Message] [sendMessage][$timestamp] Rust encryption exception. (${re.message})"
-                L.e { error }
+                val errorMessage = re.stackTraceToString()
+                val isKeyLengthError = errorMessage.contains("KeyDataLengthException", ignoreCase = true)
+
+                if (isKeyLengthError) {
+                    L.e { "[Message] [sendMessage][$timestamp] Rust encryption key length exception. (${errorMessage})" }
+                    L.w { "[Message] [sendMessage][$timestamp] Forcing public key update (attempt ${i + 1}/$RETRY_COUNT)" }
+
+                    // Force update public key data
+                    conversationManager.updateConversationMemberData(room)
+                    conversationManager.updatePublicKeyInfoData(room)
+                } else {
+                    L.e { "[Message] [sendMessage][$timestamp] Rust encryption exception. (${errorMessage})" }
+                }
             }
         }
 

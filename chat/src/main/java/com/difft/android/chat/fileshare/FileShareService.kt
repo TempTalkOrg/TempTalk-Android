@@ -114,7 +114,8 @@ data class UploadInfoReq(
     val hashAlg: String,
     val keyAlg: String,
     val encAlg: String,
-    val fileSize: Int
+    val fileSize: Int,
+    val attachmentType: Int = AttachmentUploadType.NORMAL
 )
 
 data class UploadInfoResp(
@@ -142,3 +143,15 @@ data class DownloadResp(
     val keyAlg: String,
     val url: String
 )
+
+/**
+ * 附件类型定义
+ * - NORMAL: 普通附件 (默认值 0)
+ * - VOICE: 语音消息附件 (1)
+ * - LARGE: 大附件，大于200M (2)
+ */
+object AttachmentUploadType {
+    const val NORMAL = 0    // 普通附件
+    const val VOICE = 1     // 语音消息附件
+    const val LARGE = 2     // 大附件（>200M）
+}

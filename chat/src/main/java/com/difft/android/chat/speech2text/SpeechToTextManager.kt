@@ -5,6 +5,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.fileshare.UploadInfoReq
@@ -93,9 +94,17 @@ class SpeechToTextManager @Inject constructor(
                                 val fileHash = android.util.Base64.encodeToString(keyDigest, android.util.Base64.NO_WRAP)
                                 val uploadInfoCallResponse = fileShareRepo.uploadInfo(
                                     UploadInfoReq(
-                                        SecureSharedPrefsUtil.getToken(), listOf(SPEECH_TO_TEXT),
-                                        fileExistResp.attachmentId, fileHash,
-                                        FileUtils.bytesToHex(attachment.digest), "MD5", "SHA-256", "SHA-512", "AES-CBC-256", attachment.size
+                                        token = SecureSharedPrefsUtil.getToken(),
+                                        numbers = listOf(SPEECH_TO_TEXT),
+                                        attachmentId = fileExistResp.attachmentId,
+                                        fileHash = fileHash,
+                                        cipherHash = FileUtils.bytesToHex(attachment.digest),
+                                        cipherHashType = "MD5",
+                                        hashAlg = "SHA-256",
+                                        keyAlg = "SHA-512",
+                                        encAlg = "AES-CBC-256",
+                                        fileSize = attachment.size,
+                                        attachmentType = AttachmentUploadType.VOICE
                                     )
                                 ).execute()
 

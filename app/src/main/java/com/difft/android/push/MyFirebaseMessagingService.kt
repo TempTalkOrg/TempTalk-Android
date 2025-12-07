@@ -2,10 +2,12 @@ package com.difft.android.push
 
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.chat.PendingMessageHelper
+import com.difft.android.chat.R
 import com.difft.android.chat.data.NOTIFY_TYPE_CALL_HANGUP
 import com.difft.android.chat.data.PushCustomContent
 import com.difft.android.websocket.api.util.EnvelopDeserializer
@@ -44,35 +46,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 L.d { "[fcm] onMessageReceived pushCustomContent:${pushCustomContent}" }
                 L.i { "[fcm] onMessageReceived locKey:${pushCustomContent?.locKey}" }
 
-                pushCustomContent.msg?.let {
-                    appScope.launch(Dispatchers.IO) {
-                        try {
-                            L.i { "[fcm] Start processing message" }
-
-                            val serviceEnvelope = EnvelopDeserializer.deserializeFrom(Base64.decode(it))
-
-                            val envelopToMessageProcessor = entryPoint.envelopToMessageProcessor
-
-                            val messageResult = serviceEnvelope?.let { envelopToMessageProcessor.process(it, "fcm") }
-                            if (messageResult != null) {
-                                L.i { "[fcm] Processing message success:${messageResult.message.timeStamp} shouldShowNotification:${messageResult.shouldShowNotification}" }
-                                if (messageResult.shouldShowNotification) {
-                                    SharedPrefsUtil.getInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM).let {
-                                        SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, it + 1)
-                                    }
-                                    entryPoint.messageNotificationUtil.showNotificationSuspend(baseContext, messageResult.message, messageResult.conversation)
-                                }
-                            } else {
-                                L.w { "[fcm] Processing message result is null" }
-                            }
-                        } catch (e: Exception) {
-                            L.w { "[fcm] Processing message envelope error: ${e.stackTraceToString()}" }
-                            handleMessageProcessingError(entryPoint, pushCustomContent)
-                        }
+                when(pushCustomContent.critical) {
+                    0 -> handleNormalMessage(entryPoint, pushCustomContent)
+                    1 -> handleCriticalAlertMessage(entryPoint, pushCustomContent, title, content)
+                    else -> {
+                        L.w { "[fcm] Unknown critical value: ${pushCustomContent.critical}" }
                     }
-                } ?: run {
-                    L.w { "[fcm] Processing message pushCustomContent.msg is null" }
-                    handleMessageProcessingError(entryPoint, pushCustomContent)
                 }
             } else {
                 L.i { "[fcm] customContent is null, title:${title} content:${content}, ignore" }
@@ -89,6 +68,53 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         } catch (e: Exception) {
             L.i { "[fcm] onMessageReceived error - $e , ${remoteMessage.data}" }
             e.printStackTrace()
+        }
+    }
+
+    private fun handleCriticalAlertMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent, title: String?, content: String?)  {
+        if(entryPoint.messageNotificationUtil.isNotificationPolicyAccessGranted()) {
+            pushCustomContent.uid?.let { uid ->
+                val alertTitle = title ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
+                val alertContent = content ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
+                appScope.launch(Dispatchers.IO) {
+                    entryPoint.messageNotificationUtil.showCriticalAlertNotification(For.Account(uid), alertTitle, alertContent)
+                }
+            }
+        } else {
+            L.i { "[fcm] Critical alert message is not shown because notification policy access is denied" }
+        }
+    }
+
+    private fun handleNormalMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent) {
+        pushCustomContent.msg?.let {
+            appScope.launch(Dispatchers.IO) {
+                try {
+                    L.i { "[fcm] Start processing message" }
+
+                    val serviceEnvelope = EnvelopDeserializer.deserializeFrom(Base64.decode(it))
+
+                    val envelopToMessageProcessor = entryPoint.envelopToMessageProcessor
+
+                    val messageResult = serviceEnvelope?.let { envelopToMessageProcessor.process(it, "fcm") }
+                    if (messageResult != null) {
+                        L.i { "[fcm] Processing message success:${messageResult.message.timeStamp} shouldShowNotification:${messageResult.shouldShowNotification}" }
+                        if (messageResult.shouldShowNotification) {
+                            SharedPrefsUtil.getInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM).let {
+                                SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, it + 1)
+                            }
+                            entryPoint.messageNotificationUtil.showNotificationSuspend(baseContext, messageResult.message, messageResult.conversation)
+                        }
+                    } else {
+                        L.w { "[fcm] Processing message result is null" }
+                    }
+                } catch (e: Exception) {
+                    L.w { "[fcm] Processing message envelope error: ${e.stackTraceToString()}" }
+                    handleMessageProcessingError(entryPoint, pushCustomContent)
+                }
+            }
+        } ?: run {
+            L.w { "[fcm] Processing message pushCustomContent.msg is null" }
+            handleMessageProcessingError(entryPoint, pushCustomContent)
         }
     }
 

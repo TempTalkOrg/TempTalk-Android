@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallActivity
@@ -56,8 +57,13 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
     val deNoiseEnable by viewModel.deNoiseEnable.collectAsState(true)
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
+    val callStatus by viewModel.callStatus.collectAsState()
 
-    val itemSpace = if (isOneVOneCall) 50.dp else 32.dp
+    val itemSpace = when {
+        callStatus == CallStatus.CALLING -> 8.dp
+        isOneVOneCall -> 50.dp
+        else -> 32.dp
+    }
 
     if(showToolBarBottomViewEnable && !isInPipMode){
         ModalBottomSheet (
@@ -242,6 +248,60 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                             )
                         )
                     }
+
+                    if(isOneVOneCall && (viewModel.getCallRole() == CallRole.CALLER) && (callStatus == CallStatus.CALLING)) {
+                        Column(
+                            modifier = Modifier
+                                .width(80.dp)
+                                .height(76.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .width(48.dp)
+                                    .height(48.dp)
+                                    .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
+                                    .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                        try {
+                                            L.i { "[call] ShowItemsBottomView click critical alert" }
+                                            viewModel.conversationId?.let { conversationId ->
+                                                viewModel.handleCriticalAlert(conversationId)
+                                            } ?: run {
+                                                L.w { "[call] ShowItemsBottomView conversationId is null, cannot handle critical alert" }
+                                            }
+                                        } catch (e: Exception) {
+                                            L.e { "[call] ShowItemsBottomView click alert error: ${e.message}" }
+                                        }
+                                    },
+                                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Image(
+                                    modifier = Modifier
+                                        .padding(1.dp)
+                                        .width(24.dp)
+                                        .height(24.dp),
+                                    painter = painterResource(id = R.drawable.call_tabler_critical_alert),
+                                    contentDescription = "critical alert",
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+
+                            Text(
+                                text = context.getString(R.string.call_toolbar_bottom_critical_alert_text),
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                    fontFamily = SfProFont,
+                                    fontWeight = FontWeight(400),
+                                    color = colorResource(id = com.difft.android.base.R.color.gray_50)
+                                )
+                            )
+                        }
+                    }
+
                 }
 
                 Row(

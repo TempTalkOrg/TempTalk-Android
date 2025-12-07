@@ -21,6 +21,7 @@ import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils.getString
+import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallUiController
@@ -44,6 +45,9 @@ import com.difft.android.call.manager.ParticipantManager
 import com.difft.android.call.manager.RtmMessageHandler
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.util.StringUtil
+import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.requests.CriticalAlertRequestBody
 import difft.android.messageserialization.For
 import com.google.gson.Gson
 import com.twilio.audioswitch.AudioDevice
@@ -81,6 +85,7 @@ import kotlinx.serialization.json.Json
 import livekit.org.webrtc.CameraXHelper
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
+import retrofit2.HttpException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLHandshakeException
@@ -100,6 +105,9 @@ class LCallViewModel (
     interface EntryPoint {
         var callToChatController: LCallToChatController
         var messageEncryptor: INewMessageContentEncryptor
+
+        @ChativeHttpClientModule.Chat
+        fun httpClient(): ChativeHttpClient
     }
 
     private val callToChatController: LCallToChatController by lazy {
@@ -111,6 +119,8 @@ class LCallViewModel (
     private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
 
     private val mySelfId: String by lazy { globalServices.myId }
+    val conversationId = callIntent.conversationId
+    fun getCallRole() = callRole
     private var roomId: String? = null
     private var e2eeKey: ByteArray? = null
     private var _callRoomName: String = callIntent.roomName
@@ -1042,4 +1052,51 @@ class LCallViewModel (
         currentCallNetworkPoor = false
     }
 
+    /**
+     * Handles the sending of a critical alert notification to the server.
+     */
+    fun handleCriticalAlert(uid: String) {
+        viewModelScope.launch {
+            val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).httpClient()
+            val auth = SecureSharedPrefsUtil.getBasicAuth()
+            val request = CriticalAlertRequestBody(uid)
+            withContext(Dispatchers.IO) {
+                chatHttpClient.httpService.sendCriticalAlert(auth, request)
+                    .subscribe({
+                        if(it.status == 0) {
+                            showCallBarrageMessage(
+                                room.localParticipant,
+                                getString(R.string.call_barrage_message_critical_alert_success)
+                            )
+                        }else {
+                            L.e { "[Call] handleCriticalAlert failed, status = ${it.status} reason = ${it.reason}" }
+                            showCallBarrageMessage(
+                                room.localParticipant,
+                                getString(R.string.call_barrage_message_critical_alert_failed)
+                            )
+                        }
+                    }, {
+                        it.printStackTrace()
+                        val reason = it.message
+                        val code = (it as? HttpException)?.code()
+                        when (code) {
+                            413 -> {
+                                L.w { "[Call] Critical alert limited - status: $code reason: $reason" }
+                                showCallBarrageMessage(
+                                    room.localParticipant,
+                                    getString(R.string.call_barrage_message_critical_alert_limited)
+                                )
+                            }
+                            else -> {
+                                L.e { "[Call] Critical alert failed - status: $code, reason: $reason" }
+                                showCallBarrageMessage(
+                                    room.localParticipant,
+                                    getString(R.string.call_barrage_message_critical_alert_failed)
+                                )
+                            }
+                        }
+                    })
+            }
+        }
+    }
 }
