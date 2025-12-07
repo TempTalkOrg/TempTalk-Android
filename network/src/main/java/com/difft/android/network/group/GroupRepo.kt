@@ -325,7 +325,7 @@ data class GroupInfoByInviteCodeResp(
     val messageExpiry: Int,
     val name: String?,
     val version: Int
-)
+) : java.io.Serializable
 
 data class JoinGroupByInviteCodeResp(
     val anyoneRemove: Boolean,

@@ -90,6 +90,7 @@
     <string name="chat_message_contact_card">[个人名片]</string>
     <string name="chat_message_chat_history">[聊天记录]</string>
     <string name="chat_tap_to_view">点击查看</string>
+    <string name="chat_tap_to_download">点击下载</string>
     <string name="chat_net_error">请求失败，请重试</string>
     <string name="chat_message_action_resend">重发</string>
     <string name="chat_message_action_delete">删除</string>
@@ -468,6 +469,8 @@
     <string name="notification_no_permission_tip1">请允许%s显示通知，以便您能正常接收到消息和接听电话。</string>
     <string name="notification_no_permission_tip2">请允许%s显示在锁屏页面上，以便您在设备锁定时接听电话。</string>
     <string name="notification_no_permission_tip3">请确保开启通知及全屏通知功能，以便您能正常接收到消息和接听电话。</string>
+    <string name="notification_no_permission_tip4">请开启后台弹窗权限和横幅通知权限，允许%s在锁屏时显示来电界面。</string>
+    <string name="notification_no_permission_tip5">请开启后台弹窗权限和锁屏显示权限，允许%s在锁屏时显示来电界面。</string>
     <string name="notification_disturb_tip">“请勿打扰”已开启，您可能收不到通知。</string>
     <string name="notification_no_google_tip">您的设备上没有谷歌服务，请保持开启后台连接，以便能正常接收到消息和接听电话。</string>
     <string name="notification_ignore">稍后</string>

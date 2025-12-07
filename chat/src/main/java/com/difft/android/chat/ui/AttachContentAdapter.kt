@@ -4,18 +4,13 @@ import android.text.TextUtils
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
-import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.chat.widget.AttachMessageView
-import difft.android.messageserialization.model.AttachmentStatus
 
 
 open class AttachContentAdapter : MessageContentAdapter() {
@@ -26,8 +21,7 @@ open class AttachContentAdapter : MessageContentAdapter() {
     class AttachContentViewHolder(
         val attachContentView: AttachMessageView,
         val textView: TextView,
-        val coverView: View,
-        val failView: ConstraintLayout
+        val coverView: View
     ) : ContentViewHolder()
 
     override val layoutRes: Int = R.layout.chat_item_content_attach
@@ -58,8 +52,6 @@ open class AttachContentAdapter : MessageContentAdapter() {
         } else {
             viewHolder.coverView.visibility = View.GONE
         }
-
-        viewHolder.failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
 
@@ -67,8 +59,7 @@ open class AttachContentAdapter : MessageContentAdapter() {
         return AttachContentViewHolder(
             viewGroup.findViewById(R.id.attach_content_view),
             viewGroup.findViewById(R.id.textView),
-            viewGroup.findViewById(R.id.v_cover),
-            viewGroup.findViewById(R.id.cl_fail)
+            viewGroup.findViewById(R.id.v_cover)
         )
     }
 }

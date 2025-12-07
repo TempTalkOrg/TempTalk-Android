@@ -3,18 +3,18 @@ package org.thoughtcrime.securesms.messages
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ChunkingMethod
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.chunked
 import org.difft.app.database.wcdb
 import difft.android.messageserialization.MessageStore
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.tencent.wcdb.base.WCDBException
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -38,9 +38,6 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
     private val pendingMessageProcessor: PendingMessageProcessor,
     private val messageNotificationUtil: MessageNotificationUtil
 ) {
-    private val job = SupervisorJob()
-    private val scope = CoroutineScope(Dispatchers.Default + job)
-
     @OptIn(ExperimentalCoroutinesApi::class)
     private val _incomingMessagesFlow =
         MutableSharedFlow<Pair<Envelope, Long>>(extraBufferCapacity = 30).apply {
@@ -50,17 +47,16 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
                     L.i { "[Message] Processing batch of ${batch.size} messages, timestamps: ${batch.map { it.first.timestamp }}" }
                     //sendAck for messages
                     batch.forEach { (envelop, requestId) -> sendAck(requestId, envelop.timestamp) }
-                    asyncMessageJobsManager.runAsyncJobs()
-                    pendingMessageProcessor.triggerProcess()
 
                     val executedTime = measureTimeMillis {
                         try {
-                            val results = batch.map { (envelop, _) ->
-                                scope.async {
-                                    envelopToMessageProcessor.process(envelop, "message")
-                                }
-                            }.awaitAll().filterNotNull()
-
+                            val results = coroutineScope {
+                                batch.map { (envelop, _) ->
+                                    async {
+                                        envelopToMessageProcessor.process(envelop, "message")
+                                    }
+                                }.awaitAll().filterNotNull()
+                            }
 
                             if (results.isNotEmpty()) {
                                 messageStore.putWhenNonExist(
@@ -72,7 +68,7 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
                             results.filter { it.shouldShowNotification }
                                 .groupBy({ it.conversation }) { it.message }
                                 .forEach { (conversation, messages) ->
-                                    scope.launch {
+                                    appScope.launch {
                                         messageNotificationUtil.showNotificationSuspend(
                                             context = context,
                                             message = messages.lastOrNull() ?: return@launch,
@@ -98,8 +94,10 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
                         }
                     }
                     L.i { "[Message] handle message batch(${batch.size} messages) executed time: $executedTime ms" }
+                    asyncMessageJobsManager.runAsyncJobs()
+                    pendingMessageProcessor.triggerProcess()
                 }
-                .launchIn(scope)
+                .launchIn(appScope)
         }
 
     suspend fun inComeMessage(envelope: Envelope, requestId: Long) {
@@ -115,9 +113,5 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
         }.onSuccess {
             L.i { "[Message] sendAck success, requestId:$requestId timestamp:$timestamp" }
         }
-    }
-
-    fun stop() {
-        job.cancel()
     }
 }

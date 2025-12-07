@@ -71,19 +71,28 @@ public final class JobSchedulerScheduler implements Scheduler {
 
         @Override
         public boolean onStartJob(JobParameters params) {
-            JobManager jobManager = ApplicationDependencies.getJobManager();
-
             L.i(() -> "Waking due to job: " + params.getJobId());
 
-            jobManager.addOnEmptyQueueListener(new JobManager.EmptyQueueListener() {
-                @Override
-                public void onQueueEmpty() {
-                    jobManager.removeOnEmptyQueueListener(this);
+            // 将所有操作移到后台线程，避免在主线程上阻塞
+            // 这样可以防止 onNetworkChanged 等系统回调在主线程上触发ANR
+            TTExecutors.BOUNDED.execute(() -> {
+                try {
+                    JobManager jobManager = ApplicationDependencies.getJobManager();
+
+                    jobManager.addOnEmptyQueueListener(new JobManager.EmptyQueueListener() {
+                        @Override
+                        public void onQueueEmpty() {
+                            jobManager.removeOnEmptyQueueListener(this);
+                            jobFinished(params, false);
+                        }
+                    });
+
+                    jobManager.wakeUp();
+                } catch (Exception e) {
+                    L.e(() -> TAG + " Error waking job manager: " + e.getMessage());
                     jobFinished(params, false);
                 }
             });
-
-            jobManager.wakeUp();
 
             return true;
         }
@@ -91,6 +100,13 @@ public final class JobSchedulerScheduler implements Scheduler {
         @Override
         public boolean onStopJob(JobParameters params) {
             return false;
+        }
+
+        @Override
+        public void onNetworkChanged(JobParameters params) {
+            // 重写此方法并立即返回，避免默认实现在主线程上执行
+            // 网络变化会由 onStartJob 在后台线程中处理
+            L.d(() -> "Network changed for job: " + params.getJobId());
         }
     }
 }

@@ -32,7 +32,6 @@ import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
-import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import dagger.hilt.android.internal.managers.ViewComponentManager
@@ -204,8 +203,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 } else {
                     binding.vForwardCover.visibility = View.GONE
                 }
-
-                initForwardAttachmentFailView(message, binding.vForwardAttachmentFail)
             }
 
             initReactionView(binding.root, binding.reactionsView, message, onReactionClick, onReactionLongClick)
@@ -450,8 +447,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 } else {
                     binding.vForwardCover.visibility = View.GONE
                 }
-
-                initForwardAttachmentFailView(message, binding.vForwardAttachmentFail)
             }
 
             initReactionView(binding.root, binding.reactionsView, message, onReactionClick, onReactionLongClick)
@@ -568,11 +563,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
 
     }
-
-    fun initForwardAttachmentFailView(message: TextChatMessage, failView: View) {
-        failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
-    }
-
 
     fun initReactionView(
         root: View,

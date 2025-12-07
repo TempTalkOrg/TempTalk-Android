@@ -41,6 +41,7 @@ import com.difft.android.network.group.GroupRepo
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.Dispatchers
@@ -66,7 +67,7 @@ class InviteUtils @Inject constructor() {
     private var mInviteDialog: InviteBottomSheetFragment? = null
 
     fun showInviteDialog(context: Activity) {
-        val fragment = InviteBottomSheetFragment(this)
+        val fragment = InviteBottomSheetFragment()
         mInviteDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "InviteDialog")
     }
@@ -259,7 +260,7 @@ class InviteUtils @Inject constructor() {
         groupAvatar: String? = null,
         inviteCode: String = "",
     ) {
-        val fragment = GroupInviteBottomSheetFragment(this, myName, groupName, groupAvatar, inviteCode)
+        val fragment = GroupInviteBottomSheetFragment.newInstance(myName, groupName, groupAvatar, inviteCode)
         mGroupInviteDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "GroupInviteDialog")
     }
@@ -312,7 +313,7 @@ class InviteUtils @Inject constructor() {
     private var mJoinGroupDialog: JoinGroupBottomSheetFragment? = null
 
     private fun showJoinGroupDialog(activity: Activity, data: GroupInfoByInviteCodeResp, inviteCode: String) {
-        val fragment = JoinGroupBottomSheetFragment(this, data, inviteCode)
+        val fragment = JoinGroupBottomSheetFragment.newInstance(data, inviteCode)
         mJoinGroupDialog = fragment
         fragment.show((activity as FragmentActivity).supportFragmentManager, "JoinGroupDialog")
     }
@@ -372,9 +373,11 @@ class InviteUtils @Inject constructor() {
 /**
  * 邀请码底部弹窗Fragment
  */
-class InviteBottomSheetFragment(
-    private val inviteUtils: InviteUtils
-) : BottomSheetDialogFragment() {
+@AndroidEntryPoint
+class InviteBottomSheetFragment() : BottomSheetDialogFragment() {
+
+    @Inject
+    lateinit var inviteUtils: InviteUtils
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -489,13 +492,34 @@ class InviteBottomSheetFragment(
 /**
  * 群组邀请底部弹窗Fragment
  */
-class GroupInviteBottomSheetFragment(
-    private val inviteUtils: InviteUtils,
-    private val myName: String,
-    private val groupName: String,
-    private val groupAvatar: String?,
-    private val inviteCode: String
-) : BottomSheetDialogFragment() {
+@AndroidEntryPoint
+class GroupInviteBottomSheetFragment() : BottomSheetDialogFragment() {
+
+    @Inject
+    lateinit var inviteUtils: InviteUtils
+
+    private val myName: String by lazy { arguments?.getString(ARG_MY_NAME) ?: "" }
+    private val groupName: String by lazy { arguments?.getString(ARG_GROUP_NAME) ?: "" }
+    private val groupAvatar: String? by lazy { arguments?.getString(ARG_GROUP_AVATAR) }
+    private val inviteCode: String by lazy { arguments?.getString(ARG_INVITE_CODE) ?: "" }
+
+    companion object {
+        private const val ARG_MY_NAME = "arg_my_name"
+        private const val ARG_GROUP_NAME = "arg_group_name"
+        private const val ARG_GROUP_AVATAR = "arg_group_avatar"
+        private const val ARG_INVITE_CODE = "arg_invite_code"
+
+        fun newInstance(myName: String, groupName: String, groupAvatar: String?, inviteCode: String): GroupInviteBottomSheetFragment {
+            return GroupInviteBottomSheetFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_MY_NAME, myName)
+                    putString(ARG_GROUP_NAME, groupName)
+                    putString(ARG_GROUP_AVATAR, groupAvatar)
+                    putString(ARG_INVITE_CODE, inviteCode)
+                }
+            }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -565,11 +589,31 @@ class GroupInviteBottomSheetFragment(
 /**
  * 加入群组底部弹窗Fragment
  */
-class JoinGroupBottomSheetFragment(
-    private val inviteUtils: InviteUtils,
-    private val data: GroupInfoByInviteCodeResp,
-    private val inviteCode: String
-) : BottomSheetDialogFragment() {
+@AndroidEntryPoint
+class JoinGroupBottomSheetFragment() : BottomSheetDialogFragment() {
+
+    @Inject
+    lateinit var inviteUtils: InviteUtils
+
+    private val data: GroupInfoByInviteCodeResp? by lazy {
+        @Suppress("DEPRECATION")
+        arguments?.getSerializable(ARG_DATA) as? GroupInfoByInviteCodeResp
+    }
+    private val inviteCode: String by lazy { arguments?.getString(ARG_INVITE_CODE) ?: "" }
+
+    companion object {
+        private const val ARG_DATA = "arg_data"
+        private const val ARG_INVITE_CODE = "arg_invite_code"
+
+        fun newInstance(data: GroupInfoByInviteCodeResp, inviteCode: String): JoinGroupBottomSheetFragment {
+            return JoinGroupBottomSheetFragment().apply {
+                arguments = Bundle().apply {
+                    putSerializable(ARG_DATA, data)
+                    putString(ARG_INVITE_CODE, inviteCode)
+                }
+            }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -609,9 +653,9 @@ class JoinGroupBottomSheetFragment(
         view.findViewById<AppCompatImageView>(R.id.iv_close).setOnClickListener {
             dismiss()
         }
-        view.findViewById<GroupAvatarView>(R.id.imageview_group).setAvatar(data.avatar?.getAvatarData())
+        view.findViewById<GroupAvatarView>(R.id.imageview_group).setAvatar(data?.avatar?.getAvatarData())
 
-        view.findViewById<AppCompatTextView>(R.id.textview_group_name).text = data.name + "(" + data.membersCount + ")"
+        view.findViewById<AppCompatTextView>(R.id.textview_group_name).text = data?.name + "(" + data?.membersCount + ")"
 
         view.findViewById<ChativeButton>(R.id.btn_join).setOnClickListener {
             dismiss()

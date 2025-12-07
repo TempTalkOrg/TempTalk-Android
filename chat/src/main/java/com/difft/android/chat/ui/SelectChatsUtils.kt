@@ -62,6 +62,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -191,17 +192,14 @@ class SelectChatsUtils @Inject constructor() {
         context: Activity,
         onSelected: (ChatsContact?) -> Unit
     ) {
-        val fragment = ChatSelectBottomSheetFragment(
-            onSelected = { data ->
-                onSelected(data)
-                // 选择会话后不关闭弹窗，只有取消时才关闭
-                if (data == null) {
-                    clearDialog()
-                }
-            },
-            isContactOnly = false,
-            selectChatsUtils = this
-        )
+        val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = false)
+        fragment.onSelected = { data ->
+            onSelected(data)
+            // 选择会话后不关闭弹窗，只有取消时才关闭
+            if (data == null) {
+                clearDialog()
+            }
+        }
 
         mChatSelectDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "ChatSelectDialog")
@@ -211,11 +209,8 @@ class SelectChatsUtils @Inject constructor() {
         context: Activity,
         onSelected: (ChatsContact?) -> Unit
     ) {
-        val fragment = ChatSelectBottomSheetFragment(
-            onSelected = onSelected,
-            isContactOnly = true,
-            selectChatsUtils = this
-        )
+        val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = true)
+        fragment.onSelected = onSelected
 
         mChatSelectDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "ContactSelectDialog")
@@ -835,11 +830,27 @@ class SelectChatsUtils @Inject constructor() {
 /**
  * 聊天选择底部弹窗Fragment
  */
-class ChatSelectBottomSheetFragment(
-    private val onSelected: (ChatsContact?) -> Unit,
-    private val isContactOnly: Boolean = false,
-    private val selectChatsUtils: SelectChatsUtils
-) : BottomSheetDialogFragment() {
+@AndroidEntryPoint
+class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
+
+    @Inject
+    lateinit var selectChatsUtils: SelectChatsUtils
+
+    private val isContactOnly: Boolean by lazy { arguments?.getBoolean(ARG_IS_CONTACT_ONLY) ?: false }
+
+    var onSelected: ((ChatsContact?) -> Unit)? = null
+
+    companion object {
+        private const val ARG_IS_CONTACT_ONLY = "arg_is_contact_only"
+
+        fun newInstance(isContactOnly: Boolean): ChatSelectBottomSheetFragment {
+            return ChatSelectBottomSheetFragment().apply {
+                arguments = Bundle().apply {
+                    putBoolean(ARG_IS_CONTACT_ONLY, isContactOnly)
+                }
+            }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -881,7 +892,7 @@ class ChatSelectBottomSheetFragment(
 
         val tvClose = view.findViewById<AppCompatTextView>(R.id.tv_close)
         tvClose.setOnClickListener {
-            onSelected(null)
+            onSelected?.invoke(null)
             dismiss()
         }
 
@@ -901,7 +912,7 @@ class ChatSelectBottomSheetFragment(
 
         val recentChatsAdapter = object : ChatsContactSelectAdapter(isContactOnly) {
             override fun onItemClicked(data: ChatsContact?, position: Int) {
-                onSelected(data)
+                onSelected?.invoke(data)
                 // 只有联系人选择对话框才在选择后自动关闭
                 if (isContactOnly) {
                     dismiss()

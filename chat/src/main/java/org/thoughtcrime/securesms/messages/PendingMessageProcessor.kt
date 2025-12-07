@@ -2,6 +2,7 @@ package org.thoughtcrime.securesms.messages
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.sampleAfterFirst
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,7 +35,7 @@ class PendingMessageProcessor @Inject constructor(
      */
     @Inject
     fun initWhenInject() {
-        processEvents.debounce(3000).onEach {
+        processEvents.sampleAfterFirst(3000).onEach {
             // 一次性获取所有待处理消息
             val pendingMessages = wcdb.pendingMessageNew.allObjects
 

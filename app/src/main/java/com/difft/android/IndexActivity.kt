@@ -20,6 +20,7 @@ import android.webkit.MimeTypeMap
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.ui.text.toLowerCase
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -76,6 +77,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.util.FullScreenPermissionHelper
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -98,6 +100,7 @@ import org.thoughtcrime.securesms.util.WindowUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
 import util.concurrent.TTExecutors
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.system.exitProcess
@@ -755,15 +758,32 @@ class IndexActivity : BaseActivity() {
         }
     }
 
+    private fun getFullScreenPermissionMessage(): String {
+        return if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
+            when (Build.MANUFACTURER.lowercase(Locale.ROOT)){
+                "huawei" -> {
+                    getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
+                }
+                "xiaomi" -> {
+                    getString(R.string.notification_no_permission_tip5, PackageUtil.getAppName())
+                }
+                else -> getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
+            }
+        } else {
+            getString(R.string.notification_no_permission_tip2, PackageUtil.getAppName())
+        }
+    }
+
     private fun checkNotificationFullScreenPermission() {
         if (checkNotificationFullScreenPermissionIgnore) return
 
         if (!messageNotificationUtil.hasFullScreenNotificationPermission()) {
             if (checkNotificationFullScreenPermissionDialog == null) {
+                val message = getFullScreenPermissionMessage()
                 checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
                     context = this@IndexActivity,
                     title = getString(R.string.tip),
-                    message = getString(R.string.notification_no_permission_tip2, PackageUtil.getAppName()),
+                    message = message,
                     confirmText = getString(R.string.notification_go_to_settings),
                     cancelText = getString(R.string.notification_ignore),
                     onConfirm = {

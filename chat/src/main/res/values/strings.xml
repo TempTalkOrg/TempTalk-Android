@@ -92,6 +92,7 @@
     <string name="chat_message_contact_card_content" translatable="false">[Contact Card]</string>
     <string name="chat_message_chat_history">[Chat History]</string>
     <string name="chat_tap_to_view">Tap to view</string>
+    <string name="chat_tap_to_download">Tap to download</string>
     <string name="chat_net_error">The request failed. Please try again</string>
     <string name="chat_message_action_resend">Resend</string>
     <string name="chat_message_action_delete">Delete</string>
@@ -573,6 +574,8 @@
     <string name="notification_no_permission_tip1">Please allow %s to send you notification to stay informed with the messages and meetings.</string>
     <string name="notification_no_permission_tip2">Please allow %s to be shown on the lock screen so that you can receive calls when you device is locked.</string>
     <string name="notification_no_permission_tip3">Please make sure notifications and full-screen notifications are turned on to receive messages and meeting notifications.</string>
+    <string name="notification_no_permission_tip4">Please enable background pop-up and banner notification permissions so that %s can display incoming call when the device is locked.</string>
+    <string name="notification_no_permission_tip5">Please enable background pop-up and lock screen display permissions so that %s can display incoming call when the device is locked.</string>
     <string name="notification_disturb_tip">"Do not disturb" is turned on. You may not receive notifications.</string>
     <string name="notification_no_google_tip">No google services on your device. Please keep background connection enabled to receive messages and calls.</string>
     <string name="notification_ignore">Not now</string>

@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
@@ -39,15 +40,12 @@ class VoiceMessageView @JvmOverloads constructor(
     private var message: TextChatMessage? = null
     private var attachmentPath: String = ""
 
+    @SuppressLint("SetTextI18n")
     fun setAudioMessage(audioMessage: TextChatMessage) {
         this.message = audioMessage
         val attachment = audioMessage.attachment ?: return
         val fileName: String = attachment.fileName ?: ""
         attachmentPath = FileUtil.getMessageAttachmentFilePath(audioMessage.id) + fileName
-        if (attachment.size > FileUtil.MAX_SUPPORT_FILE_SIZE) {
-            binding.playTime.text = context.getString(R.string.max_support_file_size_50)
-            return
-        }
 
         if (attachment.isAudioFile()) {
             binding.clFileName.visibility = VISIBLE
@@ -57,19 +55,48 @@ class VoiceMessageView @JvmOverloads constructor(
         }
 
         binding.progressBar.visibility = View.GONE
+        binding.tvDownloadHint.visibility = View.GONE
 
         val progress = audioMessage.getAttachmentProgress()
         val isFileValid = FileUtil.isFileValid(attachmentPath) || FileUtil.isFileValid("$attachmentPath.encrypt")
 
+        val isCurrentDeviceSend = audioMessage.isMine && audioMessage.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+        if (!isCurrentDeviceSend) {
+            // Priority 1: Show fail view if download failed
+            val isFailed = if (progress != null) {
+                progress == -1
+            } else {
+                attachment.status == AttachmentStatus.FAILED.code
+            }
+
+            if (isFailed) {
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.download_failed)
+                return
+            }
+
+            // Priority 2: Show download prompt for files > 10M
+            val fileSize = attachment.size
+            val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
+            if (isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null) {
+                // Show download prompt with file size (reuse fail view with different text)
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                val fileSizeText = FileUtil.readableFileSize(fileSize.toLong())
+                binding.tvDownloadHint.text = context.getString(R.string.chat_tap_to_download) + " ($fileSizeText)"
+                return
+            }
+        }
+        // Show content views (they will be properly configured below)
+        binding.playButton.visibility = View.VISIBLE
+        binding.audioWaveProgressBar.visibility = View.VISIBLE
+        binding.playTime.visibility = View.VISIBLE
+
         if (isFileValid && (audioMessage.isMine || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {
             setupAudioView()
         }
-        if (attachment.status != AttachmentStatus.FAILED.code
-            && progress != -1
-            && attachment.status != AttachmentStatus.SUCCESS.code
-            && progress != 100
-            || !isFileValid
-        ) {
+
+        // Priority 3: Show progress or auto download (for files <= 10M)
+        if (!isCurrentDeviceSend && attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
             if (progress == null) {
                 downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
             } else {

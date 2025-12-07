@@ -173,10 +173,13 @@ class ChatMessageListFragment : Fragment() {
                         if (forwards.size == 1) {
                             val forward = forwardContext.forwards?.getOrNull(0) ?: return
                             val attachment = forward.attachments?.getOrNull(0) ?: return
-                            if (attachment.status == AttachmentStatus.FAILED.code || data.getAttachmentProgress() == -1) {
+                            val progress = data.getAttachmentProgress()
+
+                            if (shouldTriggerManualDownload(attachment, progress, attachment.id)) {
                                 downloadAttachment(attachment.id, attachment, data)
                                 return
                             }
+
                             if (attachment.isImage() || attachment.isVideo()) {
                                 openPreview(generateMessageFromForward(forward) as TextChatMessage)
                             }
@@ -198,10 +201,13 @@ class ChatMessageListFragment : Fragment() {
                     setConfidentialRecipient(data)
                 } else if (data.isAttachmentMessage()) {
                     val attachment = data.attachment ?: return
-                    if (attachment.status == AttachmentStatus.FAILED.code || data.getAttachmentProgress() == -1) {
+                    val progress = data.getAttachmentProgress()
+
+                    if (shouldTriggerManualDownload(attachment, progress, data.id)) {
                         downloadAttachment(data.id, attachment, data)
                         return
                     }
+
                     if (attachment.isImage() || attachment.isVideo()) {
                         openPreview(data)
                     } else if (attachment.isAudioMessage() || attachment.isAudioFile()) {
@@ -247,8 +253,7 @@ class ChatMessageListFragment : Fragment() {
                         binding.reactionsShade.visibility = View.VISIBLE
                         binding.recyclerViewMessage.suppressLayout(true)
 
-                        val target: InteractiveConversationElement? =
-                            if (rootView is InteractiveConversationElement) rootView else null
+                        val target: InteractiveConversationElement? = rootView as? InteractiveConversationElement
 
                         if (target != null) {
                             val snapshot = ConversationItemSelection.snapshotView(
@@ -1265,6 +1270,33 @@ class ChatMessageListFragment : Fragment() {
                 requireActivity().finish()
             }
         }
+    }
+
+    /**
+     * Check if attachment needs manual download (failed or large file not downloaded)
+     * @return true if needs to download, false otherwise
+     */
+    private fun shouldTriggerManualDownload(
+        attachment: Attachment,
+        progress: Int?,
+        messageId: String
+    ): Boolean {
+        // Check if download failed
+        val isFailed = if (progress != null) {
+            progress == -1
+        } else {
+            attachment.status == AttachmentStatus.FAILED.code
+        }
+        if (isFailed) return true
+
+        // Check if large file needs manual download (>10M)
+        val fileSize = attachment.size
+        val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
+        val fileName = attachment.fileName ?: ""
+        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+        val isFileValid = FileUtil.isFileValid(attachmentPath)
+
+        return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
     }
 
     private fun downloadAttachment(messageId: String, attachment: Attachment, message: ChatMessage) {

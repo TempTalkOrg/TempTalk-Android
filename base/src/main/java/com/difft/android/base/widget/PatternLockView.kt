@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.difft.android.base.R
+import com.difft.android.base.utils.dp
 import kotlin.math.*
 
 class PatternLockView @JvmOverloads constructor(
@@ -40,8 +41,8 @@ class PatternLockView @JvmOverloads constructor(
 
     // Properties
     private var dotCount = 3
-    private val dotSize = 20f * context.resources.displayMetrics.density // 固定20dp
-    private val pathWidth = 10f * context.resources.displayMetrics.density // 固定14dp
+    private val dotSize = 16.dp // 固定16dp
+    private val pathWidth = 6.dp // 固定6dp
     private var normalStateColor = Color.GRAY
     private var correctStateColor = Color.BLUE
     private var wrongStateColor = Color.RED
@@ -79,7 +80,7 @@ class PatternLockView @JvmOverloads constructor(
     init {
         setupDefaultColors()
         initializeDots()
-        pathPaint.strokeWidth = pathWidth
+        pathPaint.strokeWidth = pathWidth.toFloat()
     }
 
     private fun setupDefaultColors() {
@@ -110,7 +111,7 @@ class PatternLockView @JvmOverloads constructor(
             MeasureSpec.AT_MOST -> widthSize
             else -> {
                 // Default size if no constraints
-                (280 * context.resources.displayMetrics.density).toInt()
+                280.dp
             }
         }
 
@@ -119,7 +120,7 @@ class PatternLockView @JvmOverloads constructor(
             MeasureSpec.AT_MOST -> heightSize
             else -> {
                 // Default size if no constraints
-                (280 * context.resources.displayMetrics.density).toInt()
+                280.dp
             }
         }
 
@@ -136,12 +137,12 @@ class PatternLockView @JvmOverloads constructor(
     private fun calculateDotPositions(width: Int, height: Int) {
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
-        
+
         // 留出点的半径空间，确保边缘的点不被裁减
         val dotRadius = dotSize / 2
         val availableWidth = viewWidth - 2 * dotRadius
         val availableHeight = viewHeight - 2 * dotRadius
-        
+
         // 计算点之间的间距
         val horizontalSpacing = if (dotCount > 1) availableWidth / (dotCount - 1) else 0f
         val verticalSpacing = if (dotCount > 1) availableHeight / (dotCount - 1) else 0f
@@ -195,7 +196,7 @@ class PatternLockView @JvmOverloads constructor(
         dots.forEach { dot ->
             // 所有点的大小和颜色都固定不变
             dotPaint.color = normalStateColor
-            canvas.drawCircle(dot.centerX, dot.centerY, dotSize / 2, dotPaint)
+            canvas.drawCircle(dot.centerX, dot.centerY, dotSize.toFloat() / 2, dotPaint)
         }
     }
 
@@ -264,7 +265,7 @@ class PatternLockView @JvmOverloads constructor(
 
     private fun getDotAt(x: Float, y: Float): Dot? {
         // 增加触摸区域，使用48dp的触摸半径（Android推荐的最小触摸目标大小）
-        val touchRadius = 48f * context.resources.displayMetrics.density / 2
+        val touchRadius = 48.dp / 2
         return dots.find { dot ->
             val distance = sqrt((x - dot.centerX).pow(2) + (y - dot.centerY).pow(2))
             distance <= touchRadius

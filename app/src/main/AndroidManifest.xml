@@ -218,6 +218,8 @@
             android:exported="false"
             android:launchMode="singleInstance"
             android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:supportsPictureInPicture="true"
             android:taskAffinity="com.difft.android.call.task" />

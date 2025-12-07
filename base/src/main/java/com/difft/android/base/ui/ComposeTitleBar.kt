@@ -33,7 +33,7 @@ fun TitleBar(titleText: String, titleEndText: String = "", modifier: Modifier = 
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(52.dp)
             .background(colorResource(id = R.color.bg1))
     ) {
 

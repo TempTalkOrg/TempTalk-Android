@@ -269,7 +269,7 @@ class LCallActivity : AppCompatActivity() {
 
                 launch {
                     viewModel.callStatus.collect {
-                        L.i { "[Call] LCallActivity Show CallingEnd Reminder" }
+                        L.i { "[Call] LCallActivity callStatus:$it" }
                         if (it == CallStatus.CONNECTED) {
                             currentRoomId?.let {
                                 callToChatController.cancelNotificationById(currentRoomId.hashCode())
