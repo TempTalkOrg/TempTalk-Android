@@ -7,3 +7,8 @@ data class ServerNode(
     val ping: Int,
     val recommended: Boolean
 )
+
+enum class CONNECTION_TYPE {
+    WEB_SOCKET,
+    HTTP3_QUIC,
+}

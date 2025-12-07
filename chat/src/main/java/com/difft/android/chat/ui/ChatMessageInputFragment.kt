@@ -26,7 +26,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.coroutines.launch
 import autodispose2.androidx.lifecycle.autoDispose
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
@@ -64,6 +63,7 @@ import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.source
 import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.ChativeHttpClient
@@ -135,6 +135,10 @@ import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.util.visible
 import util.FileUtils
 import util.ScreenLockUtil
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -192,9 +196,20 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }
 
     companion object {
-        const val MAX_BYTES_LIMIT = 4096
-        const val MAX_BYTES_LIMIT_FOR_CUT_STRING = 2048
+        const val OVERSIZED_TEXT_THRESHOLD = 4096  // 4KB - when to convert text to file
+        const val OVERSIZED_TEXT_BODY_LENGTH = 2048  // 2KB - truncated text in message body
+        const val MAX_TEXT_FILE_SIZE = 200 * 1024 * 1024  // 200MB - maximum text file size
     }
+
+    /**
+     * Attachment information for sending messages with attachments
+     */
+    private data class AttachmentInfo(
+        val filePath: String,
+        val fileName: String,
+        val mimeType: String,
+        val isAudioMessage: Boolean = false
+    )
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -321,9 +336,18 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             .subscribe({
                 val message = it as? TextChatMessage ?: return@subscribe
                 val text = createQuoteContent(message)
-                quote = Quote(it.timeStamp, it.authorId, text, null, it.nickname?.toString())
+
+                quote = Quote(it.timeStamp, it.authorId, text, null)
                 binding.quoteZone.visibility = View.VISIBLE
-                binding.author.text = it.nickname
+
+                // 显示时：如果是引用自己的消息，显示 "你"；否则从缓存获取作者名称
+                binding.author.text = if (it.authorId == globalServices.myId) {
+                    getString(R.string.you)
+                } else {
+                    chatViewModel.contactorCache.getContactor(it.authorId)
+                        ?.getDisplayNameWithoutRemarkForUI()
+                        ?: it.authorId.formatBase58Id()
+                }
                 binding.quoteText.text = text
                 binding.edittextInput.requestFocus()
                 ServiceUtil.getInputMethodManager(activity)
@@ -424,19 +448,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 sendEmojiReaction(it)
                 if (!it.remove && it.actionFrom == EmojiReactionFrom.EMOJI_DIALOG) {
                     globalConfigsManager.updateMostUseEmoji(it.emoji)
-                }
-            }, {})
-
-        chatViewModel.messageReEdit
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ message ->
-                message.message?.let {
-                    binding.edittextInput.setText(it)
-                    binding.edittextInput.setSelection(it.length)
-                    binding.edittextInput.requestFocus()
-                    ServiceUtil.getInputMethodManager(activity)
-                        .showSoftInput(binding.edittextInput, InputMethodManager.SHOW_IMPLICIT)
                 }
             }, {})
 
@@ -718,14 +729,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     }
                     prevInputTextLength = currentTextLength
                 }
-
-                val utf8Bytes = text.toString().toByteArray(Charsets.UTF_8)
-                if (utf8Bytes.size > MAX_BYTES_LIMIT) {
-                    val truncatedString = text.toString().utf8Substring(MAX_BYTES_LIMIT_FOR_CUT_STRING)
-                    ToastUtil.show(requireContext().getString(R.string.chat_exceed_bytes_limit))
-                    binding.edittextInput.setText(truncatedString)
-                    binding.edittextInput.setSelection(binding.edittextInput.text?.length ?: 0)
-                }
             } else {
                 if (isGroup) { //处理@相关的逻辑
                     mentionsSearchKeyStartPos = -1
@@ -772,12 +775,30 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         }
 
         binding.buttonContact.setOnClickListener {
-            selectChatsUtils.showContactSelectDialog(requireActivity()) {
-                it?.let { contact ->
+            selectChatsUtils.showContactSelectDialog(requireActivity()) { contact ->
+                // 用户取消选择，直接返回
+                if (contact == null) return@showContactSelectDialog
+
+                viewLifecycleOwner.lifecycleScope.launch {
+                    // 从数据库重新查询联系人信息，避免泄漏备注名
+                    val displayName = withContext(Dispatchers.IO) {
+                        try {
+                            val response = ContactorUtil.getContactWithID(requireContext(), contact.id).blockingGet()
+                            if (response.isPresent) {
+                                response.get().getDisplayNameWithoutRemarkForUI()
+                            } else {
+                                L.w { "Contact not found in database, using fallback: ${contact.id}" }
+                                contact.id.formatBase58Id()
+                            }
+                        } catch (e: Exception) {
+                            L.e { "Failed to query contact, using fallback: ${e.message}" }
+                            contact.id.formatBase58Id()
+                        }
+                    }
                     val phones = mutableListOf<SharedContactPhone>().apply {
                         this.add(SharedContactPhone(contact.id, 3, null))
                     }
-                    sharedContacts.add(SharedContact(SharedContactName(null, null, null, null, null, contact.name), phones, null, null, null, null))
+                    sharedContacts.add(SharedContact(SharedContactName(null, null, null, null, null, displayName), phones, null, null, null, null))
                     sendTextPush(null)
                 }
             }
@@ -793,9 +814,62 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
             val message: String = binding.edittextInput.text.toString().trim()
             if (!TextUtils.isEmpty(message)) {
-                sendTextPush(message)
-                binding.edittextInput.setText("")
-                binding.quoteZone.visibility = View.GONE
+                // Check if text exceeds maximum file size (200MB) before processing
+                val messageBytes = message.toByteArray(Charsets.UTF_8)
+                if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
+                    ToastUtil.show(getString(R.string.max_support_file_size_limit))
+                    L.w { "Text message exceeds MAX_TEXT_FILE_SIZE (${messageBytes.size} bytes), send blocked." }
+                    return@setOnClickListener
+                }
+
+                // Check if text is oversized (>= 4KB) and needs to be converted to file attachment
+                if (messageBytes.size >= OVERSIZED_TEXT_THRESHOLD) {
+                    // Generate file name and create text file in background thread
+                    val timeStamp = System.currentTimeMillis()
+                    val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+                    val fileName = generateOversizedTextFileName()
+                    val truncatedText = message.utf8Substring(OVERSIZED_TEXT_BODY_LENGTH)
+
+                    L.i { "Text message oversized (${messageBytes.size} bytes), converting to file attachment. Body truncated to $OVERSIZED_TEXT_BODY_LENGTH bytes." }
+
+                    // Create file and send in background thread using coroutines
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val filePath = withContext(Dispatchers.IO) {
+                            createTextFile(messageId, fileName, message)
+                        }
+
+                        // Check if fragment is still in valid state before UI updates
+                        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                            return@launch
+                        }
+
+                        if (filePath != null) {
+                            sendTextPush(
+                                content = truncatedText,
+                                timeStamp = timeStamp,
+                                messageId = messageId,
+                                attachmentInfo = AttachmentInfo(
+                                    filePath = filePath,
+                                    fileName = fileName,
+                                    mimeType = "text/plain",
+                                    isAudioMessage = false
+                                )
+                            )
+                            // Clear UI only after successful send
+                            binding.edittextInput.setText("")
+                            binding.quoteZone.visibility = View.GONE
+                        } else {
+                            // Keep user input when file creation fails
+                            L.e { "Failed to create text file: file creation exception" }
+                            ToastUtil.show(getString(R.string.chat_status_fail))
+                        }
+                    }
+                } else {
+                    // Send as normal text message
+                    sendTextPush(message)
+                    binding.edittextInput.setText("")
+                    binding.quoteZone.visibility = View.GONE
+                }
             }
         }
 
@@ -1025,8 +1099,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 if (quote != null) {
                     binding.quoteZone.visibility = View.VISIBLE
 
-                    // Example: show who’s being quoted (author ID or name)
-                    binding.author.text = quote.authorName
+                    // 显示引用的作者：如果是自己显示 "你"，否则从缓存获取作者名称
+                    binding.author.text = if (quote.author == globalServices.myId) {
+                        getString(R.string.you)
+                    } else {
+                        chatViewModel.contactorCache.getContactor(quote.author)
+                            ?.getDisplayNameWithoutRemarkForUI()
+                            ?: quote.author.formatBase58Id()
+                    }
 
                     // Show the quoted text
                     binding.quoteText.text = quote.text
@@ -1356,9 +1436,48 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         )
     }
 
-    private fun sendTextPush(content: String?, isScreenShot: Boolean = false, timeStamp: Long = System.currentTimeMillis()) {
+    /**
+     * Generate a file name for oversized text attachment
+     * Format: File-YYYY-MM-dd-HHmmss.txt
+     */
+    private fun generateOversizedTextFileName(): String {
+        val dateFormatter = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US)
+        val dateString = dateFormatter.format(Date())
+        return "File-$dateString.txt"
+    }
+
+    /**
+     * Create a text file from the given content and return the file path
+     */
+    private fun createTextFile(messageId: String, fileName: String, content: String): String? {
+        return try {
+            val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+            val file = File(filePath)
+            file.parentFile?.mkdirs()
+            file.writeText(content, Charsets.UTF_8)
+            filePath
+        } catch (e: Exception) {
+            L.e { "Failed to create text file: ${e.stackTraceToString()}" }
+            null
+        }
+    }
+
+    /**
+     * Unified method to send text messages with optional attachment
+     * @param content Text content (can be null for attachment-only messages)
+     * @param isScreenShot Whether this is a screenshot message
+     * @param timeStamp Message timestamp
+     * @param messageId Message ID (auto-generated if not provided)
+     * @param attachmentInfo Attachment information (null for text-only messages)
+     */
+    private fun sendTextPush(
+        content: String? = null,
+        isScreenShot: Boolean = false,
+        timeStamp: Long = System.currentTimeMillis(),
+        messageId: String = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}",
+        attachmentInfo: AttachmentInfo? = null
+    ) {
         val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
-        val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
         var screenShot: ScreenShot? = null
         if (isScreenShot) {
@@ -1376,39 +1495,69 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             atPersonsString = if (atPersons.isNotEmpty()) atPersons.substring(0, atPersons.length - 1) else null
         }
 
-        val textMessage = TextMessage(
-            messageId,
-            For.Account(globalServices.myId),
-            forWhat,
-            timeStamp,
-            timeStamp,
-            System.currentTimeMillis(),
-            SendType.Sending.rawValue,
-            disappearingTime,
-            0,
-            0,
-            conversationSet?.confidentialMode ?: 0,
-            content,
-            null,
-            quote,
-            forwardContext,
-            recall,
-            null,
-            mentions.toMutableList(),
-            atPersonsString,
-            reactions.toMutableList(),
-            screenShot,
-            sharedContacts.toMutableList()
-        )
-        ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+        // Use coroutines to handle both attachment and text-only messages uniformly
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Create attachment if attachmentInfo is provided, otherwise null
+            val attachment = attachmentInfo?.let { info ->
+                withContext(Dispatchers.IO) {
+                    val mediaWidthAndHeight = MediaUtil.getMediaWidthAndHeight(info.filePath, info.mimeType)
+                    val fileSize = FileUtils.getLength(info.filePath)
 
-        if (reactions.isEmpty() && recall == null) {
-            chatViewModel.addOneMessage(textMessage)
+                    Attachment(
+                        messageId,
+                        0,
+                        info.mimeType,
+                        "".toByteArray(),
+                        fileSize.toInt(),
+                        "".toByteArray(),
+                        "".toByteArray(),
+                        info.fileName,
+                        if (info.isAudioMessage) 1 else 0,
+                        mediaWidthAndHeight.first,
+                        mediaWidthAndHeight.second,
+                        info.filePath,
+                        AttachmentStatus.LOADING.code
+                    )
+                }
+            }
+
+            // Build and send TextMessage
+            val textMessage = TextMessage(
+                messageId,
+                For.Account(globalServices.myId),
+                forWhat,
+                timeStamp,
+                timeStamp,
+                System.currentTimeMillis(),
+                SendType.Sending.rawValue,
+                disappearingTime,
+                0,
+                0,
+                conversationSet?.confidentialMode ?: 0,
+                content ?: "",
+                if (attachment != null) mutableListOf(attachment) else null,
+                quote,
+                forwardContext,
+                recall,
+                null,
+                mentions.toMutableList(),
+                atPersonsString,
+                reactions.toMutableList(),
+                screenShot,
+                sharedContacts.toMutableList(),
+                playStatus = if (attachmentInfo?.isAudioMessage == true) AudioMessageManager.PLAY_STATUS_NOT_PLAY else 0
+            )
+
+            ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+
+            if (reactions.isEmpty() && recall == null) {
+                chatViewModel.addOneMessage(textMessage)
+            }
+
+            checkAndSendAddFriendRequest()
+
+            resetData()
         }
-
-        checkAndSendAddFriendRequest()
-
-        resetData()
     }
 
     /**
@@ -1490,69 +1639,16 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             .subscribe({
 //                MyBlobProvider.getInstance().delete(attachmentUri)
                 FileUtil.deleteTempFile(FileUtils.getFileName(attachmentUri.path))
-                sendAttachmentPush(timeStamp, messageId, filePath, fileName, mimeType, isAudioMessage)
-            }, { it.printStackTrace() })
-    }
-
-    private fun sendAttachmentPush(
-        timeStamp: Long,
-        messageId: String,
-        filePath: String,
-        fileName: String,
-        mimeType: String,
-        isAudioMessage: Boolean = false
-    ) {
-        val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
-
-        Single.fromCallable {
-            val mediaWidthAndHeight = MediaUtil.getMediaWidthAndHeight(filePath, mimeType)
-            val fileSize = FileUtils.getLength(filePath)
-
-            val attachment = Attachment(
-                messageId,
-                0,
-                mimeType,
-                "".toByteArray(),
-                fileSize.toInt(),
-                "".toByteArray(),
-                "".toByteArray(),
-                fileName,
-                if (isAudioMessage) 1 else 0,
-                mediaWidthAndHeight.first,
-                mediaWidthAndHeight.second,
-                filePath,
-                AttachmentStatus.LOADING.code
-            )
-
-            attachment
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ attachment ->
-                val attachmentMessage = TextMessage(
-                    messageId,
-                    For.Account(globalServices.myId),
-                    forWhat,
-                    timeStamp,
-                    timeStamp,
-                    System.currentTimeMillis(),
-                    SendType.Sending.rawValue,
-                    disappearingTime,
-                    0,
-                    0,
-                    conversationSet?.confidentialMode ?: 0,
-                    "",
-                    mutableListOf(attachment),
-                    quote = quote,
-                    playStatus = AudioMessageManager.PLAY_STATUS_NOT_PLAY
+                sendTextPush(
+                    timeStamp = timeStamp,
+                    messageId = messageId,
+                    attachmentInfo = AttachmentInfo(
+                        filePath = filePath,
+                        fileName = fileName,
+                        mimeType = mimeType,
+                        isAudioMessage = isAudioMessage
+                    )
                 )
-                ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, attachmentMessage))
-
-                chatViewModel.addOneMessage(attachmentMessage)
-
-                checkAndSendAddFriendRequest()
-
-                resetData()
             }, { it.printStackTrace() })
     }
 

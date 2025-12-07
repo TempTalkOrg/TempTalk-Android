@@ -19,7 +19,8 @@
     <string name="call_instant_call_title_default">instant call</string>
     <string name="call_push_stream_limit_tip">当前服务器已达到推流上限，请稍候再试。</string>
     <string name="call_connect_timeout_tip">连接超时，请稍后重试。</string>
-    <string name="call_connect_exception_error">网络连接异常</string>
+    <string name="call_connect_exception_error">无法连接服务器，请稍后再试。</string>
+    <string name="call_no_internet_connection_tip">当前无网络连接，请检查后重试。</string>
     <string name="call_other_exception_error">异常错误</string>
     <string name="call_all_mute_timeout_reminder">会议已长时间无人开麦，是否退出会议？</string>
     <string name="call_single_person_timeout_reminder">当前会议无其他参与者，是否退出会议？</string>
@@ -104,5 +105,13 @@
     <string name="call_microphone_permission_setting_failed">无法跳转，请在系统设置中手动开启麦克风权限。</string>
     <string name="call_camera_permission_setting_failed">无法跳转，请在系统设置中手动开启相机权限。</string>
     <string name="call_permission_button_setting_cancel_tip">缺少必要权限</string>
-
+    <string name="fullscreen_notification_settings_huawei_tip">请在应用设置-其他权限-允许“后台弹窗”权限，以便在锁屏时显示来电界面。</string>
+    <string name="fullscreen_notification_settings_xiaomi_tip">请在应用设置-其他权限-允许“后台弹出界面”权限，以便在锁屏时显示来电界面。</string>
+    <string name="fullscreen_notification_settings_honor_tip">请在应用设置-通知管理-允许“横幅通知”权限，以便在锁屏时显示来电界面。</string>
+    <string name="fullscreen_notification_settings_mainland_default_tip">请确保在应用设置中开启“横幅通知”，以便在锁屏时显示来电界面。</string>
+    <string name="fullscreen_notification_settings_oversea_tip">请允许“全屏通知”权限，以便在锁屏时显示来电界面。</string>
+    <string name="fullscreen_notification_no_permission_oversea_tip">请为%s开启“全屏通知”权限，以确保您在设备锁屏时也能正常接听来电。</string>
+    <string name="fullscreen_notification_no_permission_huawei_tip">请为%s开启“后台弹窗”权限，以确保您在设备锁屏时也能正常接听来电。</string>
+    <string name="fullscreen_notification_no_permission_xiaomi_tip">请为%s开启“后台弹出界面”权限，以确保您在设备锁屏时也能正常接听来电。</string>
+    <string name="fullscreen_notification_no_permission_china_default_tip">请为%s启用“横幅通知”，以确保您在设备锁屏时也能正常接听来电。</string>
 </resources>

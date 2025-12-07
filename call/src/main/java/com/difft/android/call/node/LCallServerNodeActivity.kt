@@ -25,10 +25,15 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +49,7 @@ import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.user.defaultBarrageTexts
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallEngine
+import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.ServerNode
 import com.difft.android.call.viewModelByFactory
 import com.difft.android.network.config.GlobalConfigsManager
@@ -87,6 +93,7 @@ class LCallServerNodeActivity: AppCompatActivity() {
         val servers by viewModel.serverNodes.collectAsState()
         val serverNodeConnected by viewModel.serverNodeConnected.collectAsState()
         val serverNodeSelected by viewModel.serverNodeSelected.collectAsState()
+        val connectionType by viewModel.connectionType.collectAsState()
 
         Column(
             modifier = Modifier
@@ -97,10 +104,10 @@ class LCallServerNodeActivity: AppCompatActivity() {
         ) {
             if(serverNodeConnected != null) {
                 // 顶部连接状态
-                ConnectionStatusCard(serverNodeConnected, true)
+                ConnectionStatusCard(serverNodeConnected, connectionType, true)
             }else {
                 val server = serverNodeSelected ?: servers.firstOrNull()
-                ConnectionStatusCard(server, false)
+                ConnectionStatusCard(server, connectionType, false)
             }
             // 线路选择卡片
             ServerSelectionCard(servers.toList(), onServerSelected = { server ->
@@ -112,7 +119,10 @@ class LCallServerNodeActivity: AppCompatActivity() {
 
     // 顶部状态
     @Composable
-    fun ConnectionStatusCard(server: ServerNode?, connected: Boolean) {
+    fun ConnectionStatusCard(server: ServerNode?, connectionType: CONNECTION_TYPE, connected: Boolean) {
+
+        var isHttp3 by remember { mutableStateOf(connectionType == CONNECTION_TYPE.HTTP3_QUIC) }
+
         Card(
             modifier = Modifier.Companion.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -147,6 +157,32 @@ class LCallServerNodeActivity: AppCompatActivity() {
                             color = Color.Companion.Gray
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Text(
+                        text = if (connectionType == CONNECTION_TYPE.HTTP3_QUIC) "HTTP/3" else "WebSocket",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Switch(
+                        checked = isHttp3,
+                        onCheckedChange = { checked ->
+                            isHttp3 = checked
+                            val protocol = if (checked) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET
+                            LCallEngine.setSelectedConnectMode(protocol)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF2196F3),
+                            uncheckedThumbColor = Color.LightGray
+                        )
+                    )
                 }
             }
         }

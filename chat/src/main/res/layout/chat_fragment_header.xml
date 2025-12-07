@@ -11,6 +11,8 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:background="@null"
+        android:clickable="true"
+        android:focusable="true"
         android:padding="10dp"
         android:src="@drawable/chative_ic_back"
         app:layout_constraintLeft_toLeftOf="parent"

@@ -1,7 +1,6 @@
 package com.difft.android.chat.common
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
 import android.text.SpannableString
 import android.text.Spanned
@@ -9,8 +8,6 @@ import android.text.TextPaint
 import android.text.TextUtils
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
-import android.text.style.URLSpan
-import android.text.util.Linkify
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -22,12 +19,11 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.DeeplinkUtils
 import com.difft.android.base.utils.LinkDataEntity
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.ui.ChatMessageContainerView
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ComposeDialog
 import java.util.Date
 import java.util.regex.Pattern
 
@@ -40,8 +36,8 @@ object LinkTextUtils {
         // 定义需要匹配的前缀数组
         val prefixes = (listOf("http", "https") + AppScheme.allSchemes).map { "$it://" }
 
-        // 记录手动识别的URL位置，避免与Linkify冲突
-        val manualUrlRanges = mutableListOf<Pair<Int, Int>>()
+//        // 记录手动识别的URL位置，避免与Linkify冲突
+//        val manualUrlRanges = mutableListOf<Pair<Int, Int>>()
 
         // 处理URL链接
         prefixes.forEach { prefix ->
@@ -69,8 +65,8 @@ object LinkTextUtils {
                         }
                         spannableString.setSpan(clickableSpan, startIndex, endIndex, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
 
-                        // 记录手动识别的URL范围
-                        manualUrlRanges.add(Pair(startIndex, endIndex))
+//                        // 记录手动识别的URL范围
+//                        manualUrlRanges.add(Pair(startIndex, endIndex))
                     }
                 }
 
@@ -125,38 +121,38 @@ object LinkTextUtils {
             }
         }
 
-        // 使用Linkify识别其他URL（如www.baidu.com）
-        Linkify.addLinks(spannableString, Linkify.WEB_URLS)
-
-        // 处理Linkify添加的URLSpan
-        val urlSpans = spannableString.getSpans(0, text.length, URLSpan::class.java)
-        urlSpans.forEach { urlSpan ->
-            val start = spannableString.getSpanStart(urlSpan)
-            val end = spannableString.getSpanEnd(urlSpan)
-
-            // 检查是否与手动识别的URL重叠
-            val isOverlapping = manualUrlRanges.any { (manualStart, manualEnd) ->
-                start < manualEnd && end > manualStart
-            }
-
-            // 如果不重叠，才处理这个URLSpan
-            if (!isOverlapping) {
-                spannableString.removeSpan(urlSpan)
-                spannableString.setSpan(object : URLSpan(urlSpan.url) {
-                    override fun onClick(widget: View) {
-                        handleUrlClick(context, url)
-                    }
-
-                    override fun updateDrawState(ds: TextPaint) {
-                        ds.color = ContextCompat.getColor(context, R.color.t_info)
-                        ds.isUnderlineText = false
-                    }
-                }, start, end, 0)
-            } else {
-                // 如果重叠，直接移除Linkify添加的URLSpan
-                spannableString.removeSpan(urlSpan)
-            }
-        }
+//        // 使用Linkify识别其他URL（如www.baidu.com）
+//        Linkify.addLinks(spannableString, Linkify.WEB_URLS)
+//
+//        // 处理Linkify添加的URLSpan
+//        val urlSpans = spannableString.getSpans(0, text.length, URLSpan::class.java)
+//        urlSpans.forEach { urlSpan ->
+//            val start = spannableString.getSpanStart(urlSpan)
+//            val end = spannableString.getSpanEnd(urlSpan)
+//
+//            // 检查是否与手动识别的URL重叠
+//            val isOverlapping = manualUrlRanges.any { (manualStart, manualEnd) ->
+//                start < manualEnd && end > manualStart
+//            }
+//
+//            // 如果不重叠，才处理这个URLSpan
+//            if (!isOverlapping) {
+//                spannableString.removeSpan(urlSpan)
+//                spannableString.setSpan(object : URLSpan(urlSpan.url) {
+//                    override fun onClick(widget: View) {
+//                        handleUrlClick(context, url)
+//                    }
+//
+//                    override fun updateDrawState(ds: TextPaint) {
+//                        ds.color = ContextCompat.getColor(context, R.color.t_info)
+//                        ds.isUnderlineText = false
+//                    }
+//                }, start, end, 0)
+//            } else {
+//                // 如果重叠，直接移除Linkify添加的URLSpan
+//                spannableString.removeSpan(urlSpan)
+//            }
+//        }
 
         textView?.text = spannableString
         textView?.movementMethod = LinkMovementMethod.getInstance()
@@ -209,6 +205,11 @@ object LinkTextUtils {
         // 如果没有找到结束位置，使用文本长度
         if (endIndex == startIndex) {
             endIndex = text.length
+        }
+
+        // 去除末尾的常见标点符号（这些通常是句子的标点，而不是URL的一部分）
+        while (endIndex > startIndex && text[endIndex - 1] in ".,;:!?)]}") {
+            endIndex--
         }
 
         return endIndex
@@ -269,7 +270,7 @@ object LinkTextUtils {
             }
 
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }

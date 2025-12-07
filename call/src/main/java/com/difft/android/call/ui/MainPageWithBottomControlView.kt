@@ -49,7 +49,6 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
-import com.difft.android.call.data.CallStatus
 import com.difft.android.call.openAppSettings
 import com.difft.android.call.rememberPermissionChecker
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -82,8 +81,7 @@ fun MainPageWithBottomControlView(
         viewModel = viewModel,
         permission = Manifest.permission.RECORD_AUDIO,
         onGranted = {
-            if (callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED)
-                viewModel.setMicEnabled(!viewModel.micEnabled.value)
+            viewModel.setMicEnabled(!viewModel.micEnabled.value)
         },
         onDenied =  {
             ComposeDialogManager.showMessageDialog(
@@ -105,8 +103,7 @@ fun MainPageWithBottomControlView(
         viewModel = viewModel,
         permission = Manifest.permission.CAMERA,
         onGranted = {
-            if (callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED)
-                viewModel.setCameraEnabled(!viewModel.cameraEnabled.value)
+            viewModel.setCameraEnabled(!viewModel.cameraEnabled.value)
         },
         onDenied = {
             ComposeDialogManager.showMessageDialog(
@@ -182,9 +179,7 @@ fun MainPageWithBottomControlView(
                                                 onClick = {
                                                     L.i { "[call] LCallActivity onClick Mic" }
                                                     callStatus.let { status ->
-                                                        if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
-                                                            requestMicPermission()
-                                                        }
+                                                        if (viewModel.isControlButtonClickEnabled()) requestMicPermission()
                                                     }
                                                 }
                                             )
@@ -207,9 +202,7 @@ fun MainPageWithBottomControlView(
                                         {
                                             L.i { "[call] LCallActivity onClick Camera" }
                                             callStatus.let { status ->
-                                                if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
-                                                    requestCameraPermission()
-                                                }
+                                                if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
                                             }
                                         }
                                     )

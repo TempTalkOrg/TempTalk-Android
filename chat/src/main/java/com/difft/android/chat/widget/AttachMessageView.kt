@@ -12,8 +12,8 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canAutoSaveAttachment
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
-import difft.android.messageserialization.model.AttachmentStatus
 import com.hi.dhl.binding.viewbind
+import difft.android.messageserialization.model.AttachmentStatus
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import org.thoughtcrime.securesms.util.viewFile
@@ -88,9 +88,11 @@ class AttachMessageView @JvmOverloads constructor(
         }
 
         // Priority 3: Show progress or auto download (for files <= 10M)
-        if (!isCurrentDeviceSend && attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
+        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
             if (progress == null) {
-                downloadAttachment(message, attachmentPath)
+                if (!isCurrentDeviceSend) {
+                    downloadAttachment(message, attachmentPath)
+                }
             } else {
                 binding.progress.visibility = View.VISIBLE
                 binding.progress.setProgress(progress)

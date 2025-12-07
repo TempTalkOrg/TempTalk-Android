@@ -46,9 +46,11 @@ import difft.android.messageserialization.For
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.ui.CallRatingFeedbackView
 import com.difft.android.call.util.CallComposeUiUtil
+import com.difft.android.network.config.FeatureGrayManager
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -897,5 +899,15 @@ object LCallManager {
 
     fun getCallFeedbackInfo(): FeedbackCallInfo? {
         return callFeedbackInfo
+    }
+
+    suspend fun checkQuicFeatureGrayStatus() {
+        try {
+            val type = if (FeatureGrayManager.isEnabled(FeatureGrayManager.FEATURE_GRAY_CALL_QUICK)) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET
+            L.i { "[call] LCallManager checkQuicFeatureGrayStatus: $type" }
+            LCallEngine.setSelectedConnectMode(type)
+        } catch (e: Exception) {
+            L.e { "[Call] LCallManager checkQuicFeatureGrayStatus error: ${e.message}" }
+        }
     }
 }

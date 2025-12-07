@@ -11,8 +11,6 @@ abstract class ChatMessage : Serializable {
     var id: String = ""
     lateinit var authorId: String
     var isMine: Boolean = false
-    var contactor: ContactorModel? = null
-    var nickname: CharSequence? = null
 
     /**
      * {@link com.difft.android.messageserialization.db.store.model.MessageModel.SendType}
@@ -38,8 +36,6 @@ abstract class ChatMessage : Serializable {
         if (id != other.id) return false
         if (authorId != other.authorId) return false
         if (isMine != other.isMine) return false
-        if (contactor != other.contactor) return false
-        if (nickname != other.nickname) return false
         if (sendStatus != other.sendStatus) return false
         if (timeStamp != other.timeStamp) return false
         if (systemShowTimestamp != other.systemShowTimestamp) return false
@@ -59,8 +55,6 @@ abstract class ChatMessage : Serializable {
         var result = id.hashCode()
         result = 31 * result + authorId.hashCode()
         result = 31 * result + isMine.hashCode()
-        result = 31 * result + (contactor?.hashCode() ?: 0)
-        result = 31 * result + (nickname?.hashCode() ?: 0)
         result = 31 * result + (sendStatus ?: 0)
         result = 31 * result + timeStamp.hashCode()
         result = 31 * result + systemShowTimestamp.hashCode()
@@ -77,7 +71,7 @@ abstract class ChatMessage : Serializable {
     }
 
     override fun toString(): String {
-        return "ChatMessage(id='$id', authorId='$authorId', isMine=$isMine, contactor=$contactor, nickname=$nickname, sendStatus=$sendStatus, timeStamp=$timeStamp, systemShowTimestamp=$systemShowTimestamp, readMaxSId=$readMaxSId, notifySequenceId=$notifySequenceId, selectedStatus=$selectedStatus, editMode=$editMode, mode=$mode, showName=$showName, showTime=$showTime, showDayTime=$showDayTime, showNewMsgDivider=$showNewMsgDivider)"
+        return "ChatMessage(id='$id', authorId='$authorId', isMine=$isMine, sendStatus=$sendStatus, timeStamp=$timeStamp, systemShowTimestamp=$systemShowTimestamp, readMaxSId=$readMaxSId, notifySequenceId=$notifySequenceId, selectedStatus=$selectedStatus, editMode=$editMode, mode=$mode, showName=$showName, showTime=$showTime, showDayTime=$showDayTime, showNewMsgDivider=$showNewMsgDivider)"
     }
 
 

@@ -66,7 +66,6 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.data.BottomCallEndAction
 import com.difft.android.call.data.CallExitParams
 import com.difft.android.call.data.CallStatus
-import com.difft.android.call.exception.DisconnectException
 import com.difft.android.call.exception.NetworkConnectionPoorException
 import com.difft.android.call.exception.StartCallException
 import com.difft.android.call.service.ForegroundService
@@ -93,7 +92,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
 import java.net.SocketTimeoutException
-import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -242,14 +240,6 @@ class LCallActivity : AppCompatActivity() {
                                     showStyledPopTip(getString(R.string.call_connect_timeout_tip), onDismiss = { viewModel.dismissError() })
                                 }
 
-                                is DisconnectException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error DisconnectException: ${it.message}" }
-                                    lifecycleScope.launch {
-                                        delay(2000L)
-                                        endCallAndClearResources()
-                                    }
-                                }
-
                                 is NetworkConnectionPoorException -> {
                                     L.e { "[call] LCallActivity, viewModel.error ConnectionPoorException: ${it.message}" }
                                     it.message?.let { message ->
@@ -261,14 +251,14 @@ class LCallActivity : AppCompatActivity() {
                                     handleStartCallException(it)
                                 }
 
-                                is UnknownHostException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error UnknownHostException: ${it.message}" }
-                                    showStyledPopTip(getString(R.string.call_connect_exception_error), onDismiss = { viewModel.dismissError() })
-                                }
-
                                 else -> {
-                                    L.e { "[call] LCallActivity, viewModel.error OtherException: ${it.message}" }
-                                    showStyledPopTip(getString(R.string.call_other_exception_error), onDismiss = { viewModel.dismissError() })
+                                    L.e { "[call] LCallActivity, viewModel.error connect exception: $it" }
+                                    lifecycleScope.launch {
+                                        delay(2000L)
+                                        showStyledPopTip(getString(R.string.call_connect_exception_error), onDismiss = {
+                                            endCallAndClearResources()
+                                        })
+                                    }
                                 }
                             }
                         }
@@ -812,16 +802,14 @@ class LCallActivity : AppCompatActivity() {
         if (!isInPipMode) {
             // 底部悬浮控件布局逻辑
             MainPageWithBottomControlView(viewModel, isOneVOneCall, showBottomToolBarViewEnabled, isUserSharingScreen, audioSwitchHandler, endCallAction = { callType, callEndType ->
-                viewModel.getRoomId()?.let { roomId ->
-                    val callExitParams = CallExitParams(
-                        roomId,
-                        callIntent.callerId,
-                        callRole,
-                        callType,
-                        conversationId
-                    )
-                    handleExitClick(callExitParams, callEndType)
-                }
+                val callExitParams = CallExitParams(
+                    viewModel.getRoomId(),
+                    callIntent.callerId,
+                    callRole,
+                    callType,
+                    conversationId
+                )
+                handleExitClick(callExitParams, callEndType)
             })
         }
     }
@@ -856,34 +844,37 @@ class LCallActivity : AppCompatActivity() {
             return
         }
 
-        // 根据通话状态和角色发送不同的消息或执行操作
         viewModel.callStatus.value.let { status ->
-            if (status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
-                // 通话中：发送挂断消息并结束通话
-                LCallManager.removeCallData(params.roomId)
-                L.i { "[Call] LCallActivity send hangUpCall CallMessage roomId:${params.roomId}" }
-                viewModel.rtm.sendEndCall(onComplete = {
-                    if (params.roomId.isNullOrEmpty() || conversationId.isNullOrEmpty()) {
+            when (status) {
+                CallStatus.CALLING -> {
+                    // 主叫：发送取消消息
+                    sendCancelCallMessage {
+                        // 取消回调（结束后清理资源）
                         endCallAndClearResources()
-                        return@sendEndCall
                     }
-                    callToChatController.hangUpCall(params.callerId, callRole, callType, params.roomId, conversationId, viewModel.getCurrentCallUidList(), onComplete = { endCallAndClearResources() })
-                })
-            } else {
-                // 通话未开始：根据角色发送取消消息或直接结束通话
-                when (callRole) {
-                    CallRole.CALLER -> {
-                        // 主叫：发送取消消息
-                        sendCancelCallMessage {
-                            // 取消回调（结束后清理资源）
-                            endCallAndClearResources()
-                        }
-                    }
+                }
 
-                    else -> {
-                        // 被叫或其他角色：直接结束通话
-                        endCallAndClearResources()
-                    }
+                CallStatus.JOINING -> {
+                    // 被叫或其他角色：直接结束通话
+                    endCallAndClearResources()
+                }
+
+                CallStatus.CONNECTED, CallStatus.RECONNECTED -> {
+                    // 通话已连接：发送挂断消息
+                    LCallManager.removeCallData(params.roomId)
+                    L.i { "[Call] LCallActivity send hangUpCall CallMessage roomId:${params.roomId}" }
+                    viewModel.rtm.sendEndCall(onComplete = {
+                        if (params.roomId.isNullOrEmpty() || conversationId.isNullOrEmpty()) {
+                            endCallAndClearResources()
+                            return@sendEndCall
+                        }
+                        callToChatController.hangUpCall(params.callerId, callRole, callType, params.roomId, conversationId, viewModel.getCurrentCallUidList(), onComplete = { endCallAndClearResources() })
+                    })
+                }
+
+                else -> {
+                    // 其他状态：直接结束通话并清理资源
+                    endCallAndClearResources()
                 }
             }
         }

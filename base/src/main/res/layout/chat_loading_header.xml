@@ -5,7 +5,7 @@
     android:layout_height="20dp">
 
     <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/tv_signature"
+        android:id="@+id/tv_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"

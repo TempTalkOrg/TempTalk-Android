@@ -27,6 +27,7 @@ import com.difft.android.base.user.defaultBarrageTexts
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.MD5Utils
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
@@ -99,8 +100,13 @@ class LChatToCallControllerImpl @Inject constructor(
         activity: Activity,
         forWhat: For,
         chatRoomName: String?,
-        onComplete: (Boolean) -> Unit
+        onComplete: (Boolean, String?) -> Unit
     ) {
+        if(!LCallEngine.isNetworkAvailable()) {
+            onComplete(false, ResUtils.getString(R.string.call_no_internet_connection_tip))
+            return
+        }
+
         coroutineScope.launch {
             try {
                 LCallManager.showWaitDialog(activity)
@@ -112,6 +118,8 @@ class LChatToCallControllerImpl @Inject constructor(
                 withContext(Dispatchers.IO) {
                     dbRoomStore.createRoomIfNotExist(forWhat)
                 }
+
+                LCallManager.checkQuicFeatureGrayStatus()
 
                 val mySelfName = LCallManager.getDisplayName(mySelfId)
                 val token = SecureSharedPrefsUtil.getToken()
@@ -137,10 +145,10 @@ class LChatToCallControllerImpl @Inject constructor(
                     startCallInternal(activity, forWhat, callEncryptResult, token, chatRoomName)
                 }
 
-                onComplete(result)
+                onComplete(result, null)
             } catch (e: Exception) {
                 L.e { "[Call] startCall failed: ${e.message}" }
-                onComplete(false)
+                onComplete(false, ResUtils.getString(R.string.call_start_failed_tip))
             } finally {
                 LCallManager.dismissWaitDialog()
             }
@@ -193,7 +201,8 @@ class LChatToCallControllerImpl @Inject constructor(
                                         } else if (content.calling.conversationId.hasGroupId()) {
                                             // group call
                                             conversationId = content.calling.conversationId.groupId.toStringUtf8()
-                                            if(!checkUserIsInGroup(mySelfId, conversationId)){
+                                            val inGroup = checkUserIsInGroup(mySelfId, conversationId)
+                                            if(!inGroup){
                                                 // if callee not in group, instant call
                                                 callType = CallType.INSTANT
                                                 conversationId = null
@@ -206,12 +215,9 @@ class LChatToCallControllerImpl @Inject constructor(
                                             } else {
                                                 // callee in group, group call
                                                 callType = CallType.GROUP
-                                                val groupInfo = GroupUtil.getSingleGroupInfo(application, conversationId).blockingFirst()
-                                                if(groupInfo.isPresent) {
-                                                    val groupName = groupInfo.get().name
-                                                    if(!groupName.isNullOrEmpty()){
-                                                        callName = groupName
-                                                    }
+                                                val groupName = getGroupNameSafely(conversationId)
+                                                if (!groupName.isNullOrEmpty()) {
+                                                    callName = groupName
                                                 }
                                             }
                                         }
@@ -555,23 +561,37 @@ class LChatToCallControllerImpl @Inject constructor(
             })
     }
 
+    private suspend fun checkUserIsInGroup(userId: String, gid: String): Boolean {
+        return try {
+            val resp = groupRepo.getGroupInfo(gid)
+                .subscribeOn(Schedulers.io())
+                .await()
 
-    private fun checkUserIsInGroup(userId: String, gid: String): Boolean {
-        var result = false
-        try{
-            val groupData = groupRepo.getGroupInfo(gid).blockingGet().data
-            val groupMembersSet = mutableSetOf<String>()
-            groupData?.members?.forEach {
-                groupMembersSet.add(it.uid)
-            }
-            if(groupMembersSet.contains(userId)){
-                result = true
-            }
-        }catch (e: Exception){
-            L.e { "[Call] LChatToCallControllerImpl checkUserIsInGroup, error:${e.stackTraceToString()}" }
-            e.printStackTrace()
+            val members = resp.data?.members.orEmpty()
+            members.any { it.uid == userId }
+        } catch (e: Exception) {
+            L.e { "[Call] LChatToCallControllerImpl checkUserIsInGroup error: ${e.stackTraceToString()}" }
+            false
         }
-        return result
+    }
+
+    private suspend fun getGroupNameSafely(conversationId: String): String? {
+        return try {
+            val groupInfoOptional = GroupUtil
+                .getSingleGroupInfo(application, conversationId)
+                .firstOrError()
+                .subscribeOn(Schedulers.io())
+                .await()
+
+            if (groupInfoOptional.isPresent) {
+                groupInfoOptional.get().name
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            L.e { "[Call] LChatToCallControllerImpl getGroupNameSafely error: ${e.stackTraceToString()}" }
+            null
+        }
     }
 
     private fun checkIfShowIncomingCall(anotherDeviceJoined: Boolean, msgSenderId: String, callData: CallData): Boolean {

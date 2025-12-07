@@ -12,6 +12,7 @@ import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareResponse
 import com.difft.android.network.requests.GetTokenRequestBody
+import com.difft.android.network.requests.GrayCheckRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
 import com.difft.android.network.requests.SpeechToTextRequestBody
 import com.difft.android.network.responses.AddContactorResponse
@@ -20,6 +21,7 @@ import com.difft.android.network.responses.AuthToken
 import com.difft.android.network.responses.ContactsDataResponse
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.network.responses.GetConversationSetResponseBody
+import com.difft.android.network.responses.GrayConfigData
 import com.difft.android.network.responses.PendingMessageResponse
 import com.difft.android.network.responses.SpeechToTextResponse
 import com.difft.android.websocket.api.messages.GetPublicKeysReq
@@ -201,4 +203,10 @@ interface HttpService {
         @Header("Authorization") baseAuth: String,
         @Body req: CriticalAlertRequestBody
     ): Single<BaseResponse<Any>>
+
+    @POST("/grayCheck/v1/grayCheck")
+    fun grayCheck(
+        @Header("Authorization") token: String,
+        @Body req: GrayCheckRequestBody
+    ): Single<BaseResponse<List<GrayConfigData>?>>
 }

@@ -165,6 +165,18 @@
 
             </LinearLayout>
 
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_full_screen_notification_tip"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="8dp"
+                android:paddingHorizontal="16dp"
+                android:text=""
+                android:textColor="@color/t.secondary"
+                android:textSize="14sp" />
+
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/cl_global_notification"
                 android:layout_width="match_parent"

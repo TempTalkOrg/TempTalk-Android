@@ -19,6 +19,8 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.ScreenShotUtil
@@ -35,7 +37,6 @@ import com.difft.android.chat.widget.RecordingState
 import com.difft.android.create
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.hi.dhl.binding.viewbind
-import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -45,7 +46,7 @@ import org.thoughtcrime.securesms.components.reaction.MotionEventRelay
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
 import javax.inject.Inject
-import com.difft.android.base.widget.ToastUtil
+
 @AndroidEntryPoint
 class ChatActivity : BaseActivity(), ChatMessageListProvider {
 
@@ -140,21 +141,6 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
         // chatSettingViewModel.setCurrentTarget(chatViewModel.forWhat) - 不再需要，因为通过构造方法传递
 
         refreshContact()
-
-        chatViewModel.agreeFriendRequest
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.status == 0) {
-                    ToastUtil.show(getString(R.string.contact_added))
-
-                    //                    ContactorUtil.createFriendRequestAcceptMessage(it.data ?: "", contactID)
-                } else {
-                    it.reason?.let { reason ->
-                        ToastUtil.show(reason)
-                    }
-                }
-            }, {})
 
         ContactorUtil.contactsUpdate
             .compose(RxUtil.getSchedulerComposer())

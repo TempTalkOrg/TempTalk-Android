@@ -109,9 +109,11 @@ class VoiceMessageView @JvmOverloads constructor(
         }
 
         // Priority 3: Show progress or auto download (for files <= 10M)
-        if (!isCurrentDeviceSend && attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
+        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
             if (progress == null) {
-                downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
+                if (!isCurrentDeviceSend) {
+                    downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
+                }
             } else {
                 binding.progressBar.visibility = View.VISIBLE
                 binding.progressBar.progress = progress
@@ -222,13 +224,5 @@ class VoiceMessageView @JvmOverloads constructor(
     // 设置游标颜色
     fun setCursorColor(color: Int) {
         binding.audioWaveProgressBar.setCursorColor(color)
-    }
-
-    fun unbind() {
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        unbind()
     }
 }

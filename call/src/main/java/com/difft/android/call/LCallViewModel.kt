@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.lifecycle.AndroidViewModel
@@ -29,6 +30,7 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.BarrageMessage
+import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP
@@ -41,6 +43,7 @@ import com.difft.android.call.data.RoomMetadata
 import com.difft.android.call.data.RtmMessage
 import com.difft.android.call.exception.DisconnectException
 import com.difft.android.call.exception.NetworkConnectionPoorException
+import com.difft.android.call.exception.ServerConnectionException
 import com.difft.android.call.exception.StartCallException
 import com.difft.android.call.manager.AudioDeviceManager
 import com.difft.android.call.manager.HandsUpManager
@@ -51,16 +54,18 @@ import com.difft.android.call.util.StringUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.CriticalAlertRequestBody
-import difft.android.messageserialization.For
+import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import com.google.gson.Gson
 import com.twilio.audioswitch.AudioDevice
 import com.twilio.audioswitch.AudioDeviceChangeListener
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import difft.android.messageserialization.For
 import io.livekit.android.events.DisconnectReason
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
+import io.livekit.android.room.Room
 import io.livekit.android.room.RoomException
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.LocalParticipant
@@ -87,11 +92,13 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import livekit.org.webrtc.CameraXHelper
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
-import com.difft.android.websocket.api.util.INewMessageContentEncryptor
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import retrofit2.HttpException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLHandshakeException
+import kotlin.concurrent.Volatile
 
 
 class LCallViewModel (
@@ -169,8 +176,13 @@ class LCallViewModel (
     var currentCallNetworkPoor: Boolean = false
 
     // --------------- Internals ---------------
+    @Volatile
     private var isRetryUrlConnecting = false
     private var isCallResourceReleased = false
+
+    private var lastLocalPoorErrorTime: Long = 0L
+    private val goodQualities = setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)
+    private val networkPoorInterval = 60_000L
 
     // --- no-speaking timeout detection ---
     private enum class TimeoutCheckState { NONE, PARTICIPANT_LEAVE, ONGOING_CALL }
@@ -193,7 +205,7 @@ class LCallViewModel (
         initRtmHandler()
 
         // Connect server room.
-        connectToRoom(callIntent.callServerUrls, callIntent.startCallParams)
+        connectToRoom(callIntent.callServerUrls, callIntent.startCallParams, LCallEngine.isUseQuicSignal())
 
         // Init audio device change listener.
         initAudioDeviceChangeListener(audioProcessor)
@@ -217,6 +229,8 @@ class LCallViewModel (
         registerErrorCollector()
 
         registerListenSwitchCallServer()
+
+        registerListenSwitchConnectionType()
 
         checkCriticalAlertStatusById(callIntent)
     }
@@ -289,7 +303,7 @@ class LCallViewModel (
     /**
      * Attempts to connect to a call room using a list of provided URLs.
      */
-    private fun connectToRoom(urls: List<String>, callParams: ByteArray?) {
+    private fun connectToRoom(urls: List<String>, callParams: ByteArray?, useQuicSignal: Boolean = true) {
         viewModelScope.launch(Dispatchers.IO) {
             if(callParams == null) {
                 roomCtl.collectError(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
@@ -302,7 +316,7 @@ class LCallViewModel (
             for (url in urls) {
                 try {
                     L.i { "[Call] LCallViewModel connectToRoom url = $$url" }
-                    roomCtl.connect(url, callIntent.appToken, callParams) { t -> throw t }
+                    roomCtl.connect(url, callIntent.appToken, callParams, useQuicSignal) { t -> throw t }
                     setConnectedServerUrl(url)
                     isRetryUrlConnecting = false
                     return@launch
@@ -317,14 +331,17 @@ class LCallViewModel (
 
                             } else {
                                 isRetryUrlConnecting = true
+                                continue
                             }
                         }
                         is RoomException.NoAuthException, is RoomException.StartCallException -> {
+                            isRetryUrlConnecting = false
                             roomCtl.collectError(StartCallException(e.message))
                             break
                         }
                         else -> {
-                            roomCtl.collectError(e)
+                            isRetryUrlConnecting = false
+                            roomCtl.collectError(ServerConnectionException(e.message))
                             break
                         }
                     }
@@ -504,15 +521,14 @@ class LCallViewModel (
                         L.i { "[Call] LCallViewModel room event disconnected, message = ${event.reason}" }
                         if (event.reason != DisconnectReason.CLIENT_INITIATED) {
                             if (event.reason == DisconnectReason.RECONNECT_FAILED) roomCtl.updateCallStatus(CallStatus.RECONNECT_FAILED)
-                            roomCtl.collectError(DisconnectException(
-                                DisconnectException.ROOM_DISCONNECTED_MESSAGE,
-                                Exception(event.reason.name)))
+                            roomCtl.collectError(DisconnectException(event.reason.name))
                         } else {
                             if(roomCtl.callStatus.value == CallStatus.SWITCHING_SERVER) return@collect
                             roomCtl.updateCallStatus(CallStatus.DISCONNECTED)
                         }
                     }
                     is RoomEvent.FailedToConnect -> {
+                        if (isRetryUrlConnecting) return@collect
                         L.i { "[Call] LCallViewModel room event disconnected, message = ${event.error}." }
                         roomCtl.updateCallStatus(CallStatus.CONNECTED_FAILED)
                         roomCtl.collectError(event.error)
@@ -847,24 +863,27 @@ class LCallViewModel (
     }
 
     /**
-     * Handles connection quality changes for participants in a call, displaying appropriate error messages when quality degrades.
+     * Handles connection quality changes for local participant in a call, displaying appropriate error messages when quality degrades.
      */
     private fun onConnectionQualityChanged(participant: Participant, quality: ConnectionQuality) {
         L.i { "[Call] LCallViewModel ConnectionQualityChanged ${participant.identity?.value} quality = ${quality.name}." }
-        if (getCurrentCallType() == CallType.ONE_ON_ONE.type) {
-            if (participant is RemoteParticipant && quality !in setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)) {
-                roomCtl.collectError(NetworkConnectionPoorException(getString(R.string.call_other_network_poor_tip)))
-            }
-        }
         if (participant is LocalParticipant) {
-            if (quality !in setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)) {
-                roomCtl.collectError(NetworkConnectionPoorException(getString(R.string.call_myself_network_poor_tip)))
+            val isPoorNow = quality !in goodQualities
+            val now = SystemClock.elapsedRealtime()
+
+            if (isPoorNow) {
+                val shouldNotify = (now - lastLocalPoorErrorTime > networkPoorInterval)
+                if (shouldNotify) {
+                    roomCtl.collectError(
+                        NetworkConnectionPoorException(getString(R.string.call_myself_network_poor_tip))
+                    )
+                    lastLocalPoorErrorTime = now
+                }
                 currentCallNetworkPoor = true
             } else {
                 currentCallNetworkPoor = false
             }
         }
-
     }
 
     /**
@@ -1029,13 +1048,19 @@ class LCallViewModel (
     /**
      * Registers a listener for server node selection events and handles the switching process if needed.
      */
-    fun registerListenSwitchCallServer() {
+    private fun registerListenSwitchCallServer() {
         viewModelScope.launch {
-            LCallEngine.serverNodeSelected.collect { serverNode ->
-                if (serverNode != null && callStatus.value == CallStatus.CONNECTED) {
-                    L.i { "[call] LocalViewModel registerListenSwitchCallServer serverNodeSelected:$serverNode" }
+            LCallEngine.serverNodeSelected
+                .map { it?.url }
+                .distinctUntilChanged()
+                .collect { url ->
+                    if (url == null) return@collect
+                    if (callStatus.value != CallStatus.CONNECTED) return@collect
+
+                    L.i { "[call] registerListenSwitchCallServer serverNodeSelected: $url" }
                     roomCtl.updateCallStatus(CallStatus.SWITCHING_SERVER)
                     room.disconnect()
+
                     val body = StartCallRequestBody(
                         callIntent.callType,
                         LCallConstants.CALL_VERSION,
@@ -1044,8 +1069,43 @@ class LCallViewModel (
                         roomId = roomId
                     )
                     val joinCallParams = LCallManager.createStartCallParams(body)
-                    connectToRoom(listOf(serverNode.url), joinCallParams)
+                    connectToRoom(listOf(url), joinCallParams, LCallEngine.isUseQuicSignal())
                 }
+        }
+    }
+
+    private fun registerListenSwitchConnectionType() {
+        viewModelScope.launch {
+            combine(
+                LCallEngine.connectionType,
+                LCallEngine.serverNodeSelected
+            ){ connectionType, serverNode ->
+                connectionType to serverNode
+            }.filter { (connectionType, _)->
+                val useQuicSignal = connectionType == CONNECTION_TYPE.HTTP3_QUIC
+                roomCtl.isUseQuicSignal() != useQuicSignal &&
+                        callStatus.value == CallStatus.CONNECTED
+            }.collect { (connectionType, serverNode) ->
+                val useQuicSignal = connectionType == CONNECTION_TYPE.HTTP3_QUIC
+                L.i { "[call] registerListenSwitchConnectionType connectionType: $connectionType" }
+                // 更新状态并断开当前连接
+                roomCtl.updateCallStatus(CallStatus.SWITCHING_SERVER)
+                room.disconnect()
+                // 构建请求参数
+                val body = StartCallRequestBody(
+                    callIntent.callType,
+                    LCallConstants.CALL_VERSION,
+                    System.currentTimeMillis(),
+                    conversation = callIntent.conversationId,
+                    roomId = roomId
+                )
+                val joinCallParams = LCallManager.createStartCallParams(body)
+                // 选取 server URL
+                val serverUrls = serverNode?.url
+                    ?.let(::listOf)
+                    ?: callIntent.callServerUrls
+                // 重新连接
+                connectToRoom(serverUrls, joinCallParams, useQuicSignal)
             }
         }
     }
@@ -1156,4 +1216,12 @@ class LCallViewModel (
     }
 
     fun isRequestingPermission() = callUiController.isRequestingPermission.value
+
+    fun isControlButtonClickEnabled(): Boolean {
+        return if(callType.value == CallType.ONE_ON_ONE.type) {
+            room.state == Room.State.CONNECTED
+        } else {
+            callStatus.value == CallStatus.CONNECTED || callStatus.value == CallStatus.RECONNECTED
+        }
+    }
 }

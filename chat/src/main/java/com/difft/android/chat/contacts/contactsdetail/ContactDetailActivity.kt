@@ -284,10 +284,10 @@ class ContactDetailActivity : BaseActivity() {
                         }
                         //否则发起livekit call通话
                         L.i { "[call] ContactDetailActivity start call." }
-                        callManager.startCall(this@ContactDetailActivity, For.Account(contactId), chatRoomName) { status ->
+                        callManager.startCall(this@ContactDetailActivity, For.Account(contactId), chatRoomName) { status, message ->
                             if(!status) {
                                 L.e { "[Call] ContactDetailActivity start call failed." }
-                                ToastUtil.show(com.difft.android.call.R.string.call_start_failed_tip)
+                                message?.let { ToastUtil.show(it) }
                             }
                         }
                     }

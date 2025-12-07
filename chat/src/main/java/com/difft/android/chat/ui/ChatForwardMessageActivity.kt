@@ -11,7 +11,9 @@ import androidx.activity.viewModels
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.launch
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
@@ -20,15 +22,25 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.databinding.ChatActivityForwardMessageBinding
 import com.difft.android.chat.message.ChatMessage
-import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.messageserialization.db.store.ConversationUtils
+import com.google.gson.Gson
+import com.hi.dhl.binding.viewbind
+import com.luck.picture.lib.basic.PictureSelector
+import com.luck.picture.lib.entity.LocalMedia
+import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
+import com.luck.picture.lib.language.LanguageConfig
+import com.luck.picture.lib.pictureselector.GlideEngine
+import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.ForwardContext
@@ -36,19 +48,10 @@ import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.google.gson.Gson
-import com.hi.dhl.binding.viewbind
-import com.difft.android.base.widget.ComposeDialogManager
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
-import com.luck.picture.lib.language.LanguageConfig
 import io.reactivex.rxjava3.core.Observable
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBAttachmentModel
-import util.TimeFormatter
-import util.concurrent.TTExecutors
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.components.reaction.ConversationItemSelection
 import org.thoughtcrime.securesms.components.reaction.ConversationReactionDelegate
 import org.thoughtcrime.securesms.components.reaction.ConversationReactionOverlay
@@ -62,11 +65,10 @@ import org.thoughtcrime.securesms.util.StorageUtil
 import org.thoughtcrime.securesms.util.Stub
 import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.util.WindowUtil
-import com.luck.picture.lib.pictureselector.GlideEngine
+import util.TimeFormatter
+import util.concurrent.TTExecutors
 import java.io.File
 import java.util.concurrent.TimeUnit
-import com.difft.android.base.widget.ToastUtil
-import com.difft.android.chat.message.getAttachmentProgress
 
 class ChatForwardMessageActivity : BaseActivity() {
 
@@ -82,6 +84,15 @@ class ChatForwardMessageActivity : BaseActivity() {
     }
 
     private val mBinding: ChatActivityForwardMessageBinding by viewbind()
+
+    /**
+     * 页面级联系人缓存
+     * Activity生命周期结束时自动释放
+     *
+     * 合并转发可能包含大量消息和联系人（发送者、reactions用户等），
+     * 页面级缓存会将所有需要的联系人加载到内存，无需容量限制
+     */
+    private val contactorCache = MessageContactsCacheUtil()
 
     private val confidentialMessageId: String? by lazy {
         intent.getStringExtra("confidentialMessageId")
@@ -319,7 +330,7 @@ class ChatForwardMessageActivity : BaseActivity() {
         )
     }
 
-    private val chatMessageAdapter = object : ChatMessageAdapter() {
+    private val chatMessageAdapter = object : ChatMessageAdapter(forWhat = null, contactorCache = contactorCache) {
 
         override fun onItemClick(rootView: View, data: ChatMessage) {
             if (data is TextChatMessage) {
@@ -428,20 +439,7 @@ class ChatForwardMessageActivity : BaseActivity() {
         override fun onAvatarLongClicked(contactor: ContactorModel?) {
         }
 
-        override fun onContactAcceptClicked(chatMessage: NotifyChatMessage) {
-        }
-
-        override fun onFriendRequestClicked(chatMessage: NotifyChatMessage) {
-        }
-
-        override fun onPinClicked(chatMessage: NotifyChatMessage) {
-
-        }
-
         override fun onQuoteClicked(quote: Quote) {
-        }
-
-        override fun onRecallReEditClicked(chatMessage: TextChatMessage) {
         }
 
         override fun onReactionClick(
@@ -475,26 +473,33 @@ class ChatForwardMessageActivity : BaseActivity() {
 
         ConversationUtils.intentForwardData?.let {
             globalServices.gson.fromJson(it, ForwardContext::class.java)?.let { forwardContext ->
-                val list = mutableListOf<ChatMessage>()
-                forwardContext.forwards?.forEach { forward ->
-                    list.add(generateMessageFromForward(forward))
-                }
-                val newList = list.sortedBy { message -> message.systemShowTimestamp }
-                    .mapIndexed { index, message ->
-                        val previousMessage = if (index > 0) list[index - 1] else null
-                        val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
-
-                        val nextMessage = if (index < list.size - 1) list[index + 1] else null
-                        val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
-
-                        message.showName = !isSameDayWithPreviousMessage || message.nickname != previousMessage?.nickname
-                        message.showDayTime = !isSameDayWithPreviousMessage
-                        message.showTime = !isSameDayWithNextMessage || message.nickname != nextMessage?.nickname
-                        message
+                lifecycleScope.launch {
+                    val list = mutableListOf<ChatMessage>()
+                    forwardContext.forwards?.forEach { forward ->
+                        list.add(generateMessageFromForward(forward))
                     }
 
-                chatMessageAdapter.submitList(newList) {
-                    doAfterFirstRender()
+                    // 批量加载联系人到当前页面的缓存
+                    val contactIds = MessageContactsCacheUtil.collectContactIds(list)
+                    contactorCache.loadContactors(contactIds)
+
+                    val newList = list.sortedBy { message -> message.systemShowTimestamp }
+                        .mapIndexed { index, message ->
+                            val previousMessage = if (index > 0) list[index - 1] else null
+                            val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
+
+                            val nextMessage = if (index < list.size - 1) list[index + 1] else null
+                            val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
+
+                            message.showName = !isSameDayWithPreviousMessage || message.authorId != previousMessage?.authorId
+                            message.showDayTime = !isSameDayWithPreviousMessage
+                            message.showTime = !isSameDayWithNextMessage || message.authorId != nextMessage?.authorId
+                            message
+                        }
+
+                    chatMessageAdapter.submitList(newList) {
+                        doAfterFirstRender()
+                    }
                 }
             }
             ConversationUtils.intentForwardData = null

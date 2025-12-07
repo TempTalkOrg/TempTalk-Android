@@ -100,9 +100,8 @@ class ChatHeaderFragment : CommonHeaderFragment() {
             initView(null)
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
-
-        binding.textviewNickname.setOnClickListener {
-//            ContactDetailActivity.startActivity(requireContext(), chatViewModel.forWhat.id)
+        // 给整个 header 区域添加点击事件，跳转到单聊设置页面
+        binding.root.setOnClickListener {
             SingleChatSettingActivity.startActivity(requireActivity(), chatViewModel.forWhat.id)
         }
 

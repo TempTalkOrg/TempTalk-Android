@@ -194,7 +194,7 @@ class CallMessageCreator @Inject constructor(
                                 this.calling = calling {
                                     conversationId?.let {
                                         this.conversationId = conversationId {
-                                            this.number = if(publicKeyInfo.uid == myUid) it else publicKeyInfo.uid
+                                            this.number = if(publicKeyInfo.uid == myUid) it else myUid
                                         }
                                     }
                                     roomId?.firstOrNull()?.let { this.roomId = it }

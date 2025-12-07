@@ -12,7 +12,9 @@ fun PushReadReceiptSendJobFactory.create(
     forWhat: For,
     messageTimeStamps: List<Long>,
     readPosition: ReadPosition,
-    messageMode: Int
+    messageMode: Int,
+    sendReceiptToSender: Boolean = true,  // 默认发送已读回执
+    sendSyncToSelf: Boolean = true        // 默认发送同步消息
 ): PushReadReceiptSendJob {
     val readPos = readPosition {
         readAt = readPosition.readAt
@@ -24,5 +26,5 @@ fun PushReadReceiptSendJobFactory.create(
         maxSequenceId = readPosition.maxSequenceId
     }
     val mode = SignalServiceProtos.Mode.valueOf(messageMode)
-    return create(null, recipientId, messageTimeStamps, readPos, mode, forWhat.id)
+    return create(null, recipientId, messageTimeStamps, readPos, mode, forWhat.id, sendReceiptToSender, sendSyncToSelf)
 }

@@ -22,6 +22,8 @@ class LCallServerNodeModel(application: Application, callConfig: CallConfig): An
 
     val serverNodeSelected = LCallEngine.serverNodeSelected
 
+    val connectionType = LCallEngine.connectionType
+
     val serverNodeConfig = callConfig.callServers?.clusters?.flatMap { cluster ->
         mutableListOf<Pair<String, String>>().apply {
             cluster.global_url?.let { url ->
