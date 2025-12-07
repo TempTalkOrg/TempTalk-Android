@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.fragment.app.FragmentActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
@@ -37,20 +38,20 @@ import io.reactivex.rxjava3.plugins.RxJavaPlugins
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.withContext
 import org.signal.libsignal.protocol.logging.SignalProtocolLoggerProvider
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencyProvider
-import org.thoughtcrime.securesms.keyvalue.SignalStore
-import org.thoughtcrime.securesms.service.KeyCachingService
 import org.thoughtcrime.securesms.util.AppForegroundObserver
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import util.ScreenLockUtil
-import util.concurrent.TTExecutors
+import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -68,6 +69,14 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     @Inject
     lateinit var environmentHelper: EnvironmentHelper
+
+    // 追踪当前 resumed 的 Activity
+    private var currentResumedActivity: WeakReference<FragmentActivity>? = null
+
+    private var lockCheckJob: Job? = null
+
+    // Activity 计数，用于准确判断前后台切换
+    private var startedActivityCount = 0
 
     override fun onCreate() {
         AppStartup.onApplicationCreate()
@@ -163,28 +172,33 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     override fun onForeground() {
-        if (!ScreenLockUtil.noNeedShowScreenLock && !ScreenLockUtil.pictureSelectorIsShowing) {
-            PasscodeUtil.disableScreenLock = false
-        }
-        ScreenLockUtil.noNeedShowScreenLock = false
-
         recordLastUseTime()
-
-        TTExecutors.BOUNDED.execute {
-//            FeatureFlags.refreshIfNecessary()
-            KeyCachingService.onAppForegrounded(this)
-            SignalStore.misc().lastForegroundTime = System.currentTimeMillis()
-        }
         LCallManager.restoreCallActivityIfInCalling()
         LCallManager.restoreIncomingCallActivityIfIncoming()
+        messageNotificationUtil.cancelCriticalAlertNotification()
     }
 
     override fun onBackground() {
-        KeyCachingService.onAppBackgrounded(this)
-
         recordLastUseTimeDisposable?.dispose()
+    }
 
-        ScreenLockUtil.appIsForegroundBeforeHandleDeeplink = false
+    /**
+     * 通过 Activity 计数判断的真实前台事件（仅用于锁屏检查）
+     * 因为AppForegroundObserver在快速前后台切换时不会触发
+     */
+    private fun onAppForeground() {
+        L.d { "[ScreenLock] onForeground called" }
+        scheduleQuickScreenLockCheck()
+    }
+
+    /**
+     * 通过 Activity 计数判断的真实后台事件（仅用于锁屏检查）
+     */
+    private fun onAppBackground() {
+        L.d { "[ScreenLock] onBackground called" }
+        // 取消待处理的锁屏检查
+        lockCheckJob?.cancel()
+        lockCheckJob = null
     }
 
     private fun prepareScreenLockListener() {
@@ -193,26 +207,39 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
 
             override fun onActivityStarted(activity: Activity) {
+                startedActivityCount++
+                L.d { "[ScreenLock] onActivityStarted: ${activity::class.simpleName}, count=$startedActivityCount" }
+
+                // 从后台进入前台：计数从 0 变为 1
+                if (startedActivityCount == 1) {
+                    L.d { "[ScreenLock] App entered foreground" }
+                    onAppForeground()
+                }
             }
 
             override fun onActivityResumed(activity: Activity) {
-                if (activity !is ScreenLockActivity && activity !is MainActivity) {
+                L.d { "[ScreenLock] onActivityResumed: ${activity::class.simpleName}" }
+
+                // 维护当前 Activity 引用
+                if (activity is FragmentActivity) {
+                    currentResumedActivity = WeakReference(activity)
+
+                    // 原有的 ScreenShot 逻辑
                     launch(Dispatchers.IO) {
                         val userData = userManager.getUserData()
-
                         withContext(Dispatchers.Main) {
                             if (userData != null) {
-                                checkAndShowScreenLock(activity, userData)
                                 ScreenShotUtil.setScreenShotEnable(activity, userData.passcode.isNullOrEmpty() && userData.pattern.isNullOrEmpty())
                             }
                         }
                     }
                 }
 
-                if(activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
+                // 原有的 Call 反馈逻辑
+                if (activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
                     launch(Dispatchers.IO) {
                         val callInfo = LCallManager.getCallFeedbackInfo()
-                        if(callInfo != null && !activity.isDestroyed){
+                        if (callInfo != null && !activity.isDestroyed) {
                             withContext(Dispatchers.Main) {
                                 LCallManager.showCallFeedbackView(activity, callInfo)
                             }
@@ -222,9 +249,20 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
 
             override fun onActivityPaused(activity: Activity) {
+                if (currentResumedActivity?.get() == activity) {
+                    currentResumedActivity = null
+                }
             }
 
             override fun onActivityStopped(activity: Activity) {
+                startedActivityCount--
+                L.d { "[ScreenLock] onActivityStopped: ${activity::class.simpleName}, count=$startedActivityCount" }
+
+                // 从前台进入后台：计数从 1 变为 0
+                if (startedActivityCount == 0) {
+                    L.d { "[ScreenLock] App entered background" }
+                    onAppBackground()
+                }
             }
 
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {
@@ -251,18 +289,122 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }, { e -> e.printStackTrace() })
     }
 
-    private fun checkAndShowScreenLock(activity: Activity, userData: UserData) {
-//        L.i { "[screenLock] checkAndShowScreenLock:" + PasscodeUtil.disableScreenLock }
-        if (!userData.baseAuth.isNullOrEmpty()
-            && !LCallActivity.isInCalling()
-            && !LIncomingCallActivity.isActivityShowing()
-            && !ScreenLockUtil.appIsForegroundBeforeHandleDeeplink
-            && !PasscodeUtil.disableScreenLock
-            && (!userData.passcode.isNullOrEmpty() || !userData.pattern.isNullOrEmpty())
-            && (userData.passcodeTimeout == 0 || System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds)
-        ) {
-            ScreenLockActivity.startActivity(activity)
+    /**
+     * 触发完整的锁屏检查（用于 deeplink 场景）
+     * 包含两次检查：100ms 快速检查 + 1100ms 等待目标页面启动
+     */
+    fun triggerScreenLockCheck() {
+        L.d { "[ScreenLock] Trigger full screen lock check (for deeplink)" }
+        scheduleFullScreenLockCheck()
+    }
+
+    /**
+     * 前后台切换时检查是否显示锁屏
+     *  Deeplink 场景会在 handleDeeplink() 中再次触发检查
+     */
+    private fun scheduleQuickScreenLockCheck() {
+        // 取消之前的检查
+        lockCheckJob?.cancel()
+
+        lockCheckJob = launch(Dispatchers.Main) {
+            delay(100)
+            L.d { "[ScreenLock] Quick check after 100ms" }
+            showScreenLockIfNeeded()
+
+            // 检查完成后重置临时豁免标志
+            ScreenLockUtil.temporarilyDisabled = false
         }
+    }
+
+    /**
+     * 完整的锁屏检查（用于 deeplink 场景）
+     * 两次检查：100ms + 1100ms
+     */
+    private fun scheduleFullScreenLockCheck() {
+        // 取消之前的检查
+        lockCheckJob?.cancel()
+
+        lockCheckJob = launch(Dispatchers.Main) {
+            // 第一次检查
+            delay(100)
+            L.d { "[ScreenLock] First check after 100ms" }
+            showScreenLockIfNeeded()
+
+            // 第二次检查：等待 deeplink 目标页面启动
+            delay(1000)
+            L.d { "[ScreenLock] Second check after 1100ms" }
+            showScreenLockIfNeeded()
+
+            // 检查完成后重置临时豁免标志
+            ScreenLockUtil.temporarilyDisabled = false
+        }
+    }
+
+    private suspend fun showScreenLockIfNeeded() {
+        withContext(Dispatchers.IO) {
+            val userData = userManager.getUserData()
+
+            withContext(Dispatchers.Main) {
+                val activity = currentResumedActivity?.get()
+
+                // 如果当前就是锁屏页，不需要重复启动
+                if (activity is ScreenLockActivity) {
+                    L.d { "[ScreenLock] Already showing ScreenLockActivity" }
+                    return@withContext
+                }
+
+                if (userData != null && shouldShowScreenLock(userData)) {
+                    if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+                        L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
+                        ScreenLockActivity.startActivity(activity)
+                    } else {
+                        L.w { "[ScreenLock] No valid activity to start ScreenLockActivity" }
+                    }
+                } else {
+                    L.d { "[ScreenLock] Lock not needed" }
+                }
+            }
+        }
+    }
+
+    private fun shouldShowScreenLock(userData: UserData): Boolean {
+        // 1. 通用的临时豁免
+        if (ScreenLockUtil.temporarilyDisabled) {
+            L.d { "[ScreenLock] Skip: temporarily disabled" }
+            return false
+        }
+
+        // 2. 通话相关
+        if (LCallActivity.isInCalling()) {
+            L.d { "[ScreenLock] Skip: in call" }
+            return false
+        }
+
+        if (LIncomingCallActivity.isActivityShowing()) {
+            L.d { "[ScreenLock] Skip: incoming call" }
+            return false
+        }
+
+        // 3. 用户配置检查
+        if (userData.passcode.isNullOrEmpty() && userData.pattern.isNullOrEmpty()) {
+            L.d { "[ScreenLock] Skip: no lock set" }
+            return false
+        }
+
+        if (userData.baseAuth.isNullOrEmpty()) {
+            L.d { "[ScreenLock] Skip: not authenticated" }
+            return false
+        }
+
+        // 4. 超时检查
+        val isTimeout = userData.passcodeTimeout == 0 ||
+                System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
+
+        if (!isTimeout) {
+            L.d { "[ScreenLock] Skip: not timeout yet" }
+        }
+
+        return isTimeout
     }
 
     private fun upgradeSecurityProvider() {
@@ -274,7 +416,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 ProviderInstaller.ProviderInstallListener {
                 override fun onProviderInstalled() {}
                 override fun onProviderInstallFailed(errorCode: Int, recoveryIntent: Intent?) {}
-            });
+            })
         } catch (ignorable: Exception) {
             ignorable.printStackTrace()
         }

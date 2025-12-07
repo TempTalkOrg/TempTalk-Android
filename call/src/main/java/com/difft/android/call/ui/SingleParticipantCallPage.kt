@@ -1,4 +1,4 @@
-package com.difft.android.call
+package com.difft.android.call.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -43,15 +43,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil3.compose.rememberAsyncImagePainter
+import com.difft.android.base.R
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
+import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallViewModel
+import com.difft.android.call.LocalImageLoaderProvider
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
-import com.difft.android.call.ui.ScreenShareSpeakerView
-import com.difft.android.call.ui.ScreenSharingView
-import com.difft.android.call.ui.ShowParticipantsListView
 import com.difft.android.call.util.StringUtil
 import com.difft.android.call.util.ViewUtil
 import io.livekit.android.room.Room
@@ -61,6 +62,7 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.asFlow
+import kotlin.collections.contains
 
 
 @Composable
@@ -141,15 +143,22 @@ fun SingleParticipantCallPage(
     }
 
     // 显示弹幕
-    BarrageMessageView(viewModel, config = BarrageMessageConfig(true, callConfig.chatPresets, displayDurationMillis = autoHideTimeout), { message, topic ->
-        viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
-            if(status){
-                viewModel.showCallBarrageMessage(room.localParticipant, message)
-            } else {
-                L.e {"[Call] Failed to send barrage message status = $status."}
-            }
+    BarrageMessageView(
+        viewModel,
+        config = BarrageMessageConfig(
+            true,
+            callConfig.chatPresets,
+            displayDurationMillis = autoHideTimeout
+        ),
+        { message, topic ->
+            viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
+                if (status) {
+                    viewModel.showCallBarrageMessage(room.localParticipant, message)
+                } else {
+                    L.e { "[Call] Failed to send barrage message status = $status." }
+                }
+            })
         })
-    })
 
     if(isUserSharingScreen && isShowUsersEnabled) {
         // 显示参与者小列表
@@ -215,7 +224,7 @@ fun OneVOneSelfVideoView(
                     .wrapContentSize(Alignment.Center)
                     .size(videoViewWith, videoViewHeight)
                     .clip(shape = RoundedCornerShape(8.dp))
-                    .background(colorResource(id = com.difft.android.base.R.color.bg2_night))
+                    .background(colorResource(id = R.color.bg2_night))
             ) {
                 LocalParticipantVideoView(
                     room = room,
@@ -334,7 +343,7 @@ fun SingleParticipantItem(
     Box(
         modifier = modifier.fillMaxSize()
             .clip(shape = RoundedCornerShape(8.dp))
-            .background(colorResource(id = com.difft.android.base.R.color.bg1_night)),
+            .background(colorResource(id = R.color.bg1_night)),
         contentAlignment = Alignment.Center )
     {
         if (!videoMuted) {
@@ -371,9 +380,9 @@ fun SingleParticipantItem(
                 ){
                     // 使用when表达式简化条件判断
                     val painter = when {
-                        audioMuted -> painterResource(id = R.drawable.microphone_off)
-                        !isSpeaking -> painterResource(id = R.drawable.ic_silent)
-                        else -> rememberAsyncImagePainter(model = R.drawable.speaking, imageLoader = imageLoader)
+                        audioMuted -> painterResource(id = com.difft.android.call.R.drawable.microphone_off)
+                        !isSpeaking -> painterResource(id = com.difft.android.call.R.drawable.ic_silent)
+                        else -> rememberAsyncImagePainter(model = com.difft.android.call.R.drawable.speaking, imageLoader = imageLoader)
                     }
 
                     val tintColor = when {

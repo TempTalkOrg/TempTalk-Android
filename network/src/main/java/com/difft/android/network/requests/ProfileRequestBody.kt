@@ -7,11 +7,16 @@ data class ProfileRequestBody(
     val meetingVersion: Int? = null,
     val msgEncVersion: Int? = null,// 1: Encryption Disabled, 2: Encryption Enabled
     val privateConfigs: PrivateConfigsRequestBody? = null,
+    val publicConfigs: PublicConfigsRequestBody? = null,
 )
 
 data class PrivateConfigsRequestBody(
     val saveToPhotos: Boolean? = null,
     val globalNotification: Int? = null
+)
+
+data class PublicConfigsRequestBody(
+    val criticalAlert: Boolean? = null,
 )
 
 data class AvatarRequestBody(

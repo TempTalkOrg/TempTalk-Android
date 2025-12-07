@@ -3,10 +3,10 @@ package com.difft.android.chat
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.sampleAfterFirst
-import difft.android.messageserialization.For
 import com.tencent.wcdb.winq.Order
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -44,37 +44,80 @@ class ChatNormalPaginationController @AssistedInject constructor(
         val scrollToPosition: Int
         val readPosition =
             wcdb.room.getValue(DBRoomModel.readPosition, DBRoomModel.roomId.eq(forWhat.id))?.long ?: 0L
+
+        // 多查询一条未读消息用作后锚点
         val expectedUnreadMessages =
             wcdb.message.getAllObjects(
                 commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.gt(readPosition)),
-                DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE
+                DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE + 1
             )
         L.i { "[${forWhat.id}] Load normal chat default messages, expectedUnreadMessages.size = ${expectedUnreadMessages.size}" }
-        val pageMessages =
-            if (expectedUnreadMessages.size < PAGE_SIZE) {
-                val expectedMessages = wcdb.message.getAllObjects(
-                    commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.le(readPosition)),
-                    DBMessageModel.systemShowTimestamp.order(Order.Desc), PAGE_SIZE - expectedUnreadMessages.size
-                )
-                L.i { "[${forWhat.id}] Load normal chat default messages, expectedReadMessages.size = ${expectedMessages.size}" }
-                expectedMessages + expectedUnreadMessages
-            } else expectedUnreadMessages
 
-        L.i { "[${forWhat.id}] Load normal chat default messages, pageMessages.size = ${pageMessages.size}" }
-        val messageList = pageMessages.sortedBy { it.systemShowTimestamp }
+        val allMessages = if (expectedUnreadMessages.size < PAGE_SIZE) {
+            // 如果未读消息不够一页，补充已读消息，多查一条用作前锚点
+            val expectedMessages = wcdb.message.getAllObjects(
+                commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.le(readPosition)),
+                DBMessageModel.systemShowTimestamp.order(Order.Desc), PAGE_SIZE - expectedUnreadMessages.size + 1
+            )
+            L.i { "[${forWhat.id}] Load normal chat default messages, expectedReadMessages.size = ${expectedMessages.size}" }
+            expectedMessages + expectedUnreadMessages
+        } else {
+            expectedUnreadMessages
+        }
+
+        val sortedMessages = allMessages.sortedBy { it.systemShowTimestamp }
+        L.i { "[${forWhat.id}] Load normal chat default messages, sortedMessages.size = ${sortedMessages.size}" }
+
+        // 拆分锚点消息和显示消息
+        val anchorMessageBefore: MessageModel?
+        val pageMessages: List<MessageModel>
+        val anchorMessageAfter: MessageModel?
+
+        val pageSizeInt = PAGE_SIZE.toInt()
+        if (sortedMessages.size <= pageSizeInt) {
+            // 消息不够，没有锚点
+            anchorMessageBefore = null
+            pageMessages = sortedMessages
+            anchorMessageAfter = null
+        } else if (expectedUnreadMessages.size >= pageSizeInt + 1) {
+            // 未读消息够一页还多，最后一条作为后锚点
+            anchorMessageBefore = null
+            pageMessages = sortedMessages.take(pageSizeInt)
+            anchorMessageAfter = sortedMessages.last()
+        } else {
+            // 已读+未读混合，第一条作为前锚点，最后一条作为后锚点（如果有的话）
+            val hasAfterAnchor = sortedMessages.size > pageSizeInt + 1
+            anchorMessageBefore = sortedMessages.first()
+            pageMessages = if (hasAfterAnchor) {
+                sortedMessages.subList(1, pageSizeInt + 1)
+            } else {
+                sortedMessages.subList(1, sortedMessages.size)
+            }
+            anchorMessageAfter = if (hasAfterAnchor) sortedMessages.last() else null
+        }
+
         scrollToPosition = if (expectedUnreadMessages.isNotEmpty()) {
-            messageList.indexOfFirst {
-                expectedUnreadMessages.first().id == it.id
+            val firstUnreadInPage = expectedUnreadMessages.firstOrNull { it in pageMessages }
+            if (firstUnreadInPage != null) {
+                pageMessages.indexOfFirst { it.id == firstUnreadInPage.id }
+            } else if (pageMessages.isNotEmpty()) {
+                pageMessages.size - 1
+            } else {
+                -1
             }
         } else if (pageMessages.isNotEmpty()) {
             pageMessages.size - 1
         } else {
             -1
         }
+
         _chatMessagesStateFlow.value = ChatMessageListBehavior(
             pageMessages,
             scrollToPosition,
-            updateTimestamp = System.currentTimeMillis()
+            updateTimestamp = System.currentTimeMillis(),
+            anchorMessageBefore = anchorMessageBefore,
+            anchorMessageAfter = anchorMessageAfter,
+            readPosition = readPosition
         )
         observerMessagesChanges()
     }
@@ -85,13 +128,35 @@ class ChatNormalPaginationController @AssistedInject constructor(
         val oldestMessageSystemShowTimeStamp: Long =
             currentMessages.minOfOrNull { it.systemShowTimestamp } ?: Long.MAX_VALUE
         val previewPageQueryCondition = commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.lt(oldestMessageSystemShowTimeStamp))
-        val pageMessages = wcdb.message.getAllObjects(previewPageQueryCondition, DBMessageModel.systemShowTimestamp.order(Order.Desc), PAGE_SIZE)
-        L.i { "[${forWhat.id}] loadPreviousPage, pageMessages: ${pageMessages.size}" }
+
+        // 多查询一条用作前锚点
+        val allPageMessages = wcdb.message.getAllObjects(previewPageQueryCondition, DBMessageModel.systemShowTimestamp.order(Order.Desc), PAGE_SIZE + 1)
+        L.i { "[${forWhat.id}] loadPreviousPage, allPageMessages: ${allPageMessages.size}" }
+
+        // 拆分锚点消息和要显示的消息
+        val anchorMessageBefore = if (allPageMessages.size > PAGE_SIZE.toInt()) allPageMessages.last() else null
+        val pageMessages = if (allPageMessages.size > PAGE_SIZE.toInt()) {
+            allPageMessages.dropLast(1)
+        } else {
+            allPageMessages
+        }
+
         val messageList = (pageMessages + currentMessages).distinctBy { it.id }.sortedBy { it.systemShowTimestamp }
-        val newMessageList =
-            messageList.take(MAX_MESSAGE_COUNT)
+        val newMessageList = messageList.take(MAX_MESSAGE_COUNT)
+
+        // 如果消息列表被截断，使用被截断的第一条作为后锚点
+        val anchorMessageAfter = if (messageList.size > MAX_MESSAGE_COUNT) {
+            messageList[MAX_MESSAGE_COUNT]
+        } else null
+
         _chatMessagesStateFlow.value =
-            ChatMessageListBehavior(newMessageList, -1, updateTimestamp = System.currentTimeMillis())
+            ChatMessageListBehavior(
+                newMessageList,
+                -1,
+                updateTimestamp = System.currentTimeMillis(),
+                anchorMessageBefore = anchorMessageBefore,
+                anchorMessageAfter = anchorMessageAfter
+            )
         observerMessagesChanges()
         val displayMinSystemShowTimestamp =
             chatMessagesStateFlow.value.messageList.minOfOrNull { it.systemShowTimestamp } ?: Long.MIN_VALUE
@@ -109,18 +174,42 @@ class ChatNormalPaginationController @AssistedInject constructor(
         val latestMessageSystemShowTimeStamp: Long =
             currentMessages.maxOfOrNull { it.systemShowTimestamp }
                 ?: Long.MIN_VALUE
-        val pageMessages = wcdb.message.getAllObjects(
+
+        // 多查询一条用作后锚点
+        val allPageMessages = wcdb.message.getAllObjects(
             commonMessageQueryCondition.and(
                 DBMessageModel.systemShowTimestamp.gt(
                     latestMessageSystemShowTimeStamp
                 )
             ),
-            DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE
+            DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE + 1
         )
-        val messageList = (currentMessages + pageMessages).distinctBy { it.id }.sortedBy { it.systemShowTimestamp }.takeLast(MAX_MESSAGE_COUNT)
+
+        // 拆分锚点消息和要显示的消息
+        val anchorMessageAfter = if (allPageMessages.size > PAGE_SIZE.toInt()) allPageMessages.last() else null
+        val pageMessages = if (allPageMessages.size > PAGE_SIZE.toInt()) {
+            allPageMessages.dropLast(1)
+        } else {
+            allPageMessages
+        }
+
+        val allMessages = (currentMessages + pageMessages).distinctBy { it.id }.sortedBy { it.systemShowTimestamp }
+        val messageList = allMessages.takeLast(MAX_MESSAGE_COUNT)
         L.i { "[${forWhat.id}] loadNextPage, after mering exist messages and new messages and take max size of messages, messageList: ${messageList.size}" }
+
+        // 如果消息列表被截断，使用被截断的最后一条作为前锚点
+        val anchorMessageBefore = if (allMessages.size > MAX_MESSAGE_COUNT) {
+            allMessages[allMessages.size - MAX_MESSAGE_COUNT - 1]
+        } else null
+
         _chatMessagesStateFlow.value =
-            ChatMessageListBehavior(messageList, -1, updateTimestamp = System.currentTimeMillis())
+            ChatMessageListBehavior(
+                messageList,
+                -1,
+                updateTimestamp = System.currentTimeMillis(),
+                anchorMessageBefore = anchorMessageBefore,
+                anchorMessageAfter = anchorMessageAfter
+            )
         observerMessagesChanges()
         val displayMaxSystemShowTimestamp =
             chatMessagesStateFlow.value.messageList.maxOfOrNull { it.systemShowTimestamp }
@@ -140,13 +229,16 @@ class ChatNormalPaginationController @AssistedInject constructor(
         if (targetMessage == null) {
             return@withContext false
         } else {
-            val pageMessages = wcdb.message.getAllObjects(
+            // 多查询一条用作后锚点
+            val afterMessages = wcdb.message.getAllObjects(
                 commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.ge(targetMessage.systemShowTimestamp)),
-                DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE
+                DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE + 1
             )
-            L.i { "[${forWhat.id}] jumpToMessage, pageMessages behind with current message: ${pageMessages.size}" }
+            L.i { "[${forWhat.id}] jumpToMessage, afterMessages behind with current message: ${afterMessages.size}" }
 
-            if (pageMessages.size < PAGE_SIZE) { //if the pageMessages is less than pageSize, then load the previous messages to make up the page
+            val allMessages = if (afterMessages.size < PAGE_SIZE) {
+                //if the afterMessages is less than pageSize, then load the previous messages to make up the page
+                // 多查询一条用作前锚点
                 val expectedMessages = wcdb.message.getAllObjects(
                     commonMessageQueryCondition.and(
                         DBMessageModel.systemShowTimestamp.lt(
@@ -154,19 +246,55 @@ class ChatNormalPaginationController @AssistedInject constructor(
                         )
                     ),
                     DBMessageModel.systemShowTimestamp.order(Order.Desc),
-                    PAGE_SIZE - pageMessages.size
+                    PAGE_SIZE - afterMessages.size + 1
                 )
-                pageMessages.addAll(expectedMessages)
+                expectedMessages + afterMessages
+            } else {
+                afterMessages
             }
-            L.i { "[${forWhat.id}] jumpToMessage, after load previous messages, pageMessages: ${pageMessages.size}" }
-            val newMessageList =
-                pageMessages.sortedBy { it.systemShowTimestamp }
+            L.i { "[${forWhat.id}] jumpToMessage, after load previous messages, allMessages: ${allMessages.size}" }
 
-            L.i { "[${forWhat.id}] jumpToMessage, after make up hot data and convert from message Model, newMessageList: ${newMessageList.size}" }
+            val sortedMessages = allMessages.sortedBy { it.systemShowTimestamp }
 
-            val scrollToPosition = newMessageList.indexOfFirst { it.id == targetMessage.id }
+            // 拆分锚点消息和显示消息
+            val anchorMessageBefore: MessageModel?
+            val pageMessages: List<MessageModel>
+            val anchorMessageAfter: MessageModel?
+
+            val pageSizeInt = PAGE_SIZE.toInt()
+            if (sortedMessages.size <= pageSizeInt) {
+                // 消息不够，没有锚点
+                anchorMessageBefore = null
+                pageMessages = sortedMessages
+                anchorMessageAfter = null
+            } else if (afterMessages.size >= pageSizeInt + 1) {
+                // 后续消息够一页还多，最后一条作为后锚点
+                anchorMessageBefore = null
+                pageMessages = sortedMessages.take(pageSizeInt)
+                anchorMessageAfter = sortedMessages.last()
+            } else {
+                // 前后混合，第一条作为前锚点，最后一条作为后锚点（如果有的话）
+                val hasAfterAnchor = sortedMessages.size > pageSizeInt + 1
+                anchorMessageBefore = sortedMessages.first()
+                pageMessages = if (hasAfterAnchor) {
+                    sortedMessages.subList(1, pageSizeInt + 1)
+                } else {
+                    sortedMessages.subList(1, sortedMessages.size)
+                }
+                anchorMessageAfter = if (hasAfterAnchor) sortedMessages.last() else null
+            }
+
+            L.i { "[${forWhat.id}] jumpToMessage, after make up hot data and convert from message Model, pageMessages: ${pageMessages.size}" }
+
+            val scrollToPosition = pageMessages.indexOfFirst { it.id == targetMessage.id }
             _chatMessagesStateFlow.value =
-                ChatMessageListBehavior(newMessageList, scrollToPosition, updateTimestamp = System.currentTimeMillis())
+                ChatMessageListBehavior(
+                    pageMessages,
+                    scrollToPosition,
+                    updateTimestamp = System.currentTimeMillis(),
+                    anchorMessageBefore = anchorMessageBefore,
+                    anchorMessageAfter = anchorMessageAfter
+                )
             observerMessagesChanges()
         }
         return@withContext true
@@ -174,19 +302,34 @@ class ChatNormalPaginationController @AssistedInject constructor(
 
     override
     suspend fun jumpToBottom() = withContext(Dispatchers.IO) {
-        wcdb.message.getAllObjects(
+        // 多查询一条用作前锚点
+        val allMessages = wcdb.message.getAllObjects(
             commonMessageQueryCondition,
             DBMessageModel.systemShowTimestamp.order(Order.Desc),
-            PAGE_SIZE
-        ).let { pageMessages ->
-            val newMessageList = pageMessages.distinctBy { it.id }
-                .sortedBy { it.systemShowTimestamp }
-            L.i { "[${forWhat.id}] jumpToBottom, after convert from message Model, newMessageList: ${newMessageList.size}" }
-            val scrollToPosition = newMessageList.size - 1
-            _chatMessagesStateFlow.value =
-                ChatMessageListBehavior(newMessageList, scrollToPosition, updateTimestamp = System.currentTimeMillis())
-            observerMessagesChanges()
+            PAGE_SIZE + 1
+        )
+
+        val sortedMessages = allMessages.distinctBy { it.id }
+            .sortedBy { it.systemShowTimestamp }
+        L.i { "[${forWhat.id}] jumpToBottom, after convert from message Model, sortedMessages: ${sortedMessages.size}" }
+
+        // 拆分锚点消息和显示消息（跳到底部不需要后锚点）
+        val anchorMessageBefore = if (sortedMessages.size > PAGE_SIZE.toInt()) sortedMessages.first() else null
+        val pageMessages = if (sortedMessages.size > PAGE_SIZE.toInt()) {
+            sortedMessages.drop(1)
+        } else {
+            sortedMessages
         }
+
+        val scrollToPosition = pageMessages.size - 1
+        _chatMessagesStateFlow.value =
+            ChatMessageListBehavior(
+                pageMessages,
+                scrollToPosition,
+                updateTimestamp = System.currentTimeMillis(),
+                anchorMessageBefore = anchorMessageBefore
+            )
+        observerMessagesChanges()
     }
 
 

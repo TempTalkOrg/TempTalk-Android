@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.firebase.perf)
 }
-val appVersionName = "1.9.6"
+val appVersionName = "1.9.7"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")

@@ -27,14 +27,13 @@ import com.difft.android.base.R
  * @param onBackClick the back button click listener
  */
 @Composable
-fun TitleBar(titleText: String, titleEndText: String = "", modifier: Modifier = Modifier ,onBackClick: () -> Unit = {}) {
+fun TitleBar(titleText: String, titleEndText: String = "", modifier: Modifier = Modifier, onBackClick: () -> Unit = {}) {
     Row(
-        horizontalArrangement =  Arrangement.Start,
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
-            .background(colorResource(id = R.color.bg1))
     ) {
 
         IconButton(
@@ -75,6 +74,7 @@ private fun TitleBarPreview() {
         titleEndText = "(10)",
         onBackClick = {})
 }
+
 @Preview
 @Composable
 private fun TitleBarPreviewNoExceed() {

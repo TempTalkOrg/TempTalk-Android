@@ -13,11 +13,13 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
+import android.provider.Settings
 import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
@@ -58,7 +60,9 @@ import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.user.CountdownTimer
 import com.difft.android.base.user.PromptReminder
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
@@ -72,9 +76,11 @@ import com.difft.android.call.exception.StartCallException
 import com.difft.android.call.service.ForegroundService
 import com.difft.android.call.ui.MainPageWithBottomControlView
 import com.difft.android.call.ui.MainPageWithTopStatusView
+import com.difft.android.call.ui.MultiParticipantCallPage
 import com.difft.android.call.ui.ShowBottomCallEndView
 import com.difft.android.call.ui.ShowHandsUpBottomView
 import com.difft.android.call.ui.ShowItemsBottomView
+import com.difft.android.call.ui.SingleParticipantCallPage
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.hilt.android.AndroidEntryPoint
 import io.livekit.android.audio.AudioSwitchHandler
@@ -103,6 +109,9 @@ class LCallActivity : AppCompatActivity() {
 
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
+
+    @Inject
+    lateinit var userManager: UserManager
 
     private val mySelfId: String by lazy {
         globalServices.myId
@@ -142,6 +151,10 @@ class LCallActivity : AppCompatActivity() {
 
     private lateinit var backPressedCallback: OnBackPressedCallback
 
+    private var checkFloatingWindowPermissionDialog: ComposeDialog? = null
+
+    private var isRequestingPermission = false
+
     private val viewModel: LCallViewModel by viewModelByFactory {
         LCallViewModel(
             e2eeEnable = true,
@@ -177,6 +190,7 @@ class LCallActivity : AppCompatActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         registerCallActivityReceiver()
+        isRequestingPermission = true
         callPermission.launchMultiplePermission(PermissionUtil.callPermissions)
 
         initializePictureInPictureParams()
@@ -465,7 +479,15 @@ class LCallActivity : AppCompatActivity() {
                                     }
                             ) {
                                 // 1v1 Call UI布局逻辑
-                                SingleParticipantCallPage(viewModel, room, muteOtherEnabled, autoHideTimeout, callConfig, conversationId, callRole, handleInviteUsersClick = { handleInviteUsersClick() })
+                                SingleParticipantCallPage(
+                                    viewModel,
+                                    room,
+                                    muteOtherEnabled,
+                                    autoHideTimeout,
+                                    callConfig,
+                                    conversationId,
+                                    callRole,
+                                    handleInviteUsersClick = { handleInviteUsersClick() })
                                 // 顶部和底部Control View
                                 RenderTopAndBottomOverlays(isOneVOneCall = true, isUserSharingScreen, audioSwitchHandler)
                                 // 底部raise hand view
@@ -487,7 +509,13 @@ class LCallActivity : AppCompatActivity() {
                                 }
                             ) {
                                 // 多人 Call UI布局逻辑
-                                MultiParticipantCallPage(viewModel, room, muteOtherEnabled, autoHideTimeout, callConfig, handleInviteUsersClick = { handleInviteUsersClick() })
+                                MultiParticipantCallPage(
+                                    viewModel,
+                                    room,
+                                    muteOtherEnabled,
+                                    autoHideTimeout,
+                                    callConfig,
+                                    handleInviteUsersClick = { handleInviteUsersClick() })
                                 // 顶部和底部Control View
                                 RenderTopAndBottomOverlays(isOneVOneCall = false, isUserSharingScreen, audioSwitchHandler)
                                 // 底部raise hand view
@@ -561,17 +589,20 @@ class LCallActivity : AppCompatActivity() {
             PermissionUtil.PermissionState.Denied -> {
                 L.i { "onMeetingPermissionForCallResult: Denied" }
                 showErrorAndFinish(getString(R.string.no_permission_camera_and_voice_tip))
+                isRequestingPermission = false
             }
 
             PermissionUtil.PermissionState.Granted -> {
                 L.i { "onMeetingPermissionForCallResult: Granted" }
                 // Setup compose view.
                 initView()
+                isRequestingPermission = false
             }
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.i { "onMeetingPermissionForCallResult: PermanentlyDenied" }
                 showErrorAndFinish(getString(R.string.no_permission_camera_and_voice_tip))
+                isRequestingPermission = false
             }
         }
     }
@@ -586,12 +617,19 @@ class LCallActivity : AppCompatActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         L.i { "[Call] LCallActivity onUserLeaveHint" }
-        enterPipModeIfPossible(tag = "onUserLeaveHint")
+        if (isRequestingPermission) {
+            L.i { "[Call] LCallActivity onUserLeaveHint ignored (permission dialog showing)" }
+            return
+        }
+        showPipPermissionToastOrEnterPipMode("onUserLeaveHint")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         L.i { "[Call] LCallActivity onDestroy start." }
+        checkFloatingWindowPermissionDialog?.dismiss()
+        checkFloatingWindowPermissionDialog = null
+
         countdownDispose?.takeIf { !it.isDisposed }?.dispose()
         callEndReminderDialog?.apply {
             dismiss()
@@ -623,7 +661,25 @@ class LCallActivity : AppCompatActivity() {
         if (::backPressedCallback.isInitialized) {
             backPressedCallback.remove()
         }
+
+        sendDeclineCallBroadcast()
+
         L.i { "[Call] LCallActivity onDestroy end." }
+    }
+
+    private fun sendDeclineCallBroadcast() {
+        try {
+            Intent(ACTION_IN_CALLING_CONTROL).apply {
+                putExtra(
+                    EXTRA_CONTROL_TYPE,
+                    CallActionType.DECLINE.type
+                )
+                setPackage(packageName)
+                sendBroadcast(this)
+            }
+        } catch (e: IllegalStateException) {
+            L.w(e) { "[Call] Failed to send decline broadcast during destroy" }
+        }
     }
 
     private fun endCallAndClearResources() {
@@ -669,7 +725,7 @@ class LCallActivity : AppCompatActivity() {
                 } else {
                     //when user click on Close button of PIP this will trigger, do what you want here
 //                    hangUpTheCall(tag = "onPictureInPictureModeChanged - Lifecycle.State.CREATED")
-
+                    L.i { "[Call] LCallActivity onPictureInPictureModeChanged - not ScreenLocked handleExitClick " }
                     currentRoomId?.let { roomId ->
                         val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callType.value, conversationId)
                         handleExitClick(callExitParams)
@@ -897,13 +953,15 @@ class LCallActivity : AppCompatActivity() {
 
     private fun handleWindowZoomOutClick() {
         L.d { "[Call] LCallActivity handleWindowZoomOutClick" }
-        // 20230417@w --------------------------------------------------------------------->
-        // Purpose: Show dialog to notify user that PIP is not supported on this device
-        // link to issue: https://jira.toolsfdg.net/projects/WEATOOL/issues/WEATOOL-44
+        // Check the “Display over other apps” permission
+        if (!Settings.canDrawOverlays(this)) {
+            showPipPermissionToastOrEnterPipMode("windowZoomOut")
+            return
+        }
+
         if (isSystemPipEnabledAndAvailable()) {
             enterPipModeIfPossible(tag = "windowZoomOut")
         } else {
-            // show alert dialog
             AlertDialog.Builder(this)
                 .setMessage(R.string.call_pip_not_supported_message)
                 .setPositiveButton(android.R.string.ok) { dialog, _ ->
@@ -989,7 +1047,7 @@ class LCallActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                         launch {
-                            pipBuilderParams.setAutoEnterEnabled(true)
+                            pipBuilderParams.setAutoEnterEnabled(false)
                             tryToSetPictureInPictureParams()
                         }
                     }
@@ -1170,10 +1228,57 @@ class LCallActivity : AppCompatActivity() {
     private fun registerOnBackPressedHandler() {
         backPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                L.i { "[Call] LCallActivity onBackPressed" }
-                enterPipModeIfPossible("back pressed")
+                L.i { "[Call] LCallActivity intercept on back press" }
+                showPipPermissionToastOrEnterPipMode("back pressed")
             }
         }
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
+    }
+
+    private fun showPipPermissionToastOrEnterPipMode(tag: String?) {
+        val currentVersion = userManager.getUserData()?.floatingWindowPermissionTipsShowedVersion
+        if (currentVersion == PackageUtil.getAppVersionName() || Settings.canDrawOverlays(this)) {
+            enterPipModeIfPossible(tag)
+            return
+        }
+
+        if (checkFloatingWindowPermissionDialog == null) {
+            checkFloatingWindowPermissionDialog = ComposeDialogManager.showMessageDialog(
+                context = this,
+                cancelable = false,
+                title = getString(R.string.call_pip_no_permission_tip_title),
+                message = getString(R.string.call_pip_permission_tip_content),
+                confirmText = getString(R.string.call_pip_permission_button_setting),
+                cancelText = getString(R.string.call_pip_permission_button_cancel),
+                onConfirm = {
+                    try {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        ).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        ToastUtil.show(getString(R.string.call_pip_permission_setting_failed))
+                    }
+                },
+                onCancel = {
+                    // 用户选择“暂不开启” → 记录当前版本，避免重复弹窗
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        userManager.update {
+                            floatingWindowPermissionTipsShowedVersion = PackageUtil.getAppVersionName()
+                        }
+                    }
+                    enterPipModeIfPossible(tag)
+                },
+                onDismiss = {
+                    checkFloatingWindowPermissionDialog = null
+                }
+            )
+        } else {
+            checkFloatingWindowPermissionDialog?.dismiss()
+            checkFloatingWindowPermissionDialog = null
+        }
     }
 }

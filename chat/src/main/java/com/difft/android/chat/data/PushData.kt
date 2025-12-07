@@ -14,8 +14,9 @@ data class PushCustomContent(
     val notifyType: Int,
     val passthrough: String?,
     val uid: String?,
-    val critical: Int
-) {
+    val critical: Int,
+    val timestamp: Long = 0,
+    ) {
     val passthroughData: Passthrough?
         get() = passthrough?.let {
             try {

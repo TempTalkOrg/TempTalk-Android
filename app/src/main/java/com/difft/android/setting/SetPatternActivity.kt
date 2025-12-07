@@ -94,7 +94,6 @@ class SetPatternActivity : BaseActivity() {
                         // Pattern confirmed, save it
                         savePattern(pattern)
 
-                        PasscodeUtil.disableScreenLock = true
                         // 显示成功Toast并关闭页面
                         ToastUtil.show(getString(R.string.settings_pattern_success_title))
                         finish()

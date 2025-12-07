@@ -37,6 +37,7 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
+import com.difft.android.base.ui.theme.AppTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.NotificationContentDisplayType
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,7 +61,9 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            AppTheme(backgroundColorResId = R.color.bg_setting) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -73,16 +76,7 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
         }
 
         Column(
-            Modifier.Companion
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize()
         ) {
             ToolBar()
 
@@ -115,17 +109,9 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
             )
         }
         ConstraintLayout(
-            modifier = Modifier.Companion
+            modifier = Modifier
                 .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            R.color.bg1
-                        )
-                    )
-                )
+                .fillMaxWidth()
         ) {
             val (icBack, title) = createRefs()
             Image(

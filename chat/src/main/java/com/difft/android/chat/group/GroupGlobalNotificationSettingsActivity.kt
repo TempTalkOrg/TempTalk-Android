@@ -41,6 +41,7 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.AppTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.SecureSharedPrefsUtil
@@ -79,7 +80,9 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            AppTheme(backgroundColorResId = com.difft.android.base.R.color.bg_setting) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -92,16 +95,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
         }
 
         Column(
-            Modifier.Companion
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize()
         ) {
             ToolBar()
 
@@ -161,17 +155,9 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
             )
         }
         ConstraintLayout(
-            modifier = Modifier.Companion
+            modifier = Modifier
                 .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            R.color.bg1
-                        )
-                    )
-                )
+                .fillMaxWidth()
         ) {
             val (icBack, title) = createRefs()
             Image(

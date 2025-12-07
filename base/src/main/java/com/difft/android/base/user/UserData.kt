@@ -31,6 +31,7 @@ data class UserData(
     var keepAliveEnabled: Boolean = false, // Service保活机制是否启用
     var autoStartMessageService: Boolean = true, // 是否允许自动开启消息后台连接服务（默认true，用户手动关闭后为false）
     var messageServiceTipsShowedVersion: String? = null, //上次提示开启消息后台连接服务的版本
+    var floatingWindowPermissionTipsShowedVersion: String? = null, //上次提示开启悬浮窗权限的版本
 
     //通道加密
     var signalingKey: String? = null,

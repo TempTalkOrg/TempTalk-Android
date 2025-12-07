@@ -1,4 +1,4 @@
-package com.difft.android.call
+package com.difft.android.call.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -23,10 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
+import com.difft.android.base.R
+import com.difft.android.call.LCallManager
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.util.StringUtil
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.asFlow
+import kotlin.collections.contains
 
 
 /**
@@ -66,7 +69,7 @@ fun CalleeParticipantItem(
 
     ConstraintLayout(
         modifier = modifier
-            .background(colorResource(id = com.difft.android.base.R.color.bg1_night))
+            .background(colorResource(id = R.color.bg1_night))
     ){
         val (avatarView) = createRefs()
 

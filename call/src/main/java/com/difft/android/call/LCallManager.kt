@@ -49,6 +49,9 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.ui.CallRatingFeedbackView
 import com.difft.android.call.util.CallComposeUiUtil
+import com.difft.android.network.requests.ContactsRequestBody
+import com.difft.android.network.requests.ProfileRequestBody
+import com.difft.android.network.requests.PublicConfigsRequestBody
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -58,11 +61,13 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.BehaviorSubject
 import io.reactivex.rxjava3.subjects.CompletableSubject
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import livekit.LivekitTemptalk
 import org.difft.app.database.models.ContactorModel
@@ -533,7 +538,6 @@ object LCallManager {
                 .setPackage(application.packageName)
                 .putExtra(LCallConstants.BUNDLE_KEY_ROOM_ID, roomId)
         )
-        ScreenLockUtil.noNeedShowScreenLock = false
     }
 
     fun startIncomingCallService(intent: Intent) {
@@ -574,7 +578,7 @@ object LCallManager {
         L.i { "[call] LCallManager enable incoming call timeout detection" }
         checkCallWithTimeout(CallState.INCOMING_CALL, DEF_INCOMING_CALL_TIMEOUT, roomId, callBack = { stopNotificationAndService(roomId) })
         wakeupDevice()
-        ScreenLockUtil.noNeedShowScreenLock = true
+        ScreenLockUtil.temporarilyDisabled = true
     }
 
     private fun stopNotificationAndService(roomId: String) {
@@ -898,5 +902,47 @@ object LCallManager {
 
     fun getCallFeedbackInfo(): FeedbackCallInfo? {
         return callFeedbackInfo
+    }
+
+    suspend fun getUserCriticalAlertSettingStatus(userId: String): Boolean = runCatching {
+        val client = EntryPointAccessors
+            .fromApplication<EntryPoint>(com.difft.android.base.utils.application)
+            .httpClient()
+
+        client.httpService.fetchContactors(
+            baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
+            body = ContactsRequestBody(listOf(userId))
+        ).await()
+            .data?.contacts?.firstOrNull()
+            ?.publicConfigs?.criticalAlert
+            ?: false
+    }.getOrElse {
+        L.e(it) { "[Call] getUserCriticalAlertSettingStatus failed: ${it.message}" }
+        false
+    }
+
+    fun syncCriticalAlertSettingStatusAsync(status: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                val client = EntryPointAccessors
+                    .fromApplication<EntryPoint>(com.difft.android.base.utils.application)
+                    .httpClient()
+
+                val response = client.httpService.fetchSetProfile(
+                    baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
+                    profileRequestBody = ProfileRequestBody(
+                        publicConfigs = PublicConfigsRequestBody(criticalAlert = status)
+                    )
+                ).await()
+
+                if (response.status != 0) {
+                    L.e { "[Call] syncCriticalAlertSettingStatus failed → reason=${response.reason}" }
+                } else {
+                    L.i { "[Call] syncCriticalAlertSettingStatus success → $status" }
+                }
+            }.onFailure {
+                L.e(it) { "[Call] syncCriticalAlertSettingStatus exception → ${it.message}" }
+            }
+        }
     }
 }

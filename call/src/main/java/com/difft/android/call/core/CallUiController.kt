@@ -43,6 +43,8 @@ class CallUiController() {
     private val _countDownDurationStr = MutableStateFlow("00:00")
     val countDownDurationStr = _countDownDurationStr.asStateFlow()
 
+    private val _isCriticalAlertEnable = MutableStateFlow(false)
+    val isCriticalAlertEnable = _isCriticalAlertEnable.asStateFlow()
 
     /**
      * Enables or disables the "Hands Up" feature for participants in a call or meeting.
@@ -129,6 +131,13 @@ class CallUiController() {
      */
     fun setCountDownDurationStr(str: String) {
         _countDownDurationStr.value = str
+    }
+
+    /**
+     * Sets the critical alert enable state and updates the LiveData value.
+     */
+    fun setCriticalAlertEnable(enable: Boolean) {
+        _isCriticalAlertEnable.value = enable
     }
 
 }

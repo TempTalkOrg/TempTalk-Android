@@ -39,17 +39,10 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
-import org.difft.app.database.convertToContactorModels
-import org.difft.app.database.convertToTextMessage
-import org.difft.app.database.forwardContext
-import org.difft.app.database.getContactorsFromAllTable
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
-import org.difft.app.database.sharedContacts
 import com.difft.android.base.utils.utf8Substring
-import org.difft.app.database.wcdb
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.common.SendType
@@ -60,15 +53,32 @@ import com.difft.android.chat.contacts.data.isBotId
 import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.group.GroupUtil
+import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.source
 import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
-import com.difft.android.chat.message.ChatMessage
-import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.requests.GetConversationShareRequestBody
+import com.difft.android.network.responses.ConversationSetResponseBody
+import com.luck.picture.lib.basic.PictureSelector
+import com.luck.picture.lib.config.SelectMimeType
+import com.luck.picture.lib.config.SelectModeConfig
+import com.luck.picture.lib.entity.LocalMedia
+import com.luck.picture.lib.interfaces.OnResultCallbackListener
+import com.luck.picture.lib.language.LanguageConfig
+import com.luck.picture.lib.pictureselector.GlideEngine
+import com.luck.picture.lib.pictureselector.PictureSelectorUtils
+import com.luck.picture.lib.utils.ToastUtils
+import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
@@ -91,22 +101,6 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.config.GlobalConfigsManager
-import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.GetConversationShareRequestBody
-import com.difft.android.network.responses.ConversationSetResponseBody
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.difft.android.base.widget.ComposeDialogManager
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.config.SelectMimeType
-import com.luck.picture.lib.config.SelectModeConfig
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnResultCallbackListener
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.utils.ToastUtils
-import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -118,12 +112,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
 import net.yslibrary.android.keyboardvisibilityevent.Unregistrar
+import org.difft.app.database.convertToContactorModels
+import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.forwardContext
+import org.difft.app.database.getContactorsFromAllTable
+import org.difft.app.database.members
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
-import util.FileUtils
-import util.ScreenLockUtil
+import org.difft.app.database.sharedContacts
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.create
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
@@ -132,10 +131,10 @@ import org.thoughtcrime.securesms.util.MediaUtil
 import org.thoughtcrime.securesms.util.ServiceUtil
 import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.util.visible
-import java.io.File
+import util.FileUtils
+import util.ScreenLockUtil
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class ChatMessageInputFragment : DisposableManageFragment() {
@@ -217,15 +216,26 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
             val uri = result.data?.data
             if (uri == null) {
-                showUnsupportedFile()
+                ToastUtil.showLong(R.string.unsupported_file_type)
                 return@registerForActivityResult
             }
 
             viewLifecycleOwner.lifecycleScope.launch {
-                val file = withContext(Dispatchers.IO) { copyValidFileOrNull(uri) }
+                // 优先判断文件大小是否超过200MB
+                val fileSize = withContext(Dispatchers.IO) { FileUtil.getFileSize(uri) }
+                if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                    return@launch
+                }
+
+                val file = withContext(Dispatchers.IO) {
+                    runCatching { FileUtil.copyUriToFile(uri) }
+                        .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
+                        .getOrNull()
+                }
 
                 if (file == null) {
-                    showUnsupportedFile()
+                    ToastUtil.showLong(R.string.unsupported_file_type)
                     return@launch
                 }
 
@@ -743,7 +753,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         }
 
         binding.buttonAttachment.setOnClickListener {
-            ScreenLockUtil.noNeedShowScreenLock = true
+            ScreenLockUtil.temporarilyDisabled = true
             fileActivityLauncher.launch(
                 Intent(Intent.ACTION_GET_CONTENT).apply {
                     setType("*/*")
@@ -1611,7 +1621,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }
 
     private fun createPictureSelector() {
-        ScreenLockUtil.pictureSelectorIsShowing = true
+        ScreenLockUtil.temporarilyDisabled = true
         PictureSelector.create(this)
             .openGallery(SelectMimeType.ofAll())
             .setDefaultLanguage(LanguageConfig.ENGLISH)
@@ -1627,7 +1637,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 //                .setCompressEngine(ImageFileCompressEngine())
             .forResult(object : OnResultCallbackListener<LocalMedia> {
                 override fun onResult(result: ArrayList<LocalMedia>) {
-                    ScreenLockUtil.pictureSelectorIsShowing = false
                     val list = result.filter { it.size < FileUtil.MAX_SUPPORT_FILE_SIZE }
                     if (list.isNotEmpty()) {
                         val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
@@ -1636,18 +1645,11 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         mediaSelectActivityLauncher.launch(intent)
                     }
                     if (list.size < result.size) {
-                        Observable.just(Unit)
-                            .delay(1000, TimeUnit.MILLISECONDS)
-                            .compose(RxUtil.getSchedulerComposer())
-                            .to(RxUtil.autoDispose(this@ChatMessageInputFragment))
-                            .subscribe({
-                                ToastUtil.showLong(getString(R.string.max_support_file_size_50))
-                            }, {})
+                        ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
                     }
                 }
 
                 override fun onCancel() {
-                    ScreenLockUtil.pictureSelectorIsShowing = false
                 }
             })
     }
@@ -1698,25 +1700,24 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         }
     }
 
-    private fun showUnsupportedFile() {
-        ToastUtil.showLong(R.string.unsupported_file_type)
-    }
-
-    private suspend fun copyValidFileOrNull(uri: Uri): File? = runCatching {
-        if (FileUtil.getFileSize(uri) >= FileUtil.MAX_SUPPORT_FILE_SIZE) return null
-        FileUtil.copyUriToFile(uri)
-    }.onFailure {
-        L.e { "copyUriToFile failed: ${it.stackTraceToString()}" }
-    }.getOrNull()
-
-
     private fun handleFilePaste(uri: Uri, mimeType: String) {
         // Handle file paste - similar to fileActivityLauncher callback
         viewLifecycleOwner.lifecycleScope.launch {
-            val file = withContext(Dispatchers.IO) { copyValidFileOrNull(uri) }
+            // 优先判断文件大小是否超过200MB
+            val fileSize = withContext(Dispatchers.IO) { FileUtil.getFileSize(uri) }
+            if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                return@launch
+            }
+
+            val file = withContext(Dispatchers.IO) {
+                runCatching { FileUtil.copyUriToFile(uri) }
+                    .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
+                    .getOrNull()
+            }
 
             if (file == null) {
-                showUnsupportedFile()
+                ToastUtil.showLong(R.string.unsupported_file_type)
                 return@launch
             }
 

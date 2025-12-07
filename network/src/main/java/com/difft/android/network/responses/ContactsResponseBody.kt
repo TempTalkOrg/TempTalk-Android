@@ -30,4 +30,5 @@ data class AvatarResponse(
 data class PublicConfigs(
     val meetingVersion: Int? = null,
     val publicName: String? = null,
+    val criticalAlert: Boolean = false,
 )

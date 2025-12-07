@@ -41,9 +41,7 @@ fun AboutPageView(
     isInsider: Boolean
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorResource(id = com.difft.android.base.R.color.bg_setting))
+        modifier = Modifier.fillMaxSize()
     ) {
 
         TitleBar(titleText = stringResource(id = R.string.settings_about), onBackClick = onBackClick)

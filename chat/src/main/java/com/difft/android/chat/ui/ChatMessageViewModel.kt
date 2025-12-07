@@ -517,6 +517,14 @@ class ChatMessageViewModel @AssistedInject constructor(
             false
         }
 
+        // 转换锚点消息用于计算显示逻辑
+        val anchorChatMessageBefore = chatMessageListBehavior.anchorMessageBefore?.let {
+            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup)
+        }
+        val anchorChatMessageAfter = chatMessageListBehavior.anchorMessageAfter?.let {
+            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup)
+        }
+
         val chatMessages = chatMessageListBehavior.messageList.mapNotNull { msg ->
             generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup)?.apply {
                 editMode = selectMessageState.editModel
@@ -530,17 +538,42 @@ class ChatMessageViewModel @AssistedInject constructor(
             it is NotifyChatMessage && it.notifyMessage?.showContent.isNullOrEmpty()
         }
 
+        // 使用传递过来的 readPosition，如果没有传递则为 null（不显示分割线）
+        val readPosition = chatMessageListBehavior.readPosition
+
+        // 标记是否已经找到第一个未读的非自己发送的消息
+        var firstUnreadFound = false
+
         // 处理消息显示逻辑
         val newList = listWithoutErrorNotify.mapIndexed { index, message ->
-            val previousMessage = if (index > 0) listWithoutErrorNotify[index - 1] else null
+            // 使用锚点消息来计算第一条和最后一条消息的显示逻辑
+            val previousMessage = if (index > 0) {
+                listWithoutErrorNotify[index - 1]
+            } else {
+                anchorChatMessageBefore
+            }
             val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
 
-            val nextMessage = if (index < listWithoutErrorNotify.size - 1) listWithoutErrorNotify[index + 1] else null
+            val nextMessage = if (index < listWithoutErrorNotify.size - 1) {
+                listWithoutErrorNotify[index + 1]
+            } else {
+                anchorChatMessageAfter
+            }
             val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
 
             message.showName = !isSameDayWithPreviousMessage || previousMessage is NotifyChatMessage || message.nickname != previousMessage?.nickname
             message.showDayTime = !isSameDayWithPreviousMessage
             message.showTime = !isSameDayWithNextMessage || message.nickname != nextMessage?.nickname
+
+            // 设置新消息分割线：仅在初始化加载时（readPosition 不为 null）显示
+            // 在 readPosition 之后第一个不是自己发送的消息上显示
+            if (!firstUnreadFound && readPosition != null && message.systemShowTimestamp > readPosition && !message.isMine) {
+                message.showNewMsgDivider = true
+                firstUnreadFound = true
+            } else {
+                message.showNewMsgDivider = false
+            }
+
             message
         }
 

@@ -12,7 +12,6 @@ import com.difft.android.chat.R
 import io.reactivex.rxjava3.core.Single
 import org.signal.libsignal.protocol.ecc.Curve
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.util.TextSecurePreferences
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import javax.inject.Inject

@@ -14,6 +14,7 @@
     <string name="call_connecting_retry_tip">The meeting is connecting, please try again later.</string>
     <string name="call_disconnected_title">Disconnected</string>
     <string name="call_screen_sharing_title">\'s Screen Sharing</string>
+    <string name="call_screen_sharing_placeholder">Waiting for screen…</string>
     <string name="call_instant_call_title">\'s instant call</string>
     <string name="call_instant_call_title_default">instant call</string>
     <string name="call_push_stream_limit_tip">The current server has reached the publish streaming limit. Please try again later.</string>
@@ -33,7 +34,7 @@
     <string name="call_barrage_message_close_mic">turned OFF mic 🔕</string>
     <string name="call_barrage_message_screensharing">starts sharing 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
-    <string name="call_barrage_message_critical_alert_success">set a critical alert</string>
+    <string name="call_barrage_message_critical_alert_success">sent a critical alert</string>
     <string name="call_barrage_message_critical_alert_failed">Failed to send a critical alert. Please try again.</string>
     <string name="call_barrage_message_critical_alert_limited">Send too frequently. Please try again later.</string>
     <string name="call_attendees">Attendees</string>
@@ -90,5 +91,10 @@
     <string name="call_rating_question_other_0">Call kept disconnecting</string>
     <string name="call_rating_question_other_1">Call suddenly ended</string>
     <string name="call_rating_question_other_2">I could not answer the call</string>
+    <string name="call_pip_no_permission_tip_title">Floating window permission request</string>
+    <string name="call_pip_permission_tip_content">Before entering Picture-in-Picture mode, please enable the floating window permission for a smoother experience.</string>
+    <string name="call_pip_permission_button_cancel">Not now</string>
+    <string name="call_pip_permission_button_setting">Go to Settings</string>
+    <string name="call_pip_permission_setting_failed">Unable to open settings. Please enable floating window permission manually.</string>
 
 </resources>

@@ -52,7 +52,6 @@ class MainActivity : BaseActivity() {
     lateinit var recoveryPreferences: DatabaseRecoveryPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        ScreenLockUtil.appIsForegroundBeforeHandleDeeplink = AppForegroundObserver.isForegrounded()
         super.onCreate(savedInstanceState)
 
         lifecycleScope.launch {

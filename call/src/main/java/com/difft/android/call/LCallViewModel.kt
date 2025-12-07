@@ -215,6 +215,8 @@ class LCallViewModel (
         registerErrorCollector()
 
         registerListenSwitchCallServer()
+
+        checkCriticalAlertStatusById(callIntent)
     }
 
     fun getE2eeKey(): ByteArray? = e2eeKey
@@ -737,6 +739,7 @@ class LCallViewModel (
         LCallManager.stopRingTone(); LCallManager.stopVibration(); cancelCallTimeoutCheck()
         if (getCurrentCallType() == CallType.ONE_ON_ONE.type) {
             handleConnectedState()
+            if(callIntent.callRole == CallRole.CALLER.type) callUiController.setCriticalAlertEnable(false)
             if (room.remoteParticipants.size > 1) switchToInstantCall()
         }
         refreshRoomMetadata()
@@ -1104,6 +1107,25 @@ class LCallViewModel (
                 ToastUtil.show(message)
             } catch (e: Exception) {
                 L.e(e) { "[Call] Failed to show toast message: $message" }
+            }
+        }
+    }
+
+    /**
+     * Checks the critical alert status for a given call intent and updates the UI accordingly.
+     * This method specifically handles one-on-one calls where the user is the caller.
+     * It retrieves the critical alert setting status from the call manager and updates the UI on the main thread.
+     */
+    private fun checkCriticalAlertStatusById(callIntent: CallIntent) {
+        if(callIntent.callType == CallType.ONE_ON_ONE.type && callIntent.callRole == CallRole.CALLER.type) {
+            callIntent.conversationId?.let { conversationId ->
+                viewModelScope.launch(Dispatchers.IO) {
+                    val status = LCallManager.getUserCriticalAlertSettingStatus(conversationId)
+                    withContext(Dispatchers.Main) {
+                        // Update the UI with the critical alert status
+                        callUiController.setCriticalAlertEnable(status)
+                    }
+                }
             }
         }
     }

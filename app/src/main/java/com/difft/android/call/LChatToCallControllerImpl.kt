@@ -4,13 +4,13 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.text.TextUtils
-import androidx.lifecycle.LifecycleOwner
 import autodispose2.autoDispose
 import com.difft.android.base.call.Args
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallDataCaller
 import com.difft.android.base.call.CallDataSourceType
+import com.difft.android.base.call.CallEncryptResult
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.InviteCallRequestBody
@@ -52,12 +52,17 @@ import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import java.util.ArrayList
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.network.config.WsTokenManager
+import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.yield
+
 class LChatToCallControllerImpl @Inject constructor(
     @ChativeHttpClientModule.Call
     private val httpClient: ChativeHttpClient,
     private val callMessageCreator: CallMessageCreator,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val dbRoomStore: DBRoomStore,
+    private val wsTokenManager: WsTokenManager
 ) : LChatToCallController {
 
     @Inject
@@ -87,8 +92,8 @@ class LChatToCallControllerImpl @Inject constructor(
     }
 
     private val autoDisposeCompletable = CompletableSubject.create()
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private val coroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     override fun startCall(
         activity: Activity,
@@ -96,110 +101,48 @@ class LChatToCallControllerImpl @Inject constructor(
         chatRoomName: String?,
         onComplete: (Boolean) -> Unit
     ) {
-        LCallManager.showWaitDialog(activity)
-
-        val callType = when (forWhat) {
-            is For.Group -> {
-                CallType.GROUP
-            }
-
-            is For.Account -> {
-                CallType.ONE_ON_ONE
-            }
-
-            else -> {
-                CallType.INSTANT
-            }
-        }
-        val callRole = CallRole.CALLER
-
-        val createCallMessageTime = System.currentTimeMillis()
-
         coroutineScope.launch {
-            dbRoomStore.createRoomIfNotExist(forWhat)
-            val mySelfName = LCallManager.getDisplayName(mySelfId)
-            withContext(Dispatchers.Main) {
-                callMessageCreator.createCallMessage(
-                            forWhat,
-                            callType,
-                            callRole,
-                            CallActionType.START,
-                            forWhat.id,
-                            null,
-                            null,
-                            roomName = if(callType == CallType.ONE_ON_ONE) mySelfName else chatRoomName,
-                            mySelfId,
-                            messageEncryptor.generateKey(),
-                            createCallMsg = callConfig.createCallMsg,
-                            createdAt = createCallMessageTime
-                        ).compose(RxUtil.getSingleSchedulerComposer())
-                            .doAfterTerminate {
-                                LCallManager.dismissWaitDialog()
-                            }
-                            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-                            .subscribe({ callEncryptResult ->
-                                val collapseId = MD5Utils.md5AndHexStr(System.currentTimeMillis().toString() + mySelfId + DEFAULT_DEVICE_ID)
-                                val notification = Notification(Args(collapseId), LCallConstants.CALL_NOTIFICATION_TYPE)
-                                val body = StartCallRequestBody(
-                                    callType.type,
-                                    LCallConstants.CALL_VERSION,
-                                    System.currentTimeMillis(),
-                                    conversation = forWhat.id,
-                                    cipherMessages = callEncryptResult.cipherMessages,
-                                    encInfos = callEncryptResult.encInfos,
-                                    encMeta = null,
-                                    roomId = null,
-                                    notification = notification,
-                                    publicKey = callEncryptResult.publicKey
-                                )
-                                val startCallParams = LCallManager.createStartCallParams(body)
-                                val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
+            try {
+                LCallManager.showWaitDialog(activity)
+                yield() // 让主线程先渲染一帧
 
-                                val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
-                                    .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    .withAction(CallIntent.Action.START_CALL)
-                                    .withRoomName(chatRoomName)
-                                    .withCallType(callType.type)
-                                    .withCallRole(CallRole.CALLER.type)
-                                    .withCallerId(mySelfId)
-                                    .withConversationId(forWhat.id)
-                                    .withStartCallParams(startCallParams)
-                                    .withAppToken(SecureSharedPrefsUtil.getToken())
+                // 确保 Token 有效
+                wsTokenManager.refreshTokenIfNeeded()
 
-                                if(speedTestServerUrls.isEmpty()) {
-                                    callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
-                                        .compose(RxUtil.getSingleSchedulerComposer())
-                                        .autoDispose(autoDisposeCompletable)
-                                        .subscribe({
-                                            if (it.status == 0) {
-                                                L.d { "[Call] startCall getCallServerUrl success, response data:${it.data}" }
-                                                val data = it.data
-                                                val serviceUrls = data?.serviceUrls
-                                                if(data != null && serviceUrls != null && serviceUrls.isNotEmpty()) {
-                                                    val intent = callIntentBuilder.withCallServerUrls(serviceUrls).build()
-                                                    application.startActivity(intent)
-                                                    onComplete(true)
-                                                } else {
-                                                    L.e { "[Call] startCall call server url data is null" }
-                                                    onComplete(false)
-                                                }
-                                            } else {
-                                                L.e { "[Call] startCall getCallServerUrl failed, status:${it.status}" }
-                                                onComplete(false)
-                                            }
-                                        }, {
-                                            L.e { "[Call] startCall getCallServerUrl failed, error:${it.message}" }
-                                            onComplete(false)
-                                        })
-                                } else {
-                                    val intent = callIntentBuilder.withCallServerUrls(speedTestServerUrls).build()
-                                    activity.startActivity(intent)
-                                    onComplete(true)
-                                }
-                            },{
-                                L.e { "[Call] startCall, error:${it.message}" }
-                                onComplete(false)
-                            })
+                withContext(Dispatchers.IO) {
+                    dbRoomStore.createRoomIfNotExist(forWhat)
+                }
+
+                val mySelfName = LCallManager.getDisplayName(mySelfId)
+                val token = SecureSharedPrefsUtil.getToken()
+
+                val callEncryptResult = withContext(Dispatchers.IO) {
+                    callMessageCreator.createCallMessage(
+                        forWhat = forWhat,
+                        callType = resolveCallType(forWhat),
+                        callRole = CallRole.CALLER,
+                        callActionType = CallActionType.START,
+                        conversationId = forWhat.id,
+                        members = null,
+                        roomId = null,
+                        roomName = if (resolveCallType(forWhat) == CallType.ONE_ON_ONE) mySelfName else chatRoomName,
+                        caller = mySelfId,
+                        mKey = messageEncryptor.generateKey(),
+                        createCallMsg = callConfig.createCallMsg,
+                        createdAt = System.currentTimeMillis()
+                    )
+                }.await()
+
+                val result = withContext(Dispatchers.IO) {
+                    startCallInternal(activity, forWhat, callEncryptResult, token, chatRoomName)
+                }
+
+                onComplete(result)
+            } catch (e: Exception) {
+                L.e { "[Call] startCall failed: ${e.message}" }
+                onComplete(false)
+            } finally {
+                LCallManager.dismissWaitDialog()
             }
         }
     }
@@ -649,6 +592,77 @@ class LChatToCallControllerImpl @Inject constructor(
             putExtra(LCallConstants.BUNDLE_KEY_CONVERSATION_ID, callData.conversation)
         }
         LCallManager.startIncomingCallService(intentNotify)
+    }
+
+
+    private fun resolveCallType(forWhat: For): CallType = when (forWhat) {
+        is For.Group -> CallType.GROUP
+        is For.Account -> CallType.ONE_ON_ONE
+        else -> CallType.INSTANT
+    }
+
+
+    private suspend fun startCallInternal(
+        activity: Activity,
+        forWhat: For,
+        callEncryptResult: CallEncryptResult,
+        token: String,
+        chatRoomName: String?
+    ): Boolean {
+        val callType = resolveCallType(forWhat)
+
+        val collapseId = MD5Utils.md5AndHexStr(
+            System.currentTimeMillis().toString() + mySelfId + DEFAULT_DEVICE_ID
+        )
+        val notification = Notification(Args(collapseId), LCallConstants.CALL_NOTIFICATION_TYPE)
+
+        val body = StartCallRequestBody(
+            callType.type,
+            LCallConstants.CALL_VERSION,
+            System.currentTimeMillis(),
+            conversation = forWhat.id,
+            cipherMessages = callEncryptResult.cipherMessages,
+            encInfos = callEncryptResult.encInfos,
+            notification = notification,
+            publicKey = callEncryptResult.publicKey
+        )
+
+        val startCallParams = LCallManager.createStartCallParams(body)
+        val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
+            .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .withAction(CallIntent.Action.START_CALL)
+            .withRoomName(chatRoomName)
+            .withCallType(callType.type)
+            .withCallRole(CallRole.CALLER.type)
+            .withCallerId(mySelfId)
+            .withConversationId(forWhat.id)
+            .withStartCallParams(startCallParams)
+            .withAppToken(token)
+
+        val cachedUrls = LCallEngine.getAvailableServerUrls()
+        if (cachedUrls.isNotEmpty()) {
+            activity.startActivity(callIntentBuilder.withCallServerUrls(cachedUrls).build())
+            return true
+        }
+
+        // ✅ 网络请求 + 异常处理
+        return try {
+            val response = callService.getServiceUrl(token)
+                .compose(RxUtil.getSingleSchedulerComposer())
+                .await() // 使用扩展 await() 挂起转换
+
+            if (response.status == 0 && !response.data?.serviceUrls.isNullOrEmpty()) {
+                val urls = response.data!!.serviceUrls!!
+                activity.startActivity(callIntentBuilder.withCallServerUrls(urls).build())
+                true
+            } else {
+                L.e { "[Call] startCall getCallServerUrl failed, status:${response.status}" }
+                false
+            }
+        } catch (e: Exception) {
+            L.e { "[Call] startCall getCallServerUrl failed: ${e.message}" }
+            false
+        }
     }
 
 }

@@ -156,6 +156,7 @@
     <string name="chat_voice_max_size_limit">录音文件最大限制为10M</string>
 
     <string name="chat_message_delete_tips">是否删除这条消息？</string>
+    <string name="chat_label_new_message">新消息</string>
 
     <!--Chat Option -->
     <string name="chat_option_create_group">创建群组</string>
@@ -427,7 +428,7 @@
 
     <string name="chat_new_message">[新消息]</string>
     <string name="unsupported_message_type">[不支持的消息类型]</string>
-    <string name="max_support_file_size_50">支持最大200M的文件</string>
+    <string name="max_support_file_size_limit">抱歉，您选择的文件超过了200M，无法发送。</string>
     <string name="all_messages_deleted">所有消息已被删除。</string>
 
     <string name="chat_settings_mute">免打扰</string>
@@ -473,10 +474,11 @@
     <string name="notification_no_permission_tip5">请开启后台弹窗权限和锁屏显示权限，允许%s在锁屏时显示来电界面。</string>
     <string name="notification_no_permission_tip6">请开启横幅通知权限，允许%s在锁屏时显示来电界面。</string>
     <string name="notification_disturb_tip">“请勿打扰”已开启，您可能收不到通知。</string>
-    <string name="notification_no_google_tip">您的设备上没有谷歌服务，请保持开启后台连接，以便能正常接收到消息和接听电话。</string>
+    <string name="notification_no_google_tip">您的设备上连接谷歌服务受限，请保持开启后台连接功能，以便能正常接收到消息和接听电话。</string>
     <string name="notification_ignore">稍后</string>
     <string name="notification_go_to_settings">设置</string>
     <string name="notification_title">通知</string>
+    <string name="notification_group_chat_notification">群通知</string>
     <string name="notification_settings">通知</string>
     <string name="notification_full_screen_settings">全屏通知</string>
     <string name="notification_settings_open_fail">此设备没有通知设置页面</string>
@@ -607,7 +609,7 @@
 
     <string name="background_connection">后台连接</string>
     <string name="background_connection_enabled">后台连接已启用</string>
-    <string name="background_connection_tips">保持Yelling低影响后台连接以获得可靠的通知。开启前，请确保以下设置项为正常状态：</string>
+    <string name="background_connection_tips">保持Yelling低影响后台连接以获得可靠的通知。开启前，请确保以上设置项为正常状态。</string>
 
     <!-- 后台连接检查项 -->
     <string name="background_restriction_check">后台限制</string>
@@ -627,6 +629,8 @@
 
     <string name="background_connection_check_failed">请先确保以下设置项为正常状态，再开启后台连接</string>
 
+    <string name="critical_alert_background_connection_check_failed">为了不错过重要提醒，建议您开启后台运行权限。</string>
+
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_notify_content">以下消息将在阅读后的 %1$s 内被删除。</string>
     <string name="disappearing_messages_tips">消息在被阅读后会自动过期，它们将会被删除，无法以任何方式查看。</string>
@@ -635,8 +639,8 @@
     <string name="chat_group_in_common">共同群组</string>
     <string name="contact_blocked_tips">操作被拒绝。你们还不是朋友。</string>
 
-    <string name="critical_alerts">紧急通知</string>
-    <string name="critical_alerts_content">模式访问权限 - %s 允许模式访问权限，并开启。</string>
+    <string name="critical_alerts">重要提醒</string>
+    <string name="critical_alerts_content">允许 %s 访问并启用“免打扰”权限（某些设备上称为“模式访问”权限）。</string>
     <string name="critical_alerts_off">关</string>
     <string name="critical_alerts_on">开</string>
 

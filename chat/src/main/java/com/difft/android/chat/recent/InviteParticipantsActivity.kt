@@ -1,7 +1,15 @@
 package com.difft.android.chat.recent
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.difft.android.base.call.CallActionType
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.call.LCallActivity
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ActivityInviteParticipantsBinding
 import dagger.hilt.android.AndroidEntryPoint
@@ -30,6 +38,9 @@ class InviteParticipantsActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityInviteParticipantsBinding
+
+    private var isReceiverRegistered = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityInviteParticipantsBinding.inflate(layoutInflater)
@@ -76,6 +87,35 @@ class InviteParticipantsActivity : AppCompatActivity() {
                         excludedIds = excludedIds
                     )
                 ).commitNow()
+            }
+        }
+
+        ContextCompat.registerReceiver(
+            this, broadcastReceiver, IntentFilter(
+                LCallActivity.ACTION_IN_CALLING_CONTROL
+            ), ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        isReceiverRegistered = true
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isReceiverRegistered) {
+            unregisterReceiver(broadcastReceiver)
+            isReceiverRegistered = false
+        }
+    }
+
+    private val broadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent == null || intent.`package` != packageName || intent.action != LCallActivity.ACTION_IN_CALLING_CONTROL) {
+                return
+            }
+            when (intent.getStringExtra(LCallActivity.EXTRA_CONTROL_TYPE)) {
+                CallActionType.DECLINE.type -> {
+                    L.i { "[Call] InviteParticipantsActivity CONTROL_TYPE_DECLINE" }
+                    finish()
+                }
             }
         }
     }

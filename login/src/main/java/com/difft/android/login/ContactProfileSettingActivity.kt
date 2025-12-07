@@ -199,7 +199,7 @@ class ContactProfileSettingActivity : BaseActivity() {
     }
 
     private fun createPictureSelector() {
-        ScreenLockUtil.pictureSelectorIsShowing = true
+        ScreenLockUtil.temporarilyDisabled = true
         PictureSelector.create(this)
             .openGallery(SelectMimeType.ofImage())
             .setDefaultLanguage(LanguageConfig.ENGLISH)
@@ -212,7 +212,6 @@ class ContactProfileSettingActivity : BaseActivity() {
             .setCompressEngine(ImageFileCompressEngine())
             .forResult(object : OnResultCallbackListener<LocalMedia> {
                 override fun onResult(result: ArrayList<LocalMedia>) {
-                    ScreenLockUtil.pictureSelectorIsShowing = false
                     if (result.isNotEmpty()) {
                         val localMedia = result[0]
                         mAvatarFilePath = localMedia.compressPath ?: localMedia.realPath
@@ -221,7 +220,6 @@ class ContactProfileSettingActivity : BaseActivity() {
                 }
 
                 override fun onCancel() {
-                    ScreenLockUtil.pictureSelectorIsShowing = false
                 }
             })
     }

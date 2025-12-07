@@ -28,6 +28,7 @@ abstract class ChatMessage : Serializable {
     var showName: Boolean = true
     var showTime: Boolean = true
     var showDayTime: Boolean = true
+    var showNewMsgDivider: Boolean = false
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -50,6 +51,7 @@ abstract class ChatMessage : Serializable {
         if (showName != other.showName) return false
         if (showTime != other.showTime) return false
         if (showDayTime != other.showDayTime) return false
+        if (showNewMsgDivider != other.showNewMsgDivider) return false
         return true
     }
 
@@ -70,11 +72,12 @@ abstract class ChatMessage : Serializable {
         result = 31 * result + showName.hashCode()
         result = 31 * result + showTime.hashCode()
         result = 31 * result + showDayTime.hashCode()
+        result = 31 * result + showNewMsgDivider.hashCode()
         return result
     }
 
     override fun toString(): String {
-        return "ChatMessage(id='$id', authorId='$authorId', isMine=$isMine, contactor=$contactor, nickname=$nickname, sendStatus=$sendStatus, timeStamp=$timeStamp, systemShowTimestamp=$systemShowTimestamp, readMaxSId=$readMaxSId, notifySequenceId=$notifySequenceId, selectedStatus=$selectedStatus, editMode=$editMode, mode=$mode, showName=$showName, showTime=$showTime, showDayTime=$showDayTime)"
+        return "ChatMessage(id='$id', authorId='$authorId', isMine=$isMine, contactor=$contactor, nickname=$nickname, sendStatus=$sendStatus, timeStamp=$timeStamp, systemShowTimestamp=$systemShowTimestamp, readMaxSId=$readMaxSId, notifySequenceId=$notifySequenceId, selectedStatus=$selectedStatus, editMode=$editMode, mode=$mode, showName=$showName, showTime=$showTime, showDayTime=$showDayTime, showNewMsgDivider=$showNewMsgDivider)"
     }
 
 

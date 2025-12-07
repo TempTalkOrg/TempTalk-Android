@@ -99,8 +99,6 @@ class SetPasscodeActivity : BaseActivity() {
                 this.passcodeTimeout = timeout
             }
 
-            PasscodeUtil.disableScreenLock = true
-
             ToastUtil.showLong(getString(R.string.settings_passcode_success_title))
             finish()
         } else {

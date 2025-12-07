@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
@@ -24,10 +26,11 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
-import org.difft.app.database.wcdb
 import com.difft.android.base.widget.ChativePopupView
 import com.difft.android.base.widget.ChativePopupWindow
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatBinding
@@ -41,30 +44,28 @@ import com.difft.android.chat.recent.RoomViewData.Type
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.messageserialization.db.store.ConversationUtils
 import com.difft.android.messageserialization.db.store.DBRoomStore
-import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ComposeDialog
-import com.difft.android.base.widget.ToastUtil
+import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
+import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
+import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
-import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
-import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import javax.inject.Inject
-import kotlin.collections.set
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
@@ -106,7 +107,7 @@ class RecentChatFragment : DisposableManageFragment() {
                 position: Int
             ) {
                 // Skip processing for instant calls as they don't require chat room navigation
-                if(roomViewData.isInstantCall) {
+                if (roomViewData.isInstantCall) {
                     return
                 }
 
@@ -504,8 +505,6 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
 
-
-
     private fun sortingChatRooms(
         list: List<RoomViewData>
     ) {
@@ -520,11 +519,11 @@ class RecentChatFragment : DisposableManageFragment() {
         mAdapter.submitList(items)
     }
 
-    @OptIn(FlowPreview::class)
     private fun observeChatWSConnection() {
         webSocketManager.getWebSocketConnection()
             .webSocketConnectionState
-            .debounce(500)
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .distinctUntilChanged()
             .onEach { state ->
                 L.i { "[ws][RecentChatFragment] chat webSocketConnectionState changed:$state" }
                 when (state) {

@@ -27,9 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintLayout
-import com.difft.android.call.ScaleType
-import com.difft.android.call.VideoItemTrackSelector
-import com.difft.android.call.ViewType
 import com.difft.android.call.data.CallUserDisplayInfo
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant

@@ -14,9 +14,6 @@ public final class SignalStore {
     private KeyValueStore store;
 
     private final AccountValues accountValues;
-    private final MiscellaneousValues misc;
-    private final RemoteConfigValues remoteConfigValues;
-    private final EmojiValues emojiValues;
     private final ImageEditorValues imageEditorValues;
 
     private static volatile SignalStore instance;
@@ -37,9 +34,6 @@ public final class SignalStore {
     private SignalStore(@NonNull KeyValueStore store) {
         this.store = store;
         this.accountValues = new AccountValues(store);
-        this.misc = new MiscellaneousValues(store);
-        this.remoteConfigValues = new RemoteConfigValues(store);
-        this.emojiValues = new EmojiValues(store);
         this.imageEditorValues = new ImageEditorValues(store);
     }
 
@@ -68,10 +62,6 @@ public final class SignalStore {
         getStore().blockUntilAllWritesFinished();
     }
 
-    public static @NonNull
-    MiscellaneousValues misc() {
-        return getInstance().misc;
-    }
 
     private static @NonNull
     KeyValueStore getStore() {
@@ -84,15 +74,6 @@ public final class SignalStore {
     @VisibleForTesting
     public static void inject(@NonNull KeyValueStore store) {
         instance = new SignalStore(store);
-    }
-
-    public static @NonNull
-    RemoteConfigValues remoteConfigValues() {
-        return getInstance().remoteConfigValues;
-    }
-
-    public static @NonNull EmojiValues emojiValues() {
-        return getInstance().emojiValues;
     }
 
     public static @NonNull ImageEditorValues imageEditorValues() {

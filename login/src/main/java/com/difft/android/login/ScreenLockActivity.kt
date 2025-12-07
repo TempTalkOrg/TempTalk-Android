@@ -23,6 +23,7 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.login.databinding.ActivityScreenLockBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.thoughtcrime.securesms.util.ViewUtil
@@ -36,8 +37,8 @@ class ScreenLockActivity : BaseActivity() {
 
         fun startActivity(fromActivity: Activity) {
             val intent = Intent(fromActivity, ScreenLockActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             fromActivity.startActivity(intent)
-            PasscodeUtil.disableScreenLock = true
         }
     }
 
@@ -54,6 +55,10 @@ class ScreenLockActivity : BaseActivity() {
 
     // 是否为验证模式（用于关闭锁定时的身份验证）
     private var isVerificationMode = false
+
+    // 倒计时相关 - Pattern 和 Passcode 分别维护
+    private var patternCountdownJob: Job? = null
+    private var passcodeCountdownJob: Job? = null
 
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -133,13 +138,15 @@ class ScreenLockActivity : BaseActivity() {
             )
         }
 
-        checkAndShowDelayTips(false) // Passcode
-        checkAndShowDelayTips(true)  // Pattern
+        // 检查并恢复倒计时状态
+        checkAndRestoreCountdown()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         PasscodeUtil.needRecordLastUseTime = true
+        patternCountdownJob?.cancel()
+        passcodeCountdownJob?.cancel()
     }
 
     private fun determineDefaultMode() {
@@ -214,10 +221,9 @@ class ScreenLockActivity : BaseActivity() {
         // 清除输入和错误
         mBinding.etPasscode1.text?.clear()
         mBinding.patternLockView.clearPattern()
-        mBinding.tvErrorTips.visibility = View.INVISIBLE
 
-        // 根据当前模式显示相应的延迟提示
-        checkAndShowDelayTips(isPatternMode)
+        // 切换模式时，根据新模式恢复对应的倒计时状态
+        updateDelayStatusForCurrentMode()
     }
 
     private fun updateOptionsPosition(isPatternMode: Boolean) {
@@ -288,33 +294,6 @@ class ScreenLockActivity : BaseActivity() {
         finish()
     }
 
-    private fun checkAndShowDelayTips(isPattern: Boolean = false) {
-        val attemptsCount = if (isPattern) {
-            userManager.getUserData()?.patternAttempts ?: 0
-        } else {
-            userManager.getUserData()?.passcodeAttempts ?: 0
-        }
-
-        when {
-            attemptsCount >= 9 -> {
-                // 第9次错误后显示强制退出警告
-                mBinding.tvErrorTips.visibility = View.VISIBLE
-                mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
-            }
-
-            attemptsCount > 4 -> {
-                // 5-8次错误显示延迟提示
-                val delaySeconds = (attemptsCount - 4) * (attemptsCount - 4)
-                mBinding.tvErrorTips.visibility = View.VISIBLE
-                mBinding.tvErrorTips.text = getString(R.string.settings_passcode_attempts_delay, delaySeconds)
-            }
-
-            else -> {
-                mBinding.tvErrorTips.visibility = View.INVISIBLE
-            }
-        }
-    }
-
     private fun prepareVerify(isPattern: Boolean, inputValue: String, isManualVerify: Boolean) {
         // 获取存储的hash
         val actualStoredHash = if (isPattern) {
@@ -340,49 +319,17 @@ class ScreenLockActivity : BaseActivity() {
             userManager.getUserData()?.passcodeAttempts ?: 0
         }
 
-
         // 对于Passcode，如果失败次数超过限制且不是手动验证，则不进行自动校验
         if (!isPattern && attempts >= 5 && !isManualVerify) {
             L.i { "[ScreenLockActivity] Auto verification blocked due to passcode attempts limit" }
             return
         }
 
-        if (attempts >= 5) {
-            // 第9次错误后，第10次输入时直接验证不延迟
-            if (attempts >= 9) {
-                // 直接验证，不延迟
-                if (isPattern) {
-                    verifyPattern(actualStoredHash, inputValue)
-                } else {
-                    verifyPasscode(actualStoredHash, inputValue, isManualVerify)
-                }
-            } else {
-                // 5-8次错误需要延迟等待
-                val delaySeconds = (attempts - 4) * (attempts - 4)
-                ComposeDialogManager.showWait(this@ScreenLockActivity, "", cancelable = false)
-
-                lifecycleScope.launch {
-                    try {
-                        delay(delaySeconds * 1000L)
-                        ComposeDialogManager.dismissWait()
-                        if (isPattern) {
-                            verifyPattern(actualStoredHash, inputValue)
-                        } else {
-                            verifyPasscode(actualStoredHash, inputValue, true)
-                        }
-                    } catch (e: Exception) {
-                        ComposeDialogManager.dismissWait()
-                        e.printStackTrace()
-                    }
-                }
-            }
+        // 立即验证
+        if (isPattern) {
+            verifyPattern(actualStoredHash, inputValue)
         } else {
-            // 1-4次错误直接验证
-            if (isPattern) {
-                verifyPattern(actualStoredHash, inputValue)
-            } else {
-                verifyPasscode(actualStoredHash, inputValue, isManualVerify)
-            }
+            verifyPasscode(actualStoredHash, inputValue, isManualVerify)
         }
     }
 
@@ -412,10 +359,23 @@ class ScreenLockActivity : BaseActivity() {
                 return
             }
 
-            // 检查并显示延迟提示
-            checkAndShowDelayTips(true)
-
+            // 所有错误都显示 Toast 提示
             ToastUtil.show(R.string.settings_pattern_error_tips)
+
+            // 根据尝试次数处理
+            when {
+                attemptsCount + 1 == 9 -> {
+                    // 第9次错误：显示警告文案
+                    mBinding.tvErrorTips.visibility = View.VISIBLE
+                    mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
+                }
+
+                attemptsCount + 1 >= 5 -> {
+                    // 第5-8次错误：启动倒计时
+                    val delaySeconds = (attemptsCount + 1 - 4) * (attemptsCount + 1 - 4)
+                    startCountdownTimer(delaySeconds, true)
+                }
+            }
         }
     }
 
@@ -428,6 +388,9 @@ class ScreenLockActivity : BaseActivity() {
             onVerificationSuccess()
         } else {
             if (isManualVerify) {
+                // 清空输入框
+                mBinding.etPasscode1.text?.clear()
+
                 val attemptsCount = (userManager.getUserData()?.passcodeAttempts ?: 0)
                 userManager.update {
                     this.passcodeAttempts = attemptsCount + 1
@@ -439,10 +402,129 @@ class ScreenLockActivity : BaseActivity() {
                     return
                 }
 
-                checkAndShowDelayTips(false)
-
+                // 所有错误都显示 Toast 提示
                 ToastUtil.show(R.string.settings_passcode_error_tips)
+
+                // 根据尝试次数处理
+                when {
+                    attemptsCount + 1 == 9 -> {
+                        // 第9次错误：显示警告文案
+                        mBinding.tvErrorTips.visibility = View.VISIBLE
+                        mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
+                    }
+
+                    attemptsCount + 1 >= 5 -> {
+                        // 第5-8次错误：启动倒计时
+                        val delaySeconds = (attemptsCount + 1 - 4) * (attemptsCount + 1 - 4)
+                        startCountdownTimer(delaySeconds, false)
+                    }
+                }
             }
         }
+    }
+
+    private fun startCountdownTimer(delaySeconds: Int, isPattern: Boolean) {
+        // 根据模式选择对应的 Job
+        if (isPattern) {
+            // 取消之前的 Pattern 倒计时
+            patternCountdownJob?.cancel()
+            // 禁用 Pattern 输入
+            mBinding.patternLockView.setInputEnabled(false)
+        } else {
+            // 取消之前的 Passcode 倒计时
+            passcodeCountdownJob?.cancel()
+            // 禁用 Passcode 输入
+            mBinding.etPasscode1.isEnabled = false
+            mBinding.btnSubmit.isEnabled = false
+        }
+
+        // 启动倒计时
+        val job = lifecycleScope.launch {
+            var remainingSeconds = delaySeconds
+            while (remainingSeconds > 0) {
+                // 只有当前模式与倒计时模式匹配时才更新UI
+                if (isPattern == isPatternMode) {
+                    mBinding.tvErrorTips.visibility = View.VISIBLE
+                    updateCountdownText(remainingSeconds)
+                }
+
+                delay(1000L)
+                remainingSeconds--
+            }
+
+            // 倒计时结束，恢复输入
+            if (isPattern) {
+                mBinding.patternLockView.setInputEnabled(true)
+            } else {
+                mBinding.etPasscode1.isEnabled = true
+                // 清除输入框内容
+                mBinding.etPasscode1.text?.clear()
+                // btnSubmit 的状态由 etPasscode1 的文本变化控制，会自动更新为 false
+            }
+
+            // 只有当前模式与倒计时模式匹配时才隐藏错误提示
+            if (isPattern == isPatternMode) {
+                mBinding.tvErrorTips.visibility = View.INVISIBLE
+            }
+        }
+
+        // 保存对应的 Job
+        if (isPattern) {
+            patternCountdownJob = job
+        } else {
+            passcodeCountdownJob = job
+        }
+    }
+
+    private fun updateCountdownText(remainingSeconds: Int) {
+        if (remainingSeconds > 0) {
+            mBinding.tvErrorTips.text = getString(R.string.settings_yelling_unavailable_countdown, remainingSeconds)
+        } else {
+            mBinding.tvErrorTips.visibility = View.INVISIBLE
+        }
+    }
+
+    private fun checkAndRestoreCountdown() {
+        val userData = userManager.getUserData() ?: return
+
+        // 分别检查并启动两种模式的倒计时（如果需要的话）
+        // Pattern 模式
+        val patternAttempts = userData.patternAttempts
+        if (patternAttempts in 5..8) {
+            val delaySeconds = (patternAttempts - 4) * (patternAttempts - 4)
+            startCountdownTimer(delaySeconds, true)
+        }
+
+        // Passcode 模式
+        val passcodeAttempts = userData.passcodeAttempts
+        if (passcodeAttempts in 5..8) {
+            val delaySeconds = (passcodeAttempts - 4) * (passcodeAttempts - 4)
+            startCountdownTimer(delaySeconds, false)
+        }
+
+        // 根据当前显示的模式，更新UI显示
+        updateDelayStatusForCurrentMode()
+    }
+
+    private fun updateDelayStatusForCurrentMode() {
+        val userData = userManager.getUserData() ?: return
+
+        // 根据当前模式获取对应的尝试次数
+        val attemptsCount = if (isPatternMode) {
+            userData.patternAttempts
+        } else {
+            userData.passcodeAttempts
+        }
+
+        // 处理第9次错误的情况
+        if (attemptsCount == 9) {
+            mBinding.tvErrorTips.visibility = View.VISIBLE
+            mBinding.tvErrorTips.text = getString(R.string.settings_too_many_attempts_warning)
+            return
+        }
+
+        // 如果在倒计时范围（5-8次），先隐藏错误提示，Job 会在下一秒更新显示
+        // 否则隐藏错误提示
+        mBinding.tvErrorTips.visibility = View.INVISIBLE
     }
 }

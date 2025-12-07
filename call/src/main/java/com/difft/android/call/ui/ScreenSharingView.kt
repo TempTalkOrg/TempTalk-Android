@@ -21,9 +21,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsCompat
-import com.difft.android.call.ScaleType
-import com.difft.android.call.VideoItemTrackSelector
-import com.difft.android.call.ViewType
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -60,7 +57,7 @@ fun ScreenSharingView(
             // Specifies this view should display screen sharing content
             sourceType = Track.Source.SCREEN_SHARE,
             scaleType = ScaleType.FitInside,
-            viewType = ViewType.Surface,
+            viewType = ViewType.ScreenShare,
             draggable = true,
         )
 

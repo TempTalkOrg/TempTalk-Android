@@ -202,7 +202,7 @@ object FileUtil {
         return fileSize
     }
 
-    const val MAX_SUPPORT_FILE_SIZE = 1024 * 1024 * 200
+    const val MAX_SUPPORT_FILE_SIZE = 1024 * 1024 * 200 //200M
 
     fun readableFileSize(size: Long): String {
         if (size <= 0) return "0"

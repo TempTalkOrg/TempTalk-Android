@@ -35,6 +35,7 @@ import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -68,6 +69,7 @@ import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.config.UserAgentManager
 import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
+import com.difft.android.setting.BackgroundConnectionSettingsActivity
 import com.difft.android.setting.NotificationSettingsActivity
 import com.difft.android.setting.UpdateManager
 import com.google.android.gms.common.ConnectionResult
@@ -333,7 +335,7 @@ class IndexActivity : BaseActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        L.i { "onNewIntent - indexActivity" }
+        L.i { "[IndexActivity] onNewIntent" }
         handleShareIntent(intent)
     }
 
@@ -441,8 +443,8 @@ class IndexActivity : BaseActivity() {
                         L.i { "[fcm] Fetching FCM registration token success ${tokenResult.length}" }
                         PushUtil.sendRegistrationToServer(null, tokenResult)
 
-                        // FCM可用，自动停止Service并禁用保活
-                        messageServiceManager.onFcmAvailable()
+//                        // FCM可用，自动停止Service并禁用保活
+//                        messageServiceManager.onFcmAvailable()
 
                         FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
                     }
@@ -608,7 +610,7 @@ class IndexActivity : BaseActivity() {
             cancelText = getString(R.string.notification_ignore),
             cancelable = false,
             onConfirm = {
-                NotificationSettingsActivity.startActivity(this@IndexActivity)
+                BackgroundConnectionSettingsActivity.startActivity(this@IndexActivity)
             },
             onCancel = {
                 // 用户点击"暂不开启"，记录版本号，此版本不再弹窗
@@ -621,9 +623,13 @@ class IndexActivity : BaseActivity() {
 
     private fun handleDeeplink(linkData: LinkDataEntity) {
         L.i { "[Deeplink] Handle deeplink:${linkData.category} linkData:$linkData" }
+
+        // IndexActivity 的 singleTask 会清除已有的 ScreenLockActivity
+        // deeplink 场景需要手动触发锁屏检查
+        (application as com.difft.android.app.TempTalkApplication).triggerScreenLockCheck()
+
         when (linkData.category) {
             LinkDataEntity.CATEGORY_PUSH, LinkDataEntity.CATEGORY_MESSAGE -> {
-                PasscodeUtil.disableScreenLock = false
                 if (!TextUtils.isEmpty(linkData.gid)) {
                     if (ValidatorUtil.isGid(linkData.gid.toString())) {
                         GroupChatContentActivity.startActivity(
@@ -878,11 +884,34 @@ class IndexActivity : BaseActivity() {
                             )
                         } else {
                             // Handle shared content URI (image, file, etc.)
-                            selectChatsUtils.showChatSelectAndSendDialog(
-                                this,
-                                "",
-                                logFile = copyUriToFile(uri)
-                            )
+                            lifecycleScope.launch {
+                                // 优先判断文件大小是否超过200MB
+                                val fileSize = withContext(Dispatchers.IO) {
+                                    FileUtil.getFileSize(uri)
+                                }
+
+                                if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                                    return@launch
+                                }
+
+                                val file = withContext(Dispatchers.IO) {
+                                    runCatching { copyUriToFile(uri) }
+                                        .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
+                                        .getOrNull()
+                                }
+
+                                if (file == null) {
+                                    ToastUtil.showLong(R.string.unsupported_file_type)
+                                    return@launch
+                                }
+
+                                selectChatsUtils.showChatSelectAndSendDialog(
+                                    this@IndexActivity,
+                                    "",
+                                    logFile = file
+                                )
+                            }
                         }
                     }
                 }
@@ -915,6 +944,10 @@ class IndexActivity : BaseActivity() {
         return uri
     }
 
+    /**
+     * 将 URI 复制到本地文件
+     * 注意：此方法涉及文件 IO 操作，应在子线程（如 Dispatchers.IO）中调用
+     */
     private fun copyUriToFile(uri: Uri): File {
         val mimeType = contentResolver.getType(uri) // Get the MIME type
         val extension = mimeType?.let {

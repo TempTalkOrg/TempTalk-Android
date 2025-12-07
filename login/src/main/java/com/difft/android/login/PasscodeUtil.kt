@@ -9,8 +9,6 @@ object PasscodeUtil {
 
     var needRecordLastUseTime = true
 
-    var disableScreenLock = false
-
     const val DEFAULT_TIMEOUT = 300
     val TIMEOUT_LIST = listOf(60, 300, 900, 1800, 3600, 0)
 

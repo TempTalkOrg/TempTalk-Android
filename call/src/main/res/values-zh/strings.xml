@@ -14,6 +14,7 @@
     <string name="call_connecting_retry_tip">会议连接中，请稍后再试。</string>
     <string name="call_disconnected_title">连接中断</string>
     <string name="call_screen_sharing_title">的屏幕分享</string>
+    <string name="call_screen_sharing_placeholder">Waiting for screen…</string>
     <string name="call_instant_call_title">\'s instant call</string>
     <string name="call_instant_call_title_default">instant call</string>
     <string name="call_push_stream_limit_tip">当前服务器已达到推流上限，请稍候再试。</string>
@@ -33,7 +34,7 @@
     <string name="call_barrage_message_close_mic">关闭了麦克风 🔕</string>
     <string name="call_barrage_message_screensharing">开始屏幕分享 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
-    <string name="call_barrage_message_critical_alert_success">set a critical alert</string>
+    <string name="call_barrage_message_critical_alert_success">sent a critical alert</string>
     <string name="call_barrage_message_critical_alert_failed">发送重要提醒失败，请重试。</string>
     <string name="call_barrage_message_critical_alert_limited">发送过于频繁，请稍后重试。</string>
     <string name="call_attendees">参会者</string>
@@ -51,7 +52,7 @@
     <string name="call_toolbar_bottom_invite_text">邀请</string>
     <string name="call_toolbar_bottom_raise_hand_text">举手</string>
     <string name="call_toolbar_bottom_switch_text">翻转</string>
-    <string name="call_toolbar_bottom_critical_alert_text">紧急通知</string>
+    <string name="call_toolbar_bottom_critical_alert_text">重要提醒</string>
     <string name="call_join_failed_tip">加入会议失败，请重试。</string>
     <string name="call_start_failed_tip">发起会议失败，请重试。</string>
     <string name="call_chat_header_1v1_another_device">使用其他设备通话中</string>
@@ -90,4 +91,10 @@
     <string name="call_rating_question_other_0">通话频繁中断</string>
     <string name="call_rating_question_other_1">通话突然结束</string>
     <string name="call_rating_question_other_2">我无法接听来电</string>
+    <string name="call_pip_no_permission_tip_title">悬浮窗权限申请</string>
+    <string name="call_pip_permission_tip_content">进入画中画模式前，建议开启悬浮窗权限，以获得更流畅的体验。</string>
+    <string name="call_pip_permission_button_cancel">暂不</string>
+    <string name="call_pip_permission_button_setting">去设置</string>
+    <string name="call_pip_permission_setting_failed">无法跳转，请在系统设置中手动开启悬浮窗权限。</string>
+
 </resources>

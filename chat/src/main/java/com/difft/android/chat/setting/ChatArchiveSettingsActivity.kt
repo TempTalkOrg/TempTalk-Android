@@ -39,6 +39,7 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.theme.AppTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.archive.MessageArchiveUtil
@@ -93,7 +94,9 @@ class ChatArchiveSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            AppTheme(backgroundColorResId = com.difft.android.base.R.color.bg_setting) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -110,16 +113,7 @@ class ChatArchiveSettingsActivity : BaseActivity() {
             .subscribeAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
 
         Column(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            com.difft.android.base.R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize()
         ) {
             ToolBar()
 
@@ -154,15 +148,7 @@ class ChatArchiveSettingsActivity : BaseActivity() {
         ConstraintLayout(
             modifier = Modifier
                 .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            com.difft.android.base.R.color.bg1
-                        )
-                    )
-                )
+                .fillMaxWidth()
         ) {
             val (icBack, title) = createRefs()
             Image(
