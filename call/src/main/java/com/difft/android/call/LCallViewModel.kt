@@ -26,6 +26,7 @@ import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.BarrageMessage
 import com.difft.android.call.data.CallStatus
+import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN
@@ -148,6 +149,11 @@ class LCallViewModel (
     val screenSharingUser get() = participantManager.screenSharingUser
     val currentAudioDevice get() = audioDeviceManager.selected
     val handsUpUserInfo get() = handsUpManager.handsUpUserInfo
+
+    var userSid: String? = ""
+    var userIdentity: String? = null
+    var roomSid: String? = ""
+    var currentCallNetworkPoor: Boolean = false
 
     // --------------- Internals ---------------
     private var isRetryUrlConnecting = false
@@ -696,6 +702,9 @@ class LCallViewModel (
     private fun onConnected() {
         roomId?.let { rid ->
             L.i { "[Call] LCallViewModel room event connected." }
+            userSid = room.localParticipant.sid.value
+            userIdentity = room.localParticipant.identity?.value
+            roomSid = room.sid?.sid
             LCallManager.updateCallingState(rid, isInCalling = true)
             if (getCurrentCallType() == CallType.ONE_ON_ONE.type) {
                 setMicEnabled(true)
@@ -814,9 +823,15 @@ class LCallViewModel (
                 roomCtl.collectError(NetworkConnectionPoorException(getString(R.string.call_other_network_poor_tip)))
             }
         }
-        if (participant is LocalParticipant && quality !in setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)) {
-            roomCtl.collectError(NetworkConnectionPoorException(getString(R.string.call_myself_network_poor_tip)))
+        if (participant is LocalParticipant) {
+            if (quality !in setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)) {
+                roomCtl.collectError(NetworkConnectionPoorException(getString(R.string.call_myself_network_poor_tip)))
+                currentCallNetworkPoor = true
+            } else {
+                currentCallNetworkPoor = false
+            }
         }
+
     }
 
     /**
@@ -850,11 +865,13 @@ class LCallViewModel (
         super.onCleared()
         L.i { "[Call] LCallViewModel onCleared start." }
         if (isCallResourceReleased) return
+        shouldTriggerFeedbackView()
         roomCtl.disconnectAndRelease()
         try { audioHandler.stop(); audioHandler.audioDeviceChangeListener = null } catch (_: Exception) {}
         LCallManager.resetCallingTime()
         timerManager.stopCallTimer(); timerManager.stopCountdown()
         setConnectedServerUrl(null)
+        resetFeedbackData()
         L.i { "[Call] LCallViewModel onCleared done." }
     }
 
@@ -999,4 +1016,30 @@ class LCallViewModel (
             }
         }
     }
+
+    /**
+     * Checks if the feedback view should be triggered and prepares the necessary call feedback data.
+     */
+    fun shouldTriggerFeedbackView() {
+        if(CallFeedbackTriggerManager.shouldTriggerFeedback(currentCallNetworkPoor)) {
+            val callInfo = FeedbackCallInfo(
+                userIdentity = userIdentity ?: LCallManager.getMyIdentity(),
+                userSid = userSid ?: "",
+                roomId = getRoomId() ?: "",
+                roomSid = roomSid ?: "",
+            )
+            LCallManager.setCallFeedbackInfo(callInfo)
+        }
+    }
+
+    /**
+     * Resets the feedback-related data to its default state.
+     */
+    private fun resetFeedbackData() {
+        userSid = ""
+        userIdentity = null
+        roomSid = ""
+        currentCallNetworkPoor = false
+    }
+
 }

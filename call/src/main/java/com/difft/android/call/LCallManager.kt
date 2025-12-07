@@ -1,6 +1,7 @@
 package com.difft.android.call
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -24,12 +25,14 @@ import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
+import com.difft.android.base.call.CallFeedbackRequestBody
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -43,6 +46,9 @@ import difft.android.messageserialization.For
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.call.data.FeedbackCallInfo
+import com.difft.android.call.ui.CallRatingFeedbackView
+import com.difft.android.call.util.CallComposeUiUtil
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -150,6 +156,8 @@ object LCallManager {
 
     private val _callingList: BehaviorSubject<MutableMap<String, CallData>> = BehaviorSubject.createDefault(mutableMapOf())
     val callingList: Observable<MutableMap<String, CallData>> = _callingList
+
+    private var callFeedbackInfo: FeedbackCallInfo? = null
 
     fun updateCallingListData(call: MutableMap<String, CallData>) {
         _callingList.onNext(if (call.isNotEmpty()) call else mutableMapOf())
@@ -291,6 +299,17 @@ object LCallManager {
 
 
     fun joinCall(context: Context, callData: CallData, onComplete: (Boolean) -> Unit) {
+
+        if(isIncomingCalling) {
+            try {
+                callToChatController?.getIncomingCallRoomId()?.let { roomId ->
+                    stopIncomingCallService(roomId, "stop incoming call")
+                }
+            } catch (e: Exception) {
+                L.e { "[Call] LCallManager joinCall stopIncomingCallService error: ${e.message}" }
+            }
+        }
+
         callData.let {
             val id = it.roomId
             val callType = CallType.fromString(it.type.toString()) ?: CallType.ONE_ON_ONE
@@ -818,4 +837,66 @@ object LCallManager {
         return callServiceUrls.toList()
     }
 
+    fun submitCallFeedback(params: CallFeedbackRequestBody) {
+        val token = SecureSharedPrefsUtil.getToken()
+        if (token.isNullOrEmpty()) {
+            L.e { "[Call] submitCallFeedback failed: missing authentication token" }
+            return
+        }
+        callService
+            .callFeedback(token,params)
+            .compose(RxUtil.getSingleSchedulerComposer())
+            .autoDispose(autoDisposeCompletable)
+            .subscribe(
+                { it->
+                    if(it.status == 0) {
+                        L.i { "[Call] submitCallFeedback, request success" }
+                    }else{
+                        L.e { "[Call] submitCallFeedback, request fail:${it.reason}" }
+                    }
+                },
+                {
+                    L.e { "[Call] submitCallFeedback, request fail, error:${it.message}" }
+                }
+            )
+    }
+
+    fun showCallFeedbackView(activity: Activity, callInfo: FeedbackCallInfo) {
+        val composeView = androidx.compose.ui.platform.ComposeView(activity)
+        composeView.setContent {
+            CallRatingFeedbackView(
+                callInfo = callInfo,
+                onDisplay = {
+                    clearCallFeedbackInfo()
+                },
+                onDismiss = {
+                    CallComposeUiUtil.removeComposeViewFromActivity(activity, composeView)
+                },
+                onSubmit = { data ->
+                    submitCallFeedback(data)
+                }
+            )
+        }
+        try {
+            CallComposeUiUtil.addComposeViewToActivity(activity, composeView)
+        }catch (e: Exception){
+            L.e { "[Call] Feedback addComposeViewToActivity error: ${e.message}" }
+        }
+    }
+
+    fun getMyIdentity(): String {
+        return "${globalServices.myId}.$DEFAULT_DEVICE_ID"
+    }
+
+    fun setCallFeedbackInfo(info: FeedbackCallInfo?) {
+        callFeedbackInfo = info
+    }
+
+    fun clearCallFeedbackInfo() {
+        callFeedbackInfo = null
+    }
+
+    fun getCallFeedbackInfo(): FeedbackCallInfo? {
+        return callFeedbackInfo
+    }
 }

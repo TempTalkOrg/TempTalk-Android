@@ -1035,6 +1035,43 @@ fun WCDB.getReadInfoList(roomId: String): List<ReadInfoModel> {
     return wcdb.readInfo.getAllObjects(DBReadInfoModel.roomId.eq(roomId)).toList()
 }
 
+/**
+ * 获取群成员数量
+ */
+fun WCDB.getGroupMemberCount(gid: String): Int {
+    return groupMemberContactor.getValue(
+        DBGroupMemberContactorModel.databaseId.count(),
+        DBGroupMemberContactorModel.gid.eq(gid)
+    )?.int ?: 0
+}
+
+/**
+ * 批量更新群成员的已读位置
+ * @param gid 群组ID
+ * @param readPosition 已读位置（时间戳）
+ */
+fun WCDB.updateGroupMembersReadPosition(gid: String, readPosition: Long) {
+    // 获取所有群成员（排除自己）
+    val memberIds = groupMemberContactor.getOneColumnString(
+        DBGroupMemberContactorModel.id,
+        DBGroupMemberContactorModel.gid.eq(gid)
+            .and(DBGroupMemberContactorModel.id.notEq(globalServices.myId))
+    )
+
+    if (memberIds.isEmpty()) return
+
+    // 批量插入或替换已读信息
+    val readInfoModels = memberIds.map { uid ->
+        ReadInfoModel().apply {
+            this.roomId = gid
+            this.uid = uid
+            this.readPosition = readPosition
+        }
+    }
+
+    readInfo.insertOrReplaceObjects(readInfoModels)
+}
+
 fun clearInvalidGroupMembers() {
     val allGroupIds = wcdb.group.allObjects.map { it.gid }
     if (allGroupIds.isNotEmpty()) {

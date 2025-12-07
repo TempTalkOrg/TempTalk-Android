@@ -482,7 +482,7 @@ class MessageContentProcessor @Inject constructor(
                     when (data.actionType) {
                         TTNotifyMessage.NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST ->
                             data.operatorInfo?.operatorId?.let { id ->
-                                dbRoomStore.findOrCreateRoomModel(For.Account(id)).await()
+                                dbRoomStore.createRoomIfNotExist(For.Account(id))
                                 ContactorUtil.updateContactRequestStatus(id)
                                 ContactorUtil.getContactWithID(context, id).await()
                                 ContactorUtil.emitContactsUpdate(listOf(id))

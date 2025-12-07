@@ -32,6 +32,7 @@ import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.utils.appScope
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
@@ -53,6 +54,8 @@ import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.responses.MuteStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.rx3.awaitFirst
 import org.difft.app.database.models.ContactorModel
@@ -70,6 +73,7 @@ class MessageNotificationUtil @Inject constructor(
     private val userManager: UserManager,
     private val appIconBadgeManager: AppIconBadgeManager,
     private val activityProvider: ActivityProvider,
+    private val cacheManager: NotificationCacheManager,
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -83,8 +87,6 @@ class MessageNotificationUtil @Inject constructor(
         private const val CHANNEL_CONFIG_NAME_BACKGROUND = "BACKGROUND"
 
         private const val CHANNEL_CONFIG_MESSAGE_GROUP = "MESSAGE_GROUP"
-
-        private val messageMap = mutableMapOf<String, MutableList<NotificationCompat.MessagingStyle.Message>>()
     }
 
 
@@ -113,6 +115,15 @@ class MessageNotificationUtil @Inject constructor(
         checkCallChannel()
         checkOngoingCallChannel()
         checkBackgroundChannel()
+
+        // 启动时异步清理过期缓存
+        try {
+            appScope.launch(Dispatchers.IO) {
+                cacheManager.cleanupOldCache()
+            }
+        } catch (e: Exception) {
+            L.e { "[MessageNotificationUtil] Failed to start cleanup task: ${e.message}" }
+        }
     }
 
 
@@ -268,58 +279,37 @@ class MessageNotificationUtil @Inject constructor(
         forWhat: For,
         isRecall: Boolean = false, // 是否是撤回消息
     ) = runCatching {
-        if (SendMessageUtils.isExistChat(forWhat.id) || ConversationUtils.isConversationListVisible || LCallManager.isCallScreenSharing()) {
-            L.i { "[MessageNotificationUtil] Show notification:${message.id} isExistChat:${SendMessageUtils.isExistChat(forWhat.id)} isConversationListVisible:${ConversationUtils.isConversationListVisible} isCallScreenSharing:${LCallManager.isCallScreenSharing()}" }
-            return@runCatching
-        }
+        // ⚠️ 撤回消息：删除缓存，判断是否需要重建通知（无条件执行，跳过拦截）
+        if (isRecall) {
+            val removedCount = cacheManager.removeMessageByTimestamp(forWhat.id, message.systemShowTimestamp)
+            L.i { "[MessageNotificationUtil] Recall message for ${forWhat.id} timestamp:${message.systemShowTimestamp} removed:$removedCount" }
 
-        val room = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id))
-        if (room != null) {
-            if (room.muteStatus == MuteStatus.MUTED.value) {
-                L.i { "[MessageNotificationUtil] ${forWhat.id} isMuted, No need to show notification" }
+            val messageList = cacheManager.getMessages(forWhat.id)
+            if (messageList.isEmpty()) {
+                // 没有剩余消息，取消通知
+                val notificationId = forWhat.id.hashCode()
+                nm.cancel(notificationId)
+                L.i { "[MessageNotificationUtil] All messages recalled for ${forWhat.id}, notification cancelled" }
+
+                // 检查是否还有其他消息通知，如果没有则取消汇总通知
+                // 注意：nm.cancel() 是异步的，需要排除刚取消的通知
+                if (!hasAnyMessageNotifications(excludeNotificationId = notificationId)) {
+                    nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
+                    L.i { "[MessageNotificationUtil] No message notifications left, summary notification cancelled" }
+                }
                 return@runCatching
             }
-            if (message.systemShowTimestamp <= room.readPosition) {
-                L.i { "[MessageNotificationUtil] Message already read (timestamp: ${message.systemShowTimestamp} <= readPosition: ${room.readPosition}), skipping notification for ${forWhat.id}" }
-                return@runCatching
-            }
-        }
 
-        if (forWhat is For.Group) {
-            val mySelfGroupInfo = wcdb.groupMemberContactor.getFirstObject(
-                (DBGroupMemberContactorModel.gid.eq(forWhat.id))
-                    .and(DBGroupMemberContactorModel.id.eq(globalServices.myId))
-            )
-
-            val notificationType = if (mySelfGroupInfo == null || mySelfGroupInfo.useGlobal == true) {
-                userManager.getUserData()?.globalNotification
-            } else {
-                mySelfGroupInfo.notification
-            }
-
-            when (notificationType) {
-                GlobalNotificationType.OFF.value -> {
-                    L.i { "[MessageNotificationUtil] Global notification is OFF, not showing notification for ${forWhat.id}" }
-                    return@runCatching
-                }
-
-                GlobalNotificationType.MENTION.value -> {
-                    if (!isMentionMessage(message)) {
-                        L.i { "[MessageNotificationUtil] Global notification is MENTION, not showing notification for ${forWhat.id}" }
-                        return@runCatching
-                    }
-                }
-            }
-        }
-
-        val intent = Intent(context, activityProvider.getActivityClass(ActivityType.MAIN))
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent.putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_MESSAGE)
-        if (forWhat is For.Group) {
-            intent.putExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID, forWhat.id)
+            // 有剩余消息，继续往下执行重建通知（跳过拦截条件检查）
+            L.i { "[MessageNotificationUtil] Recall: has ${messageList.size} remaining messages, rebuilding notification (skip interceptions)" }
         } else {
-            intent.putExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID, forWhat.id)
+            // 正常新消息：检查拦截条件
+            if (shouldInterceptNotification(forWhat, message)) {
+                return@runCatching
+            }
         }
+
+        val intent = createConversationIntent(forWhat)
 
         val fromId = message.fromWho.id
         var sender: ContactorModel? = null
@@ -379,49 +369,52 @@ class MessageNotificationUtil @Inject constructor(
 
         val user = Person.Builder().setName(personName).setKey(fromId).build()
 
-        val messageList = messageMap.getOrPut(forWhat.id) { mutableListOf() }
-        if (isRecall) { //删除被recall的消息通知
-            val index = messageList.indexOfFirst { it.timestamp == message.systemShowTimestamp }
-            L.i { "[MessageNotificationUtil] delete notification for ${forWhat.id} timestamp:${message.systemShowTimestamp} index:${index} messageList:${messageList.size}" }
-            if (index != -1) {
-                messageList.removeAt(index)
-            }
-        } else {
-            messageList.add(
-                NotificationCompat.MessagingStyle.Message(
-                    content,
-                    message.systemShowTimestamp,
-                    user
+        // 新消息:添加到缓存（存储消息发送时刻的快照数据）
+        // 撤回消息不需要添加，因为已经在开头删除了
+        if (!isRecall) {
+            cacheManager.addMessage(
+                forWhat.id,
+                NotificationCacheManager.NotificationMessageData(
+                    content = content,
+                    timestamp = message.systemShowTimestamp,
+                    personKey = fromId,
+                    personName = personName
                 )
             )
         }
 
+        // 获取排序后的消息列表
+        val messageList = cacheManager.getMessages(forWhat.id)
+
         createSummaryNotification(context)
 
+        // 构建MessagingStyle
         val messagingStyle = NotificationCompat.MessagingStyle(user)
         if (forWhat is For.Group) {
             messagingStyle.isGroupConversation = true
             messagingStyle.conversationTitle = title
         }
-        messageList.distinctBy { it.timestamp }.forEach {
-            messagingStyle.addMessage(it)
+
+        // 去重并添加消息到通知样式(按时间顺序)
+        // 直接使用缓存的快照数据，不再查询数据库
+        messageList.distinctBy { it.timestamp }.forEach { msgData ->
+            val person = Person.Builder()
+                .setName(msgData.personName)
+                .setKey(msgData.personKey)
+                .build()
+
+            messagingStyle.addMessage(
+                NotificationCompat.MessagingStyle.Message(
+                    msgData.content,
+                    msgData.timestamp,
+                    person
+                )
+            )
         }
 
-        val deleteIntent = Intent(context, NotificationDismissReceiver::class.java).apply {
-            putExtra("conversation_id", forWhat.id)
-        }
-        val pendingDeleteIntent = PendingIntent.getBroadcast(
-            context,
-            forWhat.id.hashCode(),
-            deleteIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val pendingDeleteIntent = createDeletePendingIntent(forWhat.id)
 
-        val channelId = if (supportConversationNotification() && nm.getNotificationChannel(getConversationChannelId(forWhat.id)) != null) {
-            getConversationChannelId(forWhat.id)
-        } else {
-            CHANNEL_CONFIG_NAME_MESSAGE
-        }
+        val channelId = selectNotificationChannel(forWhat.id)
         L.i { "[MessageNotificationUtil] forWhat:${forWhat.id} channelId:${channelId}" }
 
         val builder = NotificationCompat.Builder(context, channelId)
@@ -430,7 +423,8 @@ class MessageNotificationUtil @Inject constructor(
             .setContentText(content)
             .setContentIntent(pendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE) // 标记为消息类通知，提升权重
+            .setPriority(if (isRecall) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH) // 撤回时低优先级，不显示横幅
             .setAutoCancel(true)
             .setNumber(unreadMessageNumber)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
@@ -438,16 +432,10 @@ class MessageNotificationUtil @Inject constructor(
             .setStyle(messagingStyle)
             .setGroup(NOTIFICATION_GROUP_KEY)
             .setDeleteIntent(pendingDeleteIntent)
-            .setOnlyAlertOnce(false)
+            .setOnlyAlertOnce(isRecall) // 撤回时不震动/响铃，新消息时震动/响铃
+            .setSilent(isRecall) // 撤回时完全静默（Android 8.0+）
 
         nm.notify(notificationID, builder.build())
-
-        // Clear all empty message lists from messageMap
-        messageMap.entries.removeAll { it.value.isEmpty() }
-
-        if (messageMap.isEmpty()) {
-            nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
-        }
     }.onFailure {
         L.e { "showNotification failed: ${it.stackTraceToString()}" }
     }
@@ -482,26 +470,37 @@ class MessageNotificationUtil @Inject constructor(
         return SharedPrefsUtil.getInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM)
     }
 
-
-    //无法解析出加密消息内容时显示默认的server推送内容
-    fun showNotificationOfPush(
-        context: Context,
-        forWhat: For,
-        title: String?,
-        content: String?,
-    ) = runCatching {
-        if (SendMessageUtils.isExistChat(forWhat.id) || ConversationUtils.isConversationListVisible || LCallManager.isCallScreenSharing()) {
-            return@runCatching
+    /**
+     * 检查是否应该拦截通知（返回true表示应该拦截，不显示通知）
+     * @param forWhat 会话信息
+     * @param message 消息对象（可选，用于检查是否已读和@提及）
+     * @return true表示应该拦截，false表示可以显示通知
+     */
+    private fun shouldInterceptNotification(forWhat: For, message: Message? = null): Boolean {
+        // 1. 检查聊天窗口/会话列表/屏幕共享状态
+        if (SendMessageUtils.isExistChat(forWhat.id) ||
+            ConversationUtils.isConversationListVisible ||
+            LCallManager.isCallScreenSharing()
+        ) {
+            L.i { "[MessageNotificationUtil] Intercepted: isExistChat:${SendMessageUtils.isExistChat(forWhat.id)} isConversationListVisible:${ConversationUtils.isConversationListVisible} isCallScreenSharing:${LCallManager.isCallScreenSharing()}" }
+            return true
         }
 
+        // 2. 检查静音状态和已读位置
         val room = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id))
         if (room != null) {
             if (room.muteStatus == MuteStatus.MUTED.value) {
-                L.i { "[MessageNotificationUtil] ${forWhat.id} isMuted, No need to show notification" }
-                return@runCatching
+                L.i { "[MessageNotificationUtil] ${forWhat.id} isMuted" }
+                return true
+            }
+            // 如果有消息对象，检查是否已读
+            if (message != null && message.systemShowTimestamp <= room.readPosition) {
+                L.i { "[MessageNotificationUtil] Message already read (timestamp: ${message.systemShowTimestamp} <= readPosition: ${room.readPosition})" }
+                return true
             }
         }
 
+        // 3. 检查群组通知设置
         if (forWhat is For.Group) {
             val mySelfGroupInfo = wcdb.groupMemberContactor.getFirstObject(
                 (DBGroupMemberContactorModel.gid.eq(forWhat.id))
@@ -516,12 +515,27 @@ class MessageNotificationUtil @Inject constructor(
 
             when (notificationType) {
                 GlobalNotificationType.OFF.value -> {
-                    L.i { "[MessageNotificationUtil] Global notification is OFF, not showing notification for ${forWhat.id}" }
-                    return@runCatching
+                    L.i { "[MessageNotificationUtil] Global notification is OFF for ${forWhat.id}" }
+                    return true
+                }
+
+                GlobalNotificationType.MENTION.value -> {
+                    // 如果设置为仅@提及，且有消息对象，检查是否@了当前用户
+                    if (message != null && !isMentionMessage(message)) {
+                        L.i { "[MessageNotificationUtil] Global notification is MENTION, but not mentioned for ${forWhat.id}" }
+                        return true
+                    }
                 }
             }
         }
 
+        return false
+    }
+
+    /**
+     * 创建会话跳转Intent
+     */
+    private fun createConversationIntent(forWhat: For): Intent {
         val intent = Intent(context, activityProvider.getActivityClass(ActivityType.MAIN))
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_MESSAGE)
@@ -530,10 +544,57 @@ class MessageNotificationUtil @Inject constructor(
         } else {
             intent.putExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID, forWhat.id)
         }
+        return intent
+    }
+
+    /**
+     * 创建删除监听PendingIntent
+     */
+    private fun createDeletePendingIntent(conversationId: String): PendingIntent {
+        val deleteIntent = Intent(context, NotificationDismissReceiver::class.java).apply {
+            putExtra("conversation_id", conversationId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            conversationId.hashCode(),
+            deleteIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    /**
+     * 选择通知Channel
+     */
+    private fun selectNotificationChannel(conversationId: String): String {
+        return if (supportConversationNotification() &&
+            nm.getNotificationChannel(getConversationChannelId(conversationId)) != null
+        ) {
+            getConversationChannelId(conversationId)
+        } else {
+            CHANNEL_CONFIG_NAME_MESSAGE
+        }
+    }
+
+    //无法解析出加密消息内容时显示默认通知
+    fun showNotificationOfPush(
+        context: Context,
+        forWhat: For
+    ) = runCatching {
+        // 检查是否已有通知正在显示，如果有则不显示兜底通知，避免覆盖正常的MessagingStyle通知
+        val notificationID = forWhat.id.hashCode()
+        if (isNotificationShowing(notificationID)) {
+            L.i { "[MessageNotificationUtil] Normal notification is showing for ${forWhat.id}, skipping push fallback" }
+            return@runCatching
+        }
+
+        // 使用统一的拦截检查（不传message参数，因为兜底通知没有message对象）
+        if (shouldInterceptNotification(forWhat, null)) {
+            return@runCatching
+        }
+
+        val intent = createConversationIntent(forWhat)
 
         createSummaryNotification(context)
-
-        val notificationID = forWhat.id.hashCode()
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context,
@@ -542,25 +603,27 @@ class MessageNotificationUtil @Inject constructor(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val channelId = if (supportConversationNotification() && nm.getNotificationChannel(getConversationChannelId(forWhat.id)) != null) {
-            getConversationChannelId(forWhat.id)
-        } else {
-            CHANNEL_CONFIG_NAME_MESSAGE
-        }
+        // 添加删除监听，用于清理缓存（虽然兜底通知不写缓存，但为了一致性和防止将来逻辑变化）
+        val pendingDeleteIntent = createDeletePendingIntent(forWhat.id)
+
+        val channelId = selectNotificationChannel(forWhat.id)
         L.i { "[MessageNotificationUtil] forWhat:${forWhat.id} channelId:${channelId}" }
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
-            .setContentTitle(title)
-            .setContentText(content)
+            .setContentTitle(PackageUtil.getAppName())
+            .setContentText(ResUtils.getString(R.string.notification_received_message))
             .setContentIntent(pendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE) // 标记为消息类通知，提升权重
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setNumber(getUnreadMessageNumber())
             .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
+            .setWhen(System.currentTimeMillis()) // 显示通知到达时间
             .setGroup(NOTIFICATION_GROUP_KEY)
-            .setOnlyAlertOnce(false)
+            .setDeleteIntent(pendingDeleteIntent) // 监听通知删除，用于清理缓存
+            .setOnlyAlertOnce(true) // 避免同一会话多次解密失败时重复提醒
 
         nm.notify(notificationID, builder.build())
     }.onFailure {
@@ -697,17 +760,35 @@ class MessageNotificationUtil @Inject constructor(
     override fun cancelAllNotifications() {
         L.i { "[MessageNotificationUtil] cancelAllNotifications" }
         nm.cancelAll()
-        messageMap.clear()
+
+        // 异步清理所有缓存，避免主线程阻塞
+        appScope.launch(Dispatchers.IO) {
+            cacheManager.clearAll()
+            L.i { "[MessageNotificationUtil] All notification caches cleared" }
+        }
+    }
+
+    override fun getNotificationChannelName(): String {
+        return CHANNEL_CONFIG_NAME_CALL
     }
 
     override fun cancelNotificationsByConversation(conversationId: String?) {
         L.i { "[MessageNotificationUtil] cancelNotificationsByConversation:${conversationId}" }
         conversationId?.let {
-            nm.cancel(it.hashCode())
-            messageMap.remove(it)
-        }
-        if (messageMap.isEmpty()) {
-            nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
+            val notificationId = it.hashCode()
+            nm.cancel(notificationId)
+
+            // 异步清理缓存，避免主线程阻塞
+            appScope.launch(Dispatchers.IO) {
+                cacheManager.removeConversation(it)
+
+                // 检查是否还有其他消息通知，如果没有则取消汇总通知
+                // 注意：nm.cancel() 是异步的，需要排除刚取消的通知
+                if (!hasAnyMessageNotifications(excludeNotificationId = notificationId)) {
+                    nm.cancel(MESSAGE_SUMMARY_NOTIFICATION_ID)
+                    L.i { "[MessageNotificationUtil] No message notifications left, summary notification cancelled" }
+                }
+            }
         }
     }
 
@@ -724,6 +805,23 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
         return false
+    }
+
+    /**
+     * 检查是否还有消息类通知（排除汇总通知）
+     * @param excludeNotificationId 需要排除的通知ID（用于处理 nm.cancel() 异步取消的竞态条件）
+     */
+    private fun hasAnyMessageNotifications(excludeNotificationId: Int? = null): Boolean {
+        return try {
+            nm.activeNotifications.any { notification ->
+                notification.id != MESSAGE_SUMMARY_NOTIFICATION_ID &&
+                        (excludeNotificationId == null || notification.id != excludeNotificationId) &&
+                        notification.notification.group == NOTIFICATION_GROUP_KEY
+            }
+        } catch (e: Exception) {
+            L.e { "[MessageNotificationUtil] hasAnyMessageNotifications failed: ${e.message}" }
+            false
+        }
     }
 
     fun openNotificationSettings(activity: Activity) {
@@ -745,9 +843,9 @@ class MessageNotificationUtil @Inject constructor(
 
     fun openFullScreenNotificationSettings(activity: Activity) {
         try {
-            if(FullScreenPermissionHelper.isMainStreamChinaMobile()){
+            if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
                 FullScreenPermissionHelper.jumpToPermissionSettingActivity(activity)
-            }else {
+            } else {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
                         setData(("package:" + activity.packageName).toUri())
@@ -776,7 +874,7 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun hasFullScreenNotificationPermission(): Boolean {
-        return if(FullScreenPermissionHelper.isMainStreamChinaMobile()) {
+        return if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
             FullScreenPermissionHelper.canBackgroundStart(context)
         } else {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -796,10 +894,32 @@ class MessageNotificationUtil @Inject constructor(
     class NotificationDismissReceiver : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val conversationId = intent?.getStringExtra("conversation_id")
-            if (!conversationId.isNullOrEmpty()) {
-                messageMap[conversationId]?.clear()
+            if (!conversationId.isNullOrEmpty() && context != null) {
+                try {
+                    // 通过Hilt EntryPoint获取NotificationCacheManager
+                    val entryPoint = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                        context.applicationContext,
+                        NotificationDismissReceiverEntryPoint::class.java
+                    )
+                    val cacheManager = entryPoint.notificationCacheManager()
+
+                    // 异步清理缓存，避免阻塞 BroadcastReceiver
+                    appScope.launch(Dispatchers.IO) {
+                        cacheManager.removeConversation(conversationId)
+                        L.d { "[MessageNotificationUtil] NotificationDismissReceiver cleared cache for $conversationId" }
+                    }
+                } catch (e: Exception) {
+                    L.e { "[MessageNotificationUtil] NotificationDismissReceiver failed: ${e.message}" }
+                }
             }
         }
+    }
+
+    // Hilt EntryPoint for BroadcastReceiver
+    @dagger.hilt.EntryPoint
+    @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+    interface NotificationDismissReceiverEntryPoint {
+        fun notificationCacheManager(): NotificationCacheManager
     }
 
     /**
@@ -822,4 +942,6 @@ class MessageNotificationUtil @Inject constructor(
             openNotificationSettings(context)
         }
     }
+
+
 }

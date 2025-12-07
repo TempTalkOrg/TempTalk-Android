@@ -113,6 +113,32 @@ class DownloadAttachmentJob private constructor(
                 throw Exception("[DownloadAttachmentJob] download attachment fail: ${response.message()}")
             }
 
+            // Check response status code
+            val responseStatus = response.body()?.status
+            when (responseStatus) {
+                0 -> {
+                    // OK, continue with download
+                }
+                2 -> {
+                    // NO_PERMISSION - File has expired
+                    L.w { "[DownloadAttachmentJob] file has expired (status code: 2)" }
+                    updateAttachmentStatus(AttachmentStatus.EXPIRED.code)
+                    FileUtil.emitProgressUpdate(messageId, -2)
+                    return
+                }
+                else -> {
+                    // Handle other error status codes
+                    val errorMessage = when (responseStatus) {
+                        1 -> "INVALID_PARAMETER"
+                        9 -> "NO_SUCH_FILE"
+                        12 -> "INVALID_FILE"
+                        99 -> "OTHER_ERROR"
+                        else -> "UNKNOWN_ERROR (status: $responseStatus)"
+                    }
+                    throw Exception("[DownloadAttachmentJob] download failed with status code $responseStatus: $errorMessage")
+                }
+            }
+
             val url = response.body()?.data?.url ?: throw Exception("[DownloadAttachmentJob] download URL is null")
             val downLoadResponse = fileShareRepo.downloadFromOSS(url).execute()
 

@@ -319,7 +319,7 @@ class RecentChatFragment : DisposableManageFragment() {
             sortingChatRooms(list)
         }.launchIn(lifecycleScope)
 
-        recentChatViewModel.createNote(requireActivity())
+        recentChatViewModel.createNote()
 
         RecentChatUtil.chatDoubleTab
             .compose(RxUtil.getSchedulerComposer())

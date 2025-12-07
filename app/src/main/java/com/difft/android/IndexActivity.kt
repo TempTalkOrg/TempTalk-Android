@@ -761,11 +761,14 @@ class IndexActivity : BaseActivity() {
     private fun getFullScreenPermissionMessage(): String {
         return if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
             when (Build.MANUFACTURER.lowercase(Locale.ROOT)){
-                "huawei" -> {
+                FullScreenPermissionHelper.MANUFACTURER_HUAWEI.lowercase(Locale.ROOT) -> {
                     getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
                 }
-                "xiaomi" -> {
+                FullScreenPermissionHelper.MANUFACTURER_XIAOMI.lowercase(Locale.ROOT) -> {
                     getString(R.string.notification_no_permission_tip5, PackageUtil.getAppName())
+                }
+                FullScreenPermissionHelper.MANUFACTURER_HONOR.lowercase(Locale.ROOT) -> {
+                    getString(R.string.notification_no_permission_tip6, PackageUtil.getAppName())
                 }
                 else -> getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
             }

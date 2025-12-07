@@ -380,8 +380,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                                     selectChatsUtils.saveToNotes(
                                         requireActivity(),
                                         content,
-                                        forwardContext,
-                                        chatViewModel.getMeContactor()
+                                        forwardContext
                                     )
                                 } else {
                                     selectChatsUtils.showChatSelectAndSendDialog(
@@ -522,8 +521,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             selectChatsUtils.saveToNotes(
                 requireActivity(),
                 it.content,
-                it.forwardContexts.first(),
-                chatViewModel.getMeContactor()
+                it.forwardContexts.first()
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 

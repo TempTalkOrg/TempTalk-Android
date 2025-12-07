@@ -56,4 +56,35 @@
     <string name="call_params_url_exception_tip">The server URL parameter is abnormal.</string>
     <string name="call_params_startcall_exception_tip">Abnormal conference connection parameters.</string>
     <string name="call_service_node_dashboard_title">Call service settings</string>
+    <string name="call_rating_feedback_no_choice_tip">Please give a rating</string>
+    <string name="call_rating_feedback_title">Rate the quality of your call</string>
+    <string name="call_rating_feedback_sub">Your answer is anonymous. We use it to help improve your call experience.</string>
+    <string name="call_rating_level_very_bad">Very bad</string>
+    <string name="call_rating_level_bad">Bad</string>
+    <string name="call_rating_level_okay">Okay</string>
+    <string name="call_rating_level_good">Good</string>
+    <string name="call_rating_level_excellent">Excellent</string>
+    <string name="call_rating_action_submit">Submit</string>
+    <string name="call_rating_action_cancel">Not now</string>
+    <string name="call_rating_question_title">Tell us what happened</string>
+    <string name="call_rating_question_category_audio">Audio</string>
+    <string name="call_rating_question_category_video">Video</string>
+    <string name="call_rating_question_category_other">Other</string>
+    <string name="call_rating_question_audio_0">Echo</string>
+    <string name="call_rating_question_audio_1">Others could not hear me</string>
+    <string name="call_rating_question_audio_2">Robotic or distorted</string>
+    <string name="call_rating_question_audio_3">Audio too slow</string>
+    <string name="call_rating_question_audio_4">Audio broke up and got choppy</string>
+    <string name="call_rating_question_audio_5">Background or cracking noise</string>
+    <string name="call_rating_question_audio_6">I could not hear others</string>
+    <string name="call_rating_question_video_0">Video distorted with strange images</string>
+    <string name="call_rating_question_video_1">Other could not see me</string>
+    <string name="call_rating_question_video_2">Blurry</string>
+    <string name="call_rating_question_video_3">I cloud not see others</string>
+    <string name="call_rating_question_video_4">Video did not match audio</string>
+    <string name="call_rating_question_video_5">Video froze</string>
+    <string name="call_rating_question_other_0">Call kept disconnecting</string>
+    <string name="call_rating_question_other_1">Call suddenly ended</string>
+    <string name="call_rating_question_other_2">I could not answer the call</string>
+
 </resources>

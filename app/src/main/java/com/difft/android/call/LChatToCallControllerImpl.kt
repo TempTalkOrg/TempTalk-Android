@@ -115,12 +115,11 @@ class LChatToCallControllerImpl @Inject constructor(
 
         val createCallMessageTime = System.currentTimeMillis()
 
-        dbRoomStore.findOrCreateRoomModel(forWhat).autoDispose(autoDisposeCompletable).subscribe({
-            it.let {
-                coroutineScope.launch{
-                    val mySelfName = LCallManager.getDisplayName(mySelfId)
-                    withContext(Dispatchers.Main) {
-                        callMessageCreator.createCallMessage(
+        coroutineScope.launch {
+            dbRoomStore.createRoomIfNotExist(forWhat)
+            val mySelfName = LCallManager.getDisplayName(mySelfId)
+            withContext(Dispatchers.Main) {
+                callMessageCreator.createCallMessage(
                             forWhat,
                             callType,
                             callRole,
@@ -201,14 +200,8 @@ class LChatToCallControllerImpl @Inject constructor(
                                 L.e { "[Call] startCall, error:${it.message}" }
                                 onComplete(false)
                             })
-                    }
-                }
             }
-        },{
-            L.e { "[Call] startCall, queryContactWithID error:"+it.message }
-            onComplete(false)
-            LCallManager.dismissWaitDialog()
-        })
+        }
     }
 
     override fun handleCallMessage(message: SignalServiceDataClass) {

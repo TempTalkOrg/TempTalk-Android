@@ -19,8 +19,10 @@ import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.getReadInfoList
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
 import org.difft.app.database.wcdb
+import org.difft.app.database.getGroupMemberCount
+import org.difft.app.database.updateGroupMembersReadPosition
+import org.difft.app.database.members
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LChatToCallController
@@ -162,6 +164,8 @@ class ChatMessageViewModel @AssistedInject constructor(
             initLoadMessage(jumpMessageTimeStamp)
             // Initial load of read info
             _readInfoList.value = wcdb.getReadInfoList(forWhat.id)
+            // Check and update large group read positions
+            checkAndUpdateLargeGroupReadPositions()
         }
 
         // 监听已读状态更新事件
@@ -171,6 +175,38 @@ class ChatMessageViewModel @AssistedInject constructor(
                 .collect {
                     _readInfoList.value = wcdb.getReadInfoList(forWhat.id)
                 }
+        }
+    }
+
+    /**
+     * 检查并更新大群的已读位置
+     * 对于大群（群人数 > chatWithoutReceiptThreshold），直接将所有成员的已读位置更新为自己发的最后一条消息的时间戳
+     */
+    private suspend fun checkAndUpdateLargeGroupReadPositions() {
+        // 只对群聊进行处理
+        if (forWhat !is For.Group) return
+
+        try {
+            val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
+            val memberCount = wcdb.getGroupMemberCount(forWhat.id)
+
+            // 只对大群进行处理
+            if (memberCount <= threshold) return
+
+            // 获取自己发的最后一条消息的 systemShowTimestamp（使用数据库 MAX 查询）
+            val maxTimestamp = wcdb.message.getValue(
+                DBMessageModel.systemShowTimestamp.max(),
+                DBMessageModel.roomId.eq(forWhat.id)
+                    .and(DBMessageModel.fromWho.eq(globalServices.myId))
+            )?.long ?: 0L
+
+            if (maxTimestamp > 0) {
+                L.i { "[${forWhat.id}] Large group with $memberCount members (threshold: $threshold), updating all members' read positions to $maxTimestamp" }
+                wcdb.updateGroupMembersReadPosition(forWhat.id, maxTimestamp)
+                RoomChangeTracker.trackRoomReadInfoUpdate(forWhat.id)
+            }
+        } catch (e: Exception) {
+            L.e(e) { "[${forWhat.id}] Error checking and updating large group read positions" }
         }
     }
 
@@ -239,7 +275,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             if (callData != null) {
                 L.i { "[call] Joining existing call with roomId:${callData.roomId}" }
                 LCallManager.joinCall(activity.applicationContext, callData) { status ->
-                    if(!status) {
+                    if (!status) {
                         L.e { "[Call] startCall join call failed." }
                         ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
                     }
@@ -249,7 +285,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             //否则发起livekit call通话
             L.i { "[call] Starting new call" }
             callManager.startCall(activity, forWhat, chatRoomName) { status ->
-                if(!status) {
+                if (!status) {
                     L.e { "[Call] start call failed." }
                     ToastUtil.show(com.difft.android.call.R.string.call_start_failed_tip)
                 }
@@ -471,8 +507,18 @@ class ChatMessageViewModel @AssistedInject constructor(
     ): ChatMessageListUIState {
         val contactIds = chatMessageListBehavior.messageList.map { it.fromWho }.distinct()
         val members = wcdb.getContactorsFromAllTable(contactIds)
+
+        // 在循环外判断是否是大群，避免重复查询
+        val isLargeGroup = if (forWhat is For.Group) {
+            val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
+            val memberCount = wcdb.getGroupMemberCount(forWhat.id)
+            memberCount > threshold
+        } else {
+            false
+        }
+
         val chatMessages = chatMessageListBehavior.messageList.mapNotNull { msg ->
-            generateMessageTwo(forWhat, msg, members, readInfoList)?.apply {
+            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup)?.apply {
                 editMode = selectMessageState.editModel
                 selectedStatus = id in selectMessageState.selectedMessageIds
             }
@@ -508,6 +554,16 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     suspend fun sendReadRecipient(currentReadPosition: Long) = withContext(Dispatchers.IO) {
         try {
+            // 如果是大群（群人数大于阈值），不发送已读回执
+            if (forWhat is For.Group) {
+                val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
+                val memberCount = wcdb.getGroupMemberCount(forWhat.id)
+                if (memberCount > threshold) {
+                    L.i { "[${forWhat.id}] Large group with $memberCount members (threshold: $threshold), skipping read receipt" }
+                    return@withContext
+                }
+            }
+
             val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat).blockingGet()
             if (currentReadPosition > lastReadPosition) {
                 val messages = wcdb.message.getAllObjects(
@@ -702,10 +758,6 @@ class ChatMessageViewModel @AssistedInject constructor(
                 ForwardContextData("", listOfNotNull(forwardContext))
         }
         resetSelectMessageState()
-    }
-
-    fun getMeContactor(): ContactorModel {
-        return chatUIData.value.group?.members?.find { it.id == globalServices.myId }?.convertToContactorModel() ?: ContactorModel().apply { id = globalServices.myId }
     }
 }
 

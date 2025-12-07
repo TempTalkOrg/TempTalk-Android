@@ -71,7 +71,7 @@
     <string name="chat_message_action_voice2text">Voice To text</string>
     <string name="chat_message_action_voice2text_off">Discard Convert</string>
     <string name="chat_message_action_voice2text_tip_title">Information</string>
-    <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by TempTalk server</string>
+    <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Yelling server</string>
     <string name="chat_message_action_voice2text_tip_ok">OK</string>
     <string name="chat_message_action_select_multiple">Select Multiple</string>
     <string name="chat_message_action_combine_forward">Combine &amp; Forward</string>
@@ -384,7 +384,7 @@
     <string name="invite_enter_code_to_add">Enter a code to add a new friend</string>
     <string name="invite_copy_link">Copy Link</string>
     <string name="invite_cancel">Cancel</string>
-    <string name="invite_tips">Chat with me on TempTalk %s</string>
+    <string name="invite_tips">Chat with me on Yelling %s</string>
     <string name="invite_regenerate_dialog_title">Regenerate Invite Code</string>
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
     <string name="invite_regenerate_dialog_cancel">Cancel</string>
@@ -576,6 +576,7 @@
     <string name="notification_no_permission_tip3">Please make sure notifications and full-screen notifications are turned on to receive messages and meeting notifications.</string>
     <string name="notification_no_permission_tip4">Please enable background pop-up and banner notification permissions so that %s can display incoming call when the device is locked.</string>
     <string name="notification_no_permission_tip5">Please enable background pop-up and lock screen display permissions so that %s can display incoming call when the device is locked.</string>
+    <string name="notification_no_permission_tip6">Please enable banner notification permissions so that %s can display incoming call when the device is locked.</string>
     <string name="notification_disturb_tip">"Do not disturb" is turned on. You may not receive notifications.</string>
     <string name="notification_no_google_tip">No google services on your device. Please keep background connection enabled to receive messages and calls.</string>
     <string name="notification_ignore">Not now</string>
@@ -619,6 +620,7 @@
     <string name="download_started">Attachment download started</string>
     <string name="download_success">Download successful</string>
     <string name="download_failed">Download failed, please try again!</string>
+    <string name="file_expired">File has expired.</string>
     <string name="download_downloading">Downloading, please wait…</string>
     <string name="caption_on_reminder" translatable="false">Caption is on</string>
     <string name="the_original_message_doesn_t_exist">The original message doesn\'t exist</string>
@@ -719,7 +721,7 @@
 
     <string name="background_connection">Background connection</string>
     <string name="background_connection_enabled">Background connection enabled</string>
-    <string name="background_connection_tips">Keep a low-impact background connection to TempTalk for reliable notifications.</string>
+    <string name="background_connection_tips">Keep a low-impact background connection to Yelling for reliable notifications.</string>
 
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>

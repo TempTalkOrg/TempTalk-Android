@@ -8,7 +8,7 @@
     <string name="settings_screen_lock">Screen lock</string>
     <string name="settings_screen_lock_timeout">Timeout</string>
     <string name="settings_screen_lock_timeout_instant">Instant</string>
-    <string name="settings_screen_lock_tips">Unlock TempTalk’s screen using a passcode or pattern. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to TempTalk. It also prevents content previews from appearing in the app switcher.</string>
+    <string name="settings_screen_lock_tips">Unlock Yelling’s screen using a passcode or pattern. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to TempTalk. It also prevents content previews from appearing in the app switcher.</string>
     <string name="settings_pattern_lock">Pattern</string>
     <string name="settings_passcode_lock">Passcode</string>
     <string name="settings_pattern_show_path">Pattern Path</string>

@@ -38,14 +38,7 @@ class DBRoomStore @Inject constructor(
         globalServices.myId
     }
 
-    fun findOrCreateRoomModel(
-        forWhat: For,
-        pinnedTime: Long? = null,
-    ): Single<RoomModel> = Single.fromCallable {
-        createRoomIfNotExist(forWhat, pinnedTime)
-    }
-
-    fun createRoomIfNotExist(forWhat: For, pinnedTime: Long? = null): RoomModel {
+    fun createRoomIfNotExist(forWhat: For): RoomModel {
         val startTime = System.currentTimeMillis()
         val room =
             wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id)) ?: (RoomModel().apply {
@@ -57,8 +50,7 @@ class DBRoomStore @Inject constructor(
                         this.roomAvatarJson = it.avatar
                     }
                 } else {
-                    val contactor =
-                        wcdb.contactor.getFirstObject(DBContactorModel.id.eq(forWhat.id))
+                    val contactor = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(forWhat.id))
                     if (contactor != null) {
                         this.roomName = contactor.getDisplayNameForUI()
                         this.roomAvatarJson = contactor.avatar
@@ -72,8 +64,11 @@ class DBRoomStore @Inject constructor(
                         }
                     }
                 }
-                this.lastActiveTime = System.currentTimeMillis()
-                pinnedTime?.let { this.pinnedTime = it }
+                //备忘录
+                if (forWhat.id == globalServices.myId) {
+                    this.lastActiveTime = System.currentTimeMillis()
+                    this.pinnedTime = System.currentTimeMillis()
+                }
                 try {
                     wcdb.room.insertObject(this)
                 } catch (_: Exception) {

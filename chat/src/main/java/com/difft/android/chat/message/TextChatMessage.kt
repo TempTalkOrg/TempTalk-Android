@@ -114,14 +114,14 @@ fun TextChatMessage.shouldShowFail(): Boolean {
         return false
     }
 
-    // Check if progress indicates failure
+    // Check if progress indicates failure or expired
     val progress = getAttachmentProgress()
-    if (progress == -1) return true
+    if (progress == -1 || progress == -2) return true
 
     // If no progress info, check attachment status
     if (progress == null) {
         val attachment = getRelevantAttachment()
-        return attachment?.status == AttachmentStatus.FAILED.code
+        return attachment?.status == AttachmentStatus.FAILED.code || attachment?.status == AttachmentStatus.EXPIRED.code
     }
 
     return false
