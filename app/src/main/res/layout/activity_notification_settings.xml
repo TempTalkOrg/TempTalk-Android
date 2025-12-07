@@ -49,213 +49,11 @@
             android:orientation="vertical"
             android:paddingBottom="24dp">
 
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_global_notification_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="16dp"
-                android:text="@string/notification_default_group_settings"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/ib_back" />
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/cl_global_notification"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/chat_group_info_bg"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="10dp"
-                    android:ellipsize="end"
-                    android:gravity="center_vertical"
-                    android:lines="1"
-                    android:text="@string/notification_title"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp"
-                    app:layout_constraintEnd_toStartOf="@+id/tv_global_notification"
-                    app:layout_constraintStart_toStartOf="parent" />
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_global_notification"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="5dp"
-                    android:gravity="center_vertical"
-                    android:text="@string/notification_all"
-                    android:textColor="@color/t.secondary"
-                    android:textSize="16sp"
-                    app:layout_constraintEnd_toStartOf="@+id/iv_arrow_global_notification" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_arrow_global_notification"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:tint="@color/t.primary" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_notification_sounds_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="16dp"
-                android:text="@string/notification_sounds"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/ib_back" />
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/cl_message_sound"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/chat_group_info_bg"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="10dp"
-                    android:ellipsize="end"
-                    android:gravity="center_vertical"
-                    android:lines="1"
-                    android:text="@string/notification_message_sounds"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp"
-                    app:layout_constraintEnd_toStartOf="@+id/tv_message_sound"
-                    app:layout_constraintStart_toStartOf="parent" />
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_message_sound"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="5dp"
-                    android:gravity="center_vertical"
-                    android:text="@string/notification_all"
-                    android:textColor="@color/t.secondary"
-                    android:textSize="16sp"
-                    android:visibility="gone"
-                    app:layout_constraintEnd_toStartOf="@+id/iv_arrow_message_sound" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_arrow_message_sound"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:tint="@color/t.primary" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_notification_content_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="16dp"
-                android:text="@string/notification_content"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp" />
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/cl_notification_display"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/chat_group_info_bg"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="10dp"
-                    android:ellipsize="end"
-                    android:gravity="center_vertical"
-                    android:lines="1"
-                    android:text="@string/notification_display"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp"
-                    app:layout_constraintEnd_toStartOf="@+id/tv_notification_display"
-                    app:layout_constraintStart_toStartOf="parent" />
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_notification_display"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="5dp"
-                    android:gravity="center_vertical"
-                    android:text="@string/notification_display_name_and_content"
-                    android:textColor="@color/t.secondary"
-                    android:textSize="16sp"
-                    app:layout_constraintEnd_toStartOf="@+id/iv_arrow_notification_display" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_arrow_notification_display"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:tint="@color/t.primary" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-            <!--    <androidx.appcompat.widget.AppCompatTextView-->
-            <!--        android:id="@+id/tv_information"-->
-            <!--        android:layout_width="match_parent"-->
-            <!--        android:layout_height="wrap_content"-->
-            <!--        android:layout_marginStart="16dp"-->
-            <!--        android:layout_marginTop="16dp"-->
-            <!--        android:background="@null"-->
-            <!--        android:src="@drawable/chat_contact_detail_ic_back"-->
-            <!--        android:text="@string/settings_logging"-->
-            <!--        android:textColor="@color/t.secondary"-->
-            <!--        android:textSize="12sp"-->
-            <!--        app:layout_constraintLeft_toLeftOf="parent"-->
-            <!--        app:layout_constraintTop_toBottomOf="@+id/ib_back" />-->
-
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_notification_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="16dp"
-                android:text="@string/notification_no_permission_tip3"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/ib_back" />
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/chat_group_info_bg"
                 android:orientation="vertical">
 
@@ -367,63 +165,67 @@
 
             </LinearLayout>
 
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_background_connection"
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_global_notification"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="52dp"
                 android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="16dp"
-                android:text="@string/background_connection_tips"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/ib_back" />
+                android:layout_marginTop="24dp"
+                android:background="@drawable/chat_group_info_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="8dp">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="10dp"
+                    android:ellipsize="end"
+                    android:gravity="center_vertical"
+                    android:lines="1"
+                    android:text="@string/notification_group_chat_notification"
+                    android:textColor="@color/t.primary"
+                    android:textSize="16sp"
+                    app:layout_constraintEnd_toStartOf="@+id/tv_global_notification"
+                    app:layout_constraintStart_toStartOf="parent" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_global_notification"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="5dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/notification_all"
+                    android:textColor="@color/t.secondary"
+                    android:textSize="16sp"
+                    app:layout_constraintEnd_toStartOf="@+id/iv_arrow_global_notification" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_arrow_global_notification"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/chat_ic_arrow_right"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:tint="@color/t.primary" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="24dp"
                 android:background="@drawable/chat_group_info_bg"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_message_sound"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/switch_background_connection"
-                        style="@style/Widget.Chative.Switch"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:checked="false"
-                        android:text="@string/background_connection"
-                        android:textSize="16sp"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <!-- 后台限制检查 -->
-                <View
-                    android:id="@+id/divider_background_restriction"
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/bg.setting"
-                    android:visibility="gone" />
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_background_restriction"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="8dp"
-                    android:visibility="gone">
-
                     <androidx.appcompat.widget.AppCompatTextView
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
@@ -431,25 +233,26 @@
                         android:ellipsize="end"
                         android:gravity="center_vertical"
                         android:lines="1"
-                        android:text="@string/background_restriction_check"
+                        android:text="@string/notification_message_sounds"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/tv_background_restriction_status"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_message_sound"
                         app:layout_constraintStart_toStartOf="parent" />
 
                     <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_background_restriction_status"
+                        android:id="@+id/tv_message_sound"
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
                         android:layout_marginEnd="5dp"
                         android:gravity="center_vertical"
+                        android:text="@string/notification_all"
                         android:textColor="@color/t.secondary"
                         android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_background_restriction"
-                        tools:text="@string/notification_enable" />
+                        android:visibility="gone"
+                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_message_sound" />
 
                     <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/iv_arrow_background_restriction"
+                        android:id="@+id/iv_arrow_message_sound"
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:src="@drawable/chat_ic_arrow_right"
@@ -460,21 +263,17 @@
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <!-- 数据节省模式检查 -->
                 <View
-                    android:id="@+id/divider_data_saver"
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting"
-                    android:visibility="gone" />
+                    android:background="@color/bg.setting" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_data_saver"
+                    android:id="@+id/cl_notification_display"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp"
-                    android:visibility="gone">
+                    android:paddingEnd="8dp">
 
                     <androidx.appcompat.widget.AppCompatTextView
                         android:layout_width="0dp"
@@ -483,129 +282,25 @@
                         android:ellipsize="end"
                         android:gravity="center_vertical"
                         android:lines="1"
-                        android:text="@string/data_saver_check"
+                        android:text="@string/notification_display"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/tv_data_saver_status"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_notification_display"
                         app:layout_constraintStart_toStartOf="parent" />
 
                     <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_data_saver_status"
+                        android:id="@+id/tv_notification_display"
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
                         android:layout_marginEnd="5dp"
                         android:gravity="center_vertical"
+                        android:text="@string/notification_display_name_and_content"
                         android:textColor="@color/t.secondary"
                         android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_data_saver"
-                        tools:text="@string/notification_enable" />
+                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_notification_display" />
 
                     <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/iv_arrow_data_saver"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <!-- 电池优化检查 -->
-                <View
-                    android:id="@+id/divider_battery_optimization"
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/bg.setting"
-                    android:visibility="gone" />
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_battery_optimization"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="8dp"
-                    android:visibility="gone">
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="10dp"
-                        android:ellipsize="end"
-                        android:gravity="center_vertical"
-                        android:lines="1"
-                        android:text="@string/battery_optimization_check"
-                        android:textColor="@color/t.primary"
-                        android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/tv_battery_optimization_status"
-                        app:layout_constraintStart_toStartOf="parent" />
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_battery_optimization_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="5dp"
-                        android:gravity="center_vertical"
-                        android:textColor="@color/t.secondary"
-                        android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_battery_optimization"
-                        tools:text="@string/notification_enable" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/iv_arrow_battery_optimization"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <!-- 中国ROM自启动管理 -->
-                <View
-                    android:id="@+id/divider_auto_start"
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/bg.setting"
-                    android:visibility="gone" />
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/cl_auto_start"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="8dp"
-                    android:visibility="gone">
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="10dp"
-                        android:ellipsize="end"
-                        android:gravity="center_vertical"
-                        android:lines="1"
-                        android:text="@string/auto_start_check"
-                        android:textColor="@color/t.primary"
-                        android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/tv_auto_start_status"
-                        app:layout_constraintStart_toStartOf="parent" />
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:id="@+id/tv_auto_start_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="5dp"
-                        android:gravity="center_vertical"
-                        android:textColor="@color/t.secondary"
-                        android:textSize="16sp"
-                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_auto_start"
-                        tools:text="@string/notification_enable" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/iv_arrow_auto_start"
+                        android:id="@+id/iv_arrow_notification_display"
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:src="@drawable/chat_ic_arrow_right"
@@ -618,23 +313,12 @@
 
             </LinearLayout>
 
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_critical_alert_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="16dp"
-                android:text="@string/critical_alerts_content"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp" />
-
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/cl_critical_alert_display"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
                 android:layout_marginHorizontal="16dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="24dp"
                 android:background="@drawable/chat_group_info_bg"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp">
@@ -665,6 +349,53 @@
 
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/iv_arrow_critical_alert_display"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/chat_ic_arrow_right"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:tint="@color/t.primary" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_critical_alert_settings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="8dp"
+                android:paddingHorizontal="16dp"
+                android:text="@string/critical_alerts_content"
+                android:textColor="@color/t.secondary"
+                android:textSize="14sp" />
+
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_background_connection"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/chat_group_info_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="8dp">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="10dp"
+                    android:ellipsize="end"
+                    android:gravity="center_vertical"
+                    android:lines="1"
+                    android:text="@string/background_connection"
+                    android:textColor="@color/t.primary"
+                    android:textSize="16sp"
+                    app:layout_constraintEnd_toStartOf="@+id/iv_arrow_background_connection"
+                    app:layout_constraintStart_toStartOf="parent" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_arrow_background_connection"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:src="@drawable/chat_ic_arrow_right"

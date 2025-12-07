@@ -37,6 +37,7 @@
     <string name="settings_pattern_error_tips">Pattern does not match</string>
     <string name="settings_passcode_attempts_delay">Next attempt will be delayed by %ds.</string>
     <string name="settings_too_many_attempts_warning">Too many failed attempts. The next incorrect attempt will force a logout.</string>
+    <string name="settings_yelling_unavailable_countdown">Yelling Unavailable. Try again in %ds</string>
 
     <string name="login_select_country_code">Select Country Code</string>
 

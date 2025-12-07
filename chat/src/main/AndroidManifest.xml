@@ -56,11 +56,6 @@
             android:stateNotNeeded="true"
             android:theme="@android:style/Theme.NoDisplay" />
 
-        <service
-            android:name="org.thoughtcrime.securesms.service.KeyCachingService"
-            android:enabled="true"
-            android:exported="false" />
-
         <activity
             android:name=".contacts.contactsdetail.ContactDetailActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"

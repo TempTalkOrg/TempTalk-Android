@@ -13,6 +13,7 @@
             android:resizeableActivity="true"
             android:showOnLockScreen="true"
             android:supportsPictureInPicture="true"
+            android:finishOnTaskLaunch="true"
             android:taskAffinity="com.difft.android.call.task"
             android:theme="@style/Theme.Livekitandroid.NoActionBar" />
 

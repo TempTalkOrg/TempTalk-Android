@@ -36,7 +36,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallActivity
@@ -58,6 +57,8 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
+    val isCriticalAlertEnable by viewModel.callUiController.isCriticalAlertEnable.collectAsState(false)
+
 
     val itemSpace = when {
         callStatus == CallStatus.CALLING -> 8.dp
@@ -249,7 +250,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                         )
                     }
 
-                    if(isOneVOneCall && (viewModel.getCallRole() == CallRole.CALLER) && (callStatus == CallStatus.CALLING)) {
+                    if(isCriticalAlertEnable) {
                         Column(
                             modifier = Modifier
                                 .width(80.dp)

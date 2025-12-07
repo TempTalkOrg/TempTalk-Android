@@ -64,6 +64,7 @@ import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.util.FlashLightBlinker
 import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.chat.common.CriticalAlertSoundPlayer
 import com.difft.android.chat.common.StopCriticalAlertSoundReceiver
@@ -93,6 +94,7 @@ class MessageNotificationUtil @Inject constructor(
         const val STOP_CRITICAL_ALERT_SOUND = "STOP_CRITICAL_ALERT_SOUND"
     }
 
+    private val criticalAlertNotificationInfos = mutableMapOf<String, List<Int>>()
 
     private val nm: NotificationManager by lazy {
         ServiceUtil.getNotificationManager(context)
@@ -1047,10 +1049,17 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
-    fun showCriticalAlertNotification(forWhat: For, alertTitle: String, alertContent: String) {
+    fun showCriticalAlertNotification(forWhat: For, alertTitle: String, alertContent: String, timestamp: Long) {
         L.i { "[MessageNotificationUtil] showCriticalAlertNotification for ${forWhat.id}"}
         val title = "🚨$alertTitle"
-        val notificationId = forWhat.id.hashCode()
+        val notificationId = timestamp.hashCode()
+
+        if(isNotificationShowing(notificationId)) {
+            L.i { "[MessageNotificationUtil] Critical alert notification is already showing, skip"}
+            return
+        }
+
+        addCriticalAlertNotification(forWhat.id, notificationId)
 
         val intent = createConversationIntent(forWhat)
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
@@ -1081,6 +1090,11 @@ class MessageNotificationUtil @Inject constructor(
 
         // 播放critical alert声音
         CriticalAlertSoundPlayer.play(context, notificationId)
+
+        // 闪烁闪光灯，持续30秒
+        if (FlashLightBlinker.hasCameraPermission(context)) {
+            FlashLightBlinker.startBlinking(context, durationMs = 30000)
+        }
     }
 
     fun createStopSoundIntent(context: Context, notificationID: Int): PendingIntent {
@@ -1097,11 +1111,67 @@ class MessageNotificationUtil @Inject constructor(
         )
     }
 
-    fun cancelCriticalAlertNotification(conversationId: String?) {
-        conversationId?.let {
-            val notificationId = conversationId.hashCode()
-            CriticalAlertSoundPlayer.stopIfMatch(notificationId)
-            nm.cancel(notificationId)
+    @Synchronized
+    fun cancelCriticalAlertNotification(conversationId: String? = null) {
+        if (criticalAlertNotificationInfos.isEmpty()) return
+
+        val shouldCancelAll = conversationId == null
+        val canceledIds = mutableListOf<Int>()
+
+        // 统一先停止声音
+        if (shouldCancelAll) {
+            CriticalAlertSoundPlayer.stop()
+        }
+
+        val iterator = criticalAlertNotificationInfos.entries.iterator()
+        while (iterator.hasNext()) {
+            val (convId, notificationIds) = iterator.next()
+            L.i { "[MessageNotificationUtil] cancelCriticalAlertNotification for convId=$convId" }
+            // 如果只取消特定会话，跳过其他
+            if (!shouldCancelAll && convId != conversationId) continue
+
+            notificationIds.forEach { notificationId ->
+                try {
+                    // 检查通知是否还在展示
+                    if(isNotificationShowing(notificationId)){
+                        nm.cancel(notificationId)
+                        L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId for convId=$convId" }
+                    }
+                    // 停止匹配的声音
+                    CriticalAlertSoundPlayer.stopIfMatch(notificationId)
+                    canceledIds.add(notificationId)
+                } catch (e: Exception) {
+                    L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
+                }
+            }
+
+            // 清理缓存
+            if (shouldCancelAll) {
+                iterator.remove()
+            } else {
+                // 保留但标记已取消，用于防止旧 FCM 重复触发
+                val remainingIds = notificationIds - canceledIds.toSet()
+                if (remainingIds.isEmpty()) {
+                    iterator.remove()
+                } else {
+                    criticalAlertNotificationInfos[convId] = remainingIds
+                }
+            }
+        }
+
+        // 若闪光灯在闪烁，停止
+        if (FlashLightBlinker.isBlinking()) {
+            FlashLightBlinker.stopBlinking(context)
+        }
+
+        L.i { "[MessageNotificationUtil] cancelCriticalAlertNotification finished. conversationId=$conversationId, canceledIds=${canceledIds.size}" }
+    }
+
+    private fun addCriticalAlertNotification(key: String, value: Int) {
+        val list = criticalAlertNotificationInfos[key]?.toMutableList() ?: mutableListOf()
+        if (!list.contains(value)) {
+            list.add(value)
+            criticalAlertNotificationInfos[key] = list
         }
     }
 

@@ -214,7 +214,9 @@ class LIncomingCallActivity : AppCompatActivity() {
                     handleJoinCallResponse(status)
                 }
             } else {
-                ToastUtil.show(R.string.call_newcall_tip)
+                runOnUiThread {
+                    ToastUtil.show(R.string.call_newcall_tip)
+                }
                 hangUpTheCall("reject: local reject the new call")
             }
         }
@@ -396,7 +398,9 @@ class LIncomingCallActivity : AppCompatActivity() {
     private fun handleJoinCallResponse(status: Boolean) {
         if(!status) {
             L.e { "[Call] LIncomingActivity join call failed." }
-            ToastUtil.show(R.string.call_join_failed_tip)
+            runOnUiThread {
+                ToastUtil.show(R.string.call_join_failed_tip)
+            }
             hangUpTheCall("accept: join the call failed")
         }else {
             hangUpTheCall("accept: join the call")

@@ -159,6 +159,7 @@
     <string name="chat_voice_max_size_limit">The maximum recording file size is 10M</string>
 
     <string name="chat_message_delete_tips">Really want to delete this message?</string>
+    <string name="chat_label_new_message">NEW MESSAGES</string>
 
     <!--Chat Option -->
     <string name="chat_option_create_group">Create Group</string>
@@ -434,7 +435,7 @@
 
     <string name="chat_new_message">[New message]</string>
     <string name="unsupported_message_type">[Unsupported message type]</string>
-    <string name="max_support_file_size_50">Supports up to 200M files</string>
+    <string name="max_support_file_size_limit">Sorry, the selected file exceeds the 200MB limit and cannot be sent.</string>
     <string name="all_messages_deleted">All the messages have been deleted.</string>
     <string name="conversation_input_panel__slide_to_cancel">Slide to cancel</string>
     <string name="ConversationActivity_unable_to_record_audio">Unable to record audio!</string>
@@ -578,10 +579,11 @@
     <string name="notification_no_permission_tip5">Please enable background pop-up and lock screen display permissions so that %s can display incoming call when the device is locked.</string>
     <string name="notification_no_permission_tip6">Please enable banner notification permissions so that %s can display incoming call when the device is locked.</string>
     <string name="notification_disturb_tip">"Do not disturb" is turned on. You may not receive notifications.</string>
-    <string name="notification_no_google_tip">No google services on your device. Please keep background connection enabled to receive messages and calls.</string>
+    <string name="notification_no_google_tip">Google services are restricted on your device. Please keep background connection enabled to receive messages and calls.</string>
     <string name="notification_ignore">Not now</string>
     <string name="notification_go_to_settings">Go to settings</string>
     <string name="notification_title">Notification</string>
+    <string name="notification_group_chat_notification">Group Chat Notification</string>
     <string name="notification_settings">Notification</string>
     <string name="notification_full_screen_settings">Full screen notification</string>
     <string name="notification_settings_open_fail">Notification settings page not available on this device</string>
@@ -725,7 +727,7 @@
 
     <string name="background_connection">Background connection</string>
     <string name="background_connection_enabled">Background connection enabled</string>
-    <string name="background_connection_tips">Keep a low-impact background connection to Yelling for reliable notifications.Before enabling, please ensure the following settings are in normal status:</string>
+    <string name="background_connection_tips">Keep a low-impact background connection to Yelling for reliable notifications. Before enabling, please ensure the above settings are in normal status.</string>
 
     <!-- Background Connection Checks -->
     <string name="background_restriction_check">Background Restriction</string>
@@ -745,6 +747,8 @@
 
     <string name="background_connection_check_failed">Please ensure the following settings are in normal status before enabling background connection</string>
 
+    <string name="critical_alert_background_connection_check_failed">To avoid missing important alerts, please enable background operation.</string>
+
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>
     <string name="disappearing_messages_tips">Messages will expire after being read, they will GONE and then can NOT be viewed in any way.</string>
@@ -756,7 +760,7 @@
     <string name="contact_blocked_tips">Operation denied.You are not friend yet.</string>
 
     <string name="critical_alerts">Critical Alerts</string>
-    <string name="critical_alerts_content">Modes access - %s Allow modes access, and turn it on.</string>
+    <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission).</string>
     <string name="critical_alerts_off">Off</string>
     <string name="critical_alerts_on">On</string>
 

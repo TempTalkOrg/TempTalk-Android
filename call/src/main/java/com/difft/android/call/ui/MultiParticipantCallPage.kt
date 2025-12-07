@@ -1,4 +1,4 @@
-package com.difft.android.call
+package com.difft.android.call.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -39,18 +39,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
+import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.globalServices
+import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.MUTE_ACTION_INDEX
-import com.difft.android.call.ui.ScreenShareSpeakerView
-import com.difft.android.call.ui.ScreenSharingView
-import com.difft.android.call.ui.ShowHandsUpTipView
-import com.difft.android.call.ui.ShowItemOnClickView
-import com.difft.android.call.ui.ShowParticipantsListView
-import com.difft.android.call.ui.ShowSpeakerStatusView
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
@@ -59,6 +56,7 @@ import io.livekit.android.util.flow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.asFlow
+import kotlin.collections.contains
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -126,15 +124,22 @@ fun MultiParticipantCallPage(
     }
 
     // 显示弹幕
-    BarrageMessageView(viewModel, config = BarrageMessageConfig(false, callConfig.chatPresets, displayDurationMillis = autoHideTimeout), { message, topic ->
-        viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
-            if(status){
-                viewModel.showCallBarrageMessage(room.localParticipant, message)
-            }else {
-                L.e {"[Call] Failed to send barrage message status = $status."}
-            }
+    BarrageMessageView(
+        viewModel,
+        config = BarrageMessageConfig(
+            false,
+            callConfig.chatPresets,
+            displayDurationMillis = autoHideTimeout
+        ),
+        { message, topic ->
+            viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
+                if (status) {
+                    viewModel.showCallBarrageMessage(room.localParticipant, message)
+                } else {
+                    L.e { "[Call] Failed to send barrage message status = $status." }
+                }
+            })
         })
-    })
 
     if(isUserSharingScreen) {
         // 显示举手提示
@@ -247,7 +252,7 @@ fun MultiParticipantItem(
         ConstraintLayout(
             modifier = modifier
                 .clip(shape = RoundedCornerShape(8.dp))
-                .background(color = colorResource(id = com.difft.android.base.R.color.bg1_night))
+                .background(color = colorResource(id = R.color.bg1_night))
 
         ) {
             val (userView, statusView) = createRefs()
@@ -305,7 +310,7 @@ fun MultiParticipantItem(
                     }
                     .wrapContentWidth()
                     .height(24.dp)
-                    .background(color = colorResource(id = com.difft.android.base.R.color.gray_1000), shape = RoundedCornerShape(size = 4.dp))
+                    .background(color = colorResource(id = R.color.gray_1000), shape = RoundedCornerShape(size = 4.dp))
                     .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
                 verticalAlignment = Alignment.Bottom,

@@ -45,6 +45,7 @@ class PatternLockView @JvmOverloads constructor(
     private val outerCircleSize = 32.dp // 外圈直径32dp
     private val pathWidth = 6.dp // 固定6dp
     private var normalStateColor = Color.GRAY
+    private var disabledStateColor = Color.GRAY
     private var selectedStateColor = Color.BLUE
     private var outerCircleColor = Color.LTGRAY
     private var correctStateColor = Color.BLUE
@@ -66,7 +67,8 @@ class PatternLockView @JvmOverloads constructor(
     private var currentY = 0f
     private var lastX = 0f
     private var lastY = 0f
-    private var touchRadius = 24.dp.toFloat() // 动态计算的触摸半径
+    private val touchRadius = 48.dp / 2f // 固定触摸半径，Android推荐的最小触摸目标（24dp）
+    private val initialTouchRadius = 72.dp.toFloat() // 初始触摸半径（72dp），配合路径检测机制
 
     // Paint objects
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -93,6 +95,8 @@ class PatternLockView @JvmOverloads constructor(
     private fun setupDefaultColors() {
         // 未选中的点颜色为icon色
         normalStateColor = ContextCompat.getColor(context, R.color.t_third)
+        // 禁用状态的点颜色为bg_disable
+        disabledStateColor = ContextCompat.getColor(context, R.color.bg_disable)
         // 选中时的点颜色为t_primary
         selectedStateColor = ContextCompat.getColor(context, R.color.t_primary)
         // 外圈颜色为bg_disable
@@ -164,12 +168,6 @@ class PatternLockView @JvmOverloads constructor(
             dot.centerX = outerRadius + col * horizontalSpacing
             dot.centerY = outerRadius + row * verticalSpacing
         }
-
-        // 动态计算触摸半径：取点间距的一半和最小48dp中的较大值
-        // 这样可以确保触摸区域覆盖相邻点之间的大部分空间
-        val spacing = minOf(horizontalSpacing, verticalSpacing)
-        val minTouchRadius = 48.dp / 2f
-        touchRadius = maxOf(spacing * 0.5f, minTouchRadius)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -240,8 +238,8 @@ class PatternLockView @JvmOverloads constructor(
                 dotPaint.color = selectedStateColor
                 canvas.drawCircle(dot.centerX, dot.centerY, dotSize.toFloat() / 2, dotPaint)
             } else {
-                // 未选中的点：只绘制普通点（icon颜色）
-                dotPaint.color = normalStateColor
+                // 未选中的点：根据是否禁用显示不同颜色
+                dotPaint.color = if (isInputEnabled) normalStateColor else disabledStateColor
                 canvas.drawCircle(dot.centerX, dot.centerY, dotSize.toFloat() / 2, dotPaint)
             }
         }
@@ -278,8 +276,8 @@ class PatternLockView @JvmOverloads constructor(
         lastX = currentX
         lastY = currentY
 
-        // 检查是否直接在点上按下
-        val dot = getDotAt(currentX, currentY)
+        // 使用较大的初始触摸半径
+        val dot = getDotAt(currentX, currentY, initialTouchRadius)
         if (dot != null) {
             isPatternDrawingStarted = true
             selectDot(dot)
@@ -293,48 +291,71 @@ class PatternLockView @JvmOverloads constructor(
         if (!isTouchActive) return
 
         if (!isPatternDrawingStarted) {
-            // 如果还没开始绘制，检查路径上或当前位置是否有点
-            // 先检查从按下到现在的路径上是否经过了点
-            val dotsOnPath = getDotsOnPath(lastX, lastY, currentX, currentY)
-            val dotAtCurrent = getDotAt(currentX, currentY)
+            // 如果还没开始绘制，先检测当前位置
+            var dot = getDotAt(currentX, currentY, initialTouchRadius)
 
-            val firstDot = dotsOnPath.firstOrNull() ?: dotAtCurrent
-            if (firstDot != null) {
+            // 如果当前位置没有点，检查从起点滑动过来的路径上是否有点（只检查起点附近）
+            if (dot == null) {
+                dot = findDotNearStartPath(lastX, lastY, currentX, currentY)
+            }
+
+            if (dot != null) {
                 isPatternDrawingStarted = true
-                selectDot(firstDot)
+                selectDot(dot)
                 notifyPatternStarted()
-
-                // 如果路径上还有其他点，也一并选中
-                dotsOnPath.drop(1).forEach { dot ->
-                    selectDot(dot)
-                }
             }
-
-            lastX = currentX
-            lastY = currentY
         } else {
-            // 已经开始绘制，先检查路径上经过的所有点
-            val dotsOnPath = getDotsOnPath(lastX, lastY, currentX, currentY)
-            if (dotsOnPath.isNotEmpty()) {
-                // 按顺序选中路径上的所有点
-                dotsOnPath.forEach { dot ->
-                    selectDot(dot)
-                }
+            // 已经开始绘制，只检测当前位置的点，使用正常半径
+            val dot = getDotAt(currentX, currentY, touchRadius)
+            if (dot != null && !dot.isSelected) {
+                selectDot(dot)
                 notifyPatternProgress()
-            } else {
-                // 如果路径上没有点，检查当前位置是否有点
-                val dot = getDotAt(currentX, currentY)
-                if (dot != null && !dot.isSelected) {
-                    selectDot(dot)
-                    notifyPatternProgress()
-                }
             }
-
-            // 更新上一次的位置
-            lastX = currentX
-            lastY = currentY
         }
+
         invalidate()
+    }
+
+    /**
+     * 查找从起点附近滑动路径上的点
+     * 只检测距离起点很近的点，避免长距离滑动时误选
+     */
+    private fun findDotNearStartPath(startX: Float, startY: Float, currentX: Float, currentY: Float): Dot? {
+        // 只在短距离内检测（约100dp），避免误选远处的点
+        val moveDistance = sqrt((currentX - startX).pow(2) + (currentY - startY).pow(2))
+        if (moveDistance > 100.dp) return null
+
+        // 找出距离起点最近且在路径上的点
+        return dots.find { dot ->
+            // 点必须距离起点足够近
+            val distanceFromStart = sqrt((dot.centerX - startX).pow(2) + (dot.centerY - startY).pow(2))
+            if (distanceFromStart > initialTouchRadius) return@find false
+
+            // 点到路径的距离要小于半径
+            val distanceToPath = pointToLineDistance(dot.centerX, dot.centerY, startX, startY, currentX, currentY)
+            distanceToPath <= initialTouchRadius / 2
+        }
+    }
+
+    /**
+     * 计算点到线段的距离
+     */
+    private fun pointToLineDistance(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+        val dx = x2 - x1
+        val dy = y2 - y1
+        val lengthSquared = dx * dx + dy * dy
+
+        if (lengthSquared == 0f) {
+            return sqrt((px - x1).pow(2) + (py - y1).pow(2))
+        }
+
+        var t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared
+        t = maxOf(0f, minOf(1f, t))
+
+        val projX = x1 + t * dx
+        val projY = y1 + t * dy
+
+        return sqrt((px - projX).pow(2) + (py - projY).pow(2))
     }
 
     private fun handleTouchEnd() {
@@ -346,86 +367,12 @@ class PatternLockView @JvmOverloads constructor(
         isTouchActive = false
     }
 
-    private fun getDotAt(x: Float, y: Float): Dot? {
-        // 使用动态计算的触摸半径，基于点之间的间距
+    private fun getDotAt(x: Float, y: Float, radius: Float = touchRadius): Dot? {
+        // 使用指定的触摸半径进行检测
         return dots.find { dot ->
             val distance = sqrt((x - dot.centerX).pow(2) + (y - dot.centerY).pow(2))
-            distance <= touchRadius
+            distance <= radius
         }
-    }
-
-    /**
-     * 检测从(x1, y1)到(x2, y2)的路径上经过了哪些点
-     * 这样可以在快速滑动时自动选中中间经过的点
-     */
-    private fun getDotsOnPath(x1: Float, y1: Float, x2: Float, y2: Float): List<Dot> {
-        val dotsOnPath = mutableListOf<Dot>()
-
-        // 遍历所有未选中的点
-        dots.filter { !it.isSelected }.forEach { dot ->
-            // 计算点到线段的距离
-            val distance = pointToLineDistance(
-                dot.centerX, dot.centerY,
-                x1, y1, x2, y2
-            )
-
-            // 如果点在路径附近（距离小于触摸半径），认为经过了这个点
-            if (distance <= touchRadius) {
-                // 还需要确保这个点在起点和终点之间，不是在延长线上
-                if (isPointBetween(dot.centerX, dot.centerY, x1, y1, x2, y2)) {
-                    dotsOnPath.add(dot)
-                }
-            }
-        }
-
-        // 按照从起点到终点的顺序排序
-        dotsOnPath.sortBy { dot ->
-            // 计算点到起点的距离
-            sqrt((dot.centerX - x1).pow(2) + (dot.centerY - y1).pow(2))
-        }
-
-        return dotsOnPath
-    }
-
-    /**
-     * 计算点(px, py)到线段(x1, y1)-(x2, y2)的距离
-     */
-    private fun pointToLineDistance(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
-        val dx = x2 - x1
-        val dy = y2 - y1
-
-        // 线段长度的平方
-        val lengthSquared = dx * dx + dy * dy
-
-        if (lengthSquared == 0f) {
-            // 线段退化为点，直接返回点到点的距离
-            return sqrt((px - x1).pow(2) + (py - y1).pow(2))
-        }
-
-        // 计算投影参数t
-        var t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared
-        t = maxOf(0f, minOf(1f, t))
-
-        // 计算投影点
-        val projX = x1 + t * dx
-        val projY = y1 + t * dy
-
-        // 返回点到投影点的距离
-        return sqrt((px - projX).pow(2) + (py - projY).pow(2))
-    }
-
-    /**
-     * 判断点(px, py)是否在线段(x1, y1)-(x2, y2)之间（而不是在延长线上）
-     */
-    private fun isPointBetween(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
-        val dx = x2 - x1
-        val dy = y2 - y1
-        val lengthSquared = dx * dx + dy * dy
-
-        if (lengthSquared == 0f) return false
-
-        val t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared
-        return t in 0f..1f
     }
 
     private fun selectDot(dot: Dot) {
@@ -488,6 +435,7 @@ class PatternLockView @JvmOverloads constructor(
 
     fun setInputEnabled(inputEnabled: Boolean) {
         isInputEnabled = inputEnabled
+        invalidate() // 重绘以更新圆点颜色
     }
 
     fun setTactileFeedbackEnabled(tactileFeedbackEnabled: Boolean) {

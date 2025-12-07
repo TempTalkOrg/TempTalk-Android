@@ -47,7 +47,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
-import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.base.user.CallConfig
@@ -80,6 +79,7 @@ fun MainPageWithTopStatusView(
     val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
     val callType by viewModel.callType.collectAsState()
     val screenSharingUser by viewModel.screenSharingUser.collectAsState()
+    val isCriticalAlertEnable by viewModel.callUiController.isCriticalAlertEnable.collectAsState(false)
 
     var screenShareUserName: String? by remember { mutableStateOf(null) }
     var rotationAngle by remember { mutableFloatStateOf(0f) }
@@ -301,7 +301,7 @@ fun MainPageWithTopStatusView(
                 }
             }
 
-            if(isOneVOneCall && (viewModel.getCallRole() == CallRole.CALLER) && (callStatus == CallStatus.CALLING)) {
+            if(isCriticalAlertEnable) {
                 CallCriticalAlertView(
                     clicked = {
                         callIntent.conversationId?.let {

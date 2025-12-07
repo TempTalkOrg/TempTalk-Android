@@ -51,6 +51,13 @@ import java.util.ArrayList
 import java.util.Optional
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.network.config.WsTokenManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+
 class LCallToChatControllerImpl @Inject constructor(
     @ChativeHttpClientModule.Call
     private val httpClient: ChativeHttpClient,
@@ -61,6 +68,7 @@ class LCallToChatControllerImpl @Inject constructor(
     private val conversationManager: ConversationManager,
     private val dbMessageStore: DBMessageStore,
     private val encryptionDataManager: EncryptionDataManager,
+    private val wsTokenManager: WsTokenManager
 ) : LCallToChatController {
 
     private val autoDisposeCompletable = CompletableSubject.create()
@@ -73,72 +81,83 @@ class LCallToChatControllerImpl @Inject constructor(
         globalServices.myId
     }
 
-    override fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: (Boolean) -> Unit) {
-
+    override fun joinCall(
+        context: Context,
+        roomId: String,
+        roomName: String?,
+        callerId: String,
+        callType: CallType,
+        conversationId: String?,
+        onComplete: (Boolean) -> Unit
+    ) {
         LCallManager.showWaitDialog(context)
 
-        val body = StartCallRequestBody(
-            callType.type,
-            LCallConstants.CALL_VERSION,
-            System.currentTimeMillis(),
-            conversation = conversationId,
-            roomId = roomId
-        )
+        // 启动协程
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val body = StartCallRequestBody(
+                    callType.type,
+                    LCallConstants.CALL_VERSION,
+                    System.currentTimeMillis(),
+                    conversation = conversationId,
+                    roomId = roomId
+                )
 
-        val callData = LCallManager.getCallData(roomId)
-        val callRole = if (callData?.caller?.uid == mySelfId && callData.caller.did == DEFAULT_DEVICE_ID)
-            CallRole.CALLER
-        else
-            CallRole.CALLEE
+                val callData = LCallManager.getCallData(roomId)
+                val callRole = if (callData?.caller?.uid == mySelfId && callData.caller.did == DEFAULT_DEVICE_ID)
+                    CallRole.CALLER
+                else
+                    CallRole.CALLEE
 
-        val startCallParams = LCallManager.createStartCallParams(body)
+                val startCallParams = LCallManager.createStartCallParams(body)
 
-        val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
-            .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .withAction(CallIntent.Action.JOIN_CALL)
-            .withRoomName(roomName)
-            .withCallType(callType.type)
-            .withCallRole(callRole.type)
-            .withCallerId(mySelfId)
-            .withConversationId(conversationId)
-            .withStartCallParams(startCallParams)
-            .withAppToken(SecureSharedPrefsUtil.getToken())
+                // 刷新 Token（若需要）
+                wsTokenManager.refreshTokenIfNeeded()
 
-        val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
+                val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
+                    .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .withAction(CallIntent.Action.JOIN_CALL)
+                    .withRoomName(roomName)
+                    .withCallType(callType.type)
+                    .withCallRole(callRole.type)
+                    .withCallerId(mySelfId)
+                    .withConversationId(conversationId)
+                    .withStartCallParams(startCallParams)
+                    .withAppToken(SecureSharedPrefsUtil.getToken())
 
-        if(speedTestServerUrls.isEmpty()) {
-            callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .doAfterTerminate {
-                    LCallManager.dismissWaitDialog()
+                val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
+
+                // 优先使用缓存的 serverUrl
+                if (speedTestServerUrls.isNotEmpty()) {
+                    val intent = callIntentBuilder.withCallServerUrls(speedTestServerUrls).build()
+                    startCallInternal(context, intent, onComplete)
+                    return@launch
                 }
-                .autoDispose(autoDisposeCompletable)
-                .subscribe({
-                    if (it.status == 0) {
-                        L.d { "[Call] joinCall getCallServerUrl success, response data:${it.data}" }
-                        val data = it.data
-                        val serviceUrls = data?.serviceUrls
-                        if(data != null && serviceUrls != null && serviceUrls.isNotEmpty()) {
-                            val intent = callIntentBuilder.withCallServerUrls(serviceUrls).build()
-                            application.startActivity(intent)
-                            onComplete(true)
-                        } else {
-                            L.e { "[Call] call server url data is null" }
-                            onComplete(false)
-                        }
+
+                // 无缓存，发起网络请求
+                runCatching {
+                    callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
+                        .compose(RxUtil.getSingleSchedulerComposer())
+                        .await()  // ✅ 用扩展函数 await() 将 Rx 转协程挂起，避免嵌套回调
+                }.onSuccess { response ->
+                    if (response.status == 0 && !response.data?.serviceUrls.isNullOrEmpty()) {
+                        val urls = response.data!!.serviceUrls!!
+                        val intent = callIntentBuilder.withCallServerUrls(urls).build()
+                        startCallInternal(context, intent, onComplete)
                     } else {
-                        L.e { "[Call] joinCall getCallServerUrl failed, status:${it.status}" }
+                        L.e { "[Call] joinCall getCallServerUrl failed, status:${response.status}" }
                         onComplete(false)
                     }
-                }, {
-                    L.e { "[Call] joinCall getCallServerUrl failed, error:${it.message}" }
+                }.onFailure { e ->
+                    L.e { "[Call] joinCall getCallServerUrl error:${e.message}" }
                     onComplete(false)
-                })
-        }else {
-            val intent = callIntentBuilder.withCallServerUrls(speedTestServerUrls).build()
-            application.startActivity(intent)
-            onComplete(true)
-            LCallManager.dismissWaitDialog()
+                }
+            } catch (e: Exception) {
+                L.e { "[Call] joinCall unexpected error:${e.message}" }
+                onComplete(false)
+            } finally {
+                withContext(Dispatchers.Main) { LCallManager.dismissWaitDialog() }
+            }
         }
     }
 
@@ -635,6 +654,18 @@ class LCallToChatControllerImpl @Inject constructor(
 
     override fun getIncomingCallRoomId(): String? {
         return LIncomingCallActivity.getCurrentRoomId()
+    }
+
+    private suspend fun startCallInternal(context: Context, intent: Intent, onComplete: (Boolean) -> Unit) {
+        withContext(Dispatchers.Main) {
+            try {
+                context.applicationContext.startActivity(intent)
+                onComplete(true)
+            } catch (e: Exception) {
+                L.e { "[Call] joinCall startCallInternal failed: ${e.message}" }
+                onComplete(false)
+            }
+        }
     }
 
 }

@@ -155,6 +155,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 readNumberTextView = binding.ivReadNumber
             )
 
+            if (message.showNewMsgDivider) {
+                binding.llNewMsgDivider.root.visibility = View.VISIBLE
+            } else {
+                binding.llNewMsgDivider.root.visibility = View.GONE
+            }
+
             if (message.showDayTime) {
                 binding.tvDayTime.visibility = View.VISIBLE
                 binding.tvDayTime.text = TimeFormatter.getConversationDateHeaderString(binding.root.context, language, message.systemShowTimestamp)
@@ -400,6 +406,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 timeTextView = binding.textViewTime
             )
 
+            if (message.showNewMsgDivider) {
+                binding.llNewMsgDivider.root.visibility = View.VISIBLE
+            } else {
+                binding.llNewMsgDivider.root.visibility = View.GONE
+            }
+
             if (message.showDayTime) {
                 binding.tvDayTime.visibility = View.VISIBLE
                 binding.tvDayTime.text = TimeFormatter.getConversationDateHeaderString(binding.root.context, language, message.systemShowTimestamp)
@@ -543,6 +555,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             onSendStatusClicked: (rootView: View, message: TextChatMessage) -> Unit,
             highlightItemIds: ArrayList<Long>?
         ) {
+            if (message.showNewMsgDivider) {
+                binding.llNewMsgDivider.root.visibility = View.VISIBLE
+            } else {
+                binding.llNewMsgDivider.root.visibility = View.GONE
+            }
+
             if (message.showDayTime) {
                 binding.tvDayTime.visibility = View.VISIBLE
                 binding.tvDayTime.text = TimeFormatter.getConversationDateHeaderString(binding.root.context, language, message.systemShowTimestamp)

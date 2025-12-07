@@ -167,7 +167,7 @@ class UpdateManager @Inject constructor(
             showCancel = !isForce,
             cancelable = !isForce,
             onConfirm = {
-                ScreenLockUtil.noNeedShowScreenLock = true
+                ScreenLockUtil.temporarilyDisabled = true
                 val authority: String = context.applicationContext.packageName + ".provider"
                 val uri = FileProvider.getUriForFile(context, authority, apkFile)
                 installAPK(context, uri, apkFile)

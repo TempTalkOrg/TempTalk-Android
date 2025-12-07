@@ -33,6 +33,8 @@ data class TTNotifyMessage(
         const val NOTIFY_MESSAGE_TYPE_CALL_END = 17 // call end notify
         const val NOTIFY_MESSAGE_TYPE_RESET_IDENTITY_KEY = 19 // reset Identity Key
 
+        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 // critical alert
+
         //本地创建 type
         const val NOTIFY_MESSAGE_TYPE_LOCAL = 10000
 
@@ -99,7 +101,10 @@ data class Data(
     val roomId: String? = null,
     val resetIdentityKeyTime: Long = 0,
     val messageClearAnchor: Long = 0,
-)
+    val timestamp: Long = 0,
+    val alertTitle: String? = null,
+    val alertBody: String? = null,
+    )
 
 data class Group(
     val action: Int,

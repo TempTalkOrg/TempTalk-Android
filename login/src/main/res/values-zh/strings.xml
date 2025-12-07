@@ -36,6 +36,7 @@
     <string name="settings_pattern_error_tips">手势密码不匹配</string>
     <string name="settings_passcode_attempts_delay">下一次尝试需要等待%d秒。</string>
     <string name="settings_too_many_attempts_warning">密码错误次数过多，再次错误将强制退出登录。</string>
+    <string name="settings_yelling_unavailable_countdown">Yelling 不可用，请在 %d 秒后重试</string>
 
     <string name="login_select_country_code">选择国家编码</string>
 

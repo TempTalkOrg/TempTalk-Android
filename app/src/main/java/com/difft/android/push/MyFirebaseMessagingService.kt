@@ -70,12 +70,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             pushCustomContent.uid?.let { uid ->
                 val alertTitle = title ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
                 val alertContent = content ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
+                val timestamp = pushCustomContent.timestamp
                 appScope.launch(Dispatchers.IO) {
-                    entryPoint.messageNotificationUtil.showCriticalAlertNotification(For.Account(uid), alertTitle, alertContent)
+                    L.i { "[Call] handle fcm critical alert: uid = $uid, timestamp = $timestamp" }
+                    entryPoint.messageNotificationUtil.showCriticalAlertNotification(For.Account(uid), alertTitle, alertContent, timestamp)
                 }
             }
         } else {
-            L.i { "[fcm] Critical alert message is not shown because notification policy access is denied" }
+            L.i { "[Call] From fcm critical alert message is not shown because notification policy access is denied, uid = ${pushCustomContent.uid}, timestamp = ${pushCustomContent.timestamp}" }
         }
     }
 

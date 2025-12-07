@@ -1,4 +1,4 @@
-package com.difft.android.call
+package com.difft.android.call.ui
 
 import android.content.res.Configuration
 import androidx.compose.foundation.Image
@@ -42,13 +42,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
+import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.SfProFont
+import com.difft.android.call.LCallUiConstants
+import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.BarrageMessage
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CHAT
-import com.difft.android.call.ui.ShowHandsUpTipView
-import com.difft.android.call.ui.SimpleBarrageMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -120,7 +121,7 @@ fun BarrageMessageView(viewModel: LCallViewModel, config: BarrageMessageConfig, 
                         .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
                         .wrapContentWidth()
                         .height(LCallUiConstants.BARRAGE_MESSAGE_ITEM_HEIGHT.dp)
-                        .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
+                        .background(color = colorResource(id = R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
                         .padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -135,7 +136,7 @@ fun BarrageMessageView(viewModel: LCallViewModel, config: BarrageMessageConfig, 
                         val annotatedString = buildAnnotatedString {
                             withStyle(
                                 style = SpanStyle(
-                                    color = colorResource(id = com.difft.android.base.R.color.t_info_night),
+                                    color = colorResource(id = R.color.t_info_night),
                                 )
                             ) {
                                 append(message.userName)
@@ -217,7 +218,7 @@ private fun ShouldShowBarrageInput(viewModel: LCallViewModel, config: BarrageMes
                         .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
                         .wrapContentWidth()
                         .height(LCallUiConstants.SIMPLE_BARRAGE_INPUT_UI_HEIGHT.dp)
-                        .background(color = colorResource(com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
+                        .background(color = colorResource(R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
                         .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
@@ -234,14 +235,14 @@ private fun ShouldShowBarrageInput(viewModel: LCallViewModel, config: BarrageMes
                                 .padding(0.83333.dp)
                                 .width(20.dp)
                                 .height(20.dp),
-                            painter = painterResource(id = R.drawable.barrage_logo),
+                            painter = painterResource(id = com.difft.android.call.R.drawable.barrage_logo),
                             contentDescription = "barrage input icon",
                             contentScale = ContentScale.Fit,
                         )
                     }
 
                     Text(
-                        text = context.getString(R.string.call_barrage_broadcast_message_tip),
+                        text = context.getString(com.difft.android.call.R.string.call_barrage_broadcast_message_tip),
                         modifier = Modifier
                             .wrapContentWidth()
                             .height(20.dp),
@@ -250,7 +251,7 @@ private fun ShouldShowBarrageInput(viewModel: LCallViewModel, config: BarrageMes
                             lineHeight = 20.sp,
                             fontFamily = SfProFont,
                             fontWeight = FontWeight(510),
-                            color = colorResource(com.difft.android.base.R.color.gray_500),
+                            color = colorResource(R.color.gray_500),
                         )
                     )
                 }

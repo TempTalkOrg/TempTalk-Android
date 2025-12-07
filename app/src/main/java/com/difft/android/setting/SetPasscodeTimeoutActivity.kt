@@ -82,7 +82,6 @@ class SetPasscodeTimeoutActivity : BaseActivity() {
             this.passcodeTimeout = timeoutItem.time
         }
         updateSelectedItem(timeoutItem)
-        PasscodeUtil.disableScreenLock = true
         isUpdating = false
     }
 
