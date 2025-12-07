@@ -183,11 +183,8 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                     binding.imageviewAddContact.setOnClickListener { requestAddFriend() }
                 }
 
-                if (conversationSet?.blockStatus == 1) {
-                    binding.buttonCall.visibility = View.GONE
-                } else {
-                    binding.buttonCall.visibility = View.VISIBLE
-                }
+                val shouldHideCallButton = !isFriend || conversationSet?.blockStatus == 1
+                binding.buttonCall.visibility = if (shouldHideCallButton) View.GONE else View.VISIBLE
             }
         }
     }

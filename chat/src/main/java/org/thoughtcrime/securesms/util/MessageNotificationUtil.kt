@@ -65,6 +65,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.util.FullScreenPermissionHelper
+import com.difft.android.chat.common.CriticalAlertSoundPlayer
+import com.difft.android.chat.common.StopCriticalAlertSoundReceiver
+
 
 @Singleton
 class MessageNotificationUtil @Inject constructor(
@@ -85,8 +88,9 @@ class MessageNotificationUtil @Inject constructor(
         private const val CHANNEL_CONFIG_NAME_CALL = "CALL"
         private const val CHANNEL_CONFIG_NAME_ONGOING_CALL = "ONGOING_CALL"
         private const val CHANNEL_CONFIG_NAME_BACKGROUND = "BACKGROUND"
-
+        private const val CHANNEL_CONFIG_NAME_CRITICAL_ALERT = "CRITICAL_ALERT_V2"
         private const val CHANNEL_CONFIG_MESSAGE_GROUP = "MESSAGE_GROUP"
+        const val STOP_CRITICAL_ALERT_SOUND = "STOP_CRITICAL_ALERT_SOUND"
     }
 
 
@@ -115,6 +119,7 @@ class MessageNotificationUtil @Inject constructor(
         checkCallChannel()
         checkOngoingCallChannel()
         checkBackgroundChannel()
+        checkCriticalAlertChannel()
 
         // 启动时异步清理过期缓存
         try {
@@ -158,6 +163,31 @@ class MessageNotificationUtil @Inject constructor(
                 notificationChannel.group = CHANNEL_CONFIG_MESSAGE_GROUP
                 notificationChannel.setShowBadge(true)
                 notificationChannel.enableVibration(true)
+                nm.createNotificationChannel(notificationChannel)
+            }
+        }
+    }
+
+    private fun checkCriticalAlertChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val existingChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
+            if (existingChannel == null || existingChannel.canShowBadge()) {
+                deleteNotificationChannelSafely(CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
+                val notificationChannel = NotificationChannel(
+                    CHANNEL_CONFIG_NAME_CRITICAL_ALERT,
+                    CHANNEL_CONFIG_NAME_CRITICAL_ALERT,
+                    NotificationManager.IMPORTANCE_HIGH
+                )
+                notificationChannel.setShowBadge(false)
+                notificationChannel.enableVibration(true)
+                notificationChannel.setBypassDnd(true)
+//                val ringtoneUri = Uri.parse("android.resource://${context.packageName}/${R.raw.critical_alert}")
+//                notificationChannel.setSound(ringtoneUri,
+//                    AudioAttributes.Builder()
+//                        .setUsage(AudioAttributes.USAGE_ALARM)
+//                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+//                        .build())
+                notificationChannel.vibrationPattern = longArrayOf(0, 100)
                 nm.createNotificationChannel(notificationChannel)
             }
         }
@@ -943,5 +973,82 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
+    fun isNotificationPolicyAccessGranted(): Boolean {
+        return try {
+            nm.isNotificationPolicyAccessGranted()
+        } catch (e: Exception) {
+            L.i { "[MessageNotificationUtil] isNotificationPolicyAccessGranted failed:" + e.stackTraceToString() }
+            false
+        }
+    }
+
+    fun openNotificationDndSettings(activity: Activity) {
+        try {
+            val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            L.i { "[MessageNotificationUtil] openFullScreenNotificationSettings fail:" + e.stackTraceToString() }
+            openNotificationSettings(activity)
+        }
+    }
+
+    fun showCriticalAlertNotification(forWhat: For, alertTitle: String, alertContent: String) {
+        L.i { "[MessageNotificationUtil] showCriticalAlertNotification for ${forWhat.id}"}
+        val title = "🚨$alertTitle"
+        val notificationId = forWhat.id.hashCode()
+
+        val intent = createConversationIntent(forWhat)
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
+            .setContentTitle(title)
+            .setContentText(alertContent)
+            .setContentIntent(pendingIntent)
+            .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
+            .setOnlyAlertOnce(false)
+            .setDeleteIntent(createStopSoundIntent(context, notificationId))
+
+        try {
+            nm.notify(notificationId, builder.build())
+        } catch (e: Exception) {
+            L.e { "[MessageNotificationUtil] showCriticalAlertNotification failed:${e.message}" }
+        }
+
+        // 播放critical alert声音
+        CriticalAlertSoundPlayer.play(context, notificationId)
+    }
+
+    fun createStopSoundIntent(context: Context, notificationID: Int): PendingIntent {
+        val intent = Intent(context, StopCriticalAlertSoundReceiver::class.java).apply {
+            action = STOP_CRITICAL_ALERT_SOUND
+            `package` = context.packageName
+            putExtra("notification_id", notificationID)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            notificationID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    fun cancelCriticalAlertNotification(conversationId: String?) {
+        conversationId?.let {
+            val notificationId = conversationId.hashCode()
+            CriticalAlertSoundPlayer.stopIfMatch(notificationId)
+            nm.cancel(notificationId)
+        }
+    }
 
 }

@@ -310,6 +310,7 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
 
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
+        messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 
     override fun onPause() {

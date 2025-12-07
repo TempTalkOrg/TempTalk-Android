@@ -27,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,11 +42,16 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
+import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
+import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
@@ -150,7 +154,7 @@ fun MainPageWithTopStatusView(
                     ConstraintLayout(
                         modifier = Modifier.fillMaxWidth()
                     ){
-                        val (windowZoomOut, flipCameraView, textView, userPlus) = createRefs()
+                        val (windowZoomOut, textView) = createRefs()
 
                         if(!isInPipMode){
                             Box(
@@ -246,39 +250,49 @@ fun MainPageWithTopStatusView(
                                     }
                                 }
                             }else {
-                                if( callStatus == CallStatus.RECONNECTING ||
-                                    (callIntent.action != CallIntent.Action.START_CALL && callStatus != CallStatus.DISCONNECTED) ||
-                                    (callType != CallType.ONE_ON_ONE.type && callStatus != CallStatus.DISCONNECTED)
-                                ) {
-                                    val painter = when {
-                                        callStatus == CallStatus.RECONNECT_FAILED -> painterResource(id = R.drawable.gg_spinner_alt)
-                                        else -> painterResource(id = R.drawable.ant_design_loading_outlined)
-                                    }
+                                if (callType == CallType.ONE_ON_ONE.type && callStatus == CallStatus.CALLING) {
+                                    Text(
+                                        text = ResUtils.getString(R.string.call_status_calling),
+                                        style = TextStyle(
+                                            fontSize = 14.sp,
+                                            lineHeight = 20.sp,
+                                            fontFamily = SfProFont,
+                                            fontWeight = FontWeight(400),
+                                            color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                                        )
+                                    )
+                                } else {
+                                    if(shouldShowLoadingStatus(callStatus, callIntent, callType)) {
+                                        val painter = when {
+                                            callStatus == CallStatus.RECONNECT_FAILED -> painterResource(id = R.drawable.gg_spinner_alt)
+                                            else -> painterResource(id = R.drawable.ant_design_loading_outlined)
+                                        }
 
-                                    val status = if(callStatus == CallStatus.RECONNECT_FAILED) context.getString(R.string.call_disconnected_title) else context.getString(R.string.call_connecting_title)
+                                        val status = if(callStatus == CallStatus.RECONNECT_FAILED) context.getString(R.string.call_disconnected_title) else context.getString(R.string.call_connecting_title)
 
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ){
-                                        Image(
-                                            contentScale = ContentScale.Fit,
-                                            painter = painter,
-                                            contentDescription = null,
+                                        Row(
                                             modifier = Modifier
-                                                .size(14.dp)
-                                                .rotate(rotationAngle)
-                                        )
+                                                .fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ){
+                                            Image(
+                                                contentScale = ContentScale.Fit,
+                                                painter = painter,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .rotate(rotationAngle)
+                                            )
 
-                                        Text(
-                                            modifier = Modifier.padding(start = 4.dp),
-                                            text = status,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                            color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                            maxLines = 1
-                                        )
+                                            Text(
+                                                modifier = Modifier.padding(start = 4.dp),
+                                                text = status,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                                color = colorResource(id = com.difft.android.base.R.color.t_white),
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -286,7 +300,23 @@ fun MainPageWithTopStatusView(
                     }
                 }
             }
+
+            if(isOneVOneCall && (viewModel.getCallRole() == CallRole.CALLER) && (callStatus == CallStatus.CALLING)) {
+                CallCriticalAlertView(
+                    clicked = {
+                        callIntent.conversationId?.let {
+                            viewModel.handleCriticalAlert(it)
+                        }
+                    }
+                )
+            }
         }
     }
 
+}
+
+private fun shouldShowLoadingStatus(callStatus: CallStatus, callIntent: CallIntent, callType: String): Boolean {
+    return callStatus == CallStatus.RECONNECTING ||
+            (callIntent.action != CallIntent.Action.START_CALL && callStatus != CallStatus.DISCONNECTED) ||
+            (callType != CallType.ONE_ON_ONE.type && callStatus != CallStatus.DISCONNECTED)
 }

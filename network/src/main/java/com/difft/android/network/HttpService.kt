@@ -7,6 +7,7 @@ import com.difft.android.network.requests.ContactsRequestBody
 import com.difft.android.network.requests.ConversationSetRequestBody
 import com.difft.android.network.requests.ConversationShareRequestBody
 import com.difft.android.network.requests.ConversationShareResponse
+import com.difft.android.network.requests.CriticalAlertRequestBody
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareResponse
@@ -194,4 +195,10 @@ interface HttpService {
         @Header("Authorization") authorization: String,
         @Body req: GetPublicKeysReq
     ): Observable<BaseResponse<GetPublicKeysResp>>
+
+    @POST("/chat/v3/messages/criticalAlert")
+    fun sendCriticalAlert(
+        @Header("Authorization") baseAuth: String,
+        @Body req: CriticalAlertRequestBody
+    ): Single<BaseResponse<Any>>
 }

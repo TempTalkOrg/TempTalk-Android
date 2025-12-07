@@ -501,6 +501,10 @@
     <string name="notification_sounds">声音通知</string>
     <string name="notification_message_sounds">消息提示音</string>
     <string name="notification_message_notification">消息通知</string>
+    <string name="notification_critical_alert_title">%s 的未接呼叫</string>
+    <string name="notification_critical_alert_content">紧急：请立即接听。</string>
+    <string name="notification_critical_alert_title_default">Urgent Call</string>
+    <string name="notification_critical_alert_content_default">Tap to connect now.</string>
 
     <string name="no_permission_camera_and_voice_tip">应用没有视频语音的权限，您可以在系统设置的应用权限设置中启用摄像头和麦克风权限。</string>
     <string name="no_permission_voice_tip">应用没有语音的权限，您可以在系统设置的应用权限设置中启用麦克风权限。</string>
@@ -612,6 +616,11 @@
     <string name="group_disband_tips">此群组的数据将被删除，群组中的所有成员也将同时被移除。</string>
     <string name="chat_group_in_common">共同群组</string>
     <string name="contact_blocked_tips">操作被拒绝。你们还不是朋友。</string>
+
+    <string name="critical_alerts">紧急通知</string>
+    <string name="critical_alerts_content">模式访问权限 - %s 允许模式访问权限，并开启。</string>
+    <string name="critical_alerts_off">关</string>
+    <string name="critical_alerts_on">开</string>
 
     <!-- Chat Archive Settings -->
     <string name="chat_archive_extend_time_title">延长时间设置？</string>

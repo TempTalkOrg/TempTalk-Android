@@ -10,6 +10,8 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.NotificationContentDisplayType
 import com.difft.android.base.user.GlobalNotificationType
+import com.difft.android.base.utils.PackageUtil
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.chat.group.GroupGlobalNotificationSettingsActivity
 import com.difft.android.databinding.ActivityNotificationSettingsBinding
 import com.hi.dhl.binding.viewbind
@@ -38,6 +40,7 @@ class NotificationSettingsActivity : BaseActivity() {
 
     @Inject
     lateinit var userManager: UserManager
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,6 +113,14 @@ class NotificationSettingsActivity : BaseActivity() {
                 startMessageForegroundService()
             }
         }
+
+        mBinding.tvCriticalAlertSettings.text = ResUtils.getString(com.difft.android.chat.R.string.critical_alerts_content, PackageUtil.getAppName())
+        mBinding.tvCriticalAlertDisplay.text = if (::messageNotificationUtil.isInitialized && messageNotificationUtil.isNotificationPolicyAccessGranted())
+            getString(com.difft.android.chat.R.string.notification_enable) else getString(com.difft.android.chat.R.string.notification_disable)
+        mBinding.clCriticalAlertDisplay.setOnClickListener {
+            messageNotificationUtil.openNotificationDndSettings(this@NotificationSettingsActivity)
+        }
+
     }
 
     private fun startMessageForegroundService() {

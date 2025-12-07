@@ -9,24 +9,23 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.SecureSharedPrefsUtil
-import org.difft.app.database.delete
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
-import org.difft.app.database.wcdb
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.fileshare.UploadInfoReq
 import com.difft.android.chat.group.GroupUtil
-import difft.android.messageserialization.For
-import difft.android.messageserialization.model.AttachmentStatus
-import difft.android.messageserialization.model.MENTIONS_ALL_ID
-import difft.android.messageserialization.model.TextMessage
-import difft.android.messageserialization.model.isAttachmentMessage
-import difft.android.messageserialization.model.isAudioMessage
 import com.difft.android.network.requests.ProgressListener
 import com.difft.android.network.requests.ProgressRequestBody
+import com.difft.android.websocket.api.NewSignalServiceMessageSender
+import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
+import com.difft.android.websocket.internal.push.NotificationType
+import com.difft.android.websocket.internal.push.OutgoingPushMessage
+import com.difft.android.websocket.internal.push.OutgoingPushMessage.PassThrough
+import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -35,23 +34,25 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import difft.android.messageserialization.For
+import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.MENTIONS_ALL_ID
+import difft.android.messageserialization.model.TextMessage
+import difft.android.messageserialization.model.isAttachmentMessage
+import difft.android.messageserialization.model.isAudioMessage
 import okhttp3.RequestBody
+import org.difft.app.database.delete
+import org.difft.app.database.members
+import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
-import util.FileUtils
+import org.difft.app.database.toAttachmentModel
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobmanager.Data
 import org.thoughtcrime.securesms.jobmanager.Job
 import org.thoughtcrime.securesms.util.DataMessageCreator
-import com.difft.android.websocket.api.NewSignalServiceMessageSender
-import com.difft.android.websocket.api.messages.TTNotifyMessage
-import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
-import com.difft.android.websocket.internal.push.NotificationType
-import com.difft.android.websocket.internal.push.OutgoingPushMessage
-import com.difft.android.websocket.internal.push.OutgoingPushMessage.PassThrough
-import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
-import org.difft.app.database.models.DBAttachmentModel
-import org.difft.app.database.toAttachmentModel
+import util.FileUtils
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -377,11 +378,26 @@ class PushTextSendJob @AssistedInject constructor(
                         }
                         attachment.digest = md5.digest()
 
+                        // 判断附件类型
+                        val attachmentType = when {
+                            attachment.isAudioMessage() -> AttachmentUploadType.VOICE
+                            fileSize > 200 * 1024 * 1024 -> AttachmentUploadType.LARGE
+                            else -> AttachmentUploadType.NORMAL
+                        }
+
                         val uploadInfoCallResponse = fileShareRepo.uploadInfo(
                             UploadInfoReq(
-                                SecureSharedPrefsUtil.getToken(), recipientIds,
-                                res.attachmentId, fileHash,
-                                FileUtils.bytesToHex(attachment.digest), "MD5", "SHA-256", "SHA-512", "AES-CBC-256", fileSize
+                                token = SecureSharedPrefsUtil.getToken(),
+                                numbers = recipientIds,
+                                attachmentId = res.attachmentId,
+                                fileHash = fileHash,
+                                cipherHash = FileUtils.bytesToHex(attachment.digest),
+                                cipherHashType = "MD5",
+                                hashAlg = "SHA-256",
+                                keyAlg = "SHA-512",
+                                encAlg = "AES-CBC-256",
+                                fileSize = fileSize,
+                                attachmentType = attachmentType
                             )
                         ).execute()
                         if (uploadInfoCallResponse.isSuccessful) {

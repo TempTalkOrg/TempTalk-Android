@@ -156,6 +156,10 @@
             android:name="org.thoughtcrime.securesms.util.MessageNotificationUtil$NotificationDismissReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".common.StopCriticalAlertSoundReceiver"
+            android:exported="false" />
+
         <service
             android:name="org.thoughtcrime.securesms.messages.MessageForegroundService"
             android:enabled="true"

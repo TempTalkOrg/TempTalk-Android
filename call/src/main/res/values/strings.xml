@@ -33,6 +33,9 @@
     <string name="call_barrage_message_close_mic">turned OFF mic 🔕</string>
     <string name="call_barrage_message_screensharing">starts sharing 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
+    <string name="call_barrage_message_critical_alert_success">set a critical alert</string>
+    <string name="call_barrage_message_critical_alert_failed">failed to send a critical alert. Please try again.</string>
+    <string name="call_barrage_message_critical_alert_limited">sent too frequently. Please try again later.</string>
     <string name="call_attendees">Attendees</string>
     <string name="call_barrage_broadcast_message_tip">Send to all</string>
     <string name="call_other_network_poor_tip">The other party\'s network connection is poor.</string>
@@ -48,6 +51,7 @@
     <string name="call_toolbar_bottom_invite_text">Invite</string>
     <string name="call_toolbar_bottom_raise_hand_text">Raise hand</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>
+    <string name="call_toolbar_bottom_critical_alert_text">Critical Alert</string>
     <string name="call_join_failed_tip">Failed to join the call, please try again.</string>
     <string name="call_start_failed_tip">Failed to start the call, please try again.</string>
     <string name="call_chat_header_1v1_another_device">In call on another device.</string>

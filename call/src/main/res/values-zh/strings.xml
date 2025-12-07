@@ -33,6 +33,9 @@
     <string name="call_barrage_message_close_mic">关闭了麦克风 🔕</string>
     <string name="call_barrage_message_screensharing">开始屏幕分享 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
+    <string name="call_barrage_message_critical_alert_success">set a critical alert</string>
+    <string name="call_barrage_message_critical_alert_failed">发送紧急通知失败，请重试。</string>
+    <string name="call_barrage_message_critical_alert_limited">sent too frequently. Please try again later.</string>
     <string name="call_attendees">参会者</string>
     <string name="call_barrage_broadcast_message_tip">发送给所有人</string>
     <string name="call_other_network_poor_tip">当前通话对方网络不佳。</string>
@@ -48,6 +51,7 @@
     <string name="call_toolbar_bottom_invite_text">邀请</string>
     <string name="call_toolbar_bottom_raise_hand_text">举手</string>
     <string name="call_toolbar_bottom_switch_text">翻转</string>
+    <string name="call_toolbar_bottom_critical_alert_text">紧急通知</string>
     <string name="call_join_failed_tip">加入会议失败，请重试。</string>
     <string name="call_start_failed_tip">发起会议失败，请重试。</string>
     <string name="call_chat_header_1v1_another_device">使用其他设备通话中</string>
