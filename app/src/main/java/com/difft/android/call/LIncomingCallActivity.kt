@@ -28,6 +28,8 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.user.AppLockCallbackManager
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -38,6 +40,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import java.util.concurrent.atomic.AtomicBoolean
 
 @AndroidEntryPoint
 class LIncomingCallActivity : AppCompatActivity() {
@@ -57,7 +60,15 @@ class LIncomingCallActivity : AppCompatActivity() {
 
     private lateinit var backPressedCallback: OnBackPressedCallback
 
+    private lateinit var appUnlockListener: (Boolean) -> Unit
+
+    private val callbackId = "LIncomingCallActivity_${System.identityHashCode(this)}"
+
+    @Inject
+    lateinit var userManager: UserManager
+
     companion object {
+        private val needAppLock = AtomicBoolean(true)
         private var isActivityShowing: Boolean = false
         private var isInForeground: Boolean = false
         private var currentRoomId: String? = null
@@ -65,6 +76,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         fun isActivityShowing(): Boolean = isActivityShowing
         fun isInForeground(): Boolean = isInForeground
         fun getCurrentRoomId(): String? = currentRoomId
+        fun isNeedAppLock(): Boolean = needAppLock.get()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,12 +103,22 @@ class LIncomingCallActivity : AppCompatActivity() {
         setupCallControlMessageListener()
 
         registerOnBackPressedHandler()
+
+        registerAppUnlockListener()
+
     }
 
     private fun initializeActivityState() {
         isActivityShowing = true
         LCallManager.isIncomingCalling = true
         callIntent = getCallIntent()
+
+        if (isAppLockEnabled()) {
+            needAppLock.set(callIntent.needAppLock)
+        } else {
+            needAppLock.set(false)
+        }
+
         currentRoomId = callIntent.roomId
     }
 
@@ -118,7 +140,7 @@ class LIncomingCallActivity : AppCompatActivity() {
     private fun handleCallNotificationAction() {
         if (callIntent.action == CallIntent.Action.ACCEPT_CALL) {
             L.i { "[Call] LIncomingCallActivity handleCallNotificationAction ACCEPT_CALL roomId:${callIntent.roomId}" }
-            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId) { status ->
+            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, needAppLock.get()) { status ->
                 handleJoinCallResponse(status)
             }
         }
@@ -210,7 +232,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         binding.acceptCallBtn.setOnClickListener {
             if (!LCallActivity.isInCalling()) {
                 L.i { "[Call] LIncomingCallActivity initUI: acceptCallBtn click: callIntent:$callIntent" }
-                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId) { status ->
+                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, needAppLock.get()) { status ->
                     handleJoinCallResponse(status)
                 }
             } else {
@@ -253,6 +275,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         L.d { "[Call] LIncomingCallActivity onDestroy: onDestroy" }
         unregisterReceiver(inComingCallReceiver)
         isActivityShowing = false
+        needAppLock.set(true)
         isInForeground = false
         LCallManager.isIncomingCalling = false
         currentRoomId = null
@@ -260,6 +283,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         if (::backPressedCallback.isInitialized) {
             backPressedCallback.remove()
         }
+        AppLockCallbackManager.removeListener(callbackId)
     }
 
 
@@ -415,5 +439,23 @@ class LIncomingCallActivity : AppCompatActivity() {
             }
         }
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
+    }
+
+    private fun registerAppUnlockListener() {
+        appUnlockListener = {
+            if (it) {
+                // 用户刚刚通过应用锁解锁
+                needAppLock.set(false)
+            }
+        }
+        AppLockCallbackManager.addListener(callbackId, appUnlockListener)
+    }
+
+    private fun isAppLockEnabled(): Boolean {
+        if (!::userManager.isInitialized) return false
+        val user = userManager.getUserData() ?: return false
+        val hasPattern = !user.pattern.isNullOrEmpty()
+        val hasPasscode = !user.passcode.isNullOrEmpty()
+        return hasPattern || hasPasscode
     }
 }

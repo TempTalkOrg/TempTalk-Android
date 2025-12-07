@@ -99,6 +99,7 @@ import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
 import difft.android.messageserialization.model.TextMessage
+import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
@@ -198,7 +199,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     companion object {
         const val OVERSIZED_TEXT_THRESHOLD = 4096  // 4KB - when to convert text to file
         const val OVERSIZED_TEXT_BODY_LENGTH = 2048  // 2KB - truncated text in message body
-        const val MAX_TEXT_FILE_SIZE = 200 * 1024 * 1024  // 200MB - maximum text file size
+        const val MAX_TEXT_FILE_SIZE = 10 * 1024 * 1024  // 10MB - maximum text file size
     }
 
     /**
@@ -729,6 +730,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     }
                     prevInputTextLength = currentTextLength
                 }
+                // Check if text exceeds maximum file size (10MB) and truncate if needed
+                val utf8Bytes = text.toString().toByteArray(Charsets.UTF_8)
+                if (utf8Bytes.size > MAX_TEXT_FILE_SIZE) {
+                    val truncatedString = text.toString().utf8Substring(MAX_TEXT_FILE_SIZE)
+                    ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
+                    binding.edittextInput.setText(truncatedString)
+                    binding.edittextInput.setSelection(binding.edittextInput.text?.length ?: 0)
+                }
             } else {
                 if (isGroup) { //处理@相关的逻辑
                     mentionsSearchKeyStartPos = -1
@@ -814,10 +823,10 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
             val message: String = binding.edittextInput.text.toString().trim()
             if (!TextUtils.isEmpty(message)) {
-                // Check if text exceeds maximum file size (200MB) before processing
+                // Check if text exceeds maximum file size (10MB) before processing
                 val messageBytes = message.toByteArray(Charsets.UTF_8)
                 if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
-                    ToastUtil.show(getString(R.string.max_support_file_size_limit))
+                    ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
                     L.w { "Text message exceeds MAX_TEXT_FILE_SIZE (${messageBytes.size} bytes), send blocked." }
                     return@setOnClickListener
                 }
@@ -851,7 +860,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                                 attachmentInfo = AttachmentInfo(
                                     filePath = filePath,
                                     fileName = fileName,
-                                    mimeType = "text/plain",
+                                    mimeType = CONTENT_TYPE_LONG_TEXT,
                                     isAudioMessage = false
                                 )
                             )

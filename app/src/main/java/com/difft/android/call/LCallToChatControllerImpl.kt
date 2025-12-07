@@ -55,6 +55,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import util.ScreenLockUtil
 
 
 class LCallToChatControllerImpl @Inject constructor(
@@ -87,6 +88,7 @@ class LCallToChatControllerImpl @Inject constructor(
         callerId: String,
         callType: CallType,
         conversationId: String?,
+        isNeedAppLock: Boolean,
         onComplete: (Boolean) -> Unit
     ) {
         LCallManager.showWaitDialog(context)
@@ -125,6 +127,7 @@ class LCallToChatControllerImpl @Inject constructor(
                     .withConversationId(conversationId)
                     .withStartCallParams(startCallParams)
                     .withAppToken(SecureSharedPrefsUtil.getToken())
+                    .withNeedAppLock(isNeedAppLock)
 
                 val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
 
@@ -463,9 +466,10 @@ class LCallToChatControllerImpl @Inject constructor(
         callName: String,
         callerId: String,
         conversationId: String?,
-        callType: CallType
+        callType: CallType,
+        isNeedAppLock: Boolean
     ) {
-        return messageNotificationUtil.showCallNotificationNew(roomId, callName, callerId, conversationId, callType)
+        return messageNotificationUtil.showCallNotificationNew(roomId, callName, callerId, conversationId, callType, isNeedAppLock)
     }
 
     /**
@@ -634,6 +638,10 @@ class LCallToChatControllerImpl @Inject constructor(
         return ContactorUtil.contactsUpdate.hide()
     }
 
+    override fun getGroupsUpdateListener(): Observable<GroupModel> {
+        return GroupUtil.singleGroupsUpdate.hide()
+    }
+
     override fun startForegroundService(
         context: Context,
         intent: Intent,
@@ -659,6 +667,7 @@ class LCallToChatControllerImpl @Inject constructor(
     private suspend fun startCallInternal(context: Context, intent: Intent, onComplete: (Boolean) -> Unit) {
         withContext(Dispatchers.Main) {
             try {
+                ScreenLockUtil.temporarilyDisabled = true
                 context.applicationContext.startActivity(intent)
                 onComplete(true)
             } catch (e: Exception) {

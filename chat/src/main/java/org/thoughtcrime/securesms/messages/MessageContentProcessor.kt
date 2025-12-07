@@ -382,6 +382,9 @@ class MessageContentProcessor @Inject constructor(
                 message.screenShot.source.source,
                 content.signalServiceEnvelope.notifySequenceId,
                 content.sequenceId,
+                content.signalServiceEnvelope.timestamp,
+                content.signalServiceEnvelope.systemShowTimestamp,
+                message.expireTimer,
             )
         } else {
             val contentText = if ((TextUtils.isEmpty(messageBody)

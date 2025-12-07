@@ -357,19 +357,45 @@ class PushTextSendJob @AssistedInject constructor(
             if (fileExistResponse.isSuccessful) {
                 fileExistResponse.body()?.data?.let { res ->
                     if (!res.exists) {
-                        val urlString = res.url
-                        val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
-                            override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
-                                val currentTime = System.currentTimeMillis()
-                                if ((currentTime - lastEmitTime >= 200)) {
-                                    FileUtil.emitProgressUpdate(textMessage.id, progress)
-                                    lastEmitTime = currentTime
+                        // 获取URL列表，优先使用urls数组，回退到单个url
+                        val urlsToTry = res.urls?.takeIf { it.isNotEmpty() } ?: listOf(res.url)
+                        L.i { "[PushTextSendJob] Upload API response: using ${if (res.urls?.isNotEmpty() == true) "urls array" else "fallback url"}, total URLs: ${urlsToTry.size}, messageId: ${textMessage.id}" }
+
+                        var uploadSuccess = false
+                        var lastUploadException: Exception? = null
+
+                        for ((index, urlString) in urlsToTry.withIndex()) {
+                            try {
+                                L.i { "[PushTextSendJob] Attempting upload with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: $urlString" }
+
+                                val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
+                                    override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
+                                        val currentTime = System.currentTimeMillis()
+                                        if ((currentTime - lastEmitTime >= 200)) {
+                                            FileUtil.emitProgressUpdate(textMessage.id, progress)
+                                            lastEmitTime = currentTime
+                                        }
+                                    }
+                                })
+
+                                val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
+
+                                if (uploadToOSSCallResponse.isSuccessful) {
+                                    L.i { "[PushTextSendJob] Upload successful with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: $urlString" }
+                                    uploadSuccess = true
+                                    break
+                                } else {
+                                    L.w { "[PushTextSendJob] Upload failed with URL ${index + 1}/${urlsToTry.size}: ${uploadToOSSCallResponse.message}, messageId: ${textMessage.id}, url: $urlString" }
+                                    lastUploadException = IOException("uploadToOSSCall execute fail: ${uploadToOSSCallResponse.message}")
                                 }
+                            } catch (e: Exception) {
+                                L.w { "[PushTextSendJob] Upload exception with URL ${index + 1}/${urlsToTry.size}: ${e.message}, messageId: ${textMessage.id}, url: $urlString" }
+                                lastUploadException = e
                             }
-                        })
-                        val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
-                        if (!uploadToOSSCallResponse.isSuccessful) {
-                            throw IOException("uploadToOSSCall execute fail" + uploadToOSSCallResponse.message)
+                        }
+
+                        if (!uploadSuccess) {
+                            throw lastUploadException ?: IOException("All upload URLs failed")
                         }
 
                         val md5 = MessageDigest.getInstance("md5")

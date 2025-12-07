@@ -1,172 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<merge xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 单条转发消息的信息头（时间+来源），内容部分复用 contentFrame -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/forwardZone"
-    android:layout_width="match_parent"
+    android:id="@+id/forward_info_zone"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:visibility="gone"
-    tools:parentTag="com.difft.android.chat.ui.MessageForwardView"
-    tools:visibility="visible">
+    android:orientation="vertical">
 
     <LinearLayout
-        android:id="@+id/singleForwardZone"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="8dp">
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
-            android:orientation="horizontal">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:lines="1"
-                android:text="@string/forwarded_message"
-                android:textColor="@color/t.third"
-                android:textSize="14sp" />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_forward_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="5dp"
-                android:textColor="@color/t.third"
-                android:textSize="14sp"
-                tools:text="12:21" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
-            android:layout_marginBottom="8dp"
-            android:orientation="horizontal">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:lines="1"
-                android:text="@string/forwarded_from"
-                android:textColor="@color/t.third"
-                android:textSize="14sp" />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_forward_author"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp"
-                tools:text="xxxx" />
-        </LinearLayout>
-
-        <!--        <FrameLayout-->
-        <!--            android:id="@+id/fl_image"-->
-        <!--            android:layout_width="wrap_content"-->
-        <!--            android:layout_height="wrap_content"-->
-        <!--            android:layout_gravity="center_horizontal"-->
-        <!--            android:layout_marginTop="5dp">-->
-
-        <!--            <androidx.appcompat.widget.AppCompatImageView-->
-        <!--                android:id="@+id/iv_forward_image"-->
-        <!--                android:layout_width="wrap_content"-->
-        <!--                android:layout_height="wrap_content"-->
-        <!--                android:adjustViewBounds="true"-->
-        <!--                android:maxWidth="248dp"-->
-        <!--                tools:src="@drawable/base_ic_launcher_foreground" />-->
-
-        <!--            <ImageView-->
-        <!--                android:id="@+id/playButton"-->
-        <!--                android:layout_width="wrap_content"-->
-        <!--                android:layout_height="wrap_content"-->
-        <!--                android:layout_gravity="center"-->
-        <!--                android:src="@mipmap/chat_video_message_play_button"-->
-        <!--                android:visibility="gone"-->
-        <!--                tools:visibility="visible" />-->
-
-        <!--        </FrameLayout>-->
-
-        <com.difft.android.chat.widget.ImageAndVideoMessageView
-            android:id="@+id/image_message_view"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            tools:layout_height="100dp"
-            tools:layout_width="100dp"
-            tools:visibility="visible" />
-
-        <com.difft.android.chat.widget.VoiceMessageView
-            android:id="@+id/voice_message_view"
-            android:layout_width="270dp"
-            android:layout_height="wrap_content"
-            android:paddingTop="10dp"
-            android:paddingBottom="18dp"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <com.difft.android.chat.widget.AttachMessageView
-            android:id="@+id/attach_content_view"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingTop="10dp"
-            android:paddingBottom="18dp"
-            android:visibility="gone"
-            tools:visibility="visible" />
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
 
         <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_forward_content"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:includeFontPadding="false"
-            android:lineSpacingMultiplier="1.2"
-            android:paddingHorizontal="8dp"
-            android:paddingBottom="8dp"
-            android:textColor="@color/t.primary"
-            android:textColorLink="@color/t.info"
-            android:textSize="16sp"
-            tools:text="消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容消息内容" />
-
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/multiForwardZone"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="8dp"
-        android:minWidth="200dp"
-        android:orientation="vertical">
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_multi_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/chat_history_for"
-            android:textColor="@color/t.secondary"
+            android:lines="1"
+            android:text="@string/forwarded_message"
+            android:textColor="@color/t.third"
             android:textSize="14sp" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_forward_history"
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_forward_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="5dp" />
+            android:layout_marginStart="5dp"
+            android:textColor="@color/t.third"
+            android:textSize="14sp"
+            tools:text="2024/01/01 12:21" />
+    </LinearLayout>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="5dp"
-            android:background="@color/line" />
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="8dp"
+        android:orientation="horizontal">
 
         <androidx.appcompat.widget.AppCompatTextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:text="@string/chat_history"
+            android:lines="1"
+            android:text="@string/forwarded_from"
             android:textColor="@color/t.third"
-            android:textSize="12sp" />
+            android:textSize="14sp" />
 
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_forward_author"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/t.secondary"
+            android:textSize="14sp"
+            tools:text="xxxx" />
     </LinearLayout>
-</merge>
+
+</LinearLayout>

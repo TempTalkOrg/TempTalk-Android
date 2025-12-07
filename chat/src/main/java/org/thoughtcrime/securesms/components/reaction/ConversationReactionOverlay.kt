@@ -30,7 +30,8 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.R
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.canDownloadOrCopyFile
+import com.difft.android.chat.message.canDownloadFile
+import com.difft.android.chat.message.isLongTextAttachment
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
@@ -702,13 +703,13 @@ class ConversationReactionOverlay : FrameLayout {
     private fun getMenuActionItems(rootView: View, data: ChatMessage): List<ActionItem> {
         val items: MutableList<ActionItem> = ArrayList()
         if (selectedConversationModel?.isForForward == true) {
-            if (data.canDownloadOrCopyFile()) {
+            if (data.canDownloadFile()) {
                 items.add(ActionItem(R.drawable.symbol_save_android_24, resources.getString(R.string.chat_message_action_download), action = { handleActionItemClicked(Action.SAVE, rootView) }))
             }
         } else {
             if (data.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
                 items.add(ActionItem(R.drawable.chat_message_action_quote, resources.getString(R.string.chat_message_action_quote), action = { handleActionItemClicked(Action.QUOTE, rootView) }))
-                if (data is TextChatMessage && (hasTextContent(data) || data.canDownloadOrCopyFile())) {
+                if ((data is TextChatMessage) && (hasTextContent(data) || data.canDownloadFile() || data.isLongTextAttachment())) {
                     items.add(ActionItem(R.drawable.chat_message_action_copy, resources.getString(R.string.chat_message_action_copy), action = { handleActionItemClicked(Action.COPY, rootView) }))
                 }
                 if (data is TextChatMessage && hasTextContent(data)) {
@@ -738,7 +739,7 @@ class ConversationReactionOverlay : FrameLayout {
                         items.add(ActionItem(R.drawable.chat_message_action_voice2text_off, resources.getString(R.string.chat_message_action_voice2text_off), action = { handleActionItemClicked(Action.SPEECH_TO_TEXT_OFF, rootView) }))
                     }
                 }
-                if (data.canDownloadOrCopyFile()) {
+                if (data.canDownloadFile()) {
                     items.add(ActionItem(R.drawable.symbol_save_android_24, resources.getString(R.string.chat_message_action_download), action = { handleActionItemClicked(Action.SAVE, rootView) }))
                 }
                 if (data is TextChatMessage && data.attachment?.isAudioMessage() != true && data.attachment?.isAudioFile() != true) {

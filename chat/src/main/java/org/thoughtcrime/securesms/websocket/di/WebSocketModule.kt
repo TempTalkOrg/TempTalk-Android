@@ -3,7 +3,7 @@ package org.thoughtcrime.securesms.websocket.di
 import com.difft.android.WebSocketConnectionFactory
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
-import com.difft.android.network.WebsocketUrlManager
+import com.difft.android.network.UrlManager
 import com.difft.android.network.config.UserAgentManager
 import com.difft.android.network.push.SignalServiceTrustStore
 import dagger.Module
@@ -25,7 +25,7 @@ object WebSocketModule {
     @Provides
     @Singleton
     fun chatDataWebSocketConfiguration(
-        websocketUrlManager: WebsocketUrlManager,
+        urlManager: UrlManager,
     ): SignalServiceConfiguration {
         val headers = mapOf(
             "Authorization" to SecureSharedPrefsUtil.getBasicAuth(),
@@ -33,7 +33,7 @@ object WebSocketModule {
         )
 
         val configuration = SignalServiceUrl(
-            websocketUrlManager.getChatWebsocketUrl(),
+            urlManager.getChatWebsocketUrl(),
             headers,
             SignalServiceTrustStore(application),
             null
@@ -68,14 +68,14 @@ object WebSocketModule {
     @Singleton
     @Provides
     fun provideUChatDataWebSocketConnection(
-        websocketUrlManager: WebsocketUrlManager,
+        urlManager: UrlManager,
         webSocketConnectionFactory: WebSocketConnectionFactory,
     ) = webSocketConnectionFactory.createWebSocketConnection(
         {
             SecureSharedPrefsUtil.getBasicAuth()
         },
         {
-            websocketUrlManager.getChatWebsocketUrl()
+            urlManager.getChatWebsocketUrl()
         },
         WebSocketKeepAliveSender()
     )

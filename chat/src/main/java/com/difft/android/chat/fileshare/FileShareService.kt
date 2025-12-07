@@ -101,7 +101,8 @@ data class FileExistResp(
     val cipherHash: String,
     val cipherHashType: String,
     val exists: Boolean,
-    val url: String
+    val url: String,
+    val urls: List<String>? = null
 )
 
 data class UploadInfoReq(
@@ -141,7 +142,8 @@ data class DownloadResp(
     val fileSize: Int,
     val hashAlg: String,
     val keyAlg: String,
-    val url: String
+    val url: String,
+    val urls: List<String>? = null
 )
 
 /**

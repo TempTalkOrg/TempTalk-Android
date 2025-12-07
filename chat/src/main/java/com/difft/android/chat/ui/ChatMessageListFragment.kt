@@ -69,11 +69,12 @@ import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.databinding.ChatFragmentMessageListBinding
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.canDownloadOrCopyFile
+import com.difft.android.chat.message.canDownloadFile
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.message.isLongTextAttachment
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.widget.AudioAmplitudesHelper
 import com.difft.android.chat.widget.AudioMessageManager
@@ -106,6 +107,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
 import net.yslibrary.android.keyboardvisibilityevent.Unregistrar
@@ -126,6 +128,7 @@ import org.thoughtcrime.securesms.util.ThemeUtil
 import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.util.WindowUtil
+import org.thoughtcrime.securesms.util.viewFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import util.TimeFormatter
 import util.concurrent.TTExecutors
@@ -220,6 +223,11 @@ class ChatMessageListFragment : Fragment() {
                             if (!data.isMine) {
                                 chatViewModel.setConfidentialRecipient(data)
                             }
+                        }
+                    } else {
+                        // 普通附件（非图片/视频/音频）机密消息：弹窗预览，关闭时发送已读回执 + 删除消息
+                        if (data.isConfidential()) {
+                            showConfidentialAttachmentDialog(data)
                         }
                     }
                 } else {
@@ -943,6 +951,41 @@ class ChatMessageListFragment : Fragment() {
         currentTextMessage = null
     }
 
+    private var mConfidentialAttachmentDialog: ConfidentialAttachmentBottomSheetFragment? = null
+    var currentAttachmentMessage: TextChatMessage? = null
+
+    fun showConfidentialAttachmentDialog(message: TextChatMessage) {
+        // 检查 Fragment 是否已附加且 Activity 存在
+        if (!isAdded || activity == null) return
+
+        currentAttachmentMessage = message
+
+        // 使用 Activity 的 FragmentManager
+        val fragmentManager = requireActivity().supportFragmentManager
+
+        // 设置结果监听器
+        fragmentManager.setFragmentResultListener(
+            "confidential_attachment_dialog_result",
+            this
+        ) { _, _ ->
+            onConfidentialAttachmentDialogDismiss()
+        }
+
+        mConfidentialAttachmentDialog = ConfidentialAttachmentBottomSheetFragment.newInstance().apply {
+            show(fragmentManager, "confidential_attachment_dialog")
+        }
+    }
+
+    fun onConfidentialAttachmentDialogDismiss() {
+        currentAttachmentMessage?.let { message ->
+            if (!message.isMine) {
+                chatViewModel.setConfidentialRecipient(message)
+                chatViewModel.deleteMessage(message.id)
+            }
+        }
+        currentAttachmentMessage = null
+    }
+
     fun isScrollViewScrollable(scrollView: ScrollView): Boolean {
         return scrollView.canScrollVertically(-1) || scrollView.canScrollVertically(1)
     }
@@ -1075,22 +1118,75 @@ class ChatMessageListFragment : Fragment() {
         }
 
         private fun copyMessageContent() {
-            // Check if it's a file attachment that can be copied
-            if (data.canDownloadOrCopyFile()) {
-                copyFileToClipboard()
-            } else {
-                // Copy text content as before
-                val content = data.forwardContext?.forwards?.let { forwards ->
-                    if (forwards.size == 1) {
-                        forwards.firstOrNull()?.let { forward ->
-                            forward.card?.content.takeUnless { it.isNullOrEmpty() }
-                                ?: forward.text.takeUnless { it.isNullOrEmpty() }
-                        }
-                    } else null
-                } ?: data.card?.content.takeUnless { it.isNullOrEmpty() }
-                ?: data.message.takeUnless { it.isNullOrEmpty() }
+            // Check if it's a long text attachment - copy full text content from file
+            if (data.isLongTextAttachment()) {
+                copyLongTextContent()
+                return
+            }
 
-                content?.let { Util.copyToClipboard(requireContext(), it) }
+            // Check if it's a file attachment that can be copied as file URI
+            if (data.canDownloadFile()) {
+                copyFileToClipboard()
+                return
+            }
+
+            // Copy text content as before
+            val content = data.forwardContext?.forwards?.let { forwards ->
+                if (forwards.size == 1) {
+                    forwards.firstOrNull()?.let { forward ->
+                        forward.card?.content.takeUnless { it.isNullOrEmpty() }
+                            ?: forward.text.takeUnless { it.isNullOrEmpty() }
+                    }
+                } else null
+            } ?: data.card?.content.takeUnless { it.isNullOrEmpty() }
+            ?: data.message.takeUnless { it.isNullOrEmpty() }
+
+            content?.let { Util.copyToClipboard(requireContext(), it) }
+        }
+
+        private fun copyLongTextContent() {
+            // Get the file path for long text attachment
+            val (attachment, messageId) = when {
+                data.isAttachmentMessage() -> {
+                    data.attachment to data.id
+                }
+
+                data.forwardContext?.forwards?.size == 1 -> {
+                    val forward = data.forwardContext?.forwards?.firstOrNull()
+                    val forwardMessage = forward?.let { generateMessageFromForward(it) }
+                    forward?.attachments?.firstOrNull() to (forwardMessage?.id ?: "")
+                }
+
+                else -> null to ""
+            }
+
+            if (attachment == null || messageId.isEmpty()) {
+                // Fallback to copying message content
+                data.message?.let { Util.copyToClipboard(requireContext(), it) }
+                return
+            }
+
+            val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+
+            // Read file content asynchronously and copy to clipboard
+            lifecycleScope.launch {
+                val content = withContext(Dispatchers.IO) {
+                    try {
+                        File(filePath).takeIf { it.exists() }?.readText() ?: ""
+                    } catch (e: Exception) {
+                        L.e { "Failed to read long text file: ${e.message}" }
+                        ""
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    if (content.isNotEmpty()) {
+                        Util.copyToClipboard(requireContext(), content)
+                    } else {
+                        // Fallback to message content if file read fails
+                        data.message?.let { Util.copyToClipboard(requireContext(), it) }
+                    }
+                }
             }
         }
 
@@ -1955,6 +2051,7 @@ class ChatMessageListFragment : Fragment() {
             }
 
             val textContent = arguments?.getString(ARG_TEXT_CONTENT) ?: return
+
             @Suppress("DEPRECATION", "UNCHECKED_CAST")
             val mentions = arguments?.getSerializable(ARG_MENTIONS) as? ArrayList<difft.android.messageserialization.model.Mention>
 
@@ -1971,6 +2068,116 @@ class ChatMessageListFragment : Fragment() {
                 textView,
                 mentions
             )
+        }
+    }
+
+    /**
+     * 机密附件消息对话框
+     */
+    class ConfidentialAttachmentBottomSheetFragment : BottomSheetDialogFragment() {
+
+        companion object {
+            fun newInstance(): ConfidentialAttachmentBottomSheetFragment {
+                return ConfidentialAttachmentBottomSheetFragment()
+            }
+        }
+
+        private var attachMessageView: com.difft.android.chat.widget.AttachMessageView? = null
+        private var currentMessage: TextChatMessage? = null
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            return inflater.inflate(R.layout.chat_layout_confidential_attachment_dialog, container, false)
+        }
+
+        override fun onStart() {
+            super.onStart()
+
+            // 设置为不可手动关闭
+            isCancelable = false
+
+            // 设置底部弹窗为全屏显示
+            val dialog = dialog
+            if (dialog != null) {
+                // 禁用点击外部区域关闭
+                dialog.setCanceledOnTouchOutside(false)
+
+                val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                if (bottomSheet != null) {
+                    val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
+                    behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                    behavior.skipCollapsed = true
+
+                    // 禁用手势滑动关闭
+                    behavior.isHideable = false
+                    // 禁用拖拽
+                    behavior.isDraggable = false
+
+                    // 设置底部弹窗高度为全屏
+                    val layoutParams = bottomSheet.layoutParams
+                    layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    bottomSheet.layoutParams = layoutParams
+                }
+            }
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+
+            // 设置背景色
+            view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
+
+            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+                dismiss()
+            }
+
+            // 通过接口获取 ChatMessageListFragment
+            val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment() ?: return
+            currentMessage = chatFragment.currentAttachmentMessage ?: return
+            val message = currentMessage ?: return
+
+            val clAttachmentView = view.findViewById<ConstraintLayout>(R.id.cl_attachment_view)
+            if (message.isMine) {
+                clAttachmentView?.setBackgroundResource(R.drawable.chat_message_content_bg_mine)
+            } else {
+                clAttachmentView?.setBackgroundResource(R.drawable.chat_message_content_bg_others)
+            }
+
+            attachMessageView = view.findViewById(R.id.attach_message_view)
+            attachMessageView?.setupAttachmentView(message)
+            attachMessageView?.setOnClickListener {
+                // 点击附件打开文件查看器
+                val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
+                if (FileUtil.isFileValid(filePath)) {
+                    requireContext().viewFile(filePath)
+                } else {
+                    ToastUtil.showLong(R.string.file_load_error)
+                }
+            }
+
+            // 使用协程订阅下载进度更新，实时刷新附件视图
+            viewLifecycleOwner.lifecycleScope.launch {
+                FileUtil.progressUpdate
+                    .asFlow()
+                    .collect { messageId ->
+                        if (messageId == message.id) {
+                            attachMessageView?.setupAttachmentView(message)
+                        }
+                    }
+            }
+        }
+
+        override fun onDismiss(dialog: DialogInterface) {
+            super.onDismiss(dialog)
+            // 使用现代的 Fragment 结果 API
+            try {
+                requireActivity().supportFragmentManager.setFragmentResult("confidential_attachment_dialog_result", Bundle())
+            } catch (_: Exception) {
+                // Fragment 可能已经被销毁，忽略错误
+            }
         }
     }
 }

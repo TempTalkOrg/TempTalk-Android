@@ -52,7 +52,8 @@ abstract class ChatMessageAdapter(
         private const val CONTENT_TYPE_AUDIO = 3
         private const val CONTENT_TYPE_ATTACH = 4
         private const val CONTENT_TYPE_CONTACT = 5
-        // 预留 6-99 用于未来扩展
+        private const val CONTENT_TYPE_MULTI_FORWARD = 6  // 合并转发消息
+        // 预留 7-99 用于未来扩展
 
         // ViewType 计算偏移量
         private const val MINE_OFFSET = 0
@@ -65,6 +66,7 @@ abstract class ChatMessageAdapter(
         const val VIEW_TYPE_MINE_AUDIO = MINE_OFFSET + CONTENT_TYPE_AUDIO      // 3
         const val VIEW_TYPE_MINE_ATTACH = MINE_OFFSET + CONTENT_TYPE_ATTACH    // 4
         const val VIEW_TYPE_MINE_CONTACT = MINE_OFFSET + CONTENT_TYPE_CONTACT  // 5
+        const val VIEW_TYPE_MINE_MULTI_FORWARD = MINE_OFFSET + CONTENT_TYPE_MULTI_FORWARD  // 6
 
         const val VIEW_TYPE_OTHERS_TEXT = OTHERS_OFFSET + CONTENT_TYPE_TEXT       // 100
         const val VIEW_TYPE_OTHERS_IMAGE = OTHERS_OFFSET + CONTENT_TYPE_IMAGE     // 101
@@ -72,6 +74,7 @@ abstract class ChatMessageAdapter(
         const val VIEW_TYPE_OTHERS_AUDIO = OTHERS_OFFSET + CONTENT_TYPE_AUDIO     // 103
         const val VIEW_TYPE_OTHERS_ATTACH = OTHERS_OFFSET + CONTENT_TYPE_ATTACH   // 104
         const val VIEW_TYPE_OTHERS_CONTACT = OTHERS_OFFSET + CONTENT_TYPE_CONTACT // 105
+        const val VIEW_TYPE_OTHERS_MULTI_FORWARD = OTHERS_OFFSET + CONTENT_TYPE_MULTI_FORWARD // 106
 
         const val VIEW_TYPE_NOTIFY = 200  // 调整到 200，避免冲突
 
@@ -82,7 +85,8 @@ abstract class ChatMessageAdapter(
             CONTENT_TYPE_VIDEO to (R.layout.chat_item_content_image to ImageContentBinder),
             CONTENT_TYPE_AUDIO to (R.layout.chat_item_content_audio to AudioContentBinder),
             CONTENT_TYPE_ATTACH to (R.layout.chat_item_content_attach to AttachContentBinder),
-            CONTENT_TYPE_CONTACT to (R.layout.chat_item_content_contact to ContactContentBinder)
+            CONTENT_TYPE_CONTACT to (R.layout.chat_item_content_contact to ContactContentBinder),
+            CONTENT_TYPE_MULTI_FORWARD to (R.layout.chat_item_content_multi_forward to MultiForwardContentBinder)
         )
 
         // 解析 ViewType
@@ -93,13 +97,45 @@ abstract class ChatMessageAdapter(
     override fun getItemViewType(position: Int): Int {
         val message = getItem(position)
 
-        // 通知消息
+        // === 第一层：消息类型 ===
         if (message is NotifyChatMessage) {
             return VIEW_TYPE_NOTIFY
         }
 
         // 判断消息内容类型
         if (message is TextChatMessage) {
+            // === 第二层：特殊结构（合并转发） ===
+            // 合并转发消息（forwards.size > 1）使用独立的 ViewType
+            val forwardsSize = message.forwardContext?.forwards?.size ?: 0
+            if (forwardsSize > 1) {
+                return if (message.isMine) VIEW_TYPE_MINE_MULTI_FORWARD else VIEW_TYPE_OTHERS_MULTI_FORWARD
+            }
+
+            // 单条转发消息：根据转发内容的类型决定 ViewType（复用现有布局）
+            if (forwardsSize == 1) {
+                val forwardAttachment = message.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
+                return when {
+                    forwardAttachment?.isImage() == true -> {
+                        if (message.isMine) VIEW_TYPE_MINE_IMAGE else VIEW_TYPE_OTHERS_IMAGE
+                    }
+                    forwardAttachment?.isVideo() == true -> {
+                        if (message.isMine) VIEW_TYPE_MINE_VIDEO else VIEW_TYPE_OTHERS_VIDEO
+                    }
+                    forwardAttachment?.isAudioMessage() == true || forwardAttachment?.isAudioFile() == true -> {
+                        if (message.isMine) VIEW_TYPE_MINE_AUDIO else VIEW_TYPE_OTHERS_AUDIO
+                    }
+                    forwardAttachment != null -> {
+                        // 其他附件类型（包括长文本）
+                        if (message.isMine) VIEW_TYPE_MINE_ATTACH else VIEW_TYPE_OTHERS_ATTACH
+                    }
+                    else -> {
+                        // 单条转发的纯文本消息
+                        if (message.isMine) VIEW_TYPE_MINE_TEXT else VIEW_TYPE_OTHERS_TEXT
+                    }
+                }
+            }
+
+            // === 第三层：普通消息的内容类型 ===
             if (message.isAttachmentMessage()) {
                 // 附件消息
                 return when {

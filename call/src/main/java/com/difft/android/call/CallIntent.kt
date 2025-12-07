@@ -44,16 +44,13 @@ class CallIntent(private val intent: Intent) {
         CALL_ROOM_ID("CALL_ROOM_ID"),
         CALL_ROOM_NAME("CALL_ROOM_NAME"),
         CALL_TYPE("CALL_TYPE"),
-        CALL_TOKEN("CALL_TOKEN"),
-        CALL_MK("CALL_MK"),
         CALL_SERVER_URLS("CALL_SERVER_URLS"),
         CALL_CALLER_ID("CALL_CALLER_ID"),
         CALL_CONVERSATION_ID("CALL_CONVERSATION_ID"),
         CALL_ROLE("CALL_ROLE"),
         CALL_START_PARAMS("CALL_START_PARAMS"),
-
         CALL_APP_TOKEN("CALL_APP_TOKEN"),
-
+        CALL_NEED_APP_LOCK("CALL_NEED_APP_LOCK"),
     }
 
     /**
@@ -115,16 +112,6 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
-        fun withCallToken(token: String): Builder {
-            intent.putExtra(getExtraString(Extra.CALL_TOKEN), token)
-            return this
-        }
-
-        fun withCallMk(mk: ByteArray): Builder {
-            intent.putExtra(getExtraString(Extra.CALL_MK), mk)
-            return this
-        }
-
         fun withStartCallParams(params: ByteArray): Builder {
             intent.putExtra(getExtraString(Extra.CALL_START_PARAMS), params)
             return this
@@ -132,6 +119,11 @@ class CallIntent(private val intent: Intent) {
 
         fun withAppToken(token: String): Builder {
             intent.putExtra(getExtraString(Extra.CALL_APP_TOKEN), token)
+            return this
+        }
+
+        fun withNeedAppLock(isNeedAppLock: Boolean): Builder {
+            intent.putExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), isNeedAppLock)
             return this
         }
 
@@ -152,16 +144,13 @@ class CallIntent(private val intent: Intent) {
 
     val conversationId: String? by lazy { intent.getStringExtra(getExtraString(Extra.CALL_CONVERSATION_ID)) }
 
-    val callerToken: String by lazy { intent.getStringExtra(getExtraString(Extra.CALL_TOKEN)).orEmpty()}
-
     val callServerUrls: List<String> by lazy { intent.getStringArrayListExtra(getExtraString(Extra.CALL_SERVER_URLS)).orEmpty() }
-
-    val callMk: ByteArray? by lazy { intent.getByteArrayExtra(getExtraString(Extra.CALL_MK)) }
 
     val startCallParams: ByteArray? by lazy { intent.getByteArrayExtra(getExtraString(Extra.CALL_START_PARAMS))}
 
     val appToken: String by lazy { intent.getStringExtra(getExtraString(Extra.CALL_APP_TOKEN)).orEmpty()}
 
+    val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
 
     override fun toString(): String {
         return """
@@ -173,8 +162,6 @@ class CallIntent(private val intent: Intent) {
       CALL_ROLE? $callRole
       CALL_CALLER_ID? $callerId
       CALL_CONVERSATION_ID? $conversationId
-      CALL_Token? $callerToken
-      CALL_MK? $callMk
       CALL_ServerUrls? $callServerUrls
     """.trimIndent()
     }

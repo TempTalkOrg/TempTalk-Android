@@ -41,7 +41,7 @@ class ChativeHttpClient(
             } else {
                 addInterceptor(HeaderInterceptor(authProvider))
             }
-            addInterceptor(HttpErrorReportInterceptor())
+            addInterceptor(HttpClientInterceptor())
             if (BuildConfig.DEBUG) {
                 //如果想使用抓包工具获取接口数据，可以开启这个
 //                val manager = TrustAllSSLSocketFactory.TrustAllManager()

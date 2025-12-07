@@ -178,6 +178,7 @@ object ComposeDialogManager {
         cancelText: String = "",
         showCancel: Boolean = true,
         cancelable: Boolean = true,
+        autoDismiss: Boolean = true,
         confirmButtonColor: Color? = null,
         cancelButtonColor: Color? = null,
         onConfirm: () -> Unit = {},
@@ -209,11 +210,15 @@ object ComposeDialogManager {
                     cancelButtonColor = cancelButtonColor,
                     onConfirm = {
                         onConfirm()
-                        removeComposeViewFromActivity(activity, composeView)
+                        if (autoDismiss) {
+                            removeComposeViewFromActivity(activity, composeView)
+                        }
                     },
                     onCancel = {
                         onCancel()
-                        removeComposeViewFromActivity(activity, composeView)
+                        if (autoDismiss) {
+                            removeComposeViewFromActivity(activity, composeView)
+                        }
                     },
                     onDismiss = {
                         if (cancelable) {
@@ -248,6 +253,7 @@ object ComposeDialogManager {
         cancelText: String = "",
         showCancel: Boolean = true,
         cancelable: Boolean = true,
+        autoDismiss: Boolean = true,
         confirmButtonColor: Color? = null,
         cancelButtonColor: Color? = null,
         onConfirm: () -> Unit = {},
@@ -264,6 +270,7 @@ object ComposeDialogManager {
             cancelText = cancelText,
             showCancel = showCancel,
             cancelable = cancelable,
+            autoDismiss = autoDismiss,
             confirmButtonColor = confirmButtonColor,
             cancelButtonColor = cancelButtonColor,
             onConfirm = onConfirm,

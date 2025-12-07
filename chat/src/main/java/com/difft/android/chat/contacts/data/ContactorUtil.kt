@@ -14,21 +14,15 @@ import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
-import org.difft.app.database.convertToContactorModel
-import org.difft.app.database.covertToGroupMemberContactorModel
-import com.difft.android.messageserialization.db.store.formatBase58Id
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
+import com.difft.android.base.widget.sideBar.CharacterParser
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.contactsremark.ContactRemarkUtil
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import difft.android.messageserialization.For
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getOrNull
-import difft.android.messageserialization.model.Message
-import difft.android.messageserialization.model.NotifyMessage
-import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
@@ -40,12 +34,17 @@ import com.difft.android.network.responses.AddContactorResponse
 import com.difft.android.network.responses.AvatarResponse
 import com.difft.android.network.responses.ContactResponse
 import com.difft.android.network.responses.ContactsDataResponse
-import com.difft.android.base.widget.sideBar.CharacterParser
+import com.difft.android.websocket.api.messages.Data
+import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import difft.android.messageserialization.For
+import difft.android.messageserialization.model.Message
+import difft.android.messageserialization.model.NotifyMessage
+import difft.android.messageserialization.model.TextMessage
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -60,14 +59,15 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.yield
+import org.difft.app.database.convertToContactorModel
+import org.difft.app.database.covertToGroupMemberContactorModel
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.MessageModel
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.util.Base64
-import com.difft.android.websocket.api.messages.Data
-import com.difft.android.websocket.api.messages.TTNotifyMessage
 import java.util.Locale
 import java.util.Optional
 
@@ -533,42 +533,36 @@ object ContactorUtil {
         userId: String,
         notifySequenceId: Long,
         sequenceId: Long,
-        isMySelf: Boolean = false
+        timestamp: Long,
+        systemShowTimestamp: Long,
+        expiresInSeconds: Int,
     ): Message? {
-        val contactor = getContactWithID(application, userId).await()
-        return if (contactor.isPresent) {
-            val timeStamp = System.currentTimeMillis()
-            val name = if (isMySelf) {
-                ResUtils.getString(R.string.you)
-            } else {
-                contactor.get().getDisplayNameForUI()
-            }
-            val signalNotifyMessage = TTNotifyMessage(
-                Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_SCREEN_SHOT),
-                timeStamp,
-                TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL
-            )
-            signalNotifyMessage.showContent = ResUtils.getString(R.string.chat_took_a_screen_shot, name)
+        val name = if (userId == globalServices.myId) {
+            ResUtils.getString(R.string.you)
+        } else {
+            runCatching { getContactWithID(application, userId).await().getOrNull()?.getDisplayNameForUI() }.getOrNull() ?: userId.formatBase58Id()
+        }
+        val signalNotifyMessage = TTNotifyMessage(
+            Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_SCREEN_SHOT),
+            timestamp,
+            TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL
+        )
+        signalNotifyMessage.showContent = ResUtils.getString(R.string.chat_took_a_screen_shot, name)
 
-            val messageArchiveManager = EntryPointAccessors.fromApplication<EntryPoint>(application).getMessageArchiveManager()
-            val time = messageArchiveManager.getMessageArchiveTime(forWhat).blockingGet()
-
-            val message = NotifyMessage(
-                messageId,
-                For.Account(userId),
-                forWhat,
-                timeStamp,
-                timeStamp,
-                System.currentTimeMillis(),
-                SendType.Sent.rawValue,
-                time.toInt(),
-                notifySequenceId,
-                sequenceId,
-                0,
-                Gson().toJson(signalNotifyMessage)
-            )
-            message
-        } else null
+        return NotifyMessage(
+            messageId,
+            For.Account(userId),
+            forWhat,
+            systemShowTimestamp,
+            timestamp,
+            System.currentTimeMillis(),
+            SendType.Sent.rawValue,
+            expiresInSeconds,
+            notifySequenceId,
+            sequenceId,
+            0,
+            Gson().toJson(signalNotifyMessage)
+        )
     }
 
     /**

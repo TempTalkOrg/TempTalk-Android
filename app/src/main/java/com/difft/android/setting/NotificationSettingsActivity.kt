@@ -2,7 +2,6 @@ package com.difft.android.setting
 
 import android.app.Activity
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
@@ -18,9 +17,11 @@ import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.chat.R
 import com.difft.android.chat.group.GroupGlobalNotificationSettingsActivity
 import com.difft.android.databinding.ActivityNotificationSettingsBinding
+import com.difft.android.push.FcmInitResult
+import com.difft.android.push.PushUtil
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import org.thoughtcrime.securesms.messages.MessageServiceManager
+import org.thoughtcrime.securesms.messages.MessageForegroundService
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import javax.inject.Inject
 
@@ -44,9 +45,7 @@ class NotificationSettingsActivity : BaseActivity() {
     lateinit var userManager: UserManager
 
     @Inject
-    lateinit var messageServiceManager: MessageServiceManager
-
-    private var isCriticalAlertCheckBackgroundConnection: Boolean = false
+    lateinit var pushUtil: PushUtil
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,29 +115,47 @@ class NotificationSettingsActivity : BaseActivity() {
             messageNotificationUtil.openFullScreenNotificationSettings(this@NotificationSettingsActivity)
         }
 
-        mBinding.tvCriticalAlertSettings.text = ResUtils.getString(R.string.critical_alerts_content, PackageUtil.getAppName())
-        mBinding.tvCriticalAlertDisplay.text = if (::messageNotificationUtil.isInitialized && messageNotificationUtil.isNotificationPolicyAccessGranted())
-            getString(R.string.notification_enable) else getString(R.string.notification_disable)
+        if (::messageNotificationUtil.isInitialized && messageNotificationUtil.isNotificationPolicyAccessGranted()) {
+            mBinding.tvCriticalAlertSettings.visibility = View.GONE
+            mBinding.tvCriticalAlertDisplay.text = getString(R.string.notification_enable)
+        } else {
+            mBinding.tvCriticalAlertSettings.text = ResUtils.getString(R.string.critical_alerts_content, PackageUtil.getAppName())
+            mBinding.tvCriticalAlertSettings.visibility = View.VISIBLE
+            mBinding.tvCriticalAlertDisplay.text = getString(R.string.notification_disable)
+        }
+
         mBinding.clCriticalAlertDisplay.setOnClickListener {
-            if (!isCriticalAlertCheckBackgroundConnection && !messageServiceManager.checkBackgroundConnectionRequirements()) {
-                ComposeDialogManager.showMessageDialog(
-                    context = this@NotificationSettingsActivity,
-                    title = getString(R.string.tip),
-                    message = getString(R.string.critical_alert_background_connection_check_failed),
-                    confirmText = getString(R.string.invite_ok),
-                    showCancel = false,
-                    cancelable = false,
-                    onConfirm = {
-                        isCriticalAlertCheckBackgroundConnection = true
-                    },
-                    onDismiss = {
-                        isCriticalAlertCheckBackgroundConnection = true
-                    }
-                )
-            } else {
-                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                dndPermissionLauncher.launch(intent)
+            val hasFcm = pushUtil.fcmInitResult.value is FcmInitResult.Success
+            val hasNotification = messageNotificationUtil.canShowNotifications()
+            val hasBgConnection = MessageForegroundService.isRunning
+            val dndSettingsEnabled = messageNotificationUtil.isNotificationPolicyAccessGranted()
+
+            if (dndSettingsEnabled) {
+                openDndSettings()
+                return@setOnClickListener
             }
+
+            val canOpenDnd = if (hasFcm) hasNotification else (hasNotification && hasBgConnection)
+
+            if (canOpenDnd) {
+                openDndSettings()
+                return@setOnClickListener
+            }
+
+            val errorMessageRes = when {
+                !hasNotification && (!hasFcm && !hasBgConnection) -> R.string.critical_alert_all_permission_check_failed
+                !hasNotification -> R.string.critical_alert_notification_permission_check_failed
+                else -> R.string.critical_alert_background_connection_permission_check_failed
+            }
+
+            ComposeDialogManager.showMessageDialog(
+                context = this@NotificationSettingsActivity,
+                title = getString(R.string.tip),
+                message = getString(errorMessageRes),
+                confirmText = getString(R.string.invite_ok),
+                showCancel = false,
+                cancelable = false,
+            )
         }
 
         mBinding.clBackgroundConnection.setOnClickListener {
@@ -152,6 +169,12 @@ class NotificationSettingsActivity : BaseActivity() {
         // 当用户从设置页返回时，会回调到这里
         val isGranted = messageNotificationUtil.isNotificationPolicyAccessGranted()
         mBinding.tvCriticalAlertDisplay.text = if (isGranted) getString(R.string.notification_enable) else getString(R.string.notification_disable)
+        mBinding.tvCriticalAlertSettings.visibility = if (isGranted) View.GONE else View.VISIBLE
+    }
+
+    private fun openDndSettings() {
+        val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+        dndPermissionLauncher.launch(intent)
     }
 
 }

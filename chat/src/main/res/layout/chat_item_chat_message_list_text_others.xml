@@ -132,37 +132,14 @@
 
         </LinearLayout>
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/cl_forward_content"
+        <!-- 单条转发消息的信息头（时间+来源） -->
+        <include
+            android:id="@+id/forward_info_zone"
+            layout="@layout/chat_item_forward_zone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            tools:minHeight="20dp"
-            tools:visibility="visible">
-
-            <com.difft.android.chat.ui.MessageForwardView
-                android:id="@+id/messageForwardView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <TextView
-                android:id="@+id/v_forward_cover"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:background="@drawable/chat_message_confidential_bg"
-                android:gravity="center"
-                android:text="@string/chat_tap_to_view"
-                android:textColor="@color/t.white"
-                android:textSize="16sp"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="@+id/messageForwardView"
-                app:layout_constraintEnd_toEndOf="@+id/messageForwardView"
-                app:layout_constraintStart_toStartOf="@+id/messageForwardView"
-                app:layout_constraintTop_toTopOf="@+id/messageForwardView" />
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
+            tools:visibility="visible" />
 
         <FrameLayout
             android:id="@+id/contentFrame"

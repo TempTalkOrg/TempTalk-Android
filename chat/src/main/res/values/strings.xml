@@ -437,6 +437,7 @@
     <string name="chat_new_message">[New message]</string>
     <string name="unsupported_message_type">[Unsupported message type]</string>
     <string name="max_support_file_size_limit">Sorry, the selected file exceeds the 200MB limit and cannot be sent.</string>
+    <string name="text_file_exceeds_10mb_limit">Exceeding 10MB size limit</string>
     <string name="all_messages_deleted">All the messages have been deleted.</string>
     <string name="conversation_input_panel__slide_to_cancel">Slide to cancel</string>
     <string name="ConversationActivity_unable_to_record_audio">Unable to record audio!</string>
@@ -573,9 +574,9 @@
 
     <string name="tip">Tip</string>
     <string name="notification_no_permission_tip">Application has no permission to show notifications. You can enable it in system settings..</string>
-    <string name="notification_no_permission_tip1">Please allow %s to send you notification to stay informed with the messages and meetings.</string>
+    <string name="notification_no_permission_tip1">Please allow %s to display notifications so that you can receive messages and calls normally.</string>
     <string name="notification_disturb_tip">"Do not disturb" is turned on. You may not receive notifications.</string>
-    <string name="notification_no_google_tip">Google services are restricted on your device. Please keep background connection enabled to receive messages and calls.</string>
+    <string name="notification_no_google_tip">Google services are restricted on your device. Please keep background connection enabled to receive message and call notifications.</string>
     <string name="notification_ignore">Not now</string>
     <string name="notification_go_to_settings">Go to settings</string>
     <string name="notification_title">Notification</string>
@@ -747,7 +748,9 @@
 
     <string name="background_connection_check_failed">Please ensure the following settings are in normal status before enabling background connection</string>
 
-    <string name="critical_alert_background_connection_check_failed">To avoid missing important alerts, please enable background operation.</string>
+    <string name="critical_alert_notification_permission_check_failed">Please enable notification to receive important alerts.</string>
+    <string name="critical_alert_background_connection_permission_check_failed">Please enable background connection to receive important alerts.</string>
+    <string name="critical_alert_all_permission_check_failed">Please enable notification and background connection to receive important alerts.</string>
 
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>
