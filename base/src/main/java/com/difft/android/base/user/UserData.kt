@@ -22,15 +22,14 @@ data class UserData(
     var patternShowPath: Boolean = true, //是否显示手势路径
     var patternAttempts: Int = 0,//手势已经尝试的次数
     var lastUseTime: Long = 0,
-    var checkIgnoreBatteryOptimizations: String? = null,
     var previousSuccessConnectedChatWebsocketHost: String? = null,
     var theme: Int = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,   //AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM   AppCompatDelegate.MODE_NIGHT_NO   AppCompatDelegate.MODE_NIGHT_YES
     var textSize: Int = TextSizeUtil.TEXT_SIZE_DEFAULT,
     var lastCheckUpdateTime: Long = 0, // 上次检查更新的时间
-    var fcmEnable: Boolean = false, // FCM是否注册成功
     var saveToPhotos: Boolean = false, //是否开启自动保存到相册功能
     var migratedReadInfo: Boolean = false, // 是否已经迁移过ReadInfo数据
-    var autoStartMessageService: Boolean = true, //自动开启消息后台连接服务
+    var keepAliveEnabled: Boolean = false, // Service保活机制是否启用
+    var autoStartMessageService: Boolean = true, // 是否允许自动开启消息后台连接服务（默认true，用户手动关闭后为false）
     var messageServiceTipsShowedVersion: String? = null, //上次提示开启消息后台连接服务的版本
 
     //通道加密
@@ -44,4 +43,5 @@ data class UserData(
 
     var notificationContentDisplayType: Int = NotificationContentDisplayType.NAME_AND_CONTENT.value, //通知显示类型
     var globalNotification: Int = GlobalNotificationType.ALL.value, //全局通知开关类型
+    var checkNotificationPermission: String? = null, //上次检查通知权限的版本
 )

@@ -46,7 +46,8 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_global_notification_settings"
@@ -378,29 +379,244 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/ib_back" />
 
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/chat_group_info_bg"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
+                android:orientation="vertical">
 
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switch_background_connection"
-                    style="@style/Widget.Chative.Switch"
+                <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:checked="false"
-                    android:text="@string/background_connection"
-                    android:textSize="16sp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch_background_connection"
+                        style="@style/Widget.Chative.Switch"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:checked="false"
+                        android:text="@string/background_connection"
+                        android:textSize="16sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- 后台限制检查 -->
+                <View
+                    android:id="@+id/divider_background_restriction"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/bg.setting"
+                    android:visibility="gone" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_background_restriction"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:visibility="gone">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="10dp"
+                        android:ellipsize="end"
+                        android:gravity="center_vertical"
+                        android:lines="1"
+                        android:text="@string/background_restriction_check"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_background_restriction_status"
+                        app:layout_constraintStart_toStartOf="parent" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_background_restriction_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="5dp"
+                        android:gravity="center_vertical"
+                        android:textColor="@color/t.secondary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_background_restriction"
+                        tools:text="@string/notification_enable" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_arrow_background_restriction"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:tint="@color/t.primary" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- 数据节省模式检查 -->
+                <View
+                    android:id="@+id/divider_data_saver"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/bg.setting"
+                    android:visibility="gone" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_data_saver"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:visibility="gone">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="10dp"
+                        android:ellipsize="end"
+                        android:gravity="center_vertical"
+                        android:lines="1"
+                        android:text="@string/data_saver_check"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_data_saver_status"
+                        app:layout_constraintStart_toStartOf="parent" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_data_saver_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="5dp"
+                        android:gravity="center_vertical"
+                        android:textColor="@color/t.secondary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_data_saver"
+                        tools:text="@string/notification_enable" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_arrow_data_saver"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:tint="@color/t.primary" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- 电池优化检查 -->
+                <View
+                    android:id="@+id/divider_battery_optimization"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/bg.setting"
+                    android:visibility="gone" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_battery_optimization"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:visibility="gone">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="10dp"
+                        android:ellipsize="end"
+                        android:gravity="center_vertical"
+                        android:lines="1"
+                        android:text="@string/battery_optimization_check"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_battery_optimization_status"
+                        app:layout_constraintStart_toStartOf="parent" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_battery_optimization_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="5dp"
+                        android:gravity="center_vertical"
+                        android:textColor="@color/t.secondary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_battery_optimization"
+                        tools:text="@string/notification_enable" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_arrow_battery_optimization"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:tint="@color/t.primary" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- 中国ROM自启动管理 -->
+                <View
+                    android:id="@+id/divider_auto_start"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/bg.setting"
+                    android:visibility="gone" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_auto_start"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:visibility="gone">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="10dp"
+                        android:ellipsize="end"
+                        android:gravity="center_vertical"
+                        android:lines="1"
+                        android:text="@string/auto_start_check"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_auto_start_status"
+                        app:layout_constraintStart_toStartOf="parent" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_auto_start_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="5dp"
+                        android:gravity="center_vertical"
+                        android:textColor="@color/t.secondary"
+                        android:textSize="16sp"
+                        app:layout_constraintEnd_toStartOf="@+id/iv_arrow_auto_start"
+                        tools:text="@string/notification_enable" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_arrow_auto_start"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:tint="@color/t.primary" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </LinearLayout>
 
 
             <androidx.appcompat.widget.AppCompatTextView

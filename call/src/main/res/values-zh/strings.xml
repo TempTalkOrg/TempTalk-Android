@@ -34,8 +34,8 @@
     <string name="call_barrage_message_screensharing">开始屏幕分享 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
     <string name="call_barrage_message_critical_alert_success">set a critical alert</string>
-    <string name="call_barrage_message_critical_alert_failed">发送紧急通知失败，请重试。</string>
-    <string name="call_barrage_message_critical_alert_limited">sent too frequently. Please try again later.</string>
+    <string name="call_barrage_message_critical_alert_failed">发送重要提醒失败，请重试。</string>
+    <string name="call_barrage_message_critical_alert_limited">发送过于频繁，请稍后重试。</string>
     <string name="call_attendees">参会者</string>
     <string name="call_barrage_broadcast_message_tip">发送给所有人</string>
     <string name="call_other_network_poor_tip">当前通话对方网络不佳。</string>

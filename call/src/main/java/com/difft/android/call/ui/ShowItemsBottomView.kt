@@ -267,7 +267,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                         try {
                                             L.i { "[call] ShowItemsBottomView click critical alert" }
                                             viewModel.conversationId?.let { conversationId ->
-                                                viewModel.handleCriticalAlert(conversationId)
+                                                viewModel.handleCriticalAlert(conversationId) { isSuccess ->
+                                                    if(isSuccess) {
+                                                        viewModel.callUiController.setShowToolBarBottomViewEnable(false)
+                                                    }
+                                                }
                                             } ?: run {
                                                 L.w { "[call] ShowItemsBottomView conversationId is null, cannot handle critical alert" }
                                             }

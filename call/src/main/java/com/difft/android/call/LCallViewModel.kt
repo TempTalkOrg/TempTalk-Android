@@ -23,6 +23,7 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.BarrageMessage
@@ -1055,7 +1056,7 @@ class LCallViewModel (
     /**
      * Handles the sending of a critical alert notification to the server.
      */
-    fun handleCriticalAlert(uid: String) {
+    fun handleCriticalAlert(uid: String, callback: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
             val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).httpClient()
             val auth = SecureSharedPrefsUtil.getBasicAuth()
@@ -1064,38 +1065,45 @@ class LCallViewModel (
                 chatHttpClient.httpService.sendCriticalAlert(auth, request)
                     .subscribe({
                         if(it.status == 0) {
+                            callback?.invoke(true)
                             showCallBarrageMessage(
                                 room.localParticipant,
                                 getString(R.string.call_barrage_message_critical_alert_success)
                             )
                         }else {
                             L.e { "[Call] handleCriticalAlert failed, status = ${it.status} reason = ${it.reason}" }
-                            showCallBarrageMessage(
-                                room.localParticipant,
-                                getString(R.string.call_barrage_message_critical_alert_failed)
-                            )
+                            callback?.invoke(false)
+                            getString(R.string.call_barrage_message_critical_alert_failed)
                         }
                     }, {
                         it.printStackTrace()
                         val reason = it.message
                         val code = (it as? HttpException)?.code()
+                        callback?.invoke(false)
                         when (code) {
                             413 -> {
                                 L.w { "[Call] Critical alert limited - status: $code reason: $reason" }
-                                showCallBarrageMessage(
-                                    room.localParticipant,
-                                    getString(R.string.call_barrage_message_critical_alert_limited)
-                                )
+                                showToastMessage(getString(R.string.call_barrage_message_critical_alert_limited))
                             }
                             else -> {
                                 L.e { "[Call] Critical alert failed - status: $code, reason: $reason" }
-                                showCallBarrageMessage(
-                                    room.localParticipant,
-                                    getString(R.string.call_barrage_message_critical_alert_failed)
-                                )
+                                showToastMessage(getString(R.string.call_barrage_message_critical_alert_failed))
                             }
                         }
                     })
+            }
+        }
+    }
+
+    /**
+     * Displays a short toast message on the UI thread.
+     */
+    private fun showToastMessage(message: String) {
+        viewModelScope.launch {
+            try {
+                ToastUtil.show(message)
+            } catch (e: Exception) {
+                L.e(e) { "[Call] Failed to show toast message: $message" }
             }
         }
     }

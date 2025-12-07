@@ -134,8 +134,12 @@ object ForegroundServiceUtil {
     }
 
     fun stopService(serviceClass: Class<out Service>) {
-        val intent = Intent(application, serviceClass)
-        application.stopService(intent)
+        try {
+            val intent = Intent(application, serviceClass)
+            application.stopService(intent)
+        } catch (e: Exception) {
+            L.e { "[ForegroundServiceUtil] Unable to stop service:" + e.stackTraceToString() }
+        }
     }
 
     class Receiver : BroadcastReceiver() {

@@ -607,7 +607,25 @@
 
     <string name="background_connection">后台连接</string>
     <string name="background_connection_enabled">后台连接已启用</string>
-    <string name="background_connection_tips">保持Yelling低影响后台连接以获得可靠的通知。</string>
+    <string name="background_connection_tips">保持Yelling低影响后台连接以获得可靠的通知。开启前，请确保以下设置项为正常状态：</string>
+
+    <!-- 后台连接检查项 -->
+    <string name="background_restriction_check">后台限制</string>
+    <string name="background_restriction_restricted">受限</string>
+    <string name="background_restriction_unrestricted">正常</string>
+
+    <string name="battery_optimization_check">电池优化</string>
+    <string name="battery_optimization_ignored">正常</string>
+    <string name="battery_optimization_not_ignored">受限</string>
+
+    <string name="data_saver_check">后台数据</string>
+    <string name="data_saver_restricted">受限</string>
+    <string name="data_saver_unrestricted">正常</string>
+
+    <string name="auto_start_check">自启动权限</string>
+    <string name="auto_start_need_check">需要检查</string>
+
+    <string name="background_connection_check_failed">请先确保以下设置项为正常状态，再开启后台连接</string>
 
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_notify_content">以下消息将在阅读后的 %1$s 内被删除。</string>

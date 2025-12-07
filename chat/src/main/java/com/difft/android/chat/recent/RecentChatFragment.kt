@@ -105,6 +105,11 @@ class RecentChatFragment : DisposableManageFragment() {
                 roomViewData: RoomViewData,
                 position: Int
             ) {
+                // Skip processing for instant calls as they don't require chat room navigation
+                if(roomViewData.isInstantCall) {
+                    return
+                }
+
                 when (roomViewData.type) {
                     is Type.OneOnOne -> {
                         L.i { "BH_Lin: onItemClicked - OneOnOne ChattingRoom" }

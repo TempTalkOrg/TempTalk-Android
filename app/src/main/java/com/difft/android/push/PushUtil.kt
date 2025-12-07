@@ -30,9 +30,6 @@ object PushUtil {
             .subscribe({ result ->
                 if (result.status == 0) {
                     L.i { "[Push]绑定token成功" }
-                    globalServices.userManager.update {
-                        this.fcmEnable = true
-                    }
                 }
                 onComplete?.invoke()
             }, {

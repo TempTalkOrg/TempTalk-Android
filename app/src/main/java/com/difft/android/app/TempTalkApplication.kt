@@ -15,6 +15,7 @@ import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.call.LCallActivity
@@ -64,6 +65,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
+
+    @Inject
+    lateinit var environmentHelper: EnvironmentHelper
 
     override fun onCreate() {
         AppStartup.onApplicationCreate()
@@ -277,7 +281,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun initCallEngine() {
-        LCallEngine.init(this, this)
+        LCallEngine.init(this, this, environmentHelper)
     }
 
     private fun monitorMainThreadBlocking() {

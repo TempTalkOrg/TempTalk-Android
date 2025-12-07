@@ -9,9 +9,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.os.Process
-import android.provider.Settings
 import android.text.TextUtils
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -44,7 +42,9 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
+import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.call.util.NetUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.ScreenShotUtil
@@ -72,10 +72,7 @@ import com.difft.android.setting.NotificationSettingsActivity
 import com.difft.android.setting.UpdateManager
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
-import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.util.FullScreenPermissionHelper
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -84,19 +81,19 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataMigrationManager
 import org.thoughtcrime.securesms.messages.FailedMessageProcessor
 import org.thoughtcrime.securesms.messages.MessageForegroundService
+import org.thoughtcrime.securesms.messages.MessageServiceManager
 import org.thoughtcrime.securesms.util.AppIconBadgeManager
-import org.thoughtcrime.securesms.util.ForegroundServiceUtil
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.UnableToStartException
 import org.thoughtcrime.securesms.util.WindowUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
-import util.concurrent.TTExecutors
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -157,6 +154,9 @@ class IndexActivity : BaseActivity() {
 
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
+
+    @Inject
+    lateinit var messageServiceManager: MessageServiceManager
 
     @SuppressLint("ClickableViewAccessibility")
     @RequiresApi(Build.VERSION_CODES.O)
@@ -291,7 +291,6 @@ class IndexActivity : BaseActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerPermission { permissionState ->
                 L.i { "[Notification] requestNotificationPermission permissionState:$permissionState" }
-                checkNotificationPermission()
             }.launchSinglePermission(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
@@ -400,58 +399,52 @@ class IndexActivity : BaseActivity() {
     }
 
     private fun initFCMPush() {
-        FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                L.w { "[fcm] Fetching FCM registration token failed " + task.exception }
-                // FCM获取失败，检查是否需要启动前台服务
-                checkAndStartMessageForegroundService()
-                return@OnCompleteListener
-            }
-
-            // Get new FCM registration token
-            val token = task.result
-            L.i { "[fcm] Fetching FCM registration token success ${token.length}" }
-            PushUtil.sendRegistrationToServer(null, token) {
-                // 服务器注册完成后，检查是否需要启动前台服务
-                checkAndStartMessageForegroundService()
-            }
-        })
-        FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
-    }
-
-    /**
-     * 检查是否需要开启消息前台服务，google service不可用，或者fcm没有注册成功过
-     */
-    private fun checkAndStartMessageForegroundService() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val fcmEnable = userManager.getUserData()?.fcmEnable
-            val autoStartMessageService = userManager.getUserData()?.autoStartMessageService
+            // 在子线程检查 Google Play Services 是否可用（避免 ANR）
             val playServiceStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this@IndexActivity)
 
+            if (playServiceStatus != ConnectionResult.SUCCESS) {
+                L.w { "[fcm] Google Play Services not available, status:$playServiceStatus" }
+                withContext(Dispatchers.Main) {
+                    handleFcmUnavailable()
+                }
+                return@launch
+            }
+
+            // Google Play Services 可用，尝试获取 FCM token（设置超时避免长时间等待）
             withContext(Dispatchers.Main) {
-                L.i { "[MessageForegroundService] checkAndStartMessageForegroundService, playServiceStatus:$playServiceStatus, fcmEnable:$fcmEnable, autoStartMessageService:$autoStartMessageService" }
+                val tokenTask = FirebaseMessaging.getInstance().token
 
-                if (playServiceStatus == ConnectionResult.SUCCESS && fcmEnable == true) {
-                    ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
-                    return@withContext
-                }
-
-                //设置过不自动启动服务时进行提示
-                if (autoStartMessageService != true) {
-                    showStartMessageServiceTipsDialog()
-                    return@withContext
-                }
-
-                try {
-                    ForegroundServiceUtil.start(this@IndexActivity, Intent(this@IndexActivity, MessageForegroundService::class.java))
-                } catch (e: UnableToStartException) {
-                    L.w { "[MessageForegroundService] Unable to start foreground service for websocket. Deferring to background to try with blocking" }
-                    TTExecutors.UNBOUNDED.execute {
-                        try {
-                            ForegroundServiceUtil.startWhenCapable(this@IndexActivity, Intent(this@IndexActivity, MessageForegroundService::class.java))
-                        } catch (e: UnableToStartException) {
-                            L.w { "[MessageForegroundService] Unable to start foreground service for websocket!" + e.stackTraceToString() }
+                // 使用协程超时机制（15秒超时）
+                val tokenResult = withTimeoutOrNull(15000L) {
+                    suspendCancellableCoroutine { continuation ->
+                        tokenTask.addOnCompleteListener { task ->
+                            if (task.isSuccessful) {
+                                continuation.resumeWith(Result.success(task.result))
+                            } else {
+                                continuation.resumeWith(Result.success(null))
+                            }
                         }
+                    }
+                }
+
+                when {
+                    tokenResult == null -> {
+                        // Token 获取失败（可能是网络问题、无法连接 Google 服务器等）
+                        // 当作 FCM 不可用处理，下次打开 app 时会重新检查
+                        L.w { "[fcm] Fetching FCM registration token timeout or failed" }
+                        handleFcmUnavailable()
+                    }
+
+                    else -> {
+                        // FCM token 获取成功
+                        L.i { "[fcm] Fetching FCM registration token success ${tokenResult.length}" }
+                        PushUtil.sendRegistrationToServer(null, tokenResult)
+
+                        // FCM可用，自动停止Service并禁用保活
+                        messageServiceManager.onFcmAvailable()
+
+                        FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
                     }
                 }
             }
@@ -461,15 +454,8 @@ class IndexActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         checkInsiderUpdate()
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) {
-            checkNotificationFullScreenPermission()
-            checkNotificationPermission()
-            checkIgnoreBatteryOptimizations()
-        }
+        checkNotificationFullScreenPermission()
+        checkNotificationPermission()
     }
 
     private fun checkDisappearingMessage() {
@@ -564,12 +550,56 @@ class IndexActivity : BaseActivity() {
 
 
     /**
-     * 无google service时，提示用户去设置后台连接服务
-     * 每个版本只提示一次
+     * 处理 FCM 不可用的情况
+     *
+     * 逻辑：
+     * 1. 如果服务已运行 → 不处理
+     * 2. 如果服务未运行：
+     *    - 如果用户允许自动启动（autoStartMessageService = true）：
+     *      - 检查启动条件
+     *      - 条件满足 → 自动启动（不弹窗）
+     *      - 条件不满足 → 弹窗引导用户开启权限
+     *    - 如果用户主动关闭过服务（autoStartMessageService = false）：
+     *      - 弹窗提示用户开启服务
+     */
+    private fun handleFcmUnavailable() {
+        // 1. 服务已运行，不处理
+        if (MessageForegroundService.isRunning) {
+            L.i { "[MessageService] Service already running, no action needed" }
+            return
+        }
+
+        // 2. 检查用户意图
+        val autoStartMessageService = userManager.getUserData()?.autoStartMessageService ?: true
+
+        if (autoStartMessageService) {
+            // 用户允许自动启动，检查条件
+            if (messageServiceManager.checkBackgroundConnectionRequirements()) {
+                // 条件满足，自动启动服务
+                L.i { "[MessageService] Auto-starting service (conditions met)" }
+                messageServiceManager.startService()
+            } else {
+                // 条件不满足，弹窗引导用户开启权限
+                L.w { "[MessageService] Cannot auto-start, showing settings dialog" }
+                showStartMessageServiceTipsDialog()
+            }
+        } else {
+            // 用户主动关闭过，弹窗提示
+            L.i { "[MessageService] User disabled service, showing enable dialog" }
+            showStartMessageServiceTipsDialog()
+        }
+    }
+
+    /**
+     * 显示后台连接提示弹窗
+     * - 如果当前版本已经显示过（用户点击了"暂不开启"），则不再显示
+     * - 只有用户点击"暂不开启"时，才记录当前版本号，此版本不再弹窗
+     * - 如果用户点击"前往设置"，不记录版本号，下次还会弹窗
      */
     private fun showStartMessageServiceTipsDialog() {
         val messageServiceTipsShowedVersion = userManager.getUserData()?.messageServiceTipsShowedVersion
         if (messageServiceTipsShowedVersion == PackageUtil.getAppVersionName()) return
+
         ComposeDialogManager.showMessageDialog(
             context = this@IndexActivity,
             title = getString(R.string.tip),
@@ -579,11 +609,14 @@ class IndexActivity : BaseActivity() {
             cancelable = false,
             onConfirm = {
                 NotificationSettingsActivity.startActivity(this@IndexActivity)
+            },
+            onCancel = {
+                // 用户点击"暂不开启"，记录版本号，此版本不再弹窗
+                userManager.update {
+                    this.messageServiceTipsShowedVersion = PackageUtil.getAppVersionName()
+                }
             }
         )
-        userManager.update {
-            this.messageServiceTipsShowedVersion = PackageUtil.getAppVersionName()
-        }
     }
 
     private fun handleDeeplink(linkData: LinkDataEntity) {
@@ -723,15 +756,20 @@ class IndexActivity : BaseActivity() {
     private var checkNotificationFullScreenPermissionIgnore = false
     private var checkNotificationPermissionDialog: ComposeDialog? = null
     private var checkNotificationFullScreenPermissionDialog: ComposeDialog? = null
-    private var checkIgnoreBatteryOptimizationsDialog: ComposeDialog? = null
 
     /**
-     * 每次更新版本需要进行检查提醒
+     * 检查通知权限并显示引导对话框
      */
     private fun checkNotificationPermission() {
+        // 1. 检查会话级别的忽略标志（防止同一会话重复弹出）
         if (checkNotificationPermissionIgnore) return
 
-        if (!messageNotificationUtil.hasNotificationPermission()) {
+        // 2. 检查是否在当前版本已经取消过（每个版本只提示一次）
+        val notificationPermissionCheckedVersion = userManager.getUserData()?.checkNotificationPermission
+        if (notificationPermissionCheckedVersion == PackageUtil.getAppVersionName()) return
+
+        // 3. 使用全面检查，包括权限和系统通知开关
+        if (!messageNotificationUtil.canShowNotifications()) {
             if (checkNotificationPermissionDialog == null) {
                 checkNotificationPermissionDialog = ComposeDialogManager.showMessageDialog(
                     context = this@IndexActivity,
@@ -741,8 +779,13 @@ class IndexActivity : BaseActivity() {
                     cancelText = getString(R.string.notification_ignore),
                     onConfirm = {
                         messageNotificationUtil.openNotificationSettings(this@IndexActivity)
+                        checkNotificationPermissionIgnore = true
                     },
                     onCancel = {
+                        // 保存当前版本号，该版本不再提示
+                        userManager.update {
+                            this.checkNotificationPermission = PackageUtil.getAppVersionName()
+                        }
                         checkNotificationPermissionIgnore = true
                     },
                     onDismiss = {
@@ -751,6 +794,7 @@ class IndexActivity : BaseActivity() {
                 )
             }
         } else {
+            // 通知可用，关闭引导对话框（如果正在显示）
             checkNotificationPermissionDialog?.dismiss()
             checkNotificationPermissionDialog = null
         }
@@ -758,16 +802,19 @@ class IndexActivity : BaseActivity() {
 
     private fun getFullScreenPermissionMessage(): String {
         return if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
-            when (Build.MANUFACTURER.lowercase(Locale.ROOT)){
+            when (Build.MANUFACTURER.lowercase(Locale.ROOT)) {
                 FullScreenPermissionHelper.MANUFACTURER_HUAWEI.lowercase(Locale.ROOT) -> {
                     getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
                 }
+
                 FullScreenPermissionHelper.MANUFACTURER_XIAOMI.lowercase(Locale.ROOT) -> {
                     getString(R.string.notification_no_permission_tip5, PackageUtil.getAppName())
                 }
+
                 FullScreenPermissionHelper.MANUFACTURER_HONOR.lowercase(Locale.ROOT) -> {
                     getString(R.string.notification_no_permission_tip6, PackageUtil.getAppName())
                 }
+
                 else -> getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
             }
         } else {
@@ -804,42 +851,6 @@ class IndexActivity : BaseActivity() {
         }
     }
 
-    private fun checkIgnoreBatteryOptimizations() {
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-
-                val checkIgnoreBatteryOptimizations = userManager.getUserData()?.checkIgnoreBatteryOptimizations
-                if (checkIgnoreBatteryOptimizations == PackageUtil.getAppVersionName()) return
-
-                if (checkIgnoreBatteryOptimizationsDialog == null) {
-                    checkIgnoreBatteryOptimizationsDialog = ComposeDialogManager.showMessageDialog(
-                        context = this@IndexActivity,
-                        title = getString(R.string.tip),
-                        message = getString(R.string.battery_optimizations_tips, PackageUtil.getAppName()),
-                        confirmText = getString(R.string.notification_go_to_settings),
-                        cancelText = getString(R.string.notification_ignore),
-                        onConfirm = {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                            intent.data = Uri.parse("package:$packageName")
-                            startActivity(intent)
-                        },
-                        onCancel = {
-                            userManager.update {
-                                this.checkIgnoreBatteryOptimizations = PackageUtil.getAppVersionName()
-                            }
-                        },
-                        onDismiss = {
-                            checkIgnoreBatteryOptimizationsDialog = null
-                        }
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            L.e { "checkAndRequestIgnoreBatteryOptimizations error: ${e.stackTraceToString()}" }
-        }
-    }
-
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
             try {
@@ -858,7 +869,7 @@ class IndexActivity : BaseActivity() {
                     else -> {
                         // Get URI from ClipData first
                         val uri = getUriFromIntent(intent)
-                        
+
                         if (uri == null) {
                             val extraText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
                             selectChatsUtils.showChatSelectAndSendDialog(
@@ -891,7 +902,7 @@ class IndexActivity : BaseActivity() {
                 return uri
             }
         }
-        
+
         // Fallback to EXTRA_STREAM
         val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -899,7 +910,7 @@ class IndexActivity : BaseActivity() {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
         }
-        
+
         L.d { "[IndexActivity] Got URI from EXTRA_STREAM: $uri" }
         return uri
     }
@@ -939,7 +950,7 @@ class IndexActivity : BaseActivity() {
 
     private fun fetchCallServiceUrlAndCache() {
         lifecycleScope.launch(Dispatchers.IO) {
-            if(NetUtil.checkNet(this@IndexActivity)){
+            if (NetUtil.checkNet(this@IndexActivity)) {
                 LCallManager.fetchCallServiceUrlAndCache()
             }
         }
