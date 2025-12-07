@@ -102,6 +102,7 @@ import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
+import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -694,6 +695,15 @@ class ChatMessageListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             chatViewModel.inputHeightChanged.collect {
                 binding.recyclerViewMessage.noSmoothScrollToBottom()
+            }
+        }
+
+        // Collect text size changes at Fragment level and notify adapter
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TextSizeUtil.textSizeState.collect {
+                    chatMessageAdapter.notifyDataSetChanged()
+                }
             }
         }
     }
@@ -1791,11 +1801,7 @@ class ChatMessageListFragment : Fragment() {
             textView.autoLinkMask = 0
             textView.movementMethod = null
 
-            if (TextSizeUtil.isLager()) {
-                textView.textSize = 24f
-            } else {
-                textView.textSize = 16f
-            }
+            textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
             LinkTextUtils.setMarkdownToTextview(
                 requireContext(),

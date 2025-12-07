@@ -22,11 +22,7 @@ class ContactItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
         get() = binding.textViewName.text
         set(value) {
             binding.textViewName.text = value
-            if (TextSizeUtil.isLager()) {
-                binding.textViewName.textSize = 24f
-            } else {
-                binding.textViewName.textSize = 16f
-            }
+            binding.textViewName.textSize = if (TextSizeUtil.isLarger) 24f else 16f
         }
 
     var content: CharSequence?

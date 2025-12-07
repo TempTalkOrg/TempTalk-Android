@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -11,6 +12,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.application
@@ -113,6 +115,12 @@ object PermissionUtil {
         } catch (e: Exception) {
             e.printStackTrace()
             L.i { "[AndroidPermission] launchSettings fail:" + e.stackTraceToString() }
+        }
+    }
+
+    fun arePermissionsGranted(context: Context, permissions: Array<String>): Boolean {
+        return permissions.all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
         }
     }
 }

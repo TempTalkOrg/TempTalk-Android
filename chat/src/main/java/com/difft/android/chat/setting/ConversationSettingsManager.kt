@@ -1,6 +1,8 @@
 package com.difft.android.chat.setting
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
@@ -166,6 +168,9 @@ class ConversationSettingsManager @Inject constructor(
                 ),
                 DBRoomModel.roomId.eq(room.roomId)
             )
+
+            // ✅ 通知UI刷新
+            RoomChangeTracker.trackRoom(room.roomId, RoomChangeType.REFRESH)
         } catch (e: Exception) {
             L.e { "[ConversationSettingsManager] Failed to update room ${room.roomId}: ${e.message}" }
         }

@@ -10,6 +10,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.thoughtcrime.securesms.jobmanager.impl.BackoffUtil
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint
 import org.thoughtcrime.securesms.util.AppForegroundObserver
@@ -142,6 +144,31 @@ class WebSocketHealthMonitor
                 connection.disconnectWhenConnected()
             } catch (e: Exception) {
                 L.w { "[ws]monitor: Error disconnecting WebSocket: ${e.message}" }
+            }
+        }
+    }
+
+    /**
+     * 当 AlarmManager 触发时调用，用于加速 WebSocket 重连
+     *
+     * 作用：
+     * 1. 重置重试次数，下次重连时跳过 backoff delay
+     * 2. 发送通知信号，如果当前正在 backoff 等待中，可以立即打断
+     *
+     * 注意：
+     * - 即使 isMonitoring=false 也会执行，确保首次启动也能受益
+     * - 重置 attempts 没有副作用
+     * - notificationChannel.send() 如果没有接收者会自动丢弃（BufferOverflow.DROP_OLDEST）
+     */
+    fun onAlarmTriggered() {
+        L.i { "[ws]monitor: Alarm triggered (monitoring=$isMonitoring), resetting retry attempts and notifying" }
+        attempts = 0  // 重置重试次数，即使未启动也能在后续启动时生效
+
+        // 发送通知，打断可能正在进行的 backoff delay
+        // 如果当前没有监控，通知会被自动丢弃（BufferOverflow.DROP_OLDEST）
+        if (isMonitoring) {
+            launch {
+                notificationChannel.send(Unit)
             }
         }
     }
@@ -276,11 +303,22 @@ class WebSocketHealthMonitor
 
     private suspend fun delayWhenRetry(webSocketConnection: WebSocketConnection) {
         if (++attempts > 1) {
-            val backoff =
-                BackoffUtil.exponentialBackoff(attempts, TimeUnit.SECONDS.toMillis(5))
-            val finalAttempts = attempts
-            L.w { "${webSocketConnection.name} Too many failed connection attempts,  attempts: $finalAttempts backing off: $backoff" }
-            delay(backoff)
+            // 指数退避，最大5秒
+            val backoff = BackoffUtil.exponentialBackoff(attempts, TimeUnit.SECONDS.toMillis(5))
+
+            L.w { "${webSocketConnection.name} Too many failed connection attempts, attempts: $attempts backing off: $backoff ms" }
+
+            // 使用 withTimeout + notificationChannel.receive() 替代纯粹的 delay
+            // 这样可以被 Alarm、网络变化、前台切换等事件立即打断
+            try {
+                withTimeout(backoff) {
+                    notificationChannel.receive()  // 等待外部唤醒信号
+                }
+                L.i { "${webSocketConnection.name} Backoff interrupted by external trigger (Alarm/Network/Foreground)" }
+            } catch (_: TimeoutCancellationException) {
+                // 正常超时，继续重连流程
+                L.i { "${webSocketConnection.name} Backoff completed normally: $backoff ms" }
+            }
         }
     }
 

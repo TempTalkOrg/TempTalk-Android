@@ -141,7 +141,13 @@ fun BarrageMessageView(viewModel: LCallViewModel, config: BarrageMessageConfig, 
                             ) {
                                 append(message.userName)
                             }
-                            append(" ${message.message}")
+                            withStyle(
+                                style = SpanStyle(
+                                    color = colorResource(id = R.color.t_primary_night),
+                                )
+                            ) {
+                                append(" ${message.message}")
+                            }
                         }
 
                         Text(

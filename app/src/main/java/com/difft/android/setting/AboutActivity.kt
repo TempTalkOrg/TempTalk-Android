@@ -7,7 +7,7 @@ import android.text.TextUtils
 import androidx.activity.compose.setContent
 import com.difft.android.BuildConfig
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.ui.theme.AppTheme
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.openExternalBrowser
@@ -35,14 +35,14 @@ class AboutActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AppTheme(backgroundColorResId = com.difft.android.base.R.color.bg_setting) {
+            DifftTheme(useSecondaryBackground = true) {
                 AboutPageView(
                     onBackClick = { finish() },
                     appVersion = PackageUtil.getAppVersionName() ?: "",
                     buildVersion = PackageUtil.getAppVersionCode().toString(),
                     buildTime = TimeUtils.millis2String(BuildConfig.BUILD_TIME.toLong()),
                     onCheckForUpdateClick = {
-                        updateManager.checkUpdate(this, true)
+                        updateManager.checkUpdate(this@AboutActivity, true)
                     },
                     joinDesktopClick = {
                         val url = urlManager.installationGuideUrl
@@ -51,8 +51,8 @@ class AboutActivity : BaseActivity() {
                         }
                     },
                     callServerUrlNodeClick = {
-                        val intent = Intent(this, LCallServerNodeActivity::class.java)
-                        this.startActivity(intent)
+                        val intent = Intent(this@AboutActivity, LCallServerNodeActivity::class.java)
+                        this@AboutActivity.startActivity(intent)
                     },
                     isInsider = globalServices.environmentHelper.isInsiderChannel()
                 )

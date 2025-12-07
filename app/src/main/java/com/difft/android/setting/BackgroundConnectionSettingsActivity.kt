@@ -52,7 +52,8 @@ import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.AppTheme
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -85,7 +86,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            AppTheme(backgroundColorResId = R.color.bg_setting) {
+            DifftTheme(useSecondaryBackground = true) {
                 MainContent()
             }
         }
@@ -129,12 +130,22 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             AutoStartPermissionHelper.canOpenAutoStartSettings(this)
         }
 
+        val hasExactAlarmPermission = remember(trigger) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                alarmManager.canScheduleExactAlarms()
+            } else {
+                true // Android 12 以下不需要权限
+            }
+        }
+
         MainContentPreview(
             isBackgroundConnectionEnabled = isBackgroundConnectionEnabled,
             isIgnoringBatteryOpt = isIgnoringBatteryOpt,
             isBackgroundRestricted = isBackgroundRestricted,
             isDataSaverRestricted = dataSaverState.isRestricted,
             canOpenAutoStart = canOpenAutoStart,
+            hasExactAlarmPermission = hasExactAlarmPermission,
             onBackgroundConnectionSwitchChanged = { newValue ->
                 if (newValue) {
                     // Enable service: check requirements first
@@ -168,7 +179,8 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                 if (!success) {
                     L.w { "Failed to open auto-start settings" }
                 }
-            }
+            },
+            onExactAlarmClick = { openExactAlarmSettings() }
         )
     }
 
@@ -180,11 +192,13 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         isBackgroundRestricted: Boolean = true,
         isDataSaverRestricted: Boolean = false,
         canOpenAutoStart: Boolean = true,
+        hasExactAlarmPermission: Boolean = false,
         onBackgroundConnectionSwitchChanged: ((Boolean) -> Unit)? = null,
         onBackgroundRestrictionClick: (() -> Unit)? = null,
         onBatteryOptimizationClick: (() -> Unit)? = null,
         onDataSaverClick: (() -> Unit)? = null,
-        onAutoStartClick: (() -> Unit)? = null
+        onAutoStartClick: (() -> Unit)? = null,
+        onExactAlarmClick: (() -> Unit)? = null
     ) {
         // Local switch state that can be toggled
         var switchState by remember { mutableStateOf(isBackgroundConnectionEnabled) }
@@ -198,7 +212,8 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         Column(
             Modifier.fillMaxSize()
         ) {
-            ToolBar(
+            TitleBar(
+                titleText = context.getString(com.difft.android.chat.R.string.background_connection),
                 onBackClick = {
                     (context as? BackgroundConnectionSettingsActivity)?.onBackPressedDispatcher?.onBackPressed()
                 }
@@ -236,10 +251,12 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                             isIgnoringBatteryOpt = isIgnoringBatteryOpt,
                             isDataSaverRestricted = isDataSaverRestricted,
                             canOpenAutoStart = canOpenAutoStart,
+                            hasExactAlarmPermission = hasExactAlarmPermission,
                             onBackgroundRestrictionClick = onBackgroundRestrictionClick,
                             onBatteryOptimizationClick = onBatteryOptimizationClick,
                             onDataSaverClick = onDataSaverClick,
-                            onAutoStartClick = onAutoStartClick
+                            onAutoStartClick = onAutoStartClick,
+                            onExactAlarmClick = onExactAlarmClick
                         )
                     }
                 }
@@ -259,10 +276,12 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         isIgnoringBatteryOpt: Boolean = false,
         isDataSaverRestricted: Boolean = false,
         canOpenAutoStart: Boolean = true,
+        hasExactAlarmPermission: Boolean = false,
         onBackgroundRestrictionClick: (() -> Unit)? = null,
         onBatteryOptimizationClick: (() -> Unit)? = null,
         onDataSaverClick: (() -> Unit)? = null,
-        onAutoStartClick: (() -> Unit)? = null
+        onAutoStartClick: (() -> Unit)? = null,
+        onExactAlarmClick: (() -> Unit)? = null
     ) {
         val context = LocalContext.current
         Column {
@@ -315,6 +334,21 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                     status = context.getString(com.difft.android.chat.R.string.auto_start_need_check),
                     showArrow = true,
                     onClick = onAutoStartClick
+                )
+            }
+
+            // Exact alarm check (Android 12+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                DividerLine()
+                CheckItem(
+                    title = context.getString(com.difft.android.chat.R.string.exact_alarm_check),
+                    status = if (hasExactAlarmPermission) {
+                        context.getString(com.difft.android.chat.R.string.exact_alarm_granted)
+                    } else {
+                        context.getString(com.difft.android.chat.R.string.exact_alarm_not_granted)
+                    },
+                    showArrow = !hasExactAlarmPermission,
+                    onClick = if (!hasExactAlarmPermission) onExactAlarmClick else null
                 )
             }
         }
@@ -426,7 +460,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             ) {
                 Image(
                     imageVector = ImageVector.vectorResource(id = com.difft.android.chat.R.drawable.chat_ic_arrow_right),
-                    contentDescription = "Arrow",
+                    contentDescription = null, // Decorative icon, no accessibility description needed
                     colorFilter = ColorFilter.tint(
                         Color(
                             ContextCompat.getColor(
@@ -462,61 +496,6 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         )
     }
 
-    @Preview(showBackground = true)
-    @Composable
-    private fun ToolBar(onBackClick: (() -> Unit)? = null) {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier
-                .height(Dp(52F))
-                .fillMaxWidth()
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackClick?.invoke() ?: run {
-                            // In preview mode, do nothing
-                        }
-                    },
-                imageVector = ImageVector.vectorResource(id = com.difft.android.chat.R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = context.getString(com.difft.android.chat.R.string.background_connection),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        context, R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
-        }
-    }
-
     private fun openBackgroundRestrictionSettings() {
         try {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -549,6 +528,19 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             startActivity(intent)
         } catch (e: Exception) {
             L.e(e) { "Failed to open data saver settings" }
+        }
+    }
+
+    private fun openExactAlarmSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                L.e(e) { "Failed to open exact alarm settings" }
+            }
         }
     }
 }

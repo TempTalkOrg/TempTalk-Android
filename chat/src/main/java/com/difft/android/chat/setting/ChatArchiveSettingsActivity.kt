@@ -32,14 +32,13 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
+import com.difft.android.base.ui.TitleBar
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.ui.theme.AppTheme
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.archive.MessageArchiveUtil
@@ -94,7 +93,7 @@ class ChatArchiveSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            AppTheme(backgroundColorResId = com.difft.android.base.R.color.bg_setting) {
+            DifftTheme(useSecondaryBackground = true) {
                 MainContent()
             }
         }
@@ -115,7 +114,10 @@ class ChatArchiveSettingsActivity : BaseActivity() {
         Column(
             Modifier.fillMaxSize()
         ) {
-            ToolBar()
+            TitleBar(
+                titleText = getString(R.string.disappearing_messages),
+                onBackClick = { finish() }
+            )
 
             ItemViews(target, selectedOption) { newOption ->
                 // 如果选择的时间没有发生变化，不触发任何操作
@@ -127,59 +129,6 @@ class ChatArchiveSettingsActivity : BaseActivity() {
             }
 
             ExplainView()
-        }
-    }
-
-    @Preview
-    @Composable
-    private fun ToolBar() {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        com.difft.android.base.R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier
-                .height(Dp(52F))
-                .fillMaxWidth()
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackPressedDispatcher.onBackPressed()
-                    },
-                imageVector = ImageVector.vectorResource(id = R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = getString(R.string.disappearing_messages),
-                fontSize = 20.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        LocalContext.current, com.difft.android.base.R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
         }
     }
 

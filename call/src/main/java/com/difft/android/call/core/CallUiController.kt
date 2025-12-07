@@ -46,6 +46,9 @@ class CallUiController() {
     private val _isCriticalAlertEnable = MutableStateFlow(false)
     val isCriticalAlertEnable = _isCriticalAlertEnable.asStateFlow()
 
+    private val _isRequestingPermission = MutableStateFlow(false)
+    val isRequestingPermission = _isRequestingPermission.asStateFlow()
+
     /**
      * Enables or disables the "Hands Up" feature for participants in a call or meeting.
      */
@@ -138,6 +141,10 @@ class CallUiController() {
      */
     fun setCriticalAlertEnable(enable: Boolean) {
         _isCriticalAlertEnable.value = enable
+    }
+
+    fun setRequestPermissionStatus(status: Boolean) {
+        _isRequestingPermission.value = status
     }
 
 }

@@ -19,8 +19,11 @@ import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.adapter.FragmentStateAdapter
+import kotlinx.coroutines.launch
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
@@ -168,6 +171,19 @@ class IndexActivity : BaseActivity() {
         binding = ActivityIndexBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Load and emit text size early to avoid ANR in UI components
+        TextSizeUtil.loadAndEmitTextSize()
+
+        // Collect text size changes at Activity level and update all indicators
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TextSizeUtil.textSizeState.collect { textSize ->
+                    val isLarger = textSize == TextSizeUtil.TEXT_SIZE_LAGER
+                    indicators.forEach { it.updateSize(isLarger) }
+                }
+            }
+        }
+
         binding.viewpager.apply {
             offscreenPageLimit = 1
             isUserInputEnabled = false
@@ -276,15 +292,6 @@ class IndexActivity : BaseActivity() {
                 moveTaskToBack(true)
             }
         })
-
-        TextSizeUtil.textSizeChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                indicators.forEach {
-                    it.updateSize()
-                }
-            }, { it.printStackTrace() })
 
         fetchCallServiceUrlAndCache()
     }

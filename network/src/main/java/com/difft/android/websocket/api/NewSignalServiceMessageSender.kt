@@ -289,6 +289,20 @@ class NewSignalServiceMessageSender @Inject constructor(
             L.i { "[Message] public key info is ready" }
         }
         val publicKeyInfos: List<PublicKeyInfo> = conversationManager.getPublicKeyInfos(room)
+            .filter { info ->
+                val isValid = info.identityKey.isNotBlank()
+                if (!isValid) {
+                    L.w { "[Message] Filtering out PublicKeyInfo with empty identityKey for uid: ${info.uid}" }
+                }
+                isValid
+            }
+
+        if (publicKeyInfos.isEmpty()) {
+            val error = "No valid public key info available after filtering (all identityKeys were empty)"
+            L.e { error }
+            throw IOException(error)
+        }
+
         val contentString = if (messageEncryptor.enableLegacyContent()) Base64.encodeBytes(content.toByteArray()) else null
 
         val msgType = getMsgType(content)

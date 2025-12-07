@@ -72,7 +72,6 @@ import kotlinx.coroutines.rx3.asFlow
 @Composable
 fun ShowParticipantsListView(
     viewModel: LCallViewModel,
-    participants: List<Participant> = emptyList(),
     muteOtherEnabled: Boolean = false,
     handleInviteUsersClick: () -> Unit = {}
 ) {
@@ -80,6 +79,9 @@ fun ShowParticipantsListView(
     var raiseHandExpanded by remember { mutableStateOf(false) }
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val lazyGridState = rememberLazyGridState()
+    val participants by viewModel.participants.collectAsState(initial = emptyList())
+    val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
+    val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
 
     LaunchedEffect(lazyGridState, handsUpUserInfo.size) {
         if(handsUpUserInfo.isNotEmpty()){
@@ -87,7 +89,7 @@ fun ShowParticipantsListView(
         }
     }
 
-    if(!isInPipMode) {
+    if(!isInPipMode && isUserSharingScreen && isShowUsersEnabled) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopEnd
@@ -440,6 +442,7 @@ fun SmallParticipantViewItem(
                                 }
                                 .padding(2.dp)
                                 .size(16.dp),
+                            tint = Color.White
                         )
                     }
 

@@ -66,11 +66,9 @@ fun MultiParticipantCallPage(
     room: Room,
     muteOtherEnabled: Boolean = false,
     autoHideTimeout: Long,
-    callConfig: CallConfig,
-    handleInviteUsersClick: () -> Unit = {},
+    callConfig: CallConfig
 ) {
     val participants by viewModel.participants.collectAsState(initial = emptyList())
-    val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val whoSharedScreen by viewModel.screenSharingUser.collectAsState()
 
@@ -153,13 +151,6 @@ fun MultiParticipantCallPage(
             ShowHandsUpTipView(viewModel)
         }
     }
-
-    val shouldShowParticipantsList = isUserSharingScreen && isShowUsersEnabled
-    if(shouldShowParticipantsList) {
-        // 显示参与者小列表
-        ShowParticipantsListView(viewModel, participants, muteOtherEnabled, handleInviteUsersClick)
-    }
-
 }
 
 
@@ -252,8 +243,7 @@ fun MultiParticipantItem(
         ConstraintLayout(
             modifier = modifier
                 .clip(shape = RoundedCornerShape(8.dp))
-                .background(color = colorResource(id = R.color.bg1_night))
-
+                .background(color = colorResource(id = R.color.bg2_night))
         ) {
             val (userView, statusView) = createRefs()
 

@@ -22,6 +22,7 @@ import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.messages.EnvelopToMessageProcessor
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 
@@ -66,18 +67,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleCriticalAlertMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent, title: String?, content: String?)  {
-        if(entryPoint.messageNotificationUtil.isNotificationPolicyAccessGranted()) {
-            pushCustomContent.uid?.let { uid ->
-                val alertTitle = title ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
-                val alertContent = content ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
-                val timestamp = pushCustomContent.timestamp
-                appScope.launch(Dispatchers.IO) {
-                    L.i { "[Call] handle fcm critical alert: uid = $uid, timestamp = $timestamp" }
-                    entryPoint.messageNotificationUtil.showCriticalAlertNotification(For.Account(uid), alertTitle, alertContent, timestamp)
-                }
+
+        val gid = pushCustomContent.gid
+        val uid = pushCustomContent.uid
+
+        val forWhat = when {
+            gid != null -> For.Group(gid)
+            uid != null -> For.Account(uid)
+            else -> null
+        } ?: return // 没有 gid 或 uid，直接退出
+
+        val alertTitle = title ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
+        val alertContent = content ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
+        val timestamp = pushCustomContent.timestamp
+
+        appScope.launch {
+            withContext(Dispatchers.IO) {
+                L.i { "[Call] handle fcm critical alert: id=${forWhat.id}, timestamp=$timestamp" }
+                entryPoint.messageNotificationUtil
+                    .showCriticalAlertNotification(forWhat, alertTitle, alertContent, timestamp)
             }
-        } else {
-            L.i { "[Call] From fcm critical alert message is not shown because notification policy access is denied, uid = ${pushCustomContent.uid}, timestamp = ${pushCustomContent.timestamp}" }
         }
     }
 

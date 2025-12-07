@@ -249,6 +249,7 @@
     <string name="group_transfer_owner_tips">确定选择%1$s为新群主，你将自动放弃群主身份</string>
     <string name="group_only_moderators_can_add">仅协调人可添加成员</string>
     <string name="group_only_moderators_can_speak1">仅群主和协调人可发言</string>
+    <string name="group_critical_alert">重要提醒</string>
     <string name="group_enable_group_link">启用群邀请链接</string>
     <string name="group_add_moderators">添加协调人</string>
     <string name="group_remove_moderators">删除协调人</string>
@@ -626,6 +627,10 @@
 
     <string name="auto_start_check">自启动权限</string>
     <string name="auto_start_need_check">需要检查</string>
+
+    <string name="exact_alarm_check">精确闹钟</string>
+    <string name="exact_alarm_granted">正常</string>
+    <string name="exact_alarm_not_granted">受限</string>
 
     <string name="background_connection_check_failed">请先确保以下设置项为正常状态，再开启后台连接</string>
 

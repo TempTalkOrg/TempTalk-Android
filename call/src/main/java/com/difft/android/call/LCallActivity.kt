@@ -28,7 +28,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,22 +38,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.graphics.Color
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
-import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.AppTheme
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.AutoLeave
 import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
@@ -80,6 +76,7 @@ import com.difft.android.call.ui.MultiParticipantCallPage
 import com.difft.android.call.ui.ShowBottomCallEndView
 import com.difft.android.call.ui.ShowHandsUpBottomView
 import com.difft.android.call.ui.ShowItemsBottomView
+import com.difft.android.call.ui.ShowParticipantsListView
 import com.difft.android.call.ui.SingleParticipantCallPage
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -153,8 +150,6 @@ class LCallActivity : AppCompatActivity() {
 
     private var checkFloatingWindowPermissionDialog: ComposeDialog? = null
 
-    private var isRequestingPermission = false
-
     private val viewModel: LCallViewModel by viewModelByFactory {
         LCallViewModel(
             e2eeEnable = true,
@@ -189,9 +184,10 @@ class LCallActivity : AppCompatActivity() {
         }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        initView()
+
         registerCallActivityReceiver()
-        isRequestingPermission = true
-        callPermission.launchMultiplePermission(PermissionUtil.callPermissions)
 
         initializePictureInPictureParams()
 
@@ -451,11 +447,10 @@ class LCallActivity : AppCompatActivity() {
             callType = currentCallType
         }
 
-        AppTheme(darkTheme = true) {
+        DifftTheme(darkTheme = true) {
             ConstraintLayout(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(colorResource(id = com.difft.android.base.R.color.gray_1000))
                     .clickable(
                         interactionSource = interactionSource,
                         indication = null,
@@ -476,24 +471,27 @@ class LCallActivity : AppCompatActivity() {
                                         bottom.linkTo(parent.bottom)
                                         width = Dimension.fillToConstraints
                                         height = Dimension.fillToConstraints
-                                    }
+                                    },
+                                color = Color.Transparent
                             ) {
                                 // 1v1 Call UI布局逻辑
                                 SingleParticipantCallPage(
-                                    viewModel,
-                                    room,
-                                    muteOtherEnabled,
-                                    autoHideTimeout,
-                                    callConfig,
-                                    conversationId,
-                                    callRole,
-                                    handleInviteUsersClick = { handleInviteUsersClick() })
+                                    viewModel= viewModel,
+                                    room = room,
+                                    autoHideTimeout = autoHideTimeout,
+                                    callConfig = callConfig,
+                                    conversationId = conversationId,
+                                    callRole = callRole
+                                )
                                 // 顶部和底部Control View
                                 RenderTopAndBottomOverlays(isOneVOneCall = true, isUserSharingScreen, audioSwitchHandler)
                                 // 底部raise hand view
                                 ShowHandsUpBottomView(viewModel, onDismiss = { viewModel.callUiController.setShowHandsUpBottomViewEnabled(false) })
 
                                 ShowItemsBottomView(viewModel, isOneVOneCall = true, onDismiss = { viewModel.callUiController.setShowToolBarBottomViewEnable(false) }, deNoiseCallBack = { enable -> audioProcessor.setEnabled(enable) }, handleInviteUsersClick = { handleInviteUsersClick() })
+
+                                // 屏幕分享时显示参与者小列表
+                                ShowParticipantsListView(viewModel, muteOtherEnabled, handleInviteUsersClick = { handleInviteUsersClick() })
                             }
                         }
 
@@ -506,16 +504,17 @@ class LCallActivity : AppCompatActivity() {
                                     bottom.linkTo(parent.bottom)
                                     width = Dimension.fillToConstraints
                                     height = Dimension.fillToConstraints
-                                }
+                                },
+                                color = Color.Transparent
                             ) {
                                 // 多人 Call UI布局逻辑
                                 MultiParticipantCallPage(
-                                    viewModel,
-                                    room,
-                                    muteOtherEnabled,
-                                    autoHideTimeout,
-                                    callConfig,
-                                    handleInviteUsersClick = { handleInviteUsersClick() })
+                                    viewModel = viewModel,
+                                    room = room,
+                                    muteOtherEnabled = muteOtherEnabled,
+                                    autoHideTimeout = autoHideTimeout,
+                                    callConfig = callConfig
+                                )
                                 // 顶部和底部Control View
                                 RenderTopAndBottomOverlays(isOneVOneCall = false, isUserSharingScreen, audioSwitchHandler)
                                 // 底部raise hand view
@@ -533,6 +532,9 @@ class LCallActivity : AppCompatActivity() {
                                         handleBottomCallEndAction(action)
                                     }
                                 )
+
+                                // 屏幕分享时显示参与者小列表
+                                ShowParticipantsListView(viewModel, muteOtherEnabled, handleInviteUsersClick = { handleInviteUsersClick() })
                             }
                         }
                     }
@@ -580,33 +582,6 @@ class LCallActivity : AppCompatActivity() {
 
     }
 
-    private val callPermission = registerPermission {
-        onMeetingPermissionForCallResult(it)
-    }
-
-    private fun onMeetingPermissionForCallResult(permissionState: PermissionUtil.PermissionState) {
-        when (permissionState) {
-            PermissionUtil.PermissionState.Denied -> {
-                L.i { "onMeetingPermissionForCallResult: Denied" }
-                showErrorAndFinish(getString(R.string.no_permission_camera_and_voice_tip))
-                isRequestingPermission = false
-            }
-
-            PermissionUtil.PermissionState.Granted -> {
-                L.i { "onMeetingPermissionForCallResult: Granted" }
-                // Setup compose view.
-                initView()
-                isRequestingPermission = false
-            }
-
-            PermissionUtil.PermissionState.PermanentlyDenied -> {
-                L.i { "onMeetingPermissionForCallResult: PermanentlyDenied" }
-                showErrorAndFinish(getString(R.string.no_permission_camera_and_voice_tip))
-                isRequestingPermission = false
-            }
-        }
-    }
-
     private fun showErrorAndFinish(tips: String) {
         ToastUtil.show(tips)
         endCallAndClearResources()
@@ -617,10 +592,11 @@ class LCallActivity : AppCompatActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         L.i { "[Call] LCallActivity onUserLeaveHint" }
-        if (isRequestingPermission) {
+        if (viewModel.isRequestingPermission()) {
             L.i { "[Call] LCallActivity onUserLeaveHint ignored (permission dialog showing)" }
             return
         }
+
         showPipPermissionToastOrEnterPipMode("onUserLeaveHint")
     }
 
@@ -835,7 +811,7 @@ class LCallActivity : AppCompatActivity() {
 
         if (!isInPipMode) {
             // 底部悬浮控件布局逻辑
-            MainPageWithBottomControlView(viewModel, isOneVOneCall, showBottomToolBarViewEnabled, isUserSharingScreen, audioSwitchHandler, { callType, callEndType ->
+            MainPageWithBottomControlView(viewModel, isOneVOneCall, showBottomToolBarViewEnabled, isUserSharingScreen, audioSwitchHandler, endCallAction = { callType, callEndType ->
                 viewModel.getRoomId()?.let { roomId ->
                     val callExitParams = CallExitParams(
                         roomId,
@@ -1020,6 +996,10 @@ class LCallActivity : AppCompatActivity() {
 
         isInForeground = true
         updateOngoingCallNotification(false)
+
+        if (viewModel.isRequestingPermission()) {
+            viewModel.callUiController.setRequestPermissionStatus(false)
+        }
     }
 
 
@@ -1248,8 +1228,8 @@ class LCallActivity : AppCompatActivity() {
                 cancelable = false,
                 title = getString(R.string.call_pip_no_permission_tip_title),
                 message = getString(R.string.call_pip_permission_tip_content),
-                confirmText = getString(R.string.call_pip_permission_button_setting),
-                cancelText = getString(R.string.call_pip_permission_button_cancel),
+                confirmText = getString(R.string.call_permission_button_setting_go),
+                cancelText = getString(R.string.call_permission_button_not_now),
                 onConfirm = {
                     try {
                         val intent = Intent(

@@ -112,10 +112,12 @@ class GroupManagementActivity : BaseActivity() {
         mBinding.switchCanAdd.setOnCheckedChangeListener(null)
         mBinding.switchCanSpeak.setOnCheckedChangeListener(null)
         mBinding.switchEnableLink.setOnCheckedChangeListener(null)
+        mBinding.switchCanCriticalAlert.setOnCheckedChangeListener(null)
 
         mBinding.switchCanAdd.isChecked = group.invitationRule == 1
         mBinding.switchCanSpeak.isChecked = group.publishRule == 1
         mBinding.switchEnableLink.isChecked = group.linkInviteSwitch == true
+        mBinding.switchCanCriticalAlert.isChecked = group.criticalAlert == true
 
         setCheckChangeListener()
 
@@ -173,20 +175,26 @@ class GroupManagementActivity : BaseActivity() {
         mBinding.switchEnableLink.setOnCheckedChangeListener { _, isChecked ->
             changeGroupSetting(mBinding.switchEnableLink, linkInviteSwitch = isChecked)
         }
+
+        mBinding.switchCanCriticalAlert.setOnCheckedChangeListener { _, isChecked ->
+            changeGroupSetting(mBinding.switchCanCriticalAlert, criticalAlertSwitch = isChecked)
+        }
     }
 
     private fun changeGroupSetting(
         switch: SwitchCompat,
         invitationRule: Int? = null,
         publishRule: Int? = null,
-        linkInviteSwitch: Boolean? = null
+        linkInviteSwitch: Boolean? = null,
+        criticalAlertSwitch: Boolean? = null,
     ) {
         ComposeDialogManager.showWait(this@GroupManagementActivity, "")
         groupRepo.changeGroupSettings(
             groupId, ChangeGroupSettingsReq(
                 invitationRule = invitationRule,
                 publishRule = publishRule,
-                linkInviteSwitch = linkInviteSwitch
+                linkInviteSwitch = linkInviteSwitch,
+                criticalAlert = criticalAlertSwitch,
             )
         ).compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))

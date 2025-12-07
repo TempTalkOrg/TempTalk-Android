@@ -220,6 +220,7 @@ data class ChangeGroupSettingsReq(
     val remindCycle: String? = null,
     val privateChat: Boolean? = null,
     val linkInviteSwitch: Boolean? = null,
+    val criticalAlert: Boolean? = null,
 )
 
 data class GetGroupInfoResp(
@@ -237,6 +238,7 @@ data class GetGroupInfoResp(
     val linkInviteSwitch: Boolean,
     val privateChat: Boolean,
     val messageClearAnchor: Long,
+    val criticalAlert: Boolean,
 )
 
 data class Member(
@@ -267,7 +269,8 @@ data class GroupResp(
     val rejoin: Boolean,
     val remindCycle: String,
     val status: Int,
-    val version: Int
+    val version: Int,
+    val criticalAlert: Boolean
 )
 
 data class GroupAvatarResponse(

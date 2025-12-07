@@ -1,11 +1,9 @@
 package com.difft.android.call
 
-import android.app.NotificationManager
 import android.content.Context
 import android.util.Log
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.EnvironmentHelper
-import com.difft.android.base.utils.globalServices
 import com.difft.android.call.BuildConfig.*
 import com.difft.android.call.data.ServerNode
 import com.difft.android.call.data.ServerUrlSpeedInfo
@@ -25,8 +23,6 @@ import kotlinx.coroutines.launch
 
 
 object LCallEngine {
-
-    private val mySelfId: String by lazy { globalServices.myId }
     private const val SPEED_TEST_INTERVAL = 5 * 60 * 1000L
     private const val ERROR_RESET_THRESHOLD = 15 * 60 * 1000L
     private const val MAX_ERROR_COUNT = 3
@@ -61,8 +57,6 @@ object LCallEngine {
         LiveKit.enableWebRTCLogging = false
 
         registerNetworkConnectionListener(context, scope)
-
-        checkSelfCriticalAlertSettingAndSync(context, scope)
 
         LKLog.registerLogCallback(object : LKLog.LogCallback {
             override fun onLog(level: LoggingLevel, message: String?, throwable: Throwable?) {
@@ -197,23 +191,4 @@ object LCallEngine {
     fun setConnectedServerUrl(url: String?) {
         _serverUrlConnected.value = url
     }
-
-    private fun checkSelfCriticalAlertSettingAndSync(context: Context, scope: CoroutineScope) {
-        scope.launch(Dispatchers.IO) {
-            val status = LCallManager.getUserCriticalAlertSettingStatus(mySelfId)
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val isGranted = try {
-                notificationManager.isNotificationPolicyAccessGranted()
-            } catch (e: Exception) {
-                L.i { "[Call] LCallEngine check notification policy access failed:" + e.message }
-                false
-            }
-            if(status != isGranted ) {
-                L.d { "[Call] LCallEngine sync critical alert setting status:$isGranted"}
-                LCallManager.syncCriticalAlertSettingStatusAsync(isGranted)
-            }
-        }
-
-    }
-
 }

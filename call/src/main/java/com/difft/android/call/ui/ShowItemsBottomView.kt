@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallActivity
@@ -58,12 +59,18 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
     val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
     val isCriticalAlertEnable by viewModel.callUiController.isCriticalAlertEnable.collectAsState(false)
+    val cameraEnabled by viewModel.cameraEnabled.collectAsState(false)
+    val callType by viewModel.callType.collectAsState()
 
 
     val itemSpace = when {
-        callStatus == CallStatus.CALLING -> 8.dp
+        cameraEnabled && callType == CallType.GROUP.type -> 8.dp
         isOneVOneCall -> 50.dp
         else -> 32.dp
+    }
+
+    val onCriticalAlertComplete: (Boolean) -> Unit = { isSuccess ->
+        if (isSuccess) viewModel.callUiController.setShowToolBarBottomViewEnable(false)
     }
 
     if(showToolBarBottomViewEnable && !isInPipMode){
@@ -203,54 +210,56 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                         }
                     }
 
-                    Column(
-                        modifier = Modifier
-                            .width(80.dp)
-                            .height(76.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Row(
+                    if (cameraEnabled) {
+                        Column(
                             modifier = Modifier
-                                .width(48.dp)
-                                .height(48.dp)
-                                .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
-                                .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
-                                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                                    try {
-                                        L.i { "[call] ShowItemsBottomView onClick switch" }
-                                        viewModel.flipCamera()
-                                    } catch (e: Exception) {
-                                        L.e { "[call] ShowItemsBottomView Error switching camera: ${e.message}" }
-                                    }
-                                },
-                            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
-                            verticalAlignment = Alignment.Top,
+                                .width(80.dp)
+                                .height(76.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Image(
+                            Row(
                                 modifier = Modifier
-                                    .padding(1.dp)
-                                    .width(24.dp)
-                                    .height(24.dp),
-                                painter = painterResource(id = R.drawable.chat_tabler_camera_rotate),
-                                contentDescription = "switch camera",
-                                contentScale = ContentScale.Fit
+                                    .width(48.dp)
+                                    .height(48.dp)
+                                    .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
+                                    .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                        try {
+                                            L.i { "[call] ShowItemsBottomView onClick switch" }
+                                            viewModel.flipCamera()
+                                        } catch (e: Exception) {
+                                            L.e { "[call] ShowItemsBottomView Error switching camera: ${e.message}" }
+                                        }
+                                    },
+                                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Image(
+                                    modifier = Modifier
+                                        .padding(1.dp)
+                                        .width(24.dp)
+                                        .height(24.dp),
+                                    painter = painterResource(id = R.drawable.chat_tabler_camera_rotate),
+                                    contentDescription = "switch camera",
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+
+                            Text(
+                                text = context.getString(R.string.call_toolbar_bottom_switch_text),
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                    fontFamily = SfProFont,
+                                    fontWeight = FontWeight(400),
+                                    color = colorResource(id = com.difft.android.base.R.color.gray_50)
+                                )
                             )
                         }
-
-                        Text(
-                            text = context.getString(R.string.call_toolbar_bottom_switch_text),
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                fontFamily = SfProFont,
-                                fontWeight = FontWeight(400),
-                                color = colorResource(id = com.difft.android.base.R.color.gray_50)
-                            )
-                        )
                     }
 
-                    if(isCriticalAlertEnable) {
+                    if(viewModel.isGroupShowCriticalAlertEnable(isCriticalAlertEnable) || viewModel.is1v1ShowCriticalAlertEnable(callStatus)) {
                         Column(
                             modifier = Modifier
                                 .width(80.dp)
@@ -268,10 +277,9 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                         try {
                                             L.i { "[call] ShowItemsBottomView click critical alert" }
                                             viewModel.conversationId?.let { conversationId ->
-                                                viewModel.handleCriticalAlert(conversationId) { isSuccess ->
-                                                    if(isSuccess) {
-                                                        viewModel.callUiController.setShowToolBarBottomViewEnable(false)
-                                                    }
+                                                when {
+                                                    callType == CallType.GROUP.type -> viewModel.handleCriticalAlert(gid = conversationId, callback = onCriticalAlertComplete)
+                                                    else -> viewModel.handleCriticalAlert(uid = conversationId, callback = onCriticalAlertComplete)
                                                 }
                                             } ?: run {
                                                 L.w { "[call] ShowItemsBottomView conversationId is null, cannot handle critical alert" }

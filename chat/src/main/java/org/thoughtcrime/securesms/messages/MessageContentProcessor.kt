@@ -6,6 +6,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.utils.ValidatorUtil
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.delete
 import com.difft.android.base.utils.globalServices
@@ -511,17 +512,17 @@ class MessageContentProcessor @Inject constructor(
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT) {
                 L.i { "[Message][${tag}] process critical alert notify message -> timestamp:${message.data?.timestamp}" }
                 val data = message.data ?: return
-                if(messageNotificationUtil.isNotificationPolicyAccessGranted()) {
-                    data.source?.let { uid ->
-                        val alertTitle = data.alertTitle ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
-                        val alertContent = data.alertBody ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
-                        val timestamp = data.timestamp
-                        L.i { "[Call] handle notify message critical alert: uid = $uid, timestamp = $timestamp" }
-                        messageNotificationUtil.showCriticalAlertNotification(For.Account(uid), alertTitle, alertContent, timestamp)
-                    }
+                val conversationId = data.conversation?.asString ?: return
+                val forWhat = if (ValidatorUtil.isGid(conversationId)) {
+                    For.Group(conversationId)
                 } else {
-                    L.i { "[Call] From notify critical alert message is not shown because notification policy access is denied, uid = ${data.source}, timestamp = ${data.timestamp}" }
+                    For.Account(conversationId)
                 }
+                val alertTitle = data.alertTitle ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
+                val alertContent = data.alertBody ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
+                val timestamp = data.timestamp
+                L.i { "[Call] handle notify critical alert: conversationId=$conversationId, timestamp=$timestamp" }
+                messageNotificationUtil.showCriticalAlertNotification(forWhat, alertTitle, alertContent, timestamp)
             }
         }
     }

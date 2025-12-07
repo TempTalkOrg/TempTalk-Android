@@ -252,6 +252,7 @@
     <string name="group_transfer_owner_tips">Select %1$s as the new group owner? You will automatically give up ownership</string>
     <string name="group_only_moderators_can_add">Only moderators can add members</string>
     <string name="group_only_moderators_can_speak1">Only moderators can speak</string>
+    <string name="group_critical_alert">Critical Alert</string>
     <string name="group_enable_group_link">Enable group invite link</string>
     <string name="group_add_moderators">Add Moderators</string>
     <string name="group_remove_moderators">Remove Moderators</string>
@@ -744,6 +745,10 @@
 
     <string name="auto_start_check">Auto-start Permission</string>
     <string name="auto_start_need_check">Need to Check</string>
+
+    <string name="exact_alarm_check">Exact Alarm</string>
+    <string name="exact_alarm_granted">Normal</string>
+    <string name="exact_alarm_not_granted">Restricted</string>
 
     <string name="background_connection_check_failed">Please ensure the following settings are in normal status before enabling background connection</string>
 

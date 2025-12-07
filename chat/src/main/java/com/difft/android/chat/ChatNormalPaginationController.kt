@@ -2,6 +2,7 @@ package com.difft.android.chat
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.sampleAfterFirst
 import com.tencent.wcdb.winq.Order
 import dagger.assisted.Assisted
@@ -369,7 +370,7 @@ class ChatNormalPaginationController @AssistedInject constructor(
             )
         }
         observeMessageChangesJob = RoomChangeTracker.roomChanges
-            .filter { changes -> changes.any { it.roomId == forWhat.id } }
+            .filter { changes -> changes.any { it.roomId == forWhat.id && it.type == RoomChangeType.MESSAGE } }
             .sampleAfterFirst(500)
             .onEach {
                 L.d { "[${forWhat.id}] observerMessagesChanges, time : ${System.currentTimeMillis()}" }

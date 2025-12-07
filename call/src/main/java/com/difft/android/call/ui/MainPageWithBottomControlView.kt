@@ -1,5 +1,6 @@
 package com.difft.android.call.ui
 
+import android.Manifest
 import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -29,27 +30,34 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.SfProFont
+import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallStatus
+import com.difft.android.call.openAppSettings
+import com.difft.android.call.rememberPermissionChecker
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.audio.AudioSwitchHandler
 
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalPermissionsApi::class)
 @Composable
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
@@ -66,6 +74,55 @@ fun MainPageWithBottomControlView(
     val currentCallType by viewModel.callType.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val callStatus by viewModel.callStatus.collectAsState()
+
+    val context = LocalContext.current
+
+    val requestMicPermission = rememberPermissionChecker(
+        viewModel = viewModel,
+        permission = Manifest.permission.RECORD_AUDIO,
+        onGranted = {
+            if (callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED)
+                viewModel.setMicEnabled(!viewModel.micEnabled.value)
+        },
+        onDenied =  {
+            ComposeDialogManager.showMessageDialog(
+                context = context,
+                cancelable = true,
+                title = ResUtils.getString(R.string.call_microphone_permission_deny_title),
+                message = ResUtils.getString(R.string.call_microphone_permission_deny_content),
+                confirmText = ResUtils.getString(R.string.call_permission_button_setting_go),
+                cancelText = ResUtils.getString(R.string.call_permission_button_setting_cancel),
+                onConfirm = {
+                    openAppSettings(context)
+                    viewModel.callUiController.setRequestPermissionStatus(true)
+                }
+            )
+        }
+    )
+
+    val requestCameraPermission = rememberPermissionChecker(
+        viewModel = viewModel,
+        permission = Manifest.permission.CAMERA,
+        onGranted = {
+            if (callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED)
+                viewModel.setCameraEnabled(!viewModel.cameraEnabled.value)
+        },
+        onDenied = {
+            ComposeDialogManager.showMessageDialog(
+                context = context,
+                cancelable = true,
+                title = ResUtils.getString(R.string.call_camera_permission_deny_title),
+                message = ResUtils.getString(R.string.call_camera_permission_deny_content),
+                confirmText = ResUtils.getString(R.string.call_permission_button_setting_go),
+                cancelText = ResUtils.getString(R.string.call_permission_button_setting_cancel),
+                onConfirm = {
+                    openAppSettings(context)
+                    viewModel.callUiController.setRequestPermissionStatus(true)
+                }
+            )
+        }
+    )
 
     Column(
         modifier = Modifier
@@ -94,7 +151,6 @@ fun MainPageWithBottomControlView(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-
                         ConstraintLayout(
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -109,7 +165,6 @@ fun MainPageWithBottomControlView(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically,
                             ){
-
                                 Surface(
                                     modifier = Modifier.size(controlSize),
                                     color = Color.Transparent
@@ -126,9 +181,10 @@ fun MainPageWithBottomControlView(
                                                 indication = null,
                                                 onClick = {
                                                     L.i { "[call] LCallActivity onClick Mic" }
-                                                    viewModel.callStatus.value.let { status ->
-                                                        if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED)
-                                                            viewModel.setMicEnabled(!micEnabled)
+                                                    callStatus.let { status ->
+                                                        if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
+                                                            requestMicPermission()
+                                                        }
                                                     }
                                                 }
                                             )
@@ -150,9 +206,10 @@ fun MainPageWithBottomControlView(
                                         modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
                                         {
                                             L.i { "[call] LCallActivity onClick Camera" }
-                                            viewModel.callStatus.value.let { status ->
-                                                if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED)
-                                                    viewModel.setCameraEnabled(!videoEnabled)
+                                            callStatus.let { status ->
+                                                if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
+                                                    requestCameraPermission()
+                                                }
                                             }
                                         }
                                     )
@@ -229,19 +286,25 @@ fun MainPageWithBottomControlView(
                                             )
                                             if(participants.isNotEmpty()){
                                                 Box(
+                                                    contentAlignment = Alignment.Center,
                                                     modifier = Modifier
                                                         .align(Alignment.BottomEnd)
                                                         .size(20.dp)
-                                                        .clip(CircleShape)
-                                                        .background(colorResource(id = com.difft.android.base.R.color.bg_tooltip))
-                                                        .padding(2.dp)
+                                                        .background(
+                                                            color = colorResource(id = com.difft.android.base.R.color.bg_tooltip),
+                                                            shape = CircleShape
+                                                        )
                                                 ){
                                                     Text(
                                                         text = "${participants.size}",
                                                         color = Color.White,
-                                                        fontSize = 12.sp,
+                                                        fontSize = 10.sp,
+                                                        lineHeight = 16.sp,
+                                                        fontFamily = SfProFont,
+                                                        fontWeight = FontWeight(590),
                                                         textAlign = TextAlign.Center,
-                                                        modifier = Modifier.align(Alignment.Center)
+                                                        modifier = Modifier
+                                                            .wrapContentSize(Alignment.Center)
                                                     )
                                                 }
                                             }

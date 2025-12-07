@@ -14,6 +14,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.launch
 import org.thoughtcrime.securesms.util.DeviceProperties
 import org.thoughtcrime.securesms.util.ForegroundServiceUtil
+import org.thoughtcrime.securesms.websocket.monitor.WebSocketHealthMonitor
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,7 +32,9 @@ import javax.inject.Singleton
  * - onFcmAvailable() -> 取消 AlarmManager，设置 keepAliveEnabled=false
  *
  * 保活触发点：
- * - AlarmManager（5分钟间隔，Doze时系统延长到9-15分钟，进程死亡后能唤醒）
+ * - AlarmManager（自动选择精确/非精确闹钟，进程死亡后能唤醒）
+ *   - 有精确闹钟权限：3分钟间隔（非Doze）/~9分钟（Doze，系统延长）
+ *   - 无精确闹钟权限：3分钟间隔（非Doze）/30分钟-2小时（Doze，系统维护窗口）
  * - BOOT_COMPLETED（静态注册，系统重启后恢复 AlarmManager 和 Service）
  *
  * 注意：WebSocket 重连由 WebSocketHealthMonitor 管理（网络监听、心跳检测等）
@@ -40,16 +43,23 @@ import javax.inject.Singleton
 class MessageServiceManager @Inject constructor(
     @ApplicationContext
     private val context: Context,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    private val webSocketHealthMonitor: WebSocketHealthMonitor
 ) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     companion object {
-        // 设置5分钟间隔：
-        // - 非Doze模式（屏幕亮/充电/移动）：5分钟触发，更及时
-        // - Doze模式：系统自动延长到9-15分钟，符合省电策略
-        private const val ALARM_INTERVAL_MS = 5 * 60 * 1000L // 5分钟
+        // 非精确闹钟间隔（setAndAllowWhileIdle）
+        // - 非Doze模式：3分钟触发
+        // - Doze模式：系统维护窗口触发（初期9-15分钟，深度30分钟-2小时）
+        private const val NON_EXACT_ALARM_INTERVAL_MS = 3 * 60 * 1000L // 3分钟
+
+        // 精确闹钟间隔（setExactAndAllowWhileIdle，需要 SCHEDULE_EXACT_ALARM 权限）
+        // - 非Doze模式：3分钟触发（及时检查）
+        // - Doze模式：系统自动延长到 ~9分钟（符合系统最小限制，不会被延长到几十分钟）
+        private const val EXACT_ALARM_INTERVAL_MS = 3 * 60 * 1000L // 3分钟
+
         private const val ALARM_REQUEST_CODE = 10001
     }
 
@@ -119,22 +129,39 @@ class MessageServiceManager @Inject constructor(
      * 核心检查和恢复逻辑
      *
      * 由 AlarmManager 和 BOOT_COMPLETED 触发
-     * ✅ 检查 Service 存活状态
+     * ✅ 通过 Intent 唤醒或恢复 Service
+     *
      * 注意：调用前需要确保 keepAliveEnabled=true（即保活机制已启用）
+     *
+     * 统一处理所有场景：
+     * 1. Service 正常运行：触发 onStartCommand()，无副作用
+     * 2. Service 被冻结（Doze模式）：Intent 唤醒 Service，恢复执行
+     * 3. Service 被杀死：重新创建并启动 Service
+     *
+     * startService() 的行为：
+     * - Service 存在：只触发 onStartCommand()，不会重新创建
+     * - Service 不存在：创建新实例并启动
      */
     fun checkAndRecover() {
-        // 只检查 Service 存活状态
-        if (!MessageForegroundService.isRunning) {
-            L.w { "[MessageService] Service not running, trying to recover" }
-            tryStartService()
-        }
-    }
+        // 记录当前状态用于日志分析
+        val wasRunning = MessageForegroundService.isRunning
 
-    /**
-     * 尝试启动Service（用于自动恢复场景）
-     */
-    private fun tryStartService() {
+        if (!wasRunning) {
+            L.w { "[MessageService] Service not running, recovering..." }
+        } else {
+            L.i { "[MessageService] Service running, sending wakeup/check intent (may be frozen in Doze)" }
+        }
+
+        // 统一调用启动逻辑（包含降级重试策略）
+        // - 如果 Service 正常运行或被冻结：成功触发 onStartCommand()，无异常
+        // - 如果 Service 被杀死：重新创建，失败时协程异步重试
         doStartService()
+
+        // ✅ 通知 WebSocket 健康监控器：Alarm 已触发
+        // 作用：
+        // 1. 重置重试次数，下次重连立即执行（无 backoff delay）
+        // 2. 如果当前正在 backoff 等待中，立即打断并触发重连
+        webSocketHealthMonitor.onAlarmTriggered()
     }
 
     /**
@@ -173,7 +200,10 @@ class MessageServiceManager @Inject constructor(
 
     /**
      * 调度定时检查（常驻）
-     * ✅ 使用 setAndAllowWhileIdle（更省电）
+     *
+     * 策略：
+     * - 有精确闹钟权限：使用 setExactAndAllowWhileIdle（3分钟间隔，Doze下系统延长到~9分钟）
+     * - 无精确闹钟权限：使用 setAndAllowWhileIdle（3分钟间隔，Doze下延长到30分钟-2小时）
      */
     fun scheduleAlarmCheck() {
         val intent = Intent(context, ServiceCheckReceiver::class.java)
@@ -184,17 +214,47 @@ class MessageServiceManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val triggerTime = SystemClock.elapsedRealtime() + ALARM_INTERVAL_MS
+        // Cancel any existing alarm first to ensure clean state
+        // (Though FLAG_UPDATE_CURRENT should handle this, explicit cancel is clearer)
+        alarmManager.cancel(pendingIntent)
 
-        // 使用 setAndAllowWhileIdle（非精确但更省电）
-        // minSdkVersion 24 >= Android M (API 23)，所以这个方法总是可用
-        alarmManager.setAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            triggerTime,
-            pendingIntent
-        )
+        val hasExactAlarmPermission = hasExactAlarmPermission()
+        val interval = if (hasExactAlarmPermission) EXACT_ALARM_INTERVAL_MS else NON_EXACT_ALARM_INTERVAL_MS
+        val triggerTime = SystemClock.elapsedRealtime() + interval
 
-        L.d { "[MessageService] Alarm scheduled (5 min, Doze mode may extend to 9-15 min)" }
+        if (hasExactAlarmPermission) {
+            // 有权限：使用精确闹钟
+            // - Android 12 以下：不需要权限，直接使用
+            // - Android 12+：需要 SCHEDULE_EXACT_ALARM 权限
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerTime,
+                pendingIntent
+            )
+            L.i { "[MessageService] Exact alarm scheduled (3 min, Doze extends to ~9 min)" }
+        } else {
+            // 无权限：使用非精确闹钟（仅 Android 12+ 且用户未授权）
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerTime,
+                pendingIntent
+            )
+            L.i { "[MessageService] Non-exact alarm scheduled (3 min, Doze may extend to 30min-2hr)" }
+        }
+    }
+
+    /**
+     * 检查是否有精确闹钟权限
+     *
+     * Android 12 (API 31) 开始需要 SCHEDULE_EXACT_ALARM 权限
+     */
+    private fun hasExactAlarmPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            // Android 12 以下不需要权限
+            true
+        }
     }
 
     /**

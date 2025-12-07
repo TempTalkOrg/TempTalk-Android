@@ -204,8 +204,11 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
         MediaConstraints mediaConstraints = new PushMediaConstraints(SentMediaQuality.HIGH);
 
-        imageMaxWidth = mediaConstraints.getImageMaxWidth(requireContext());
-        imageMaxHeight = mediaConstraints.getImageMaxHeight(requireContext());
+        // Dynamic size limit based on device memory to prevent OOM
+        // Low memory devices: 1600 (10MB), Normal devices: 2560 (26MB) vs original 4096 (67MB)
+        int baseDimension = org.thoughtcrime.securesms.util.Util.isLowMemory(requireContext()) ? 1600 : 2560;
+        imageMaxWidth = Math.min(baseDimension, mediaConstraints.getImageMaxWidth(requireContext()));
+        imageMaxHeight = Math.min(baseDimension, mediaConstraints.getImageMaxHeight(requireContext()));
     }
 
     @Nullable
@@ -338,6 +341,18 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
     @Override
     public void notifyHidden() {
+    }
+
+    @Override
+    public void onDestroyView() {
+        // Clean up all blurred bitmaps when fragment view is destroyed
+        // This prevents memory leaks when user leaves the editor
+        clearBlurredBitmaps();
+
+        imageEditorView = null;
+        imageEditorHud = null;
+
+        super.onDestroyView();
     }
 
     private void changeEntityColor(int selectedColor) {
@@ -763,16 +778,36 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
     }
 
     private void performSaveToDisk() {
-        SimpleTask.run(this::renderToSingleUseBlob, uri -> {
+        // Check view lifecycle before accessing
+        if (imageEditorView == null) {
+            L.w(() -> "[ImageEditor] Cannot save: view is null");
+            return;
+        }
+
+        // Get model on UI thread before passing to worker thread
+        final EditorModel model = imageEditorView.getModel();
+        if (model == null) {
+            L.w(() -> "[ImageEditor] Cannot save: model is null");
+            return;
+        }
+
+        final Context context = getContext();
+        if (context == null) {
+            L.w(() -> "[ImageEditor] Cannot save: context is null");
+            return;
+        }
+
+        SimpleTask.run(() -> renderToSingleUseBlob(context, model), uri -> {
+            // Check if fragment is still attached when callback executes
+            if (!isAdded() || getContext() == null) {
+                L.w(() -> "[ImageEditor] Save completed but fragment is detached");
+                return;
+            }
+
             SaveAttachmentTask saveTask = new SaveAttachmentTask(requireContext());
             SaveAttachmentTask.Attachment attachment = new SaveAttachmentTask.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null, true, true);
             saveTask.executeOnExecutor(TTExecutors.BOUNDED, attachment);
         });
-    }
-
-    @WorkerThread
-    public Uri renderToSingleUseBlob() {
-        return renderToSingleUseBlob(requireContext(), imageEditorView.getModel());
     }
 
     @WorkerThread
@@ -1031,6 +1066,24 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
             ((SelectableRenderer) editorElement.getRenderer()).onSelected(selected);
         }
         imageEditorView.getModel().setSelected(selected ? editorElement : null);
+    }
+
+    /**
+     * Clears blurred bitmaps from the main image renderer to free memory.
+     * Called after editing is complete to reduce memory footprint.
+     * Blurred bitmaps will be recreated if needed during rendering (e.g., when sending).
+     */
+    public void clearBlurredBitmaps() {
+        if (imageEditorView != null && imageEditorView.getModel() != null) {
+            EditorModel model = imageEditorView.getModel();
+            EditorElement mainImage = model.getMainImage();
+            if (mainImage != null) {
+                Renderer renderer = mainImage.getRenderer();
+                if (renderer instanceof UriGlideRenderer) {
+                    ((UriGlideRenderer) renderer).clearBlurredBitmap();
+                }
+            }
+        }
     }
 
     private final OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {

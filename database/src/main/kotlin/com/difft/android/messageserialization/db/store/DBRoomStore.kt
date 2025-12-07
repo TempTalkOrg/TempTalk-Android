@@ -2,6 +2,8 @@ package com.difft.android.messageserialization.db.store
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.IMessageNotificationUtil
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import org.difft.app.database.convertToContactorModel
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.mentions
@@ -92,6 +94,9 @@ class DBRoomStore @Inject constructor(
             arrayOf(DBRoomModel.messageExpiry, DBRoomModel.messageClearAnchor),
             DBRoomModel.roomId.eq(forWhat.id)
         )
+
+        // ✅ 通知UI刷新
+        RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
     override fun getMessageExpiry(forWhat: For): Single<Optional<Long>> {
@@ -109,11 +114,17 @@ class DBRoomStore @Inject constructor(
                 DBRoomModel.muteStatus,
                 DBRoomModel.roomId.eq(forWhat.id)
             )
+
+            // ✅ 通知UI刷新
+            RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
         }
 
     fun updateMuteStatus(id: String, muteStatus: Int?): Completable = Completable.fromAction {
         L.i { "[DBRoomStore] updateMuteStatus  id:${id} muteStatus: $muteStatus" }
         wcdb.room.updateValue(muteStatus ?: 0, DBRoomModel.muteStatus, DBRoomModel.roomId.eq(id))
+
+        // ✅ 通知UI刷新
+        RoomChangeTracker.trackRoom(id, RoomChangeType.REFRESH)
     }
 
     override fun getMuteStatus(forWhat: For): Single<Optional<Int>> {
@@ -131,6 +142,9 @@ class DBRoomStore @Inject constructor(
             DBRoomModel.pinnedTime,
             DBRoomModel.roomId.eq(forWhat.id)
         )
+
+        // ✅ 通知UI刷新
+        RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
     override fun getPinnedTime(forWhat: For): Single<Optional<Long>> {
@@ -186,6 +200,9 @@ class DBRoomStore @Inject constructor(
                 room.updateRoomUnreadState(readPosition)
                 L.i { "[Message] Read position advanced from ${room.readPosition} to $readPosition for ${room.roomId}, clearing notifications" }
                 messageNotificationUtil.cancelNotificationsByConversation(room.roomId)
+
+                // ✅ 触发会话列表刷新，更新未读徽章
+                RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
             }
 
             updatingReadPositions.remove(forWhat.id, readPosition)

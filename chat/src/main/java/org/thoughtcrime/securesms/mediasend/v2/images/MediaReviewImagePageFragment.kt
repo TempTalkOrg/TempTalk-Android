@@ -124,6 +124,10 @@ class MediaReviewImagePageFragment : Fragment(R.layout.fragment_container), Imag
     override fun onDoneEditing() {
         imageEditorFragment?.setMode(ImageEditorHudV2.Mode.NONE)
 
+        // Clear blurred bitmaps immediately after editing to free memory (saves ~17MB per blurred image)
+        // Blurred bitmaps will be recreated if needed when sending the image
+        imageEditorFragment?.clearBlurredBitmaps()
+
         if (isResumed) {
             imageEditorFragment?.let {
                 sharedViewModel.setEditorState(requireUri(), requireNotNull(it.saveState()))

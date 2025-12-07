@@ -8,6 +8,8 @@ import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.chat.databinding.ChatItemGroupBinding
 import com.difft.android.chat.group.getAvatarData
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.disposables.Disposable
 import org.difft.app.database.models.GroupModel
 
 abstract class GroupsAdapter : ListAdapter<GroupModel, GroupItemViewHolder>(object : DiffUtil.ItemCallback<GroupModel>() {
@@ -37,11 +39,7 @@ class GroupItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
     private val binding = ChatItemGroupBinding.bind(itemView)
 
     fun bind(data: GroupModel) {
-        if (TextSizeUtil.isLager()) {
-            binding.textviewGroupName.textSize = 24f
-        } else {
-            binding.textviewGroupName.textSize = 16f
-        }
+        binding.textviewGroupName.textSize = if (TextSizeUtil.isLarger) 24f else 16f
         binding.textviewGroupName.text = data.name
         binding.imageviewGroup.setAvatar(data.avatar?.getAvatarData())
     }

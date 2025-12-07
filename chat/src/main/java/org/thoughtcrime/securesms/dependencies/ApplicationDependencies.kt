@@ -1,5 +1,6 @@
 package org.thoughtcrime.securesms.dependencies
 
+import android.annotation.SuppressLint
 import android.app.Application
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.websocket.api.SignalServiceAccountManager
@@ -43,43 +44,78 @@ object ApplicationDependencies {
     @JvmStatic
     fun getApplication(): Application = _application
 
-    @JvmStatic
-    fun getJobManager(): JobManager = jobManagerInstance
+    // Use separate locks for each component to avoid blocking across different initializations
+    private val jobManagerLock = Any()
+    private val signalServiceAccountManagerLock = Any()
+    private val messageStoreLock = Any()
+    private val exoPlayerPoolLock = Any()
+    private val environmentHelperLock = Any()
+
+    @Volatile
+    private var jobManagerInstance: JobManager? = null
+    @Volatile
+    private var signalServiceAccountManagerInstance: SignalServiceAccountManager? = null
+    @Volatile
+    private var messageStoreInstance: MessageStore? = null
+    @Volatile
+    @SuppressLint("StaticFieldLeak")
+    private var exoPlayerPoolInstance: SimpleExoPlayerPool? = null
+    @Volatile
+    private var environmentHelperInstance: EnvironmentHelper? = null
 
     @JvmStatic
-    fun getSignalServiceAccountManager(): SignalServiceAccountManager = signalServiceAccountManagerInstance
-
-    @JvmStatic
-    fun getMessageStore(): MessageStore = messageStoreInstance
-
-    @JvmStatic
-    fun getExoPlayerPool(): SimpleExoPlayerPool = exoPlayerPoolInstance
-
-    @JvmStatic
-    fun getEnvironmentHelper(): EnvironmentHelper = environmentHelperInstance
-
-    // Lazy instances for internal use
-    private val jobManagerInstance: JobManager by lazy {
-        provider.provideJobManager()
+    fun getJobManager(): JobManager {
+        jobManagerInstance?.let { return it }
+        synchronized(jobManagerLock) {
+            return jobManagerInstance ?: run {
+                provider.provideJobManager().also { jobManagerInstance = it }
+            }
+        }
     }
 
-    private val signalServiceAccountManagerInstance: SignalServiceAccountManager by lazy {
-        val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
-        provider.provideSignalServiceAccountManager(entryPoint.chatConfig)
+    @JvmStatic
+    fun getSignalServiceAccountManager(): SignalServiceAccountManager {
+        signalServiceAccountManagerInstance?.let { return it }
+        synchronized(signalServiceAccountManagerLock) {
+            return signalServiceAccountManagerInstance ?: run {
+                val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
+                provider.provideSignalServiceAccountManager(entryPoint.chatConfig).also {
+                    signalServiceAccountManagerInstance = it
+                }
+            }
+        }
     }
 
-    private val messageStoreInstance: MessageStore by lazy {
-        val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
-        entryPoint.messageStore
+    @JvmStatic
+    fun getMessageStore(): MessageStore {
+        messageStoreInstance?.let { return it }
+        synchronized(messageStoreLock) {
+            return messageStoreInstance ?: run {
+                val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
+                entryPoint.messageStore.also { messageStoreInstance = it }
+            }
+        }
     }
 
-    private val exoPlayerPoolInstance: SimpleExoPlayerPool by lazy {
-        provider.provideExoPlayerPool()
+    @JvmStatic
+    fun getExoPlayerPool(): SimpleExoPlayerPool {
+        exoPlayerPoolInstance?.let { return it }
+        synchronized(exoPlayerPoolLock) {
+            return exoPlayerPoolInstance ?: run {
+                provider.provideExoPlayerPool().also { exoPlayerPoolInstance = it }
+            }
+        }
     }
 
-    private val environmentHelperInstance: EnvironmentHelper by lazy {
-        val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
-        entryPoint.environmentHelper
+    @JvmStatic
+    fun getEnvironmentHelper(): EnvironmentHelper {
+        environmentHelperInstance?.let { return it }
+        synchronized(environmentHelperLock) {
+            return environmentHelperInstance ?: run {
+                val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
+                entryPoint.environmentHelper.also { environmentHelperInstance = it }
+            }
+        }
     }
 
     interface Provider {

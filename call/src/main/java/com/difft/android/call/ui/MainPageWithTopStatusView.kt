@@ -79,7 +79,6 @@ fun MainPageWithTopStatusView(
     val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
     val callType by viewModel.callType.collectAsState()
     val screenSharingUser by viewModel.screenSharingUser.collectAsState()
-    val isCriticalAlertEnable by viewModel.callUiController.isCriticalAlertEnable.collectAsState(false)
 
     var screenShareUserName: String? by remember { mutableStateOf(null) }
     var rotationAngle by remember { mutableFloatStateOf(0f) }
@@ -301,7 +300,7 @@ fun MainPageWithTopStatusView(
                 }
             }
 
-            if(isCriticalAlertEnable) {
+            if(viewModel.is1v1ShowCriticalAlertEnable(callStatus)) {
                 CallCriticalAlertView(
                     clicked = {
                         callIntent.conversationId?.let {

@@ -121,8 +121,9 @@ data class Group(
     val privateChat: Boolean,
     val anyoneChangeAutoClear: Boolean,
     val autoClear: Boolean,
-    val messageClearAnchor: Long
-)
+    val messageClearAnchor: Long,
+    val criticalAlert: Boolean = false,
+    )
 
 data class Member(
     val uid: String?,
@@ -143,7 +144,7 @@ data class Member(
 data class PublicConfigs(
     val meetingVersion: Int = 0,
     val publicName: String = "",
-    val msgEncVersion: Int = 0
+    val msgEncVersion: Int = 0,
 )
 
 data class PrivateConfigs(
