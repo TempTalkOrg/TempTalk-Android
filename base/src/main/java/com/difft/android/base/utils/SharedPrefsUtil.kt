@@ -27,13 +27,33 @@ object SharedPrefsUtil {
         return sharedPreferences.getString(key, defaultValue)
     }
 
-    fun getInt(key: String): Int {
-        return sharedPreferences.getInt(key, 0)
+    fun getInt(key: String, defaultValue: Int = 0): Int {
+        return sharedPreferences.getInt(key, defaultValue)
+    }
+
+    fun getLong(key: String, defaultValue: Long = 0L): Long {
+        return sharedPreferences.getLong(key, defaultValue)
+    }
+
+    fun getBoolean(key: String, defaultValue: Boolean = false): Boolean {
+        return sharedPreferences.getBoolean(key, defaultValue)
+    }
+
+    fun putBoolean(key: String, value: Boolean) {
+        sharedPreferences.edit {
+            putBoolean(key, value)
+        }
     }
 
     fun putInt(key: String, value: Int) {
         sharedPreferences.edit {
             putInt(key, value)
+        }
+    }
+
+    fun putLong(key: String, value: Long) {
+        sharedPreferences.edit {
+            putLong(key, value)
         }
     }
 

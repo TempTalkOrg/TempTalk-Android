@@ -24,6 +24,8 @@ import com.difft.android.chat.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -41,6 +43,9 @@ class VoiceRecorderView @JvmOverloads constructor(
     private val cancelZone: AppCompatImageView
     private val tvTips: AppCompatTextView
     private val tvStop: AppCompatTextView
+
+    // View 级别的协程作用域，与 View 生命周期绑定
+    private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var startY = 0f
     private var isRecording = false
@@ -73,6 +78,28 @@ class VoiceRecorderView @JvmOverloads constructor(
         tvStop.background = TooltipBackgroundDrawable()
 
         initListeners()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // View 被销毁时，取消所有协程，避免内存泄漏
+        viewScope.cancel()
+        amplitudeUpdateJob?.cancel()
+        countdownJob?.cancel()
+
+        // 同步停止 MediaRecorder，避免资源泄漏
+        try {
+            mediaRecorder?.apply {
+                stop()
+                release()
+            }
+            mediaRecorder = null
+        } catch (e: Exception) {
+            L.i { "[VoiceRecorder] cleanup MediaRecorder failed: ${e.message}" }
+        }
+
+        releaseAudioFocus()
+        L.i { "[VoiceRecorder] View detached, all resources cleaned up" }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -121,7 +148,7 @@ class VoiceRecorderView @JvmOverloads constructor(
     }
 
     private fun startCountdown() {
-        countdownJob = CoroutineScope(Dispatchers.Main).launch {
+        countdownJob = viewScope.launch {
             while (isActive) {
                 val elapsedTime = System.currentTimeMillis() - recordingStartTime
                 val remainingTime = MAX_RECORDING_DURATION_MS - elapsedTime
@@ -135,9 +162,7 @@ class VoiceRecorderView @JvmOverloads constructor(
                 }
 
                 if (elapsedTime >= MAX_RECORDING_DURATION_MS) {
-                    withContext(Dispatchers.Main) {
-                        stopRecording()
-                    }
+                    stopRecording()
                     break
                 }
 
@@ -183,20 +208,41 @@ class VoiceRecorderView @JvmOverloads constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setOnAudioFocusChangeListener { focusChange ->
+                    // ✅ 检查录音状态，避免在 MediaRecorder 已停止时操作
+                    if (!isRecording) {
+                        L.i { "[VoiceRecorder] Audio focus changed but not recording, ignore" }
+                        return@setOnAudioFocusChangeListener
+                    }
+
                     when (focusChange) {
                         AudioManager.AUDIOFOCUS_LOSS -> {
-                            // 丧失音频焦点，暂停录音
-                            mediaRecorder?.pause()
+                            // 丧失音频焦点，直接停止录音（不只是暂停）
+                            L.i { "[VoiceRecorder] Audio focus lost, stop recording" }
+                            try {
+                                stopRecording()
+                            } catch (e: Exception) {
+                                L.i { "[VoiceRecorder] Stop recording failed: ${e.message}" }
+                            }
                         }
 
                         AudioManager.AUDIOFOCUS_GAIN -> {
                             // 获取音频焦点，继续录音
-                            mediaRecorder?.resume()
+                            L.i { "[VoiceRecorder] Audio focus gained" }
+                            try {
+                                mediaRecorder?.resume()
+                            } catch (e: Exception) {
+                                L.i { "[VoiceRecorder] Resume failed: ${e.message}" }
+                            }
                         }
 
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                             // 临时丧失音频焦点（短暂丧失），暂停录音
-                            mediaRecorder?.pause()
+                            L.i { "[VoiceRecorder] Audio focus lost transient, pause recording" }
+                            try {
+                                mediaRecorder?.pause()
+                            } catch (e: Exception) {
+                                L.i { "[VoiceRecorder] Pause failed: ${e.message}" }
+                            }
                         }
                     }
                 }
@@ -220,7 +266,7 @@ class VoiceRecorderView @JvmOverloads constructor(
 
 
     private fun startAmplitudeUpdates() {
-        amplitudeUpdateJob = CoroutineScope(Dispatchers.IO).launch {
+        amplitudeUpdateJob = viewScope.launch(Dispatchers.IO) {
             while (isActive) {
                 try {
                     val amplitude = mediaRecorder?.maxAmplitude?.toFloat() ?: 0f
@@ -291,38 +337,56 @@ class VoiceRecorderView @JvmOverloads constructor(
 
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
-        stopMediaRecorder()
-        releaseAudioFocus()
 
-        when {
-            isCancelled -> {
-                L.i { "[VoiceRecorder] Recording cancelled, file deleted." }
-                deleteRecordingFile()
-                recordingCallback?.invoke(RecordingState.Cancelled)
+        // 在后台线程停止 MediaRecorder，避免阻塞主线程
+        viewScope.launch(Dispatchers.IO) {
+            try {
+                stopMediaRecorder()
+                releaseAudioFocus()
+            } catch (e: Exception) {
+                L.i { "[VoiceRecorder] Error during stop: ${e.message}" }
             }
 
-            recordingDuration < MIN_RECORDING_DURATION_MS -> {
-                L.i { "[VoiceRecorder] Recording too short, file deleted." }
-                deleteRecordingFile()
-                recordingCallback?.invoke(RecordingState.TooShort)
-            }
+            // 在主线程更新 UI 和回调，确保无论是否发生异常都会执行
+            withContext(Dispatchers.Main) {
+                // 检查 View 是否还附加在窗口上，避免操作已销毁的 View
+                if (!isAttachedToWindow) {
+                    L.i { "[VoiceRecorder] View detached, skip UI update" }
+                    return@withContext
+                }
 
-            else -> {
-                L.i { "[VoiceRecorder] Recording saved. Duration:$recordingDuration  path:$outputFilePath" }
-                outputFilePath?.let { path ->
-                    // 检查文件大小
-                    val file = java.io.File(path)
-                    if (file.exists() && file.length() > 10 * 1024 * 1024) { // 10MB
+                when {
+                    isCancelled -> {
+                        L.i { "[VoiceRecorder] Recording cancelled, file deleted." }
                         deleteRecordingFile()
-                        recordingCallback?.invoke(RecordingState.TooLarge)
-                    } else {
-                        recordingCallback?.invoke(RecordingState.Stopped(filePath = path))
+                        recordingCallback?.invoke(RecordingState.Cancelled)
+                    }
+
+                    recordingDuration < MIN_RECORDING_DURATION_MS -> {
+                        L.i { "[VoiceRecorder] Recording too short, file deleted." }
+                        deleteRecordingFile()
+                        recordingCallback?.invoke(RecordingState.TooShort)
+                    }
+
+                    else -> {
+                        L.i { "[VoiceRecorder] Recording saved. Duration:$recordingDuration  path:$outputFilePath" }
+                        outputFilePath?.let { path ->
+                            // 检查文件大小
+                            val file = java.io.File(path)
+                            if (file.exists() && file.length() > 10 * 1024 * 1024) { // 10MB
+                                deleteRecordingFile()
+                                recordingCallback?.invoke(RecordingState.TooLarge)
+                            } else {
+                                recordingCallback?.invoke(RecordingState.Stopped(filePath = path))
+                            }
+                        }
                     }
                 }
+
+                // 确保无论什么情况都重置 UI
+                resetButton()
             }
         }
-
-        resetButton()
     }
 
 
@@ -334,7 +398,6 @@ class VoiceRecorderView @JvmOverloads constructor(
             } catch (e: Exception) {
                 e.printStackTrace()
                 L.i { "[VoiceRecorder] stop failed:" + e.stackTraceToString() }
-                resetButton()
             }
         }
         mediaRecorder = null

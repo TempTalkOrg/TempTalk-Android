@@ -20,6 +20,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.util.Rational
 import android.view.WindowManager
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
@@ -139,6 +140,8 @@ class LCallActivity : AppCompatActivity() {
     private var proximitySensor: Sensor? = null
     private var proximitySensorListener: SensorEventListener? = null
 
+    private lateinit var backPressedCallback: OnBackPressedCallback
+
     private val viewModel: LCallViewModel by viewModelByFactory {
         LCallViewModel(
             e2eeEnable = true,
@@ -179,6 +182,8 @@ class LCallActivity : AppCompatActivity() {
         initializePictureInPictureParams()
 
         initializeFaceFittingScreen()
+
+        registerOnBackPressedHandler()
     }
 
     private fun getCallIntent(): CallIntent {
@@ -584,14 +589,6 @@ class LCallActivity : AppCompatActivity() {
         enterPipModeIfPossible(tag = "onUserLeaveHint")
     }
 
-    @SuppressLint("MissingSuperCall")
-    override fun onBackPressed() {
-        L.i { "[Call] LCallActivity onBackPressed" }
-        if (!enterPipModeIfPossible(tag = "onBackPressed")) {
-            super.onBackPressed()
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         L.i { "[Call] LCallActivity onDestroy start." }
@@ -621,6 +618,10 @@ class LCallActivity : AppCompatActivity() {
 
         viewModel.getRoomId()?.let { roomId ->
             LCallManager.updateCallingState(roomId, false)
+        }
+
+        if (::backPressedCallback.isInitialized) {
+            backPressedCallback.remove()
         }
         L.i { "[Call] LCallActivity onDestroy end." }
     }
@@ -1162,5 +1163,15 @@ class LCallActivity : AppCompatActivity() {
             getString(R.string.call_join_failed_tip)
 
         showStyledPopTip(tipTextInfo, onDismiss = { endCallAndClearResources() })
+    }
+
+    private fun registerOnBackPressedHandler() {
+        backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                L.i { "[Call] LCallActivity onBackPressed" }
+                enterPipModeIfPossible("back pressed")
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
     }
 }

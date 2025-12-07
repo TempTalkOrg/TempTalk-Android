@@ -217,18 +217,6 @@ class SelectChatsUtils @Inject constructor() {
     }
 
 
-    fun saveToNotes(
-        context: Activity,
-        content: String,
-        forwardContext: ForwardContext? = null,
-        me: ContactorModel
-    ) {
-        val meChatsContact = ChatsContact(me.id ?: "", me.getDisplayNameForUI(), me.avatar, me.getDisplayNameForUI().getFirstLetter(), false, ITEM_TYPE_CHAT, null)
-
-        sendToWithoutShowDialog(context, meChatsContact, content, forwardContext)
-    }
-
-
     fun search() {
         dialogScope.launch(Dispatchers.IO) {
             // 并发查询所有数据
@@ -408,9 +396,8 @@ class SelectChatsUtils @Inject constructor() {
         )
     }
 
-    private fun sendToWithoutShowDialog(
+    fun saveToNotes(
         context: Activity,
-        chatsContact: ChatsContact,
         content: String,
         forwardContext: ForwardContext? = null
     ) {
@@ -425,8 +412,8 @@ class SelectChatsUtils @Inject constructor() {
                         givePermissionForAttachments(
                             context,
                             content,
-                            chatsContact.id,
-                            chatsContact.isGroup,
+                            globalServices.myId,
+                            false,
                             list,
                             forwardContext
                         )
@@ -441,8 +428,8 @@ class SelectChatsUtils @Inject constructor() {
                         sendTextPush(
                             context,
                             content,
-                            chatsContact.id,
-                            chatsContact.isGroup,
+                            globalServices.myId,
+                            false,
                             forwardContext,
                             sharedContactId = forwardContext.sharedContactId,
                             sharedContactName = forwardContext.sharedContactName
@@ -456,7 +443,7 @@ class SelectChatsUtils @Inject constructor() {
         } else {
             dialogScope.launch(Dispatchers.IO) {
                 try {
-                    sendTextPush(context, content, chatsContact.id, chatsContact.isGroup)
+                    sendTextPush(context, content, globalServices.myId, false)
                     handleTaskSuccess(R.string.chat_sent)
                 } catch (e: Exception) {
                     handleTaskError(e)

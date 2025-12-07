@@ -62,4 +62,5 @@ interface LCallToChatController {
 
     fun startForegroundService(context: Context, intent: Intent)
 
+    fun getIncomingCallRoomId(): String?
 }

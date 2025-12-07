@@ -70,7 +70,7 @@
     <string name="chat_message_action_voice2text">转文字</string>
     <string name="chat_message_action_voice2text_off">取消转文字</string>
     <string name="chat_message_action_voice2text_tip_title">信息</string>
-    <string name="chat_message_action_voice2text_tip_info">语音转文字由TempTalk服务器提供</string>
+    <string name="chat_message_action_voice2text_tip_info">语音转文字由Yelling服务器提供</string>
     <string name="chat_message_action_voice2text_tip_ok">确定</string>
     <string name="chat_message_action_select_multiple">选择多个</string>
     <string name="chat_message_action_combine_forward">合并转发</string>
@@ -378,7 +378,7 @@
     <string name="invite_enter_code_to_add">输入邀请码添加朋友</string>
     <string name="invite_copy_link">复制链接</string>
     <string name="invite_cancel">取消</string>
-    <string name="invite_tips">在TempTalk上跟我聊天%s</string>
+    <string name="invite_tips">在Yelling上跟我聊天%s</string>
     <string name="invite_regenerate_dialog_title">重新生成邀请码</string>
     <string name="invite_regenerate_dialog_content">旧的邀请码将过期。您确定要继续吗？</string>
     <string name="invite_regenerate_dialog_cancel">取消</string>
@@ -471,6 +471,7 @@
     <string name="notification_no_permission_tip3">请确保开启通知及全屏通知功能，以便您能正常接收到消息和接听电话。</string>
     <string name="notification_no_permission_tip4">请开启后台弹窗权限和横幅通知权限，允许%s在锁屏时显示来电界面。</string>
     <string name="notification_no_permission_tip5">请开启后台弹窗权限和锁屏显示权限，允许%s在锁屏时显示来电界面。</string>
+    <string name="notification_no_permission_tip6">请开启横幅通知权限，允许%s在锁屏时显示来电界面。</string>
     <string name="notification_disturb_tip">“请勿打扰”已开启，您可能收不到通知。</string>
     <string name="notification_no_google_tip">您的设备上没有谷歌服务，请保持开启后台连接，以便能正常接收到消息和接听电话。</string>
     <string name="notification_ignore">稍后</string>
@@ -511,6 +512,7 @@
     <string name="download_started">附件下载已开始</string>
     <string name="download_success">附件下载完成</string>
     <string name="download_failed">下载失败，请重试</string>
+    <string name="file_expired">文件已过期</string>
     <string name="download_downloading">下载中，请稍候…</string>
 
 
@@ -601,7 +603,7 @@
 
     <string name="background_connection">后台连接</string>
     <string name="background_connection_enabled">后台连接已启用</string>
-    <string name="background_connection_tips">保持TempTalk低影响后台连接以获得可靠的通知。</string>
+    <string name="background_connection_tips">保持Yelling低影响后台连接以获得可靠的通知。</string>
 
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_notify_content">以下消息将在阅读后的 %1$s 内被删除。</string>

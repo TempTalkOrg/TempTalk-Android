@@ -3,7 +3,6 @@ package com.difft.android.chat.recent
 import android.app.Activity
 import android.content.Context
 import android.text.TextUtils
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.call.CallDataSourceType
 import com.difft.android.base.call.CallType
@@ -16,13 +15,12 @@ import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sampleAfterFirst
-import org.difft.app.database.updateRoomUnreadState
-import org.difft.app.database.wcdb
 import com.difft.android.base.viewmodel.DisposableManageViewModel
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
-import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.DraftRepository
 import com.difft.android.network.BaseResponse
@@ -31,8 +29,8 @@ import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.requests.ConversationSetRequestBody
-import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import difft.android.messageserialization.For
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
@@ -51,12 +49,14 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
 import org.difft.app.database.observeTable
-import util.TimeFormatter
+import org.difft.app.database.updateRoomUnreadState
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.AppIconBadgeManager
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import util.TimeFormatter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.minutes
-import com.difft.android.base.widget.ToastUtil
+
 @HiltViewModel
 class RecentChatViewModel @Inject constructor(
     private val dbRoomStore: DBRoomStore,
@@ -83,6 +83,7 @@ class RecentChatViewModel @Inject constructor(
                 DBRoomModel.roomId.notEq("server")
                     .and(DBRoomModel.roomName.notNull())
                     .and(DBRoomModel.roomName.notEq(""))
+                    .and(DBRoomModel.lastActiveTime.notEq(0L))
             )
             L.i { "[ChatList] latestRoomModelsFlow receive new room flow size: ${newRooms.size}" }
             newRooms
@@ -154,13 +155,15 @@ class RecentChatViewModel @Inject constructor(
         }.flowOn(Dispatchers.IO).launchIn(viewModelScope)
     }
 
-    fun createNote(activity: Activity) {
-        dbRoomStore.findOrCreateRoomModel(For.Account(globalServices.myId), pinnedTime = System.currentTimeMillis())
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({}, { error ->
+    fun createNote() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                dbRoomStore.createRoomIfNotExist(For.Account(globalServices.myId))
+            } catch (error: Exception) {
                 error.printStackTrace()
-            })
+                L.e { "createNote error: ${error.stackTraceToString()}" }
+            }
+        }
     }
 
 

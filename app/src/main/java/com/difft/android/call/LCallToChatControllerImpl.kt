@@ -633,4 +633,8 @@ class LCallToChatControllerImpl @Inject constructor(
         }
     }
 
+    override fun getIncomingCallRoomId(): String? {
+        return LIncomingCallActivity.getCurrentRoomId()
+    }
+
 }

@@ -62,7 +62,20 @@ class VoiceMessageView @JvmOverloads constructor(
 
         val isCurrentDeviceSend = audioMessage.isMine && audioMessage.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
         if (!isCurrentDeviceSend) {
-            // Priority 1: Show fail view if download failed
+            // Priority 1: Show expired view if file has expired
+            val isExpired = if (progress != null) {
+                progress == -2
+            } else {
+                attachment.status == AttachmentStatus.EXPIRED.code
+            }
+
+            if (isExpired) {
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.file_expired)
+                return
+            }
+
+            // Priority 2: Show fail view if download failed
             val isFailed = if (progress != null) {
                 progress == -1
             } else {

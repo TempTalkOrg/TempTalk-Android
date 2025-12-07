@@ -204,6 +204,17 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                         }
                     }
                 }
+
+                if(activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
+                    launch(Dispatchers.IO) {
+                        val callInfo = LCallManager.getCallFeedbackInfo()
+                        if(callInfo != null && !activity.isDestroyed){
+                            withContext(Dispatchers.Main) {
+                                LCallManager.showCallFeedbackView(activity, callInfo)
+                            }
+                        }
+                    }
+                }
             }
 
             override fun onActivityPaused(activity: Activity) {

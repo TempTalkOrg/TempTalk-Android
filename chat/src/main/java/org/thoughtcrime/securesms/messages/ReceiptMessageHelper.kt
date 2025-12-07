@@ -24,6 +24,7 @@ import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBReadInfoModel
 import org.difft.app.database.models.ReadInfoModel
+import org.difft.app.database.getGroupMemberCount
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import java.lang.reflect.Type
@@ -93,6 +94,15 @@ class ReceiptMessageHelper @Inject constructor(
 
         if (signalService.conversation is For.Group) {
             val groupId = signalService.conversation.id
+
+            // 如果是大群（群人数大于阈值），不处理已读回执（机密消息除外）
+            val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
+            val memberCount = wcdb.getGroupMemberCount(groupId)
+            if (memberCount > threshold && mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
+                L.i { "[ReceiptMessageHelper] Large group with $memberCount members (threshold: $threshold), skipping read receipt processing" }
+                return
+            }
+
             if (mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
                 receiptMessage.timestampList?.forEach { timestamp ->
                     val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp)) ?: run {

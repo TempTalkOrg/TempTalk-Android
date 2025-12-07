@@ -286,13 +286,13 @@ class ChatForwardMessageActivity : BaseActivity() {
         progress: Int?,
         messageId: String
     ): Boolean {
-        // Check if download failed
-        val isFailed = if (progress != null) {
-            progress == -1
+        // Check if download failed or expired
+        val isFailedOrExpired = if (progress != null) {
+            progress == -1 || progress == -2
         } else {
-            attachment.status == AttachmentStatus.FAILED.code
+            attachment.status == AttachmentStatus.FAILED.code || attachment.status == AttachmentStatus.EXPIRED.code
         }
-        if (isFailed) return true
+        if (isFailedOrExpired) return true
 
         // Check if large file needs manual download (>10M)
         val fileSize = attachment.size

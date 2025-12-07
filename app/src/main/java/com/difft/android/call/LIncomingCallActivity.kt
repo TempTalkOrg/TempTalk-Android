@@ -15,6 +15,7 @@ import android.util.Rational
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -54,6 +55,8 @@ class LIncomingCallActivity : AppCompatActivity() {
         CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
     }
 
+    private lateinit var backPressedCallback: OnBackPressedCallback
+
     companion object {
         private var isActivityShowing: Boolean = false
         private var isInForeground: Boolean = false
@@ -86,6 +89,8 @@ class LIncomingCallActivity : AppCompatActivity() {
         initializePictureInPictureParams()
 
         setupCallControlMessageListener()
+
+        registerOnBackPressedHandler()
     }
 
     private fun initializeActivityState() {
@@ -250,6 +255,9 @@ class LIncomingCallActivity : AppCompatActivity() {
         LCallManager.isIncomingCalling = false
         currentRoomId = null
         LCallManager.clearControlMessage()
+        if (::backPressedCallback.isInitialized) {
+            backPressedCallback.remove()
+        }
     }
 
 
@@ -393,5 +401,15 @@ class LIncomingCallActivity : AppCompatActivity() {
         }else {
             hangUpTheCall("accept: join the call")
         }
+    }
+
+    private fun registerOnBackPressedHandler() {
+        backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                L.i { "[Call] LIncomingActivity onBackPressed" }
+                enterPipModeIfPossible("back pressed")
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
     }
 }

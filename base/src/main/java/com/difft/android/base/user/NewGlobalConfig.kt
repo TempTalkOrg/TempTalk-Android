@@ -30,7 +30,6 @@ data class Data(
     val vega: String?,
     val voteExpireConfig: List<Int>?,
     val weaAppBotId: String?,
-    val installationGuideUrl: String?,
     var verifyCodePattern: String?,
     var enableDoh: Boolean,
     val dohv2: DohV2,

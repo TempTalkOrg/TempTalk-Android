@@ -1,5 +1,6 @@
 package com.difft.android.call.repo
 
+import com.difft.android.base.call.CallFeedbackRequestBody
 import com.difft.android.base.call.CallListResponseData
 import com.difft.android.base.call.ControlMessageRequestBody
 import com.difft.android.base.call.ControlMessageResponseData
@@ -54,5 +55,9 @@ interface LCallHttpService {
         @Header("Authorization") authorization: String,
     ): Single<BaseResponse<ServiceUrlData>>
 
-
+    @POST("v3/call/feedback")
+    fun callFeedback(
+        @Header("Authorization") authorization: String,
+        @Body request: CallFeedbackRequestBody
+    ): Single<BaseResponse<Unit>>
 }

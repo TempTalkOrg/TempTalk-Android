@@ -75,6 +75,7 @@ fun generateMessageTwo(
     record: MessageModel,
     contactor: List<ContactorModel>,
     readInfoList: List<ReadInfoModel>?,
+    isLargeGroup: Boolean = false
 ): ChatMessage? {
     val myId = globalServices.myId
     val isFromMySelf = globalServices.myId == record.fromWho
@@ -119,22 +120,33 @@ fun generateMessageTwo(
                         this.readStatus = if ((readInfo?.readPosition ?: 0) >= systemShowTimestamp) 1 else 0
                     }
                 } else {
+                    // 群聊消息的已读状态处理
                     if (record.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
+                        // 机密消息的已读处理
                         val readInfos = parseReadInfo(record.readInfo)
                         this.readContactNumber = readInfos?.size ?: 0
                     } else {
-                        val readInfos = readInfoList?.filter { it.readPosition >= systemShowTimestamp }
-                        val receiverIds = parseReceiverIds(record.receiverIds)
-
-                        if (receiverIds == null || readInfos == null) {
-                            this.readContactNumber = 0
-                            this.readStatus = 0
+                        // 使用传入的 isLargeGroup 参数判断
+                        if (isLargeGroup) {
+                            // 大群：直接标记为已读
+                            val receiverIds = parseReceiverIds(record.receiverIds)
+                            this.readContactNumber = receiverIds?.size ?: 0
+                            this.readStatus = 1
                         } else {
-                            val readContactIds = readInfos.map { it.uid }.toSet()
-                            // 计算已读人数：统计有多少接收者已经读了消息
-                            this.readContactNumber = receiverIds.count { receiverId -> readContactIds.contains(receiverId) }
-                            // 设置已读状态：所有接收者都已读则为1，否则为0
-                            this.readStatus = if (readContactIds.containsAll(receiverIds)) 1 else 0
+                            // 普通群：计算实际已读状态
+                            val readInfos = readInfoList?.filter { it.readPosition >= systemShowTimestamp }
+                            val receiverIds = parseReceiverIds(record.receiverIds)
+
+                            if (receiverIds == null || readInfos == null) {
+                                this.readContactNumber = 0
+                                this.readStatus = 0
+                            } else {
+                                val readContactIds = readInfos.map { it.uid }.toSet()
+                                // 计算已读人数：统计有多少接收者已经读了消息
+                                this.readContactNumber = receiverIds.count { receiverId -> readContactIds.contains(receiverId) }
+                                // 设置已读状态：所有接收者都已读则为1，否则为0
+                                this.readStatus = if (readContactIds.containsAll(receiverIds)) 1 else 0
+                            }
                         }
                     }
                 }

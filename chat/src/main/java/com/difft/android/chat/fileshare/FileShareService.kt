@@ -22,6 +22,16 @@ interface FileShareService {
     @POST("v1/file/uploadInfo")
     fun uploadInfo(@Body uploadInfoReq: UploadInfoReq): Call<BaseResponse<UploadInfoResp>>
 
+    /**
+     * Download file from server
+     * Status codes:
+     * - 0: OK
+     * - 1: INVALID_PARAMETER
+     * - 2: NO_PERMISSION (File expired)
+     * - 9: NO_SUCH_FILE
+     * - 12: INVALID_FILE
+     * - 99: OTHER_ERROR
+     */
     @POST("v1/file/download")
     fun download(@Body downloadReq: DownloadReq): Call<BaseResponse<DownloadResp>>
 }

@@ -6,9 +6,10 @@ import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.chat.PendingMessageHelper
-import com.difft.android.chat.data.PushCustomContent
 import com.difft.android.chat.data.NOTIFY_TYPE_CALL_HANGUP
-import difft.android.messageserialization.For
+import com.difft.android.chat.data.PushCustomContent
+import com.difft.android.websocket.api.util.EnvelopDeserializer
+import com.difft.android.websocket.util.Base64
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.google.gson.Gson
@@ -16,12 +17,11 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import difft.android.messageserialization.For
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.thoughtcrime.securesms.messages.EnvelopToMessageProcessor
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import com.difft.android.websocket.api.util.EnvelopDeserializer
-import com.difft.android.websocket.util.Base64
-import kotlinx.coroutines.Dispatchers
 
 @AndroidEntryPoint
 class MyFirebaseMessagingService : FirebaseMessagingService() {
@@ -67,12 +67,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                             }
                         } catch (e: Exception) {
                             L.w { "[fcm] Processing message envelope error: ${e.stackTraceToString()}" }
-                            handleMessageProcessingError(entryPoint, pushCustomContent, title, content)
+                            handleMessageProcessingError(entryPoint, pushCustomContent)
                         }
                     }
                 } ?: run {
                     L.w { "[fcm] Processing message pushCustomContent.msg is null" }
-                    handleMessageProcessingError(entryPoint, pushCustomContent, title, content)
+                    handleMessageProcessingError(entryPoint, pushCustomContent)
                 }
             } else {
                 L.i { "[fcm] customContent is null, title:${title} content:${content}, ignore" }
@@ -92,12 +92,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun handleMessageProcessingError(
-        entryPoint: EntryPoint,
-        pushCustomContent: PushCustomContent,
-        title: String?,
-        content: String?
-    ) {
+    private fun handleMessageProcessingError(entryPoint: EntryPoint, pushCustomContent: PushCustomContent) {
         // 检查某些通知类型不显示通知
         if (pushCustomContent.notifyType == NOTIFY_TYPE_CALL_HANGUP) {
             L.i { "[fcm] notifyType: ${pushCustomContent.notifyType}, skip notification" }
@@ -110,12 +105,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 检查标题和内容是否有效
-        if (title.isNullOrEmpty() || content.isNullOrEmpty()) {
-            L.w { "[fcm] showNotificationOfPush failed: title or content isNullOrEmpty" }
-            return
-        }
-
         try {
             // 根据目标类型创建For对象
             val forWhat = when {
@@ -125,7 +114,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             forWhat?.let { target ->
-                entryPoint.messageNotificationUtil.showNotificationOfPush(baseContext, target, title, content)
+                entryPoint.messageNotificationUtil.showNotificationOfPush(baseContext, target)
                 L.i { "[fcm] Successfully showed fallback notification for target: $target" }
             } ?: L.w { "[fcm] Invalid target type, cannot show notification" }
         } catch (e: Exception) {

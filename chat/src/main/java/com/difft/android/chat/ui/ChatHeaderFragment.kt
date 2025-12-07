@@ -210,10 +210,6 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 if (it.status == 0) {
                     ToastUtil.show(R.string.contact_request_sent)
                     ContactorUtil.sendFriendRequestMessage(requireActivity(), chatViewModel.forWhat)
-//                    dbRoomStore.findOrCreateRoomModel(For.Account(chatViewModel.forWhat.id))
-//                        .compose(RxUtil.getSingleSchedulerComposer())
-//                        .to(RxUtil.autoDispose(activity as LifecycleOwner))
-//                        .subscribe()
                 } else {
                     it.reason?.let { message -> ToastUtil.show(message) }
                 }

@@ -8,7 +8,7 @@
     <string name="settings_screen_lock">屏幕锁</string>
     <string name="settings_screen_lock_timeout">屏幕锁超时</string>
     <string name="settings_screen_lock_timeout_instant">立即</string>
-    <string name="settings_screen_lock_tips">使用密码或图案解锁屏幕。密码可以不同于系统密码，因此如果有人设法得到了系统密码，但他仍然无法访问TempTalk。此外，内容预览也会在app切换时被遮盖。</string>
+    <string name="settings_screen_lock_tips">使用密码或图案解锁屏幕。密码可以不同于系统密码，因此如果有人设法得到了系统密码，但他仍然无法访问Yelling。此外，内容预览也会在app切换时被遮盖。</string>
     <string name="settings_pattern_lock">手势密码</string>
     <string name="settings_passcode_lock">数字密码</string>
     <string name="settings_pattern_show_path">手势轨迹</string>

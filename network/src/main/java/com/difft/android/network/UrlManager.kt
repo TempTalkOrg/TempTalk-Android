@@ -29,8 +29,8 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val call: String = "$defaultChatUrl/call/"
     override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
-    override val inviteGroupUrl: String = "https://temptalk.app/"
-    override val installationGuideUrl: String = "https://temptalk.app/"
+    override val inviteGroupUrl: String = "https://yelling.pro/"
+    override val installationGuideUrl: String = "https://yelling.pro/"
 
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/prod-buildversion/insider-version.json"
 }
@@ -44,8 +44,8 @@ private class ChativeDevelopmentUrlProtocol : UrlProtocol {
     override val call: String = "$defaultChatUrl/call/"
     override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
-    override val inviteGroupUrl: String = "https://temptalk.app/"
-    override val installationGuideUrl: String = "https://temptalk.app/"
+    override val inviteGroupUrl: String = "https://yelling.pro/"
+    override val installationGuideUrl: String = "https://test.yelling.pro/"
 
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/test-buildversion/insider-version.json"
 }
@@ -149,7 +149,7 @@ class UrlManager @Inject constructor(
     }
 
     val installationGuideUrl
-        get() = newGlobalConfig?.data?.installationGuideUrl ?: protocol.installationGuideUrl
+        get() = protocol.installationGuideUrl
 
     val appVersionConfigUrl
         get() = protocol.appVersionConfigUrl
@@ -161,7 +161,8 @@ class UrlManager @Inject constructor(
             default,
             "https://chative.com/",
             "https://temptalk.app/",
-            "https://test.temptalk.app/"
+            "https://test.temptalk.app/",
+            "https://yelling.pro/"
         ).mapNotNull { url ->
             Uri.parse(url).host
         }

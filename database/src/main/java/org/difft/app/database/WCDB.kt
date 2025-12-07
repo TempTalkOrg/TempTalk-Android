@@ -32,6 +32,7 @@ import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.DBNotificationCacheModel
 import org.difft.app.database.models.DBPendingMessageModelNew
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
@@ -253,6 +254,11 @@ class WCDB @Inject constructor(
         db.getTable("reset_identity_key", DBResetIdentityKeyModel.INSTANCE)
     }
 
+    val notificationCache by lazy {
+        db.createTable("notification_cache", DBNotificationCacheModel.INSTANCE)
+        db.getTable("notification_cache", DBNotificationCacheModel.INSTANCE)
+    }
+
     // Map from lowercase tableName to the actual table
     val tablesMap by lazy {
         listOf(
@@ -275,7 +281,8 @@ class WCDB @Inject constructor(
             translate,
             failedMessage,
             readInfo,
-            resetIdentityKey
+            resetIdentityKey,
+            notificationCache
         ).associateBy { it.tableName.lowercase() }
     }
 

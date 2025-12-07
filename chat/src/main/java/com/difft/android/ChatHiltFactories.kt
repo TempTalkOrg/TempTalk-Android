@@ -8,18 +8,17 @@ import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.contactorID
 import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
 import com.difft.android.chat.ui.ChatMessageViewModel
-import difft.android.messageserialization.For
-import difft.android.messageserialization.model.TextMessage
+import com.difft.android.websocket.api.websocket.KeepAliveSender
+import com.difft.android.websocket.internal.push.OutgoingPushMessage
+import com.difft.android.websocket.internal.websocket.WebSocketConnection
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
+import difft.android.messageserialization.For
+import difft.android.messageserialization.model.TextMessage
 import org.thoughtcrime.securesms.jobmanager.Job
 import org.thoughtcrime.securesms.jobs.PushReadReceiptSendJob
 import org.thoughtcrime.securesms.jobs.PushTextSendJob
-import org.thoughtcrime.securesms.jobs.TextMessageSender
-import com.difft.android.websocket.api.websocket.KeepAliveSender
-import com.difft.android.websocket.internal.push.OutgoingPushMessage
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
-import com.difft.android.websocket.internal.websocket.WebSocketConnection
 
 @AssistedFactory
 interface WebSocketConnectionFactory {
@@ -44,18 +43,6 @@ interface PushTextSendJobFactory {
         notification: OutgoingPushMessage.Notification? = null,
     ): PushTextSendJob
 }
-
-@AssistedFactory
-interface TextMessageSenderFactory {
-    /**
-     * parameters: Job.Parameters? only used in JobManager, when creating a job from the PushTextSendJob's Factory
-     */
-    fun create(
-        textMessage: TextMessage,
-        notification: OutgoingPushMessage.Notification? = null,
-    ): TextMessageSender
-}
-
 
 @AssistedFactory
 interface PushReadReceiptSendJobFactory {

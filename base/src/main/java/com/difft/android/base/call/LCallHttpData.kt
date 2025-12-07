@@ -138,3 +138,12 @@ data class InviteCallResponseData(
 data class ServiceUrlData(
     val serviceUrls: List<String>?,
 )
+
+data class CallFeedbackRequestBody(
+    val userIdentity: String?,
+    val userSid: String?,
+    val roomSid: String?,
+    val roomId: String?,
+    val rating: Int,
+    val reasons: Map<String, List<Int>> = emptyMap()
+)
