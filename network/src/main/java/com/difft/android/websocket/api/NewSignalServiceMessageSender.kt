@@ -459,30 +459,41 @@ class NewSignalServiceMessageSender @Inject constructor(
      * @param recipient The sender of the received message you're acknowledging.
      * @param message   The read receipt to deliver.
      * @param group if the receipt is for a group message. then this value is not null, then used in later flow
+     * @param sendReceiptToSender Whether to send read receipt to the message sender
+     * @param sendSyncToSelf Whether to send sync message to self's other devices
      */
     fun sendReceipt(
         recipient: For,
         room: For,
         message: ReceiptMessage,
         readMessages: List<SyncMessage.Read>,
-    ): SendMessageResult {
-        val content: Content = createReceiptContent(message)
-
+        sendReceiptToSender: Boolean = true,
+        sendSyncToSelf: Boolean = true
+    ) {
         val sendTimeStamp = System.currentTimeMillis()
-        val result = sendMessage(
-            recipient,
-            room,
-            sendTimeStamp,
-            content,
-            message.type == ReceiptMessage.Type.READ,
-            Optional.ofNullable(message.readPosition.toOutgoingReadPositionEntity()),
-            Optional.ofNullable(null),
-            null
-        )
-        L.i { "[Message] sendDataMessage result success is ${result.isSuccess()}" }
-        if (result.success != null) {
+
+        // 1. 发送已读回执给对方（如果需要）
+        if (sendReceiptToSender) {
+            val content: Content = createReceiptContent(message)
+            val receiptResult = sendMessage(
+                recipient,
+                room,
+                sendTimeStamp,
+                content,
+                message.type == ReceiptMessage.Type.READ,
+                Optional.ofNullable(message.readPosition.toOutgoingReadPositionEntity()),
+                Optional.ofNullable(null),
+                null
+            )
+            L.i { "[Message] sendReceiptToSender result success is ${receiptResult.isSuccess()}" }
+        } else {
+            L.i { "[Message] Skip sending read receipt to sender" }
+        }
+
+        // 2. 发送同步消息给自己的其他设备（如果需要）
+        if (sendSyncToSelf) {
             val syncMessageContent = createMultiDeviceReadContent(readMessages)
-            val result1 = sendMessage(
+            val syncResult = sendMessage(
                 localAddress,
                 room,
                 sendTimeStamp,
@@ -492,9 +503,10 @@ class NewSignalServiceMessageSender @Inject constructor(
                 Optional.ofNullable(null),
                 null
             )
-            L.i { "[Message] sendSyncMessage result is " + result1.isSuccess() }
+            L.i { "[Message] sendSyncToSelf result is " + syncResult.isSuccess() }
+        } else {
+            L.i { "[Message] Skip sending sync message to self" }
         }
-        return result
     }
 
     private fun createReceiptContent(message: ReceiptMessage): Content {

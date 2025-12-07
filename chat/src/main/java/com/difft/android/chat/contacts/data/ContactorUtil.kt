@@ -244,12 +244,6 @@ object ContactorUtil {
             .httpService
             .fetchAddContactor(token, if (!TextUtils.isEmpty(sourceType)) AddContactorRequestBody(contactID, AddContactorSource(sourceType, source), action) else AddContactorRequestBody(contactID, null, action))
 
-    fun fetchAgreeFriendRequest(context: Context, applyId: Int, token: String): Single<BaseResponse<String>> = context
-        .getEntryPoint()
-        .getHttpClient()
-        .httpService
-        .fetchAgreeContactRequest(applyId, token)
-
     fun fetchRemoveFriend(context: Context, token: String, contactID: String): Single<BaseResponse<Any>> = context
         .getEntryPoint()
         .getHttpClient()

@@ -89,9 +89,6 @@ fun generateMessageTwo(
             this.id = record.id
             this.authorId = authorId
             this.isMine = isFromMySelf
-            this.contactor = author
-            this.nickname =
-                if (isFromMySelf) ResUtils.getString(R.string.you) else author.getDisplayNameForUI()
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
             this.systemShowTimestamp = record.systemShowTimestamp
@@ -100,12 +97,7 @@ fun generateMessageTwo(
             this.mode = record.mode
             this.message = if (record.forwardContext() != null) "" else record.messageText
             this.attachment = record.attachment()
-            this.quote =
-                record.quote()?.apply {
-                    this.authorName =
-                        if (myId == this.author) ResUtils.getString(R.string.you) else contactor.firstOrNull { it.id == this.author }
-                            ?.getDisplayNameForUI()
-                }
+            this.quote = record.quote()
             this.forwardContext = record.forwardContext()
             this.card = record.card()
             this.mentions = record.mentions()
@@ -160,9 +152,6 @@ fun generateMessageTwo(
             this.id = record.id
             this.authorId = author.id
             this.isMine = isFromMySelf
-            this.contactor = author
-            this.nickname =
-                if (isFromMySelf) ResUtils.getString(R.string.you) else author.getDisplayNameForUI()
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
             this.systemShowTimestamp = record.systemShowTimestamp
@@ -297,8 +286,6 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
 
 
 fun generateMessageFromForward(record: Forward): ChatMessage {
-    val author: ContactorModel = wcdb
-        .getContactorFromAllTable(record.author) ?: ContactorModel().also { it.id = record.author }
     return TextChatMessage().apply {
         val attachmentID = if (!record.attachments.isNullOrEmpty()) {
             record.attachments?.firstOrNull()?.authorityId.toString()
@@ -309,10 +296,8 @@ fun generateMessageFromForward(record: Forward): ChatMessage {
             } else ""
         } else ""
         this.id = if (!TextUtils.isEmpty(attachmentID)) attachmentID else System.currentTimeMillis().toString()
-        this.authorId = author.id
+        this.authorId = record.author
         this.isMine = false
-        this.contactor = author
-        this.nickname = author.getDisplayNameWithoutRemarkForUI()
         this.sendStatus = SendType.Sent.rawValue
         this.timeStamp = record.id
         this.systemShowTimestamp = record.serverTimestampForUI

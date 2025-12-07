@@ -5,6 +5,7 @@ import android.util.Log
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.call.BuildConfig.*
+import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.ServerNode
 import com.difft.android.call.data.ServerUrlSpeedInfo
 import com.difft.android.call.data.SpeedResponseStatus
@@ -40,6 +41,10 @@ object LCallEngine {
     private var _serverUrlConnected = MutableStateFlow<String?>(null)
     val serverUrlConnected: StateFlow<String?> get() = _serverUrlConnected
 
+    private var _connectionType = MutableStateFlow<CONNECTION_TYPE>(CONNECTION_TYPE.WEB_SOCKET)
+    val connectionType: StateFlow<CONNECTION_TYPE> get() = _connectionType
+
+    private var _isNetworkAvailable = MutableStateFlow<Boolean>(false)
 
     private var availableServerUrls = emptyList<String>()
 
@@ -170,6 +175,7 @@ object LCallEngine {
                     LCallManager.fetchCallServiceUrlAndCache()
                 }
             }
+            _isNetworkAvailable.value = !isNetworkUnavailable()
         }
         networkConnectionListener.register()
     }
@@ -190,5 +196,17 @@ object LCallEngine {
 
     fun setConnectedServerUrl(url: String?) {
         _serverUrlConnected.value = url
+    }
+
+    fun setSelectedConnectMode(type: CONNECTION_TYPE) {
+        _connectionType.value = type
+    }
+
+    fun isUseQuicSignal(): Boolean {
+        return _connectionType.value == CONNECTION_TYPE.HTTP3_QUIC
+    }
+
+    fun isNetworkAvailable(): Boolean {
+        return _isNetworkAvailable.value
     }
 }

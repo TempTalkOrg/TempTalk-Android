@@ -23,7 +23,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.adapter.FragmentStateAdapter
-import kotlinx.coroutines.launch
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
@@ -34,11 +33,11 @@ import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DeeplinkUtils
 import com.difft.android.base.utils.EnvironmentHelper
+import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -65,15 +64,14 @@ import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.databinding.ActivityIndexBinding
-import com.difft.android.login.PasscodeUtil
 import com.difft.android.login.repo.LoginRepo
 import com.difft.android.me.MeFragment
+import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.config.UserAgentManager
 import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
-import com.difft.android.setting.NotificationSettingsActivity
 import com.difft.android.setting.UpdateManager
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -294,6 +292,8 @@ class IndexActivity : BaseActivity() {
         })
 
         fetchCallServiceUrlAndCache()
+
+        fetchFeatureGrayConfigs()
     }
 
     private fun requestNotificationPermission() {
@@ -813,34 +813,12 @@ class IndexActivity : BaseActivity() {
         }
     }
 
-    private fun getFullScreenPermissionMessage(): String {
-        return if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
-            when (Build.MANUFACTURER.lowercase(Locale.ROOT)) {
-                FullScreenPermissionHelper.MANUFACTURER_HUAWEI.lowercase(Locale.ROOT) -> {
-                    getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
-                }
-
-                FullScreenPermissionHelper.MANUFACTURER_XIAOMI.lowercase(Locale.ROOT) -> {
-                    getString(R.string.notification_no_permission_tip5, PackageUtil.getAppName())
-                }
-
-                FullScreenPermissionHelper.MANUFACTURER_HONOR.lowercase(Locale.ROOT) -> {
-                    getString(R.string.notification_no_permission_tip6, PackageUtil.getAppName())
-                }
-
-                else -> getString(R.string.notification_no_permission_tip4, PackageUtil.getAppName())
-            }
-        } else {
-            getString(R.string.notification_no_permission_tip2, PackageUtil.getAppName())
-        }
-    }
-
     private fun checkNotificationFullScreenPermission() {
         if (checkNotificationFullScreenPermissionIgnore) return
 
         if (!messageNotificationUtil.hasFullScreenNotificationPermission()) {
             if (checkNotificationFullScreenPermissionDialog == null) {
-                val message = getFullScreenPermissionMessage()
+                val message = FullScreenPermissionHelper.getNoPermissionTip()
                 checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
                     context = this@IndexActivity,
                     title = getString(R.string.tip),
@@ -867,65 +845,62 @@ class IndexActivity : BaseActivity() {
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
             try {
-                when (intent.type) {
-                    "text/plain" -> {
-                        val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-                        sharedText?.let {
-                            // Do something with the shared text
-                            selectChatsUtils.showChatSelectAndSendDialog(
-                                this@IndexActivity,
-                                sharedText,
-                            )
-                        }
-                    }
+                val uri = getUriFromIntent(intent)
 
-                    else -> {
-                        // Get URI from ClipData first
-                        val uri = getUriFromIntent(intent)
-
-                        if (uri == null) {
-                            val extraText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
-                            selectChatsUtils.showChatSelectAndSendDialog(
-                                this,
-                                extraText,
-                            )
-                        } else {
-                            // Handle shared content URI (image, file, etc.)
-                            lifecycleScope.launch {
-                                // 优先判断文件大小是否超过200MB
-                                val fileSize = withContext(Dispatchers.IO) {
-                                    FileUtil.getFileSize(uri)
-                                }
-
-                                if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
-                                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
-                                    return@launch
-                                }
-
-                                val file = withContext(Dispatchers.IO) {
-                                    runCatching { copyUriToFile(uri) }
-                                        .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
-                                        .getOrNull()
-                                }
-
-                                if (file == null) {
-                                    ToastUtil.showLong(R.string.unsupported_file_type)
-                                    return@launch
-                                }
-
-                                selectChatsUtils.showChatSelectAndSendDialog(
-                                    this@IndexActivity,
-                                    "",
-                                    logFile = file
-                                )
-                            }
-                        }
+                if (uri != null) {
+                    // 有URI，作为文件处理（包括txt文件、图片、PDF等）
+                    handleSharedFileUri(uri)
+                } else {
+                    // 无URI，作为纯文本处理
+                    val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                    if (sharedText != null) {
+                        selectChatsUtils.showChatSelectAndSendDialog(
+                            this@IndexActivity,
+                            sharedText,
+                        )
+                    } else {
+                        // 既没有URI也没有文本，记录异常情况
+                        L.w { "[Share] Received share intent but neither URI nor text found. Intent type: ${intent.type}" }
                     }
                 }
             } catch (e: Exception) {
-                L.e { "SharedContent Received Exception: ${e.message}" }
+                L.e { "SharedContent Received Exception: ${e.stackTraceToString()}" }
                 e.printStackTrace()
             }
+        }
+    }
+
+    /**
+     * 处理分享的文件URI
+     */
+    private fun handleSharedFileUri(uri: Uri) {
+        lifecycleScope.launch {
+            // 优先判断文件大小是否超过200MB
+            val fileSize = withContext(Dispatchers.IO) {
+                FileUtil.getFileSize(uri)
+            }
+
+            if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                return@launch
+            }
+
+            val file = withContext(Dispatchers.IO) {
+                runCatching { copyUriToFile(uri) }
+                    .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
+                    .getOrNull()
+            }
+
+            if (file == null) {
+                ToastUtil.showLong(R.string.unsupported_file_type)
+                return@launch
+            }
+
+            selectChatsUtils.showChatSelectAndSendDialog(
+                this@IndexActivity,
+                "",
+                logFile = file
+            )
         }
     }
 
@@ -993,6 +968,12 @@ class IndexActivity : BaseActivity() {
             if (NetUtil.checkNet(this@IndexActivity)) {
                 LCallManager.fetchCallServiceUrlAndCache()
             }
+        }
+    }
+
+    private fun fetchFeatureGrayConfigs() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            FeatureGrayManager.init()
         }
     }
 }

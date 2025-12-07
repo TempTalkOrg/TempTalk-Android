@@ -27,7 +27,6 @@ import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import org.thoughtcrime.securesms.util.MediaUtil
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.text.last
 
 class ImageAndVideoMessageView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -173,9 +172,11 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         }
 
         // Priority 3: Show progress or auto download (for files <= 10M)
-        if (!isCurrentDeviceSend && attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
+        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
             if (progress == null) {
-                downloadAttachment(message, attachmentPath)
+                if (!isCurrentDeviceSend) {
+                    downloadAttachment(message, attachmentPath)
+                }
             } else {
                 binding.progressView.visibility = View.VISIBLE
                 binding.progressBar.progress = progress

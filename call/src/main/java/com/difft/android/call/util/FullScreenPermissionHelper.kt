@@ -1,33 +1,40 @@
 package com.difft.android.call.util
 
+import android.Manifest
 import android.app.AppOpsManager
+import android.app.Notification
 import android.app.NotificationManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
-import android.text.TextUtils
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.IMessageNotificationUtil
+import com.difft.android.base.utils.PackageUtil
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
+import com.difft.android.call.R
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import java.io.BufferedReader
-import java.io.IOException
-import java.io.InputStreamReader
 import java.lang.reflect.Method
 import java.util.Locale
 
+
 object FullScreenPermissionHelper {
 
-    const val MANUFACTURER_HUAWEI = "huawei" //华为
-    const val MANUFACTURER_XIAOMI = "xiaomi" //小米
-    const val MANUFACTURER_HONOR = "honor" //荣耀
+    private const val MANUFACTURER_HUAWEI = "huawei"
+    private const val MANUFACTURER_XIAOMI = "xiaomi"
+    private const val MANUFACTURER_HONOR = "honor"
+    private const val MANUFACTURER_OPPO = "oppo"
+    private const val MANUFACTURER_ONEPLUS = "oneplus"
+    private const val MANUFACTURER_REALME = "realme"
 
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -39,214 +46,199 @@ object FullScreenPermissionHelper {
         EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).msgNotificationUtil()
     }
 
-    private fun isHuawei(): Boolean {
-        return checkManufacturer("huawei")
-    }
+    private val manufacturer: String
+        get() = Build.MANUFACTURER.lowercase(Locale.ROOT)
 
-    private fun isMiui(): Boolean {
-        val value = getSystemProperty("ro.miui.ui.version.name")
-        return !TextUtils.isEmpty(value)
-    }
+    private fun isManufacturer(target: String) = manufacturer == target
 
-    private fun isXiaoMi(): Boolean {
-        return checkManufacturer("xiaomi")
-    }
-
-    private fun isHonor(): Boolean {
-        return checkManufacturer("honor")
-    }
-
-    private fun checkManufacturer(manufacturer: String): Boolean {
-        return manufacturer.equals(Build.MANUFACTURER, true)
-    }
-
-    private fun getSystemProperty(propName: String): String? {
-        // Validate input to prevent command injection
-        if (!propName.matches(Regex("^[a-zA-Z0-9._-]+$"))) {
-            return null
-        }
-
+    private fun getSystemProperty(prop: String): String {
+        if (!prop.matches(Regex("^[a-zA-Z0-9._-]+$"))) return ""
         return try {
-            val p = Runtime.getRuntime().exec(arrayOf("getprop", propName))
-            BufferedReader(InputStreamReader(p.inputStream)).use { reader ->
-                reader.readLine()
-            }
-        } catch (ex: IOException) {
-            null
-        }
-    }
-
-
-    fun isMainStreamChinaMobile(): Boolean {
-        return isHuawei() || isXiaoMi() || isHonor()
-    }
-
-    fun canBackgroundStart(context: Context): Boolean {
-        if (isHuawei()) {
-            return isHuaweiBgStartPermissionAllowed(context)
-        }
-        if (isXiaoMi() && isMiui()) {
-            return isXiaomiBgStartPermissionAllowed(context)
-        }
-        if (isHonor()) {
-            return isBannerNotificationEnabled(context, msgNotificationUtil.getNotificationChannelName())
-        }
-        return true
-    }
-
-    private fun isHuaweiBgStartPermissionAllowed(context: Context): Boolean {
-        try {
-            val appOpsManagerEx = Class.forName("com.huawei.android.app.AppOpsManagerEx")
-            val checkHwOpNoThrow = appOpsManagerEx.getDeclaredMethod(
-                "checkHwOpNoThrow",
-                AppOpsManager::class.java,
-                Int::class.javaPrimitiveType,
-                Int::class.javaPrimitiveType,
-                String::class.java
-            )
-            var op = 100000
-            op = appOpsManagerEx.getDeclaredField("HW_OP_CODE_POPUP_BACKGROUND_WINDOW").getInt(op)
-            val checkResult = checkHwOpNoThrow.invoke(
-                appOpsManagerEx.newInstance(),
-                context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager,
-                op,
-                Process.myUid(),
-                context.packageName
-            ) as Int
-            return checkResult == AppOpsManager.MODE_ALLOWED
-
+            val clz = Class.forName("android.os.SystemProperties")
+            val get = clz.getMethod("get", String::class.java)
+            get.invoke(null, prop) as? String ?: ""
         } catch (e: Exception) {
-            e.printStackTrace()
-            L.e {"[Call] FullScreenPermissionHelper HuaWei check BackgroundPopup error"}
+            ""
         }
-        return true
     }
 
-    private fun isXiaomiBgStartPermissionAllowed(context: Context): Boolean {
-        val ops = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        try {
-            val op = 10021
-            val method: Method = ops.javaClass.getMethod("checkOpNoThrow", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, String::class.java)
-            val result = method.invoke(ops, op, Process.myUid(), context.packageName) as Int
-            return result == AppOpsManager.MODE_ALLOWED
-        } catch (e: Exception) {
-            e.printStackTrace()
-            L.e {"[Call] FullScreenPermissionHelper Xiaomi check BackgroundPopup error"}
-        }
-        return true
-    }
+    fun isMainStreamChinaMobile(): Boolean =
+        manufacturer in setOf(MANUFACTURER_HUAWEI, MANUFACTURER_XIAOMI, MANUFACTURER_HONOR, MANUFACTURER_OPPO, MANUFACTURER_ONEPLUS, MANUFACTURER_REALME)
 
-    fun getAppPermissionsSettingIntent(context: Context): Intent {
-        return when (Build.MANUFACTURER.lowercase(Locale.ROOT)) {
-//            MANUFACTURER_HUAWEI -> huawei(packageName)
-            MANUFACTURER_XIAOMI -> xiaomi(context.packageName)
-            MANUFACTURER_HONOR -> getAppNotificationSettingIntent(context, msgNotificationUtil.getNotificationChannelName())
-            else -> getAppDetailSettingIntent(context.packageName)
-        }
+    fun isOppoEcosystemDevice(): Boolean {
+        return manufacturer in setOf(MANUFACTURER_OPPO, MANUFACTURER_ONEPLUS, MANUFACTURER_REALME)
     }
 
     /**
-     * 华为跳转权限设置页
+     * Main entry for background popup or lockscreen popup behavior
      */
-    private fun huawei(packageName: String): Intent {
-        val intent = Intent()
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        intent.putExtra("packageName", packageName)
-        val comp = ComponentName(
-            "com.huawei.systemmanager",
-            "com.huawei.permissionmanager.ui.MainActivity"
+    fun canBackgroundStart(context: Context): Boolean = when (manufacturer) {
+        MANUFACTURER_HUAWEI -> isHuaweiBgStartAllowed(context)
+        MANUFACTURER_XIAOMI -> isXiaomiBgStartAllowed(context)
+        else -> canShowOnLockScreen(context, msgNotificationUtil.getNotificationChannelName())
+    }
+
+    private fun isHuaweiBgStartAllowed(context: Context): Boolean = try {
+        val clazz = Class.forName("com.huawei.android.app.AppOpsManagerEx")
+        val checkMethod = clazz.getDeclaredMethod(
+            "checkHwOpNoThrow",
+            AppOpsManager::class.java,
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            String::class.java
         )
-        intent.component = comp
+        val opField = clazz.getDeclaredField("HW_OP_CODE_POPUP_BACKGROUND_WINDOW")
+        val opCode = opField.getInt(null)
+
+        val result = checkMethod.invoke(
+            null,
+            context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager,
+            opCode,
+            Process.myUid(),
+            context.packageName
+        ) as Int
+        result == AppOpsManager.MODE_ALLOWED
+    } catch (e: Exception) {
+        L.e { "[Call] Huawei BgPopup check failed: ${e.message}" }
+        true
+    }
+
+    private fun isXiaomiBgStartAllowed(context: Context): Boolean = try {
+        val ops = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val method: Method = ops.javaClass.getMethod(
+            "checkOpNoThrow",
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            String::class.java
+        )
+        val result = method.invoke(ops, 10021, Process.myUid(), context.packageName) as Int
+        result == AppOpsManager.MODE_ALLOWED
+    } catch (e: Exception) {
+        L.e { "[Call] Xiaomi BgPopup check failed: ${e.message}" }
+        true
+    }
+
+    fun getAppPermissionsSettingIntent(context: Context): Intent = when (manufacturer) {
+        MANUFACTURER_XIAOMI -> buildXiaomiPermissionIntent(context.packageName)
+        MANUFACTURER_HONOR -> buildChannelSettingIntent(context, msgNotificationUtil.getNotificationChannelName())
+        MANUFACTURER_OPPO, MANUFACTURER_ONEPLUS, MANUFACTURER_REALME -> buildAppNotificationIntent(context)
+        else -> buildAppDetailIntent(context.packageName)
+    }
+
+    /** Xiaomi Permissions */
+    private fun buildXiaomiPermissionIntent(packageName: String): Intent {
+        val intent = Intent("miui.intent.action.APP_PERM_EDITOR").putExtra("extra_pkgname", packageName)
+        val version = getSystemProperty("ro.miui.ui.version.name")?.trimStart('V')?.toIntOrNull() ?: return intent
+
+        val className = if (version >= 8)
+            "com.miui.permcenter.permissions.PermissionsEditorActivity"
+        else
+            "com.miui.permcenter.permissions.AppPermissionsEditorActivity"
+
+        intent.setClassName("com.miui.securitycenter", className)
         return intent
     }
 
-    /**
-     * 小米跳转权限设置页
-     */
-    private fun xiaomi(packageName: String): Intent {
-        val intent = Intent("miui.intent.action.APP_PERM_EDITOR").putExtra(
-            "extra_pkgname",
-            packageName
-        )
-        getMIUIVersion()?.let {
-            val versionCode = it.trimStart('V').toIntOrNull()
-            versionCode?.let {
-                return intent.setClassName(
-                    "com.miui.securitycenter",
-                    if (it >= 8)  "com.miui.permcenter.permissions.PermissionsEditorActivity"
-                    else "com.miui.permcenter.permissions.AppPermissionsEditorActivity"
-                )
-            }
-        }
-        return intent.setClassName(
-            "com.miui.securitycenter",
-            "com.miui.permcenter.permissions.PermissionsEditorActivity"
-        )
+    private fun buildAppDetailIntent(packageName: String): Intent = Intent().apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+        data = Uri.fromParts("package", packageName, null)
     }
 
-    private fun getMIUIVersion(): String? {
-        return getSystemProperty("ro.miui.ui.version.name")
-    }
-
-    /**
-     * 获取应用详情页面
-     */
-    private fun getAppDetailSettingIntent(packageName: String): Intent {
-        val localIntent = Intent()
-        localIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        localIntent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-        localIntent.data = Uri.fromParts("package", packageName, null)
-        return localIntent
-    }
-
-
-    /**
-     * 获取应用通知Channel管理设置页面
-     */
-    private fun getAppNotificationSettingIntent(context: Context, channelId: String): Intent {
-        val localIntent = Intent()
-        // Android 8.0 (API 26) 及以上：跳转到应用通知Channel设置页
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            localIntent.action = Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS
-            localIntent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            localIntent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
+    private fun buildChannelSettingIntent(context: Context, channelId: String): Intent = Intent().apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            action = Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
         } else {
-            localIntent.action = "android.settings.APP_NOTIFICATION_SETTINGS"
-            localIntent.putExtra("app_package", context.packageName)
-            localIntent.putExtra("app_uid", context.applicationInfo.uid)
+            action = "android.settings.APP_NOTIFICATION_SETTINGS"
+            putExtra("app_package", context.packageName)
+            putExtra("app_uid", context.applicationInfo.uid)
         }
-        return localIntent
     }
 
-    /**
-     * 跳转到权限设置页面
-     */
+    private fun buildAppNotificationIntent(context: Context): Intent = Intent().apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        } else {
+            action = "android.settings.APP_NOTIFICATION_SETTINGS"
+            putExtra("app_package", context.packageName)
+            putExtra("app_uid", context.applicationInfo.uid)
+        }
+    }
+
     fun jumpToPermissionSettingActivity(context: Context?) {
         try {
-            val intent = getAppPermissionsSettingIntent(application)
-            context?.startActivity(intent)
+            context?.startActivity(getAppPermissionsSettingIntent(application))
         } catch (e: Exception) {
             L.e { "[Call] jumpToPermissionSettingActivity error: ${e.message}" }
-            val intent = Intent(Settings.ACTION_SETTINGS)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context?.startActivity(intent)
+            context?.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
     }
 
-    /**
-     * 检测横幅通知是否开启
-     */
-    fun isBannerNotificationEnabled(context: Context, channelId: String): Boolean {
+    fun getFullScreenSettingTip(): String = when {
+        !isMainStreamChinaMobile() -> ResUtils.getString(R.string.fullscreen_notification_settings_oversea_tip)
+        manufacturer == MANUFACTURER_HUAWEI -> ResUtils.getString(R.string.fullscreen_notification_settings_huawei_tip)
+        manufacturer == MANUFACTURER_XIAOMI -> ResUtils.getString(R.string.fullscreen_notification_settings_xiaomi_tip)
+        else -> ResUtils.getString(R.string.fullscreen_notification_settings_mainland_default_tip)
+    }
+
+    fun getNoPermissionTip(): String = when {
+        !isMainStreamChinaMobile() -> ResUtils.getString(
+            R.string.fullscreen_notification_no_permission_oversea_tip,
+            PackageUtil.getAppName()
+        )
+        manufacturer == MANUFACTURER_HUAWEI -> ResUtils.getString(
+            R.string.fullscreen_notification_no_permission_huawei_tip,
+            PackageUtil.getAppName()
+        )
+        manufacturer == MANUFACTURER_XIAOMI -> ResUtils.getString(
+            R.string.fullscreen_notification_no_permission_xiaomi_tip,
+            PackageUtil.getAppName()
+        )
+        else -> ResUtils.getString(
+            R.string.fullscreen_notification_no_permission_china_default_tip,
+            PackageUtil.getAppName()
+        )
+    }
+
+    fun canShowOnLockScreen(context: Context, channelId: String): Boolean {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // 1. 应用通知总开关
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return false
+        }
+        // 2. Android 13+ 通知权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!granted) return false
+        }
+        // 3. DND（勿扰模式）完全静音
+        //    如果处于 INTERRUPTION_FILTER_NONE，则任何锁屏通知都可能被拦截
+        if (nm.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_NONE) {
+            return false
+        }
+        // 4. Channel 权限（横幅通知 + 锁屏可见性）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = nm.getNotificationChannel(channelId)
             if (channel != null) {
-                // 在 Android 的通知机制中，只有 importance >= HIGH 才可能展示横幅（Heads-up / Banner）
-                return channel.importance >= NotificationManager.IMPORTANCE_HIGH
+                // 横幅通知需要 IMPORTANCE_HIGH 或以上
+                if (channel.importance < NotificationManager.IMPORTANCE_HIGH) {
+                    return false
+                }
+                // 锁屏可见性不能是 SECRET，否则锁屏上不显示内容
+                if (channel.lockscreenVisibility == Notification.VISIBILITY_SECRET) {
+                    return false
+                }
             }
         }
         return true
     }
-
-
 }

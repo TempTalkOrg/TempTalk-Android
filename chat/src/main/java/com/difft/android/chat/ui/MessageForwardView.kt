@@ -14,23 +14,20 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.utils.TextSizeUtil
-import org.difft.app.database.getContactorFromAllTable
-import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
-import org.difft.app.database.wcdb
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
+import com.difft.android.chat.common.TextTruncationUtil
 import com.difft.android.chat.databinding.ChatItemForwardHistoryBinding
 import com.difft.android.chat.databinding.ChatItemForwardZoneBinding
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import com.hi.dhl.binding.viewbind
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.disposables.Disposable
 import util.TimeUtils
 
 class MessageForwardView @JvmOverloads constructor(
@@ -43,7 +40,7 @@ class MessageForwardView @JvmOverloads constructor(
     val binding: ChatItemForwardZoneBinding by viewbind(this)
 
     @SuppressLint("ClickableViewAccessibility")
-    fun bindView(activity: Activity, message: TextChatMessage, itemView: View) {
+    fun bindView(activity: Activity, message: TextChatMessage, itemView: View, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
         val forwardContext = message.forwardContext ?: return
         if (forwardContext.forwards != null) {
             binding.root.visibility = View.VISIBLE
@@ -96,17 +93,40 @@ class MessageForwardView @JvmOverloads constructor(
 
                 if (!TextUtils.isEmpty(forward.text)) {
                     binding.tvForwardContent.visibility = View.VISIBLE
-                    LinkTextUtils.setMarkdownToTextview(context, forward.text.toString(), binding.tvForwardContent, forward.mentions)
+
+                    // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
+                    val forwardId = forward.id.toString()
+                    val rawText = forward.text.toString()
+                    binding.tvForwardContent.setTag(R.id.tag_truncation_message_id, forwardId)
+
+                    LinkTextUtils.setMarkdownToTextview(context, rawText, binding.tvForwardContent, forward.mentions)
+
+                    // 先设置为 21 行，避免刷新时闪动
+                    binding.tvForwardContent.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
+
+                    // Post to measure after layout and apply truncation
+                    binding.tvForwardContent.post {
+                        TextTruncationUtil.applyTruncationWithMarkdown(
+                            context = context,
+                            textView = binding.tvForwardContent,
+                            messageId = forwardId,
+                            rawText = rawText,
+                            mentions = forward.mentions,
+                        ) {
+                            TextTruncationUtil.showFullTextDialog(
+                                binding.tvForwardContent,
+                                rawText,
+                                forward.mentions
+                            )
+                        }
+                    }
                 } else {
                     binding.tvForwardContent.visibility = View.GONE
                 }
 
-                val author = wcdb.getContactorFromAllTable(forward.author)
-                if (author != null) {
-                    binding.tvForwardAuthor.text = author.getDisplayNameWithoutRemarkForUI()
-                } else {
-                    binding.tvForwardAuthor.text = forward.author
-                }
+                // 从缓存中获取联系人信息
+                val author = contactorCache.getContactor(forward.author)
+                binding.tvForwardAuthor.text = author?.getDisplayNameWithoutRemarkForUI() ?: forward.author
             } else {
                 binding.singleForwardZone.visibility = View.GONE
                 binding.multiForwardZone.visibility = View.VISIBLE
@@ -115,15 +135,16 @@ class MessageForwardView @JvmOverloads constructor(
                     binding.tvMultiTitle.text = context.getString(R.string.group_chat_history)
                 } else {
                     val id = forwardContext.forwards?.firstOrNull()?.author ?: ""
-                    val author = wcdb.getContactorFromAllTable(id)
-                    if (author != null) {
-                        binding.tvMultiTitle.text = context.getString(R.string.chat_history_for, author.getDisplayNameWithoutRemarkForUI())
+                    // 从缓存中获取联系人信息
+                    val author = contactorCache.getContactor(id)
+                    binding.tvMultiTitle.text = if (author != null) {
+                        context.getString(R.string.chat_history_for, author.getDisplayNameWithoutRemarkForUI())
                     } else {
-                        binding.tvMultiTitle.text = context.getString(R.string.chat_history_for, id)
+                        context.getString(R.string.chat_history_for, id)
                     }
                 }
 
-                val adapter = ForwardMessagesAdapter()
+                val adapter = ForwardMessagesAdapter(contactorCache)
 
                 binding.rvForwardHistory.apply {
                     this.adapter = adapter
@@ -154,7 +175,9 @@ private fun getForwardText(context: Context, forward: Forward): String {
 
 }
 
-class ForwardMessagesAdapter : ListAdapter<Forward, ForwardMessagesItemViewHolder>(
+class ForwardMessagesAdapter(
+    private val contactorCache: com.difft.android.chat.MessageContactsCacheUtil
+) : ListAdapter<Forward, ForwardMessagesItemViewHolder>(
     object : DiffUtil.ItemCallback<Forward>() {
         override fun areItemsTheSame(oldItem: Forward, newItem: Forward): Boolean =
             oldItem.id == newItem.id
@@ -172,7 +195,7 @@ class ForwardMessagesAdapter : ListAdapter<Forward, ForwardMessagesItemViewHolde
 
     override fun onBindViewHolder(holder: ForwardMessagesItemViewHolder, position: Int) {
         val data = getItem(position)
-        holder.setContent(data)
+        holder.setContent(data, contactorCache)
     }
 }
 
@@ -184,13 +207,14 @@ class ForwardMessagesItemViewHolder(parentView: ViewGroup) : RecyclerView.ViewHo
         ChatItemForwardHistoryBinding.bind(itemView)
 
     @SuppressLint("SetTextI18n")
-    fun setContent(forward: Forward) {
+    fun setContent(forward: Forward, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
         val text = getForwardText(binding.textContent.context, forward)
-        val author = wcdb.getContactorFromAllTable(forward.author)
-        if (author != null) {
-            binding.textContent.text = author.getDisplayNameWithoutRemarkForUI() + ": " + text
+        // 从缓存中获取联系人信息
+        val author = contactorCache.getContactor(forward.author)
+        binding.textContent.text = if (author != null) {
+            "${author.getDisplayNameWithoutRemarkForUI()}: $text"
         } else {
-            binding.textContent.text = forward.author + "  " + text
+            "${forward.author}: $text"
         }
     }
 }

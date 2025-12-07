@@ -50,7 +50,6 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.globalServices
@@ -69,7 +68,6 @@ import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.databinding.ChatFragmentMessageListBinding
 import com.difft.android.chat.message.ChatMessage
-import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canDownloadOrCopyFile
 import com.difft.android.chat.message.generateMessageFromForward
@@ -102,10 +100,10 @@ import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -150,7 +148,7 @@ class ChatMessageListFragment : Fragment() {
     private lateinit var binding: ChatFragmentMessageListBinding
     private val chatViewModel: ChatMessageViewModel by activityViewModels()
     private val chatMessageAdapter: ChatMessageAdapter by lazy {
-        object : ChatMessageAdapter(chatViewModel.forWhat) {
+        object : ChatMessageAdapter(chatViewModel.forWhat, chatViewModel.contactorCache) {
             override fun onItemClick(rootView: View, data: ChatMessage) {
                 if (data !is TextChatMessage) return
                 if (data.isMine && data.sendStatus == SendType.SentFailed.rawValue) {
@@ -338,31 +336,6 @@ class ChatMessageListFragment : Fragment() {
                 }
             }
 
-            override fun onContactAcceptClicked(chatMessage: NotifyChatMessage) {
-                chatViewModel.agreeFriendRequest(
-                    chatMessage.id,
-                    chatMessage.notifyMessage?.data?.askID ?: -1,
-                    SecureSharedPrefsUtil.getToken()
-                )
-            }
-
-            override fun onFriendRequestClicked(chatMessage: NotifyChatMessage) {
-//                chatMessage.contactor?.id?.let {
-//                    chatViewModel.requestAddFriend(requireActivity(), it)
-//                }
-            }
-
-            override fun onPinClicked(chatMessage: NotifyChatMessage) {
-                lifecycleScope.launch {
-                    val groupPin = chatMessage.notifyMessage?.data?.groupPins?.firstOrNull()
-                        ?: return@launch
-                    val pinnedMessageTimeStamp =
-                        groupPin.conversationId.split(":").last().toLongOrNull()
-                            ?: return@launch
-                    chatViewModel.jumpToMessage(pinnedMessageTimeStamp)
-                }
-            }
-
             override fun onQuoteClicked(quote: Quote) {
                 val position =
                     chatMessageAdapter.currentList.indexOfFirst { chatMessage -> chatMessage.timeStamp == quote.id }
@@ -375,10 +348,6 @@ class ChatMessageListFragment : Fragment() {
                         }
                     }
                 }
-            }
-
-            override fun onRecallReEditClicked(chatMessage: TextChatMessage) {
-                chatViewModel.reEditMessage(chatMessage)
             }
 
             override fun onReactionClick(
@@ -452,7 +421,7 @@ class ChatMessageListFragment : Fragment() {
     }
 
 
-    @SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility", "NotifyDataSetChanged")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -703,6 +672,17 @@ class ChatMessageListFragment : Fragment() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 TextSizeUtil.textSizeState.collect {
                     chatMessageAdapter.notifyDataSetChanged()
+                }
+            }
+        }
+
+        // 监听联系人缓存刷新事件
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                chatViewModel.contactorCacheRefreshed.collect {
+                    L.d { "ChatMessageListFragment: Received contactor cache refresh event, calling notifyDataSetChanged()" }
+                    chatMessageAdapter.notifyDataSetChanged()
+                    L.d { "ChatMessageListFragment: notifyDataSetChanged() called" }
                 }
             }
         }
@@ -1903,6 +1883,94 @@ class ChatMessageListFragment : Fragment() {
             } catch (e: Exception) {
                 // Fragment 可能已经被销毁，忽略错误
             }
+        }
+    }
+
+    /**
+     * 显示完整文本内容的对话框
+     */
+    class TextContentBottomSheetFragment : BottomSheetDialogFragment() {
+
+        companion object {
+            private const val ARG_TEXT_CONTENT = "text_content"
+            private const val ARG_MENTIONS = "mentions"
+
+            fun newInstance(textContent: String, mentions: List<difft.android.messageserialization.model.Mention>? = null): TextContentBottomSheetFragment {
+                return TextContentBottomSheetFragment().apply {
+                    arguments = Bundle().apply {
+                        putString(ARG_TEXT_CONTENT, textContent)
+                        mentions?.let { putSerializable(ARG_MENTIONS, ArrayList(it)) }
+                    }
+                }
+            }
+        }
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            return inflater.inflate(R.layout.chat_layout_text_content_dialog, container, false)
+        }
+
+        override fun onStart() {
+            super.onStart()
+
+            // 设置为不可手动关闭
+            isCancelable = false
+
+            // 设置底部弹窗为全屏显示
+            val dialog = dialog
+            if (dialog != null) {
+                // 禁用点击外部区域关闭
+                dialog.setCanceledOnTouchOutside(false)
+
+                val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                if (bottomSheet != null) {
+                    val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
+                    behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                    behavior.skipCollapsed = true
+
+                    // 禁用手势滑动关闭
+                    behavior.isHideable = false
+                    // 禁用拖拽
+                    behavior.isDraggable = false
+
+                    // 设置底部弹窗高度为全屏
+                    val layoutParams = bottomSheet.layoutParams
+                    layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    bottomSheet.layoutParams = layoutParams
+                }
+            }
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+
+            // 设置背景色
+            view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
+
+            view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
+                dismiss()
+            }
+
+            val textContent = arguments?.getString(ARG_TEXT_CONTENT) ?: return
+            @Suppress("DEPRECATION", "UNCHECKED_CAST")
+            val mentions = arguments?.getSerializable(ARG_MENTIONS) as? ArrayList<difft.android.messageserialization.model.Mention>
+
+            val textView = view.findViewById<TextView>(R.id.textView)
+
+            textView.autoLinkMask = 0
+            textView.movementMethod = null
+
+            textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
+
+            LinkTextUtils.setMarkdownToTextview(
+                requireContext(),
+                textContent,
+                textView,
+                mentions
+            )
         }
     }
 }

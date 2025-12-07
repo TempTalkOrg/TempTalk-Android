@@ -32,6 +32,10 @@ class PushReadReceiptSendJob @AssistedInject constructor(
     private val mode: SignalServiceProtos.Mode,
     @Assisted("conversationId")
     private val conversationId: String,
+    @Assisted("sendReceiptToSender")
+    private val sendReceiptToSender: Boolean,
+    @Assisted("sendSyncToSelf")
+    private val sendSyncToSelf: Boolean,
     private val newSignalServiceMessageSender: NewSignalServiceMessageSender,
     private val gson: Gson,
 ) : PushSendJob(parameters ?: buildParameters(recipientId)) {
@@ -52,6 +56,8 @@ class PushReadReceiptSendJob @AssistedInject constructor(
             .putString(KEY_MESSAGE_READ_POSITION, gson.toJson(readPosition1))
             .putString(KEY_MESSAGE_MESSAGE_MODE, gson.toJson(mode))
             .putString(KEY_MESSAGE_CONVERSATION_ID, conversationId)
+            .putBoolean(KEY_SEND_RECEIPT_TO_SENDER, sendReceiptToSender)
+            .putBoolean(KEY_SEND_SYNC_TO_SELF, sendSyncToSelf)
         return builder.build()
     }
 
@@ -71,7 +77,7 @@ class PushReadReceiptSendJob @AssistedInject constructor(
                 readPosition = readPosition1
                 messageMode = mode
             }
-            L.i { "[Message][PushReadReceiptSendJob] send read receipt message to-> $recipientId, RetryCount: $runAttempt" }
+            L.i { "[Message][PushReadReceiptSendJob] send read receipt message to-> $recipientId, sendReceiptToSender=$sendReceiptToSender, sendSyncToSelf=$sendSyncToSelf, RetryCount: $runAttempt" }
 
             val readMessages: MutableList<SignalServiceProtos.SyncMessage.Read> = LinkedList()
             readMessages.add(
@@ -87,6 +93,8 @@ class PushReadReceiptSendJob @AssistedInject constructor(
                 room,
                 receiptMessage,
                 readMessages,
+                sendReceiptToSender,
+                sendSyncToSelf
             )
         } catch (e: Exception) {
             L.e { "[Message][PushReadReceiptSendJob] send read receipt message exception -> ${e.stackTraceToString()}" }
@@ -125,6 +133,10 @@ class PushReadReceiptSendJob @AssistedInject constructor(
             )
             val conversationId = data.getString(KEY_MESSAGE_CONVERSATION_ID)
 
+            // 向后兼容：如果旧Job数据中没有这两个字段，使用默认值true（保持原有行为）
+            val sendReceiptToSender = data.getBooleanOrDefault(KEY_SEND_RECEIPT_TO_SENDER, true)
+            val sendSyncToSelf = data.getBooleanOrDefault(KEY_SEND_SYNC_TO_SELF, true)
+
             return EntryPointAccessors.fromApplication(
                 ApplicationDependencies.getApplication(),
                 EntryPoint::class.java
@@ -134,7 +146,9 @@ class PushReadReceiptSendJob @AssistedInject constructor(
                 timeStamps,
                 readPosition,
                 mode,
-                conversationId
+                conversationId,
+                sendReceiptToSender,
+                sendSyncToSelf
             )
         }
     }
@@ -146,6 +160,8 @@ class PushReadReceiptSendJob @AssistedInject constructor(
         private const val KEY_MESSAGE_READ_POSITION = "read_position"
         private const val KEY_MESSAGE_MESSAGE_MODE = "message_mode"
         private const val KEY_MESSAGE_CONVERSATION_ID = "conversation_id"
+        private const val KEY_SEND_RECEIPT_TO_SENDER = "send_receipt_to_sender"
+        private const val KEY_SEND_SYNC_TO_SELF = "send_sync_to_self"
 
         private fun buildParameters(recipientId: String): Parameters {
             return Parameters.Builder()

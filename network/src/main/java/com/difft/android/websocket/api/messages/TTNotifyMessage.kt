@@ -91,7 +91,6 @@ data class Data(
     var topicId: String? = null,
     var source: String? = null,
     var conversationId: String? = null,
-    var groupPins: List<GroupPin>? = null,
     var concatNumbers: String? = null,
     var endTimestamp: Long = 0,
     val invitorId: String? = null,

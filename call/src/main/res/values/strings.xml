@@ -19,7 +19,8 @@
     <string name="call_instant_call_title_default">instant call</string>
     <string name="call_push_stream_limit_tip">The current server has reached the publish streaming limit. Please try again later.</string>
     <string name="call_connect_timeout_tip">Connection timed out, please try again later.</string>
-    <string name="call_connect_exception_error">Network connection abnormality</string>
+    <string name="call_connect_exception_error">Unable to connect to the server. Please try later.</string>
+    <string name="call_no_internet_connection_tip">No internet connection. Please check your network and try again.</string>
     <string name="call_other_exception_error">Exception error</string>
     <string name="call_all_mute_timeout_reminder">No one has been speaking for a while. Would you like to leave the meeting?</string>
     <string name="call_single_person_timeout_reminder">No other participants are in the meeting. Would you like to leave?</string>
@@ -104,5 +105,13 @@
     <string name="call_microphone_permission_setting_failed">Unable to open settings. Please enable microphone permission manually.</string>
     <string name="call_camera_permission_setting_failed">Unable to open settings. Please enable camera permission manually.</string>
     <string name="call_permission_button_setting_cancel_tip">Lack of necessary permissions</string>
-
+    <string name="fullscreen_notification_settings_huawei_tip">Please go to App Settings → Other Permissions and enable “Background Popup” to allow incoming calls to appear on the lock screen.</string>
+    <string name="fullscreen_notification_settings_xiaomi_tip">Please go to App Settings → Other Permissions and enable “Background Popup Interface” to allow incoming calls to appear on the lock screen.</string>
+    <string name="fullscreen_notification_settings_honor_tip">Please go to App Settings → Notification Management and enable “Banner Notifications” to allow incoming calls to appear on the lock screen.</string>
+    <string name="fullscreen_notification_settings_mainland_default_tip">Please make sure “Banner Notifications” are enabled in the app settings to allow incoming calls to appear on the lock screen.</string>
+    <string name="fullscreen_notification_settings_oversea_tip">Please enable the “Full-Screen Notifications” permission to allow incoming calls to appear on the lock screen.</string>
+    <string name="fullscreen_notification_no_permission_oversea_tip">Please allow the “Full-Screen Notifications” permission for %s so you can receive calls while your device is locked.</string>
+    <string name="fullscreen_notification_no_permission_huawei_tip">Please allow the “Background Popup” permission for %s so you can receive calls while your device is locked.</string>
+    <string name="fullscreen_notification_no_permission_xiaomi_tip">Please allow the “Background Popup Interface” permission for %s so you can receive calls while your device is locked.</string>
+    <string name="fullscreen_notification_no_permission_china_default_tip">Please allow “Banner Notifications” for %s so you can receive calls while your device is locked.</string>
 </resources>

@@ -50,7 +50,6 @@ import com.difft.android.websocket.api.util.CallMessageCreator
 import java.util.ArrayList
 import java.util.Optional
 import javax.inject.Inject
-import com.difft.android.base.widget.ToastUtil
 import com.difft.android.network.config.WsTokenManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,6 +112,8 @@ class LCallToChatControllerImpl @Inject constructor(
 
                 // 刷新 Token（若需要）
                 wsTokenManager.refreshTokenIfNeeded()
+
+                LCallManager.checkQuicFeatureGrayStatus()
 
                 val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
                     .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -200,12 +201,9 @@ class LCallToChatControllerImpl @Inject constructor(
                     }
                 } else {
                     L.e { "[Call] rejectCall, response status fail, reason:${it.reason}" }
-                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
-                it.printStackTrace()
-                L.e { "[Call] rejectCall, request fail, error:${it.stackTraceToString()}" }
-                it.message?.let { message -> ToastUtil.show(message) }
+                L.e { "[Call] rejectCall, request fail, error:${it.message}" }
             })
 
     }
@@ -249,12 +247,9 @@ class LCallToChatControllerImpl @Inject constructor(
                 }
             } else {
                 L.e { "[Call] cancelCall, response status fail, reason:${it.reason}" }
-                it.reason?.let { message -> ToastUtil.show(message) }
             }
         }, {
-            it.printStackTrace()
-            L.e { "[Call] cancelCall, request fail, error:${it.stackTraceToString()}" }
-            it.message?.let { message -> ToastUtil.show(message) }
+            L.e { "[Call] cancelCall, request fail, error:${it.message}" }
         })
 
     }
@@ -315,9 +310,7 @@ class LCallToChatControllerImpl @Inject constructor(
                     L.e { "[Call] hangUpCall, response status fail, reason:${it.reason}" }
                 }
             }, {
-                it.printStackTrace()
-                L.e { "[Call] hangUpCall, request fail, error:${it.stackTraceToString()}" }
-                it.message?.let { message -> ToastUtil.show(message) }
+                L.e { "[Call] hangUpCall, request fail, error:${it.message}" }
             })
 
     }
@@ -353,12 +346,9 @@ class LCallToChatControllerImpl @Inject constructor(
                     }
                 } else {
                     L.e { "[Call] syncJoinedMessage, response status fail, reason:${it.reason}" }
-                    it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
-                it.printStackTrace()
-                L.e { "[Call] syncJoinedMessage, request fail, error:${it.stackTraceToString()}" }
-                it.message?.let { message -> ToastUtil.show(message) }
+                L.e { "[Call] syncJoinedMessage, request fail, error:${it.message}" }
             })
     }
 

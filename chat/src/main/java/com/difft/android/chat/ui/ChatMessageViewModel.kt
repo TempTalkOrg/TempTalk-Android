@@ -13,16 +13,8 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.appScope
-import org.difft.app.database.convertToContactorModel
-import org.difft.app.database.convertToMessageModel
-import org.difft.app.database.convertToTextMessage
-import org.difft.app.database.getContactorsFromAllTable
-import org.difft.app.database.getReadInfoList
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
-import org.difft.app.database.getGroupMemberCount
-import org.difft.app.database.updateGroupMembersReadPosition
-import org.difft.app.database.members
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LChatToCallController
@@ -39,9 +31,14 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageTwo
 import com.difft.android.chat.speech2text.SpeechToTextManager
 import com.difft.android.chat.translate.TranslateManager
-import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
+import com.difft.android.network.BaseResponse
+import com.google.mlkit.nl.translate.TranslateLanguage
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
+import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.ReadPosition
@@ -53,23 +50,17 @@ import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.TranslateTargetLanguage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
-import com.difft.android.network.BaseResponse
-import com.google.mlkit.nl.translate.TranslateLanguage
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
-import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.BehaviorSubject
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -77,17 +68,24 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
+import org.difft.app.database.convertToMessageModel
+import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.getContactorsFromAllTable
+import org.difft.app.database.getGroupMemberCount
+import org.difft.app.database.getReadInfoList
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.ReadInfoModel
-import util.TimeFormatter
+import org.difft.app.database.updateGroupMembersReadPosition
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.create
+import util.TimeFormatter
 import javax.inject.Inject
-import com.difft.android.base.widget.ToastUtil
 
 @HiltViewModel(assistedFactory = ChatMessageViewModelFactory::class)
 class ChatMessageViewModel @AssistedInject constructor(
@@ -112,6 +110,13 @@ class ChatMessageViewModel @AssistedInject constructor(
     val viewModelCreateTime = System.currentTimeMillis()
 
     private val disposableManager = CompositeDisposable()
+
+    /**
+     * 页面级联系人缓存
+     *
+     * 跟随ViewModel生命周期，页面销毁时自动释放
+     */
+    val contactorCache = com.difft.android.chat.MessageContactsCacheUtil()
 
     val chatUIData = MutableStateFlow(
         ChatUIData(
@@ -138,6 +143,54 @@ class ChatMessageViewModel @AssistedInject constructor(
     fun emitInputHeightChanged() {
         viewModelScope.launch {
             _inputHeightChanged.emit(Unit)
+        }
+    }
+
+    // 联系人缓存刷新事件（用于触发adapter.notifyDataSetChanged）
+    // extraBufferCapacity=1: 缓冲一个事件，避免因为Fragment生命周期而丢失事件
+    private val _contactorCacheRefreshed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val contactorCacheRefreshed: SharedFlow<Unit> = _contactorCacheRefreshed.asSharedFlow()
+
+    init {
+        // 监听联系人更新事件
+        observeContactorUpdates()
+    }
+
+    /**
+     * 监听联系人更新事件
+     *
+     * 当联系人信息更新时，检查是否在当前缓存中：
+     * - 如果有交集，重新加载这些联系人并发送刷新事件
+     * - 这样群聊中其他成员、转发消息作者、引用消息作者等的名字也能及时更新
+     */
+    private fun observeContactorUpdates() {
+        viewModelScope.launch {
+            ContactorUtil.contactsUpdate
+                .asFlow()
+                .flowOn(Dispatchers.IO)
+                .collect { updatedContactIds ->
+                    // 获取缓存中的所有联系人ID
+                    val cachedIds = contactorCache.getCachedIds()
+
+                    // 找出需要更新的联系人（在缓存中的）
+                    val idsToRefresh = updatedContactIds.filter { cachedIds.contains(it) }.toSet()
+
+                    if (idsToRefresh.isNotEmpty()) {
+                        L.d { "MessageContactsCacheUtil: Refreshing ${idsToRefresh.size} cached contactors: $idsToRefresh" }
+
+                        // 1. 先清除缓存中的旧数据
+                        contactorCache.remove(idsToRefresh)
+                        L.d { "MessageContactsCacheUtil: Removed old cache entries" }
+
+                        // 2. 重新加载这些联系人
+                        contactorCache.loadContactors(idsToRefresh)
+                        L.d { "MessageContactsCacheUtil: Reloaded contactors from database" }
+
+                        // 3. 发送刷新事件
+                        _contactorCacheRefreshed.emit(Unit)
+                        L.d { "MessageContactsCacheUtil: Refresh event emitted" }
+                    }
+                }
         }
     }
 
@@ -224,12 +277,9 @@ class ChatMessageViewModel @AssistedInject constructor(
         chatUIData.value = data
     }
 
-    var agreeFriendRequest: Subject<BaseResponse<String>> = BehaviorSubject.create()
-
     var messageQuoted: Subject<ChatMessage> = BehaviorSubject.create()
     var messageForward: Subject<Pair<ChatMessage, Boolean>> = BehaviorSubject.create()
     var messageRecall: Subject<ChatMessage> = BehaviorSubject.create()
-    var messageReEdit: Subject<TextChatMessage> = BehaviorSubject.create()
     var messageResend: Subject<ChatMessage> = BehaviorSubject.create()
     var messageEmojiReaction: Subject<EmojiReactionEvent> = BehaviorSubject.create()
 
@@ -284,10 +334,10 @@ class ChatMessageViewModel @AssistedInject constructor(
             }
             //否则发起livekit call通话
             L.i { "[call] Starting new call" }
-            callManager.startCall(activity, forWhat, chatRoomName) { status ->
+            callManager.startCall(activity, forWhat, chatRoomName) { status, message ->
                 if (!status) {
                     L.e { "[Call] start call failed." }
-                    ToastUtil.show(com.difft.android.call.R.string.call_start_failed_tip)
+                    message?.let { ToastUtil.show(it) }
                 }
             }
         }
@@ -315,19 +365,6 @@ class ChatMessageViewModel @AssistedInject constructor(
         confidentialRecipient.onNext(message)
     }
 
-    fun agreeFriendRequest(messageId: String, applyId: Int, token: String) {
-        disposableManager.add(
-            ContactorUtil.fetchAgreeFriendRequest(com.difft.android.base.utils.application, applyId, token)
-                .subscribeOn(Schedulers.io())
-                .subscribe({
-                    it.data = messageId
-                    agreeFriendRequest.onNext(it)
-                }) {
-                    it.printStackTrace()
-                }
-        )
-    }
-
     fun quoteMessage(data: ChatMessage) {
         messageQuoted.onNext(data)
     }
@@ -338,10 +375,6 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     fun recallMessage(data: ChatMessage) {
         messageRecall.onNext(data)
-    }
-
-    fun reEditMessage(data: TextChatMessage) {
-        messageReEdit.onNext(data)
     }
 
     fun reSendMessage(data: ChatMessage) {
@@ -500,15 +533,18 @@ class ChatMessageViewModel @AssistedInject constructor(
         dbMessageStore.updateMessageTranslateData(forWhat.id, data.id, translateData).subscribe()
     }
 
-    private fun assembleMessagesUIData(
+    private suspend fun assembleMessagesUIData(
         chatMessageListBehavior: ChatMessageListBehavior,
         selectMessageState: SelectMessageState,
         readInfoList: List<ReadInfoModel>
     ): ChatMessageListUIState {
-        val contactIds = chatMessageListBehavior.messageList.map { it.fromWho }.distinct()
-        val members = wcdb.getContactorsFromAllTable(contactIds)
+        // 1. 先批量查询消息发送者的联系人信息（generateMessageTwo需要用于设置nickname）
+        val senderIds = chatMessageListBehavior.messageList.map { it.fromWho }.distinct()
+        val members = withContext(Dispatchers.IO) {
+            wcdb.getContactorsFromAllTable(senderIds)
+        }
 
-        // 在循环外判断是否是大群，避免重复查询
+        // 2. 在循环外判断是否是大群，避免重复查询
         val isLargeGroup = if (forWhat is For.Group) {
             val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
             val memberCount = wcdb.getGroupMemberCount(forWhat.id)
@@ -517,6 +553,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             false
         }
 
+        // 3. 生成 ChatMessage（generateMessageTwo 内部会查询子数据一次）
         // 转换锚点消息用于计算显示逻辑
         val anchorChatMessageBefore = chatMessageListBehavior.anchorMessageBefore?.let {
             generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup)
@@ -531,6 +568,13 @@ class ChatMessageViewModel @AssistedInject constructor(
                 selectedStatus = id in selectMessageState.selectedMessageIds
             }
         }
+
+        // 4. 从已生成的 ChatMessage 中收集所有联系人ID（不触发新查询）
+        val allMessagesToCollect = listOfNotNull(anchorChatMessageBefore, anchorChatMessageAfter) + chatMessages
+        val allContactIds = com.difft.android.chat.MessageContactsCacheUtil.collectContactIds(allMessagesToCollect)
+
+        // 5. 批量加载联系人到当前页面的缓存（只查询缓存中不存在的）
+        contactorCache.loadContactors(allContactIds)
         val list = chatMessages.sortedBy { message -> message.systemShowTimestamp }
 
         // 过滤掉错误通知消息
@@ -561,9 +605,9 @@ class ChatMessageViewModel @AssistedInject constructor(
             }
             val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
 
-            message.showName = !isSameDayWithPreviousMessage || previousMessage is NotifyChatMessage || message.nickname != previousMessage?.nickname
+            message.showName = !isSameDayWithPreviousMessage || previousMessage is NotifyChatMessage || message.authorId != previousMessage?.authorId
             message.showDayTime = !isSameDayWithPreviousMessage
-            message.showTime = !isSameDayWithNextMessage || message.nickname != nextMessage?.nickname
+            message.showTime = !isSameDayWithNextMessage || message.authorId != nextMessage?.authorId
 
             // 设置新消息分割线：仅在初始化加载时（readPosition 不为 null）显示
             // 在 readPosition 之后第一个不是自己发送的消息上显示
@@ -587,14 +631,17 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     suspend fun sendReadRecipient(currentReadPosition: Long) = withContext(Dispatchers.IO) {
         try {
-            // 如果是大群（群人数大于阈值），不发送已读回执
-            if (forWhat is For.Group) {
+            // 判断是否为大群（群人数大于阈值）
+            val isLargeGroup = if (forWhat is For.Group) {
                 val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
                 val memberCount = wcdb.getGroupMemberCount(forWhat.id)
-                if (memberCount > threshold) {
-                    L.i { "[${forWhat.id}] Large group with $memberCount members (threshold: $threshold), skipping read receipt" }
-                    return@withContext
+                val isLarge = memberCount > threshold
+                if (isLarge) {
+                    L.i { "[${forWhat.id}] Large group with $memberCount members (threshold: $threshold), will skip sending read receipts to senders but will send sync message" }
                 }
+                isLarge
+            } else {
+                false
             }
 
             val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat).blockingGet()
@@ -606,20 +653,63 @@ class ChatMessageViewModel @AssistedInject constructor(
                         .and(DBMessageModel.systemShowTimestamp.between(lastReadPosition, currentReadPosition))
                 )
 
-                messages.groupBy { it.fromWho }.forEach { (contactId, messages) ->
-                    L.i { "[${forWhat.id}] Sending read recipient to $contactId, currentReadPosition:$currentReadPosition, size:${messages.size}" }
-                    val maxMessage = messages.maxBy { it.systemShowTimestamp }
-                    val readPosition = ReadPosition(
-                        forWhat.id.takeIf { forWhat is For.Group },
-                        maxMessage.timeStamp,
-                        maxMessage.systemShowTimestamp,
-                        maxMessage.notifySequenceId,
-                        maxMessage.sequenceId
-                    )
-                    ApplicationDependencies.getJobManager().add(
-                        pushReadReceiptSendJobFactory.create(contactId, forWhat, messages.map { it.timeStamp }, readPosition, 0)
-                    )
+                if (messages.isEmpty()) {
+                    L.i { "[${forWhat.id}] No messages to send read receipt for" }
+                    return@withContext
                 }
+
+                val groupedMessages = messages.groupBy { it.fromWho }
+
+                // 1. 小群/单聊：为每个发送者创建Job发送已读回执 大群：跳过这一步
+                if (!isLargeGroup) {
+                    groupedMessages.forEach { (contactId, senderMessages) ->
+                        L.i { "[${forWhat.id}] Creating read receipt job for $contactId, messages=${senderMessages.size}" }
+                        val maxMessage = senderMessages.maxBy { it.systemShowTimestamp }
+                        val readPosition = ReadPosition(
+                            forWhat.id.takeIf { forWhat is For.Group },
+                            maxMessage.timeStamp,
+                            maxMessage.systemShowTimestamp,
+                            maxMessage.notifySequenceId,
+                            maxMessage.sequenceId
+                        )
+                        ApplicationDependencies.getJobManager().add(
+                            pushReadReceiptSendJobFactory.create(
+                                recipientId = contactId,
+                                forWhat = forWhat,
+                                messageTimeStamps = senderMessages.map { it.timeStamp },
+                                readPosition = readPosition,
+                                messageMode = 0,
+                                sendReceiptToSender = true,   // 小群发送已读回执
+                                sendSyncToSelf = false        // 统一在最后发送同步消息
+                            )
+                        )
+                    }
+                } else {
+                    L.i { "[${forWhat.id}] Large group: skipping read receipt jobs, will only send sync message" }
+                }
+
+                // 2. 统一发送一次同步消息（无论是否大群）
+                // 从所有消息中找到时间戳最大的消息，用于同步已读位置
+                val syncMaxMessage = messages.maxBy { it.systemShowTimestamp }
+                val syncReadPosition = ReadPosition(
+                    forWhat.id.takeIf { forWhat is For.Group },
+                    syncMaxMessage.timeStamp,
+                    syncMaxMessage.systemShowTimestamp,
+                    syncMaxMessage.notifySequenceId,
+                    syncMaxMessage.sequenceId
+                )
+                L.i { "[${forWhat.id}] Creating sync-only job to sync read position to self's other devices, maxTimestamp=${syncMaxMessage.systemShowTimestamp}" }
+                ApplicationDependencies.getJobManager().add(
+                    pushReadReceiptSendJobFactory.create(
+                        recipientId = syncMaxMessage.fromWho,
+                        forWhat = forWhat,
+                        messageTimeStamps = listOf(syncMaxMessage.timeStamp),
+                        readPosition = syncReadPosition,
+                        messageMode = 0,
+                        sendReceiptToSender = false,  // 不发已读回执
+                        sendSyncToSelf = true          // 只发同步消息
+                    )
+                )
             } else {
                 L.i { "[${forWhat.id}] Read recipient already sent at position: $lastReadPosition, no need to resend." }
             }
@@ -792,6 +882,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
         resetSelectMessageState()
     }
+
 }
 
 data class EmojiReactionEvent(

@@ -574,11 +574,6 @@
     <string name="tip">Tip</string>
     <string name="notification_no_permission_tip">Application has no permission to show notifications. You can enable it in system settings..</string>
     <string name="notification_no_permission_tip1">Please allow %s to send you notification to stay informed with the messages and meetings.</string>
-    <string name="notification_no_permission_tip2">Please allow %s to be shown on the lock screen so that you can receive calls when you device is locked.</string>
-    <string name="notification_no_permission_tip3">Please make sure notifications and full-screen notifications are turned on to receive messages and meeting notifications.</string>
-    <string name="notification_no_permission_tip4">Please enable background pop-up and banner notification permissions so that %s can display incoming call when the device is locked.</string>
-    <string name="notification_no_permission_tip5">Please enable background pop-up and lock screen display permissions so that %s can display incoming call when the device is locked.</string>
-    <string name="notification_no_permission_tip6">Please enable banner notification permissions so that %s can display incoming call when the device is locked.</string>
     <string name="notification_disturb_tip">"Do not disturb" is turned on. You may not receive notifications.</string>
     <string name="notification_no_google_tip">Google services are restricted on your device. Please keep background connection enabled to receive messages and calls.</string>
     <string name="notification_ignore">Not now</string>

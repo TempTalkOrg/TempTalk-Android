@@ -14,6 +14,7 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.chat.R
 import com.difft.android.chat.group.GroupGlobalNotificationSettingsActivity
 import com.difft.android.databinding.ActivityNotificationSettingsBinding
@@ -47,11 +48,8 @@ class NotificationSettingsActivity : BaseActivity() {
 
     private var isCriticalAlertCheckBackgroundConnection: Boolean = false
 
-    var isCriticalAlertSettingsOpened: Boolean = false
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        isCriticalAlertSettingsOpened = messageNotificationUtil.isNotificationPolicyAccessGranted()
         mBinding.ibBack.setOnClickListener { finish() }
     }
 
@@ -98,24 +96,29 @@ class NotificationSettingsActivity : BaseActivity() {
             messageNotificationUtil.openNotificationSettings(this@NotificationSettingsActivity)
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (FullScreenPermissionHelper.isOppoEcosystemDevice()) {
+            mBinding.tvFullScreenNotificationSettingsStatus.visibility = View.GONE
+            mBinding.tvFullScreenNotificationTip.visibility = View.VISIBLE
+            mBinding.tvFullScreenNotificationTip.text = FullScreenPermissionHelper.getFullScreenSettingTip()
+        } else {
             mBinding.tvFullScreenNotificationSettingsStatus.visibility = View.VISIBLE
             if (messageNotificationUtil.hasFullScreenNotificationPermission()) {
-                mBinding.tvFullScreenNotificationSettingsStatus.text = getString(com.difft.android.chat.R.string.notification_enable)
+                mBinding.tvFullScreenNotificationSettingsStatus.text = getString(R.string.notification_enable)
+                mBinding.tvFullScreenNotificationTip.visibility = View.GONE
             } else {
-                mBinding.tvFullScreenNotificationSettingsStatus.text = getString(com.difft.android.chat.R.string.notification_disable)
+                mBinding.tvFullScreenNotificationSettingsStatus.text = getString(R.string.notification_disable)
+                mBinding.tvFullScreenNotificationTip.visibility = View.VISIBLE
+                mBinding.tvFullScreenNotificationTip.text = FullScreenPermissionHelper.getFullScreenSettingTip()
             }
-        } else {
-            mBinding.tvFullScreenNotificationSettingsStatus.visibility = View.GONE
         }
 
         mBinding.clFullScreenNotification.setOnClickListener {
             messageNotificationUtil.openFullScreenNotificationSettings(this@NotificationSettingsActivity)
         }
 
-        mBinding.tvCriticalAlertSettings.text = ResUtils.getString(com.difft.android.chat.R.string.critical_alerts_content, PackageUtil.getAppName())
+        mBinding.tvCriticalAlertSettings.text = ResUtils.getString(R.string.critical_alerts_content, PackageUtil.getAppName())
         mBinding.tvCriticalAlertDisplay.text = if (::messageNotificationUtil.isInitialized && messageNotificationUtil.isNotificationPolicyAccessGranted())
-            getString(com.difft.android.chat.R.string.notification_enable) else getString(com.difft.android.chat.R.string.notification_disable)
+            getString(R.string.notification_enable) else getString(R.string.notification_disable)
         mBinding.clCriticalAlertDisplay.setOnClickListener {
             if (!isCriticalAlertCheckBackgroundConnection && !messageServiceManager.checkBackgroundConnectionRequirements()) {
                 ComposeDialogManager.showMessageDialog(
@@ -143,12 +146,12 @@ class NotificationSettingsActivity : BaseActivity() {
         }
     }
 
-
     private val dndPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
         // 当用户从设置页返回时，会回调到这里
-        isCriticalAlertSettingsOpened = messageNotificationUtil.isNotificationPolicyAccessGranted()
+        val isGranted = messageNotificationUtil.isNotificationPolicyAccessGranted()
+        mBinding.tvCriticalAlertDisplay.text = if (isGranted) getString(R.string.notification_enable) else getString(R.string.notification_disable)
     }
 
 }

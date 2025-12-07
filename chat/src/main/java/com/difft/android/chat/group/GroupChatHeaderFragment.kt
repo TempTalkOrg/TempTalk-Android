@@ -92,7 +92,9 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
         binding.ibBack.setOnClickListener {
             activity?.finish()
         }
-        binding.title.setOnClickListener {
+
+        // 给整个 header 区域添加点击事件，跳转到群组详情页面
+        binding.titleContainerInner.setOnClickListener {
             (activity as GroupChatContentActivity).openGroupInfoActivity()
         }
 

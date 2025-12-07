@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.accompanist.permissions)
     implementation(libs.livekit.android)
     implementation(libs.livekit.android.camerax)
+    implementation(libs.livekit.ttsignal)
     implementation(libs.denoise.filter)
     implementation(libs.coil.compose)
     implementation(libs.coil)
@@ -76,5 +77,5 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.protobuf.javalite)
     implementation(libs.protobuf.kotlin.lite)
-    
+
 }

@@ -7,7 +7,7 @@ import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import java.util.ArrayList
 
 interface LChatToCallController {
-    fun startCall(activity: Activity, forWhat: For, chatRoomName: String?, onComplete: (Boolean) -> Unit)
+    fun startCall(activity: Activity, forWhat: For, chatRoomName: String?, onComplete: (Boolean, String?) -> Unit)
 
     fun handleCallMessage(message: SignalServiceDataClass)
 

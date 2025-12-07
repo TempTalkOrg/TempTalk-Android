@@ -63,6 +63,10 @@ class CallRoomController(
     private val _roomMetadata = MutableStateFlow(RoomMetadata(canPublishAudio = true, canPublishVideo = true))
     val roomMetadata = _roomMetadata.asStateFlow()
 
+    @Volatile
+    private var isUseQuicSignal = false
+    fun isUseQuicSignal(): Boolean = isUseQuicSignal
+
     val room by lazy {
         LiveKit.create(
             appContext = appContext,
@@ -112,24 +116,22 @@ class CallRoomController(
         }
     }
 
-    suspend fun connect(url: String, appToken: String, startCallParams: ByteArray, onError: (Throwable) -> Unit) = withContext(
+    suspend fun connect(url: String, appToken: String, startCallParams: ByteArray, useQuicSignal: Boolean, onError: (Throwable) -> Unit) = withContext(
         Dispatchers.IO) {
         try {
             room.e2eeOptions = getE2EEOptions()
+            isUseQuicSignal = useQuicSignal
             room.connect(
                 url = url,
                 token = "",
-                options = ConnectOptions().apply {
-                    try {
-                        this.ttCallRequest = LivekitTemptalk.TTCallRequest
-                            .newBuilder()
-                            .setToken(appToken)
-                            .setStartCall(livekit.LivekitTemptalk.TTStartCall.parseFrom(startCallParams))
-                            .build()
-                    } catch (e: Exception) {
-                        throw StartCallException(e.message)
-                    }
-                }
+                options = ConnectOptions(
+                    ttCallRequest = LivekitTemptalk.TTCallRequest
+                        .newBuilder()
+                        .setToken(appToken)
+                        .setStartCall(livekit.LivekitTemptalk.TTStartCall.parseFrom(startCallParams))
+                        .build(),
+                    useQuicSignal = useQuicSignal
+                )
             )
             L.i { "[Call] connectToRoom connected" }
         } catch (t: Throwable) {

@@ -61,7 +61,11 @@ interface PushReadReceiptSendJobFactory {
         @Assisted
         mode: SignalServiceProtos.Mode,
         @Assisted("conversationId")
-        conversationId: String
+        conversationId: String,
+        @Assisted("sendReceiptToSender")
+        sendReceiptToSender: Boolean,
+        @Assisted("sendSyncToSelf")
+        sendSyncToSelf: Boolean
     ): PushReadReceiptSendJob
 }
 

@@ -469,11 +469,6 @@
     <string name="tip">提示</string>
     <string name="notification_no_permission_tip">应用没有显示通知的权限，您可以在系统设置中启用它。</string>
     <string name="notification_no_permission_tip1">请允许%s显示通知，以便您能正常接收到消息和接听电话。</string>
-    <string name="notification_no_permission_tip2">请允许%s显示在锁屏页面上，以便您在设备锁定时接听电话。</string>
-    <string name="notification_no_permission_tip3">请确保开启通知及全屏通知功能，以便您能正常接收到消息和接听电话。</string>
-    <string name="notification_no_permission_tip4">请开启后台弹窗权限和横幅通知权限，允许%s在锁屏时显示来电界面。</string>
-    <string name="notification_no_permission_tip5">请开启后台弹窗权限和锁屏显示权限，允许%s在锁屏时显示来电界面。</string>
-    <string name="notification_no_permission_tip6">请开启横幅通知权限，允许%s在锁屏时显示来电界面。</string>
     <string name="notification_disturb_tip">“请勿打扰”已开启，您可能收不到通知。</string>
     <string name="notification_no_google_tip">您的设备上连接谷歌服务受限，请保持开启后台连接功能，以便能正常接收到消息和接听电话。</string>
     <string name="notification_ignore">稍后</string>

@@ -27,6 +27,7 @@ import com.difft.android.chat.common.ScreenShotUtil
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.login.PasscodeUtil
 import com.difft.android.login.ScreenLockActivity
+import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.github.anrwatchdog.ANRWatchDog
 import com.google.android.gms.security.ProviderInstaller
@@ -173,6 +174,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     override fun onForeground() {
         recordLastUseTime()
+        scheduleGrayConfigUpdateCheck()
         LCallManager.restoreCallActivityIfInCalling()
         LCallManager.restoreIncomingCallActivityIfIncoming()
         messageNotificationUtil.cancelCriticalAlertNotification()
@@ -453,6 +455,14 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 }
                 .setReportMainThreadOnly()
                 .start()
+        }
+    }
+
+    private fun scheduleGrayConfigUpdateCheck() {
+        launch(Dispatchers.IO){
+            userManager.getUserData()?.let {
+                FeatureGrayManager.checkUpdateConfigFromServer(it.lastUseTime)
+            }
         }
     }
 }
