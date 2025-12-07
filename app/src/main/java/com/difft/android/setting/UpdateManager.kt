@@ -144,6 +144,7 @@ class UpdateManager @Inject constructor(
             confirmText = context.getString(R.string.settings_dialog_update),
             cancelable = false,
             showCancel = false,
+            autoDismiss = false,
             onConfirm = {
                 if (AppUpgradeService.isDownloading) {
                     ToastUtil.show(R.string.status_upgrade_downloading)
@@ -168,9 +169,20 @@ class UpdateManager @Inject constructor(
             cancelable = !isForce,
             onConfirm = {
                 ScreenLockUtil.temporarilyDisabled = true
-                val authority: String = context.applicationContext.packageName + ".provider"
-                val uri = FileProvider.getUriForFile(context, authority, apkFile)
-                installAPK(context, uri, apkFile)
+                try {
+                    if (!apkFile.exists()) {
+                        L.e { "APK file does not exist: ${apkFile.absolutePath}" }
+                        ToastUtil.show(R.string.status_upgrade_install_failed)
+                        return@showMessageDialog
+                    }
+                    val authority: String = context.applicationContext.packageName + ".provider"
+                    val uri = FileProvider.getUriForFile(context, authority, apkFile)
+                    installAPK(context, uri, apkFile)
+                } catch (e: IllegalArgumentException) {
+                    L.e { "FileProvider failed to find configured root for: ${apkFile.absolutePath}" }
+                    L.e { "Error: ${e.message}" }
+                    ToastUtil.show(R.string.status_upgrade_install_failed)
+                }
             }
         )
     }

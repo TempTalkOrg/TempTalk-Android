@@ -93,4 +93,11 @@ class TimerManager(private val scope: CoroutineScope) {
         return if (hours <= 0) String.format("%02d:%02d", minutes, seconds)
         else String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
+
+    /**
+     * Retrieves the current call duration in seconds.
+     */
+    fun getCurrentDuration(): Long {
+        return _callDurationSeconds.value
+    }
 }

@@ -18,6 +18,7 @@ data class LinkDataEntity(
         const val CATEGORY_PUSH = 1
         const val CATEGORY_MESSAGE = 2
         const val CATEGORY_SCHEME = 3
+        const val CATEGORY_BACKGROUND_CONNECTION_SETTINGS = 4
     }
 }
 

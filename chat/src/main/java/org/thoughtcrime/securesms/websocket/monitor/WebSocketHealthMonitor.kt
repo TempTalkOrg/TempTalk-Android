@@ -5,7 +5,11 @@ import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
-import com.difft.android.network.WebsocketUrlManager
+import com.difft.android.network.UrlManager
+import com.difft.android.websocket.api.websocket.HealthMonitor
+import com.difft.android.websocket.api.websocket.WebSocketConnectionState
+import com.difft.android.websocket.internal.websocket.WebSocketConnection
+import com.difft.android.websocket.internal.websocket.value
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,10 +26,6 @@ import kotlinx.coroutines.withTimeout
 import org.thoughtcrime.securesms.jobmanager.impl.BackoffUtil
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint
 import org.thoughtcrime.securesms.util.AppForegroundObserver
-import com.difft.android.websocket.api.websocket.HealthMonitor
-import com.difft.android.websocket.api.websocket.WebSocketConnectionState
-import com.difft.android.websocket.internal.websocket.WebSocketConnection
-import com.difft.android.websocket.internal.websocket.value
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -39,7 +39,7 @@ class WebSocketHealthMonitor
 @Inject constructor(
     @ApplicationContext
     private val context: Context,
-    private val websocketUrlManager: WebsocketUrlManager,
+    private val urlManager: UrlManager,
 ) : HealthMonitor, CoroutineScope by appScope {
 
     @Volatile
@@ -181,14 +181,12 @@ class WebSocketHealthMonitor
             if (state is WebSocketConnectionState.CONNECTING) {
                 timeoutJob?.cancel()
                 // Start the timeout coroutine only for CONNECTING state
-                val timeoutDuration = calculateConnectingTimeout()
-                L.i { "${connection.name} [ws]monitor: Starting timeout coroutine for state: $state" }
+                L.i { "${connection.name} [ws]monitor: Starting timeout coroutine for state: $state, timeout: ${CONNECTING_TIMEOUT}ms" }
                 timeoutJob = launch {
-                    delay(timeoutDuration)
+                    delay(CONNECTING_TIMEOUT)
                     if (isMonitoring) {
                         timeoutJob = null
-                        L.i { "${connection.name} [ws]monitor: Timeout for connecting, canceling connection. Timeout duration: $timeoutDuration" }
-                        switchHost(connection)
+                        L.i { "${connection.name} [ws]monitor: Timeout for connecting, canceling connection" }
                         connection.cancelConnection()
                     }
                 }
@@ -204,20 +202,6 @@ class WebSocketHealthMonitor
             }
         }.launchIn(this)
         monitoringJobs.add(job)
-    }
-
-    private fun calculateConnectingTimeout(): Long {
-        val hostCount = websocketUrlManager.getChatWebsocketHostCounts()
-
-        val rawExponent = attempts / (hostCount + 1) + 1 //loop through all hosts with same timeout value every patch
-
-        // 1) Pick a max exponent so we don't overflow.
-        //    e.g., 2^12 = 4096; 2^14 = 16384, etc.
-        val maxExponent = 12              // Adjust up or down as you like
-        val safeExponent = minOf(rawExponent, maxExponent)
-
-        // 2) Compute 2^exponent safely:
-        return minOf((1L shl safeExponent) * 1000, 60_000) // in milliseconds at most 60s
     }
 
     private fun checkConnectedStateHealthy(webSocketConnection: WebSocketConnection) {
@@ -248,29 +232,27 @@ class WebSocketHealthMonitor
             if (!isMonitoring) return@onEach
 
             L.i { "${webSocketConnection.name} [ws]monitor: receive webSocketConnectionState: $it" }
-            if (it is WebSocketConnectionState.UNKNOWN_HOST_FAILED) {
-                switchHost(webSocketConnection)
-            }
             if (it is WebSocketConnectionState.FAILED
                 || it is WebSocketConnectionState.DISCONNECTED
                 || it is WebSocketConnectionState.AUTHENTICATION_FAILED
                 || it is WebSocketConnectionState.UNKNOWN_HOST_FAILED
                 || it is WebSocketConnectionState.INACTIVE_FAILED
             ) {
+                // 任何连接失败都切换 host，下次重连会使用新的 host
+                switchHost(webSocketConnection)
                 L.i { "${webSocketConnection.name} [ws]monitor: start trigger doConnect, webSocketConnectionState: $it" }
                 handleRedoConnect(webSocketConnection)
                 L.i { "${webSocketConnection.name} [ws]monitor: finished trigger doConnect, webSocketConnectionState: $it" }
             } else if (it is WebSocketConnectionState.CONNECTED) {
                 attempts = 0 // reset attempts when connected
-                websocketUrlManager.recordCurrentChatHostAsSuccess()
             }
         }.launchIn(this)
         monitoringJobs.add(job)
     }
 
     private fun switchHost(connection: WebSocketConnection) {
-        L.i { "${connection.name} [ws]monitor: switch host and clear last success connected host" }
-        websocketUrlManager.switchToNextChatWebsocketHost()
+        L.i { "${connection.name} [ws]monitor: switch host (record current as failed)" }
+        urlManager.switchToNextChatWebsocketHost()
     }
 
     private suspend fun handleRedoConnect(
@@ -328,6 +310,11 @@ class WebSocketHealthMonitor
     }
 
     companion object {
+        // 连接超时时间：10 秒
+        // - 足够判断连接是否能建立（现代网络通常 3-5 秒内连接）
+        // - 配合 host 切换机制，快速失败后尝试其他 host
+        private const val CONNECTING_TIMEOUT = 10_000L
+
         private val KEEP_ALIVE_SEND_CADENCE =
             TimeUnit.SECONDS.toMillis(WebSocketConnection.KEEP_ALIVE_TIMEOUT_SECONDS.toLong())
         private val MAX_TIME_SINCE_SUCCESSFUL_KEEP_ALIVE = KEEP_ALIVE_SEND_CADENCE * 3

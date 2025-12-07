@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 object RoomChangeTracker {
-    private val pendingChanges = mutableSetOf<Pair<String, RoomChangeType>>()
-    private val channel = Channel<Unit>(Channel.CONFLATED)
+    // Channel 来接收房间变更事件，UNLIMITED 确保不会丢失事件
+    private val changeChannel = Channel<Pair<String, RoomChangeType>>(capacity = Channel.UNLIMITED)
 
     private val _roomChanges = MutableSharedFlow<List<RoomChange>>(
         replay = 0,
@@ -29,29 +29,46 @@ object RoomChangeTracker {
 
     init {
         appScope.launch {
+            // 用于批量收集变更的缓冲区，Set 自动去重
+            val buffer = mutableSetOf<Pair<String, RoomChangeType>>()
+
             while (true) {
-                channel.receive()
+                // 阻塞等待第一个变更事件
+                buffer.add(changeChannel.receive())
+
+                // 等待 500ms，在此期间继续收集更多变更
                 delay(500)
-                sendChanges()
+
+                // 非阻塞地收集这段时间内的所有其他变更
+                while (true) {
+                    val result = changeChannel.tryReceive()
+                    if (result.isSuccess) {
+                        buffer.add(result.getOrThrow())
+                    } else {
+                        break
+                    }
+                }
+
+                // 批量发送所有收集到的变更
+                if (buffer.isNotEmpty()) {
+                    val changes = buffer.map { (roomId, type) ->
+                        RoomChange(roomId, type)
+                    }
+                    _roomChanges.tryEmit(changes)
+                    buffer.clear()
+                }
             }
         }
     }
 
     fun trackRoom(roomId: String, type: RoomChangeType) {
         L.i { "[Message][RoomChangeTracker] trackRoom:$roomId type:$type" }
-        pendingChanges.add(roomId to type)
-        channel.trySend(Unit)
-    }
-
-    private fun sendChanges() {
-        if (pendingChanges.isEmpty()) return
-        val changes = pendingChanges.map { (roomId, type) -> RoomChange(roomId, type) }
-        _roomChanges.tryEmit(changes)
-        pendingChanges.clear()
+        // 直接发送到 Channel，无需加锁
+        changeChannel.trySend(roomId to type)
     }
 
     fun close() {
-        channel.close()
+        changeChannel.close()
     }
 
     suspend fun trackRoomReadInfoUpdate(roomId: String) {

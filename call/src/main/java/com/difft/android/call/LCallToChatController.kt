@@ -14,7 +14,7 @@ import java.util.ArrayList
 import java.util.Optional
 
 interface LCallToChatController {
-    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: (Boolean) -> Unit)
+    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, isNeedAppLock: Boolean, onComplete: (Boolean) -> Unit)
 
     fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit)
 
@@ -40,7 +40,7 @@ interface LCallToChatController {
 
     fun cancelNotificationById(notificationId: Int)
 
-    fun showCallNotification(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType)
+    fun showCallNotification(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, isNeedAppLock: Boolean)
 
     fun isNotificationShowing(notificationId: Int): Boolean
 
@@ -59,6 +59,8 @@ interface LCallToChatController {
     fun isIncomingCallNotifying(roomId: String): Boolean
 
     fun getContactsUpdateListener(): Observable<List<String>>
+
+    fun getGroupsUpdateListener(): Observable<GroupModel>
 
     fun startForegroundService(context: Context, intent: Intent)
 

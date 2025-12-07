@@ -9,7 +9,13 @@ import android.text.style.ClickableSpan
 import android.view.View
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.appScope
 import com.difft.android.chat.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 文本截断工具类
@@ -21,22 +27,22 @@ object TextTruncationUtil {
     const val DEFAULT_MAX_LINES = 20
 
     /**
-     * 应用文本截断逻辑（带 markdown 格式的版本）
+     * 应用文本截断逻辑
+     *
+     * 使用 lineCount > maxLines 判断是否需要截断，
+     * 截取已渲染的 SpannableStringBuilder（保留原有格式），
+     * 在末尾添加换行和 "Read more" 可点击链接
      *
      * @param context Context
      * @param textView 目标 TextView
      * @param messageId 消息 ID，用于检查 View 是否被复用
-     * @param rawText 原始 markdown 文本（未格式化）
-     * @param mentions Mention 列表
      * @param maxLines 最大行数，默认 20 行
      * @param onReadMoreClick 点击 "Read more" 时的回调
      */
-    fun applyTruncationWithMarkdown(
+    fun applyTruncation(
         context: Context,
         textView: TextView,
         messageId: String,
-        rawText: String,
-        mentions: List<difft.android.messageserialization.model.Mention>?,
         maxLines: Int = DEFAULT_MAX_LINES,
         onReadMoreClick: () -> Unit
     ) {
@@ -53,36 +59,15 @@ object TextTruncationUtil {
         val lineCount = layout.lineCount
 
         // 如果行数 > 20，说明文本超过了 20 行，需要截断
-        // 不需要知道真实行数是 21 还是 100，因为都要截断到 20 行
         if (lineCount > maxLines) {
-            // 简化逻辑：直接截取到第 maxLines 行末尾，然后替换末尾字符为 "..."
-            // 不需要精确计算宽度，直接截取并替换，避免复杂计算导致的问题
+            // 获取第 maxLines 行的末尾位置，截取文本到这个位置
             val truncateAtLineEnd = layout.getLineEnd(maxLines - 1)
-
-            // 获取原始文本
-            val originalText = textView.text
-
-            // 计算原始文本和渲染文本的长度比例，用于估算 raw text 的截断位置
-            val lengthRatio = if (originalText.isNotEmpty()) {
-                rawText.length.toDouble() / originalText.length
-            } else {
-                1.0
-            }
-
-            // 估算 raw text 的截断位置，只需留出 "..." 的长度
-            val estimatedRawIndex = (truncateAtLineEnd * lengthRatio).toInt()
-            val truncateAtIndex = (estimatedRawIndex - 3).coerceIn(0, rawText.length)  // 只减去 "..." 的3个字符
-
-            // 截断原始 markdown 文本并添加 "..."
-            val truncatedRawText = rawText.substring(0, truncateAtIndex).trimEnd() + "..."
-
-            // 重新渲染截断后的 markdown 文本
-            LinkTextUtils.setMarkdownToTextview(context, truncatedRawText, textView, mentions)
-
-            // 添加 "Read more" 可点击链接
             val currentText = textView.text
+            val truncatedText = currentText.subSequence(0, truncateAtLineEnd)
+
+            // 添加 "Read more" 可点击链接（不添加 "..."）
             val readMoreText = context.getString(R.string.SpanUtil__read_more)
-            val builder = SpannableStringBuilder(currentText)
+            val builder = SpannableStringBuilder(truncatedText)
             builder.append("\n")
 
             val readMoreStart = builder.length
@@ -140,6 +125,48 @@ object TextTruncationUtil {
                 return
             }
             context = context.baseContext
+        }
+    }
+
+    /**
+     * 异步读取文件内容并显示完整文本对话框
+     * 适用于CONTENT_TYPE_LONG_TEXT类型的附件，文件可能较大（最大10MB）
+     *
+     * @param view 触发显示的 View
+     * @param filePath 文件路径
+     * @param fallbackText 如果文件读取失败，显示的备用文本
+     * @param mentions Mention 列表
+     */
+    fun showFullTextDialogFromFile(
+        view: View,
+        filePath: String?,
+        fallbackText: String,
+        mentions: List<difft.android.messageserialization.model.Mention>? = null
+    ) {
+        if (filePath.isNullOrEmpty()) {
+            showFullTextDialog(view, fallbackText, mentions)
+            return
+        }
+
+        appScope.launch {
+            val content = withContext(Dispatchers.IO) {
+                readTextFileContent(filePath)
+            }
+            withContext(Dispatchers.Main) {
+                showFullTextDialog(view, content.ifEmpty { fallbackText }, mentions)
+            }
+        }
+    }
+
+    /**
+     * 读取文本文件内容
+     */
+    private fun readTextFileContent(filePath: String): String {
+        return try {
+            File(filePath).readText(Charsets.UTF_8)
+        } catch (e: Exception) {
+            L.e(e) { "[LongText] Failed to read text file: $filePath" }
+            ""
         }
     }
 }

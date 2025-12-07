@@ -22,7 +22,6 @@ data class UserData(
     var patternShowPath: Boolean = true, //是否显示手势路径
     var patternAttempts: Int = 0,//手势已经尝试的次数
     var lastUseTime: Long = 0,
-    var previousSuccessConnectedChatWebsocketHost: String? = null,
     var theme: Int = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,   //AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM   AppCompatDelegate.MODE_NIGHT_NO   AppCompatDelegate.MODE_NIGHT_YES
     var textSize: Int = TextSizeUtil.TEXT_SIZE_DEFAULT,
     var lastCheckUpdateTime: Long = 0, // 上次检查更新的时间

@@ -81,6 +81,12 @@ fun MainPageWithBottomControlView(
         viewModel = viewModel,
         permission = Manifest.permission.RECORD_AUDIO,
         onGranted = {
+            // Update foreground service type when microphone permission is granted
+            // This must be done before enabling microphone to ensure service type is correct
+            if (context is com.difft.android.call.LCallActivity) {
+                context.updateForegroundServiceType()
+            }
+            // Enable microphone after updating service type
             viewModel.setMicEnabled(!viewModel.micEnabled.value)
         },
         onDenied =  {
@@ -103,6 +109,12 @@ fun MainPageWithBottomControlView(
         viewModel = viewModel,
         permission = Manifest.permission.CAMERA,
         onGranted = {
+            // Update foreground service type when camera permission is granted
+            // This must be done before enabling camera to ensure service type is correct
+            if (context is com.difft.android.call.LCallActivity) {
+                context.updateForegroundServiceType()
+            }
+            // Enable camera after updating service type
             viewModel.setCameraEnabled(!viewModel.cameraEnabled.value)
         },
         onDenied = {

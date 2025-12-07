@@ -1,6 +1,5 @@
 package com.difft.android.chat.ui
 
-import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -31,12 +30,11 @@ import com.difft.android.chat.databinding.ChatItemChatMessageListTextMineBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextOthersBinding
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
-import dagger.hilt.android.internal.managers.ViewComponentManager
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
@@ -45,9 +43,7 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.Util
 import util.TimeFormatter
 
@@ -183,14 +179,15 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val quoteText: TextView
             get() = if (isMine) mineBinding!!.quoteText else othersBinding!!.quoteText
 
-        private val clForwardContent: View
-            get() = if (isMine) mineBinding!!.clForwardContent else othersBinding!!.clForwardContent
+        // 单条转发消息的信息头（时间+来源）
+        private val forwardInfoZone: View
+            get() = if (isMine) mineBinding!!.forwardInfoZone.root else othersBinding!!.forwardInfoZone.root
 
-        private val messageForwardView: MessageForwardView
-            get() = if (isMine) mineBinding!!.messageForwardView else othersBinding!!.messageForwardView
+        private val tvForwardTime: TextView
+            get() = if (isMine) mineBinding!!.forwardInfoZone.tvForwardTime else othersBinding!!.forwardInfoZone.tvForwardTime
 
-        private val vForwardCover: View
-            get() = if (isMine) mineBinding!!.vForwardCover else othersBinding!!.vForwardCover
+        private val tvForwardAuthor: TextView
+            get() = if (isMine) mineBinding!!.forwardInfoZone.tvForwardAuthor else othersBinding!!.forwardInfoZone.tvForwardAuthor
 
         private val reactionsView: FlowLayout
             get() = if (isMine) mineBinding!!.reactionsView else othersBinding!!.reactionsView
@@ -231,9 +228,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             val textView = contentFrame.findViewById<TextView>(R.id.textView)
             textView?.setPaddingRelative(8.dp, 8.dp, 8.dp, 8.dp)
-
-            val forwardTextView = messageForwardView.findViewById<TextView>(R.id.tv_forward_content)
-            forwardTextView?.setPaddingRelative(8.dp, 0, 8.dp, 8.dp)
 
             reactionsView.setPaddingRelative(8.dp, 4.dp, 8.dp, 8.dp)
         }
@@ -382,32 +376,54 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
 
         private fun bindForwardView(message: TextChatMessage, contactorCache: MessageContactsCacheUtil) {
-            if (message.forwardContext == null) {
-                contentFrame.visibility = View.VISIBLE
-                clForwardContent.visibility = View.GONE
-                // 使用 ContentBinder 绑定内容
-                contentBinder.bind(contentFrame, message, contactorCache)
-            } else {
-                contentFrame.visibility = View.GONE
-                clForwardContent.visibility = View.VISIBLE
-                val context = if (itemView.context is ViewComponentManager.FragmentContextWrapper) {
-                    (itemView.context as ViewComponentManager.FragmentContextWrapper).baseContext as Activity
-                } else {
-                    itemView.context as Activity
-                }
-                messageForwardView.bindView(context, message, contentContainer, contactorCache)
+            val forwardsSize = message.forwardContext?.forwards?.size ?: 0
 
-                if (message.isConfidential()) {
-                    vForwardCover.visibility = View.VISIBLE
-                    vForwardCover.setOnClickListener {
-                        contentContainer.performClick()
+            // 重置 contentFrame 的 margin
+            (contentFrame.layoutParams as? LinearLayout.LayoutParams)?.let {
+                it.topMargin = 0
+                contentFrame.layoutParams = it
+            }
+
+            when {
+                // 无转发：普通消息
+                forwardsSize == 0 -> {
+                    forwardInfoZone.visibility = View.GONE
+                    contentFrame.visibility = View.VISIBLE
+                    contentBinder.bind(contentFrame, message, contactorCache)
+                }
+
+                // 单条转发：显示转发信息头 + 复用 contentFrame
+                forwardsSize == 1 -> {
+                    val forward = message.forwardContext?.forwards?.firstOrNull()
+                    if (forward != null) {
+                        // 显示转发信息头（直接绑定时间和来源）
+                        forwardInfoZone.visibility = View.VISIBLE
+                        tvForwardTime.text = util.TimeUtils.millis2String(forward.serverTimestampForUI, "yyyy/MM/dd HH:mm")
+                        val author = contactorCache.getContactor(forward.author)
+                        tvForwardAuthor.text = author?.getDisplayNameForUI() ?: forward.author
+
+                        // 将 forward 转换为 TextChatMessage，复用 contentFrame（传递原消息的 mode）
+                        val forwardMessage = generateMessageFromForward(forward, message.mode) as TextChatMessage
+                        contentFrame.visibility = View.VISIBLE
+
+                        // 图片/视频内容布局没有 padding，需要动态添加 margin
+                        val attachment = forward.attachments?.firstOrNull()
+                        if (attachment != null && (attachment.isImage() || attachment.isVideo())) {
+                            (contentFrame.layoutParams as? LinearLayout.LayoutParams)?.let {
+                                it.topMargin = 8.dp
+                                contentFrame.layoutParams = it
+                            }
+                        }
+
+                        contentBinder.bind(contentFrame, forwardMessage, contactorCache)
                     }
-                    vForwardCover.setOnLongClickListener {
-                        contentContainer.performLongClick()
-                        true
-                    }
-                } else {
-                    vForwardCover.visibility = View.GONE
+                }
+
+                // 合并转发：由 MultiForwardContentBinder 处理
+                else -> {
+                    forwardInfoZone.visibility = View.GONE
+                    contentFrame.visibility = View.VISIBLE
+                    contentBinder.bind(contentFrame, message, contactorCache)
                 }
             }
         }
@@ -810,10 +826,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
     private fun shouldShowMessageTimeShadow(message: TextChatMessage): Boolean {
         if (!message.reactions.isNullOrEmpty()) {
             return false
-        }
-
-        if (message.isConfidential() && message.message.isNullOrEmpty()) {
-            return true
         }
 
         if (message.isAttachmentMessage() && message.attachment?.let { it.isImage() || it.isVideo() } == true) {

@@ -20,9 +20,15 @@ import retrofit2.HttpException
 import java.io.IOException
 
 /**
- * 网络异常拦截及错误日志上报
+ * HTTP Client Interceptor
+ *
+ * Responsibilities:
+ * 1. Token management - Refresh and update auth tokens automatically
+ * 2. Host failover - Switch to backup hosts when request fails (response code not in [100, 499])
+ * 3. Response handling - Handle 204 No Content, transform non-success responses
+ * 4. Error reporting - Record network errors to Firebase Crashlytics
  */
-class HttpErrorReportInterceptor : Interceptor {
+class HttpClientInterceptor : Interceptor {
 
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -62,7 +68,7 @@ class HttpErrorReportInterceptor : Interceptor {
                         newRequest = updateTokenIfNeeded(request)
                     }
                     newRequest?.let {
-                        response?.close()
+                        response.close()
                         return chain.proceed(it)
                     }
                 } else {
@@ -94,13 +100,9 @@ class HttpErrorReportInterceptor : Interceptor {
                 }
             }
         } catch (e: Exception) {
+            e.printStackTrace()
             lastException = e
             handleException(e, request)
-            if (isRetryAbleException(e)) {
-                response?.close()
-                response = changeHostAndReSendRequest(request, chain)
-                if (response != null) return response
-            }
         }
 
         return response ?: run {
@@ -131,17 +133,23 @@ class HttpErrorReportInterceptor : Interceptor {
         return response != null && response.isSuccessful
     }
 
-    private fun shouldRetry(response: Response?): Boolean {
-        val code = response?.code ?: 0
-        return code >= 500 || code == 404
+    /**
+     * 判断response code是否在正常范围内
+     * 只有response code在 [100, 499] 之间认为正常
+     */
+    private fun isNormalResponseCode(code: Int): Boolean {
+        return code in 100..499
     }
 
-    private fun isRetryAbleException(e: Exception): Boolean {
-        return e is IOException
+    /**
+     * 判断是否需要切换域名重试
+     */
+    private fun shouldRetry(response: Response?): Boolean {
+        val code = response?.code ?: 0
+        return !isNormalResponseCode(code)
     }
 
     private fun handleException(e: Exception, request: Request?) {
-        e.printStackTrace()
         if (needHandleException(e)) {
             recordError(e, request)
         }
@@ -150,10 +158,12 @@ class HttpErrorReportInterceptor : Interceptor {
     private fun needHandleException(e: Exception) = "Canceled".equals(e.message, true).not() && "Socket closed".equals(e.message, true).not()
 
     private fun changeHostAndReSendRequest(request: Request, chain: Interceptor.Chain): Response? {
-        UrlManager.changeToOtherHost()
         val originalUrl = request.url
         val originalHost = originalUrl.host
-        val hosts = EntryPointAccessors.fromApplication<EntryPoint>(application).urlManager.findHostsByOldHost(originalHost)
+        val urlManager = EntryPointAccessors.fromApplication<EntryPoint>(application).urlManager
+        // 记录失败的 host，下次优先使用其他 host
+        urlManager.recordFailedHost(originalHost)
+        val hosts = urlManager.findHostsByOldHost(originalHost)
         val attemptedHosts = mutableSetOf<String>()
         for (host in hosts) {
             if (host != originalHost && host !in attemptedHosts) {
@@ -163,7 +173,7 @@ class HttpErrorReportInterceptor : Interceptor {
                 val newRequest = request.newBuilder().url(newUrl).build()
                 try {
                     val newResponse = chain.proceed(newRequest)
-                    if (newResponse.code < 500) {
+                    if (isNormalResponseCode(newResponse.code)) {
                         return newResponse
                     } else {
                         newResponse.close()
@@ -205,7 +215,7 @@ class HttpErrorReportInterceptor : Interceptor {
         FirebaseCrashlytics.getInstance().recordException(e)
     }
 
-    private fun networkStatus(): String = "网络类型=${NetUtil.getNetWorkSumary()}"
+    private fun networkStatus(): String = "network=${NetUtil.getNetWorkSummary()}"
 
     private fun requestUrl(request: Request?): String = "url=${request?.url?.toString() ?: ""}"
 

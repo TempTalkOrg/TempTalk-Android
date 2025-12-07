@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -12,6 +13,9 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnPreDraw
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
+import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
@@ -19,10 +23,15 @@ import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.common.TextTruncationUtil
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.chat.widget.ImageAndVideoMessageView
 import com.difft.android.chat.widget.VoiceMessageView
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.isLongText
 
 /**
  * 文本内容绑定器
@@ -51,7 +60,7 @@ object TextContentBinder : ContentBinder {
 
         if (textMessage.isConfidential()) {
             textView.movementMethod = null
-            val spannableText = getGrayBlockTextWithTransparentForeground(
+            val spannableText = getGrayBlockText(
                 content,
                 ContextCompat.getColor(
                     textView.context,
@@ -79,14 +88,12 @@ object TextContentBinder : ContentBinder {
             // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
             textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
 
-            // Post to measure after layout and apply truncation
-            textView.post {
-                TextTruncationUtil.applyTruncationWithMarkdown(
+            // doOnPreDraw to measure after layout and apply truncation
+            textView.doOnPreDraw {
+                TextTruncationUtil.applyTruncation(
                     context = textView.context,
                     textView = textView,
-                    messageId = messageId,
-                    rawText = rawText,
-                    mentions = textMessage.mentions
+                    messageId = messageId
                 ) {
                     TextTruncationUtil.showFullTextDialog(
                         textView,
@@ -98,7 +105,11 @@ object TextContentBinder : ContentBinder {
         }
     }
 
-    private fun getGrayBlockTextWithTransparentForeground(
+    /**
+     * 将文本渲染为灰色块样式（用于机密消息）
+     * 供外部调用（如 AttachContentBinder 处理长文本机密消息）
+     */
+    fun getGrayBlockText(
         originalText: String,
         blockColor: Int,
         textViewWidth: Int,
@@ -235,14 +246,12 @@ object ImageContentBinder : ContentBinder {
             // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
             textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
 
-            // Post to measure after layout and apply truncation
-            textView.post {
-                TextTruncationUtil.applyTruncationWithMarkdown(
+            // doOnPreDraw to measure after layout and apply truncation
+            textView.doOnPreDraw {
+                TextTruncationUtil.applyTruncation(
                     context = textView.context,
                     textView = textView,
-                    messageId = messageId,
-                    rawText = rawText,
-                    mentions = textMessage.mentions
+                    messageId = messageId
                 ) {
                     TextTruncationUtil.showFullTextDialog(
                         textView,
@@ -330,54 +339,121 @@ object AttachContentBinder : ContentBinder {
         val textView = contentFrame.findViewById<TextView>(R.id.textView)
         val coverView = contentFrame.findViewById<View>(R.id.v_cover)
 
-        attachContentView.setupAttachmentView(textMessage)
+        val attachment = textMessage.attachment
+
+        // Handle long text attachment - check if file is downloaded
+        val isLongText = attachment?.isLongText() == true
+        var longTextPath: String? = null
+        var isLongTextDownloaded = false
+
+        if (isLongText) {
+            val fileName = attachment?.fileName ?: ""
+            longTextPath = FileUtil.getMessageAttachmentFilePath(textMessage.id) + fileName
+            val isCurrentDeviceSend = textMessage.isMine && textMessage.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+            val isFileValid = FileUtil.isFileValid(longTextPath)
+            val progress = textMessage.getAttachmentProgress()
+
+            isLongTextDownloaded = isFileValid && (attachment?.status == AttachmentStatus.SUCCESS.code || progress == 100 || isCurrentDeviceSend)
+
+            if (isLongTextDownloaded) {
+                // File downloaded - hide attachment view
+                attachContentView.visibility = View.GONE
+            } else {
+                // File not downloaded yet - show attachment view for download
+                attachContentView.visibility = View.VISIBLE
+                attachContentView.setupAttachmentView(textMessage)
+            }
+        } else {
+            // Normal attachment handling
+            attachContentView.visibility = View.VISIBLE
+            attachContentView.setupAttachmentView(textMessage)
+        }
+
+        // 长文本已下载的机密消息：按文本机密消息处理
+        val isLongTextConfidential = isLongTextDownloaded && textMessage.isConfidential()
 
         if (!TextUtils.isEmpty(textMessage.message)) {
             textView.visibility = View.VISIBLE
-
             textView.autoLinkMask = 0
 
-            // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
-            val messageId = textMessage.id
-            val rawText = textMessage.message.toString()
-            textView.setTag(R.id.tag_truncation_message_id, messageId)
+            if (isLongTextConfidential) {
+                // 长文本机密消息：使用灰色块样式，点击传递给父容器处理（由 ChatMessageListFragment 统一处理转发跳转）
+                textView.movementMethod = null
+                val content = textMessage.message.toString()
+                val spannableText = TextContentBinder.getGrayBlockText(
+                    content,
+                    ContextCompat.getColor(textView.context, com.difft.android.base.R.color.bg_confidential),
+                    textView.width,
+                    textView.paint
+                )
+                textView.text = spannableText
+                textView.maxLines = 5
 
-            // First render full text to measure line count
-            LinkTextUtils.setMarkdownToTextview(
-                textView.context,
-                rawText,
-                textView,
-                textMessage.mentions
-            )
+                // 点击传递给父容器处理（与普通文本机密消息一致）
+                textView.setOnClickListener {
+                    LinkTextUtils.findParentChatMessageItemView(textView)?.performClick()
+                }
+                textView.setOnLongClickListener {
+                    LinkTextUtils.findParentChatMessageItemView(textView)?.performLongClick()
+                    true
+                }
+            } else {
+                // 普通文本处理
+                // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
+                val messageId = textMessage.id
+                val rawText = textMessage.message.toString()
+                textView.setTag(R.id.tag_truncation_message_id, messageId)
 
-            // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
-            textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
+                // First render full text to measure line count
+                LinkTextUtils.setMarkdownToTextview(
+                    textView.context,
+                    rawText,
+                    textView,
+                    textMessage.mentions
+                )
 
-            // Post to measure after layout and apply truncation
-            textView.post {
-                TextTruncationUtil.applyTruncationWithMarkdown(
-                    context = textView.context,
-                    textView = textView,
-                    messageId = messageId,
-                    rawText = rawText,
-                    mentions = textMessage.mentions
-                ) {
-                    TextTruncationUtil.showFullTextDialog(
-                        textView,
-                        rawText,
-                        textMessage.mentions
-                    )
+                // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
+                textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
+
+                // doOnPreDraw to measure after layout and apply truncation
+                textView.doOnPreDraw {
+                    TextTruncationUtil.applyTruncation(
+                        context = textView.context,
+                        textView = textView,
+                        messageId = messageId
+                    ) {
+                        // View more click - read full file content if long text is downloaded
+                        if (isLongTextDownloaded && longTextPath != null) {
+                            TextTruncationUtil.showFullTextDialogFromFile(
+                                textView,
+                                longTextPath,
+                                rawText,
+                                textMessage.mentions
+                            )
+                        } else {
+                            TextTruncationUtil.showFullTextDialog(
+                                textView,
+                                rawText,
+                                textMessage.mentions
+                            )
+                        }
+                    }
                 }
             }
         } else {
             textView.visibility = View.GONE
         }
 
-        if (textMessage.isConfidential()) {
+        // 机密消息遮罩处理（长文本已下载的机密消息不需要遮罩，因为文本已经用灰色块处理）
+        // 点击传递给父容器，由 ChatMessageListFragment 统一处理（与 ImageContentBinder 保持一致）
+        if (textMessage.isConfidential() && !isLongTextConfidential) {
             coverView.visibility = View.VISIBLE
             coverView.setOnClickListener {
-                attachContentView.openFile()
-                com.difft.android.chat.recent.RecentChatUtil.emitConfidentialRecipient(textMessage)
+                LinkTextUtils.findParentChatMessageItemView(coverView)?.performClick()
+            }
+            coverView.setOnLongClickListener {
+                LinkTextUtils.findParentChatMessageItemView(coverView)?.performLongClick()
+                true
             }
         } else {
             coverView.visibility = View.GONE
@@ -442,5 +518,65 @@ class NotifyContentBinder() : ContentBinder {
 
         textViewAction.visibility = View.GONE
         textViewContent.text = textChatMessage.notifyMessage?.showContent
+    }
+}
+
+/**
+ * 合并转发消息内容绑定器
+ *
+ * 处理多条消息的合并转发显示
+ */
+object MultiForwardContentBinder : ContentBinder {
+    @SuppressLint("ClickableViewAccessibility")
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+        val textMessage = message as TextChatMessage
+        val forwardContext = textMessage.forwardContext ?: return
+        val forwards = forwardContext.forwards ?: return
+
+        val tvMultiTitle = contentFrame.findViewById<androidx.appcompat.widget.AppCompatTextView>(R.id.tv_multi_title)
+        val rvForwardHistory = contentFrame.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_forward_history)
+        val vCover = contentFrame.findViewById<View>(R.id.v_cover)
+
+        // 设置标题
+        val context = contentFrame.context
+        if (forwards.firstOrNull()?.isFromGroup == true) {
+            tvMultiTitle.text = context.getString(R.string.group_chat_history)
+        } else {
+            val authorId = forwards.firstOrNull()?.author ?: ""
+            val author = contactorCache.getContactor(authorId)
+            tvMultiTitle.text = if (author != null) {
+                context.getString(R.string.chat_history_for, author.getDisplayNameWithoutRemarkForUI())
+            } else {
+                context.getString(R.string.chat_history_for, authorId.formatBase58Id())
+            }
+        }
+
+        // 设置预览列表
+        val adapter = ForwardMessagesAdapter(contactorCache)
+        rvForwardHistory.adapter = adapter
+        rvForwardHistory.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
+        rvForwardHistory.setOnTouchListener { view, event ->
+            LinkTextUtils.findParentChatMessageItemView(view)?.onTouchEvent(event) ?: false
+        }
+        adapter.submitList(forwards.take(5))
+
+        // 机密消息遮罩（覆盖整个合并转发区域）
+        if (textMessage.isConfidential()) {
+            vCover.visibility = View.VISIBLE
+            // 点击遮罩触发父视图的点击事件
+            vCover.setOnClickListener {
+                LinkTextUtils.findParentChatMessageItemView(vCover)?.let { parent ->
+                    parent.findViewById<View>(R.id.contentContainer)?.performClick()
+                }
+            }
+            vCover.setOnLongClickListener {
+                LinkTextUtils.findParentChatMessageItemView(vCover)?.let { parent ->
+                    parent.findViewById<View>(R.id.contentContainer)?.performLongClick()
+                }
+                true
+            }
+        } else {
+            vCover.visibility = View.GONE
+        }
     }
 }

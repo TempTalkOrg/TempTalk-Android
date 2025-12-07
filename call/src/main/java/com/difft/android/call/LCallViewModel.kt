@@ -222,6 +222,9 @@ class LCallViewModel (
         // Collect any changes in contacts.
         registerContactsUpdateListener()
 
+        // Collect any changes in groups.
+        registerGroupsUpdateListener()
+
         // Handle any changes in speakers.
         registerSpeakerChangeListener()
 
@@ -464,6 +467,18 @@ class LCallViewModel (
      */
     private fun registerContactsUpdateListener() {
         viewModelScope.launch(Dispatchers.IO) { callToChatController.getContactsUpdateListener().collect { LCallManager.updateCallContactorCache(it) } }
+    }
+
+    private fun registerGroupsUpdateListener() {
+        viewModelScope.launch(Dispatchers.IO) {
+            callToChatController.getGroupsUpdateListener().collect {
+                it.gid?.let { gid ->
+                    if (gid == callIntent.conversationId) {
+                        callUiController.setCriticalAlertEnable(it.criticalAlert)
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -1114,6 +1129,7 @@ class LCallViewModel (
      * Checks if the feedback view should be triggered and prepares the necessary call feedback data.
      */
     fun shouldTriggerFeedbackView() {
+        if (timerManager.getCurrentDuration()< 60) return
         if(CallFeedbackTriggerManager.shouldTriggerFeedback(currentCallNetworkPoor)) {
             val callInfo = FeedbackCallInfo(
                 userIdentity = userIdentity ?: LCallManager.getMyIdentity(),

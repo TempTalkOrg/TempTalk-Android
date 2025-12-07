@@ -64,10 +64,13 @@ import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.util.FlashLightBlinker
 import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.chat.common.CriticalAlertSoundPlayer
 import com.difft.android.chat.common.StopCriticalAlertSoundReceiver
+import kotlinx.coroutines.delay
+import org.thoughtcrime.securesms.messages.MessageForegroundService
 
 
 @Singleton
@@ -78,6 +81,7 @@ class MessageNotificationUtil @Inject constructor(
     private val appIconBadgeManager: AppIconBadgeManager,
     private val activityProvider: ActivityProvider,
     private val cacheManager: NotificationCacheManager,
+    private val criticalAlertManager: CriticalAlertManager,
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -93,8 +97,6 @@ class MessageNotificationUtil @Inject constructor(
         private const val CHANNEL_CONFIG_MESSAGE_GROUP = "MESSAGE_GROUP"
         const val STOP_CRITICAL_ALERT_SOUND = "STOP_CRITICAL_ALERT_SOUND"
     }
-
-    private val criticalAlertNotificationInfos = mutableMapOf<String, List<Int>>()
 
     private val nm: NotificationManager by lazy {
         ServiceUtil.getNotificationManager(context)
@@ -127,6 +129,7 @@ class MessageNotificationUtil @Inject constructor(
         try {
             appScope.launch(Dispatchers.IO) {
                 cacheManager.cleanupOldCache()
+                criticalAlertManager.cleanupOldCriticalAlertCache()
             }
         } catch (e: Exception) {
             L.e { "[MessageNotificationUtil] Failed to start cleanup task: ${e.message}" }
@@ -662,7 +665,7 @@ class MessageNotificationUtil @Inject constructor(
         L.e { "showNotificationOfPush failed: ${it.stackTraceToString()}" }
     }
 
-    fun showCallNotificationNew(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType) {
+    fun showCallNotificationNew(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, needAppLock: Boolean) {
 
         val notificationID = roomId.hashCode()  //roomId为空
         var title = ""
@@ -682,7 +685,7 @@ class MessageNotificationUtil @Inject constructor(
         }
 
         L.d { "[Call] showCallNotificationNew createCallIntent roomId:$roomId callName:$callName callerId:$callerId conversationId:$conversationId" }
-        val intent = createCallIntent(context, callType, callerId, roomId, conversationId, null, callName)
+        val intent = createCallIntent(context, callType, callerId, roomId, conversationId, null, callName, needAppLock)
         val pendingIntent = createPendingIntent(context, notificationID, intent)
         val acceptIntent = CallIntent.Builder(context, activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL))
             .withAction(CallIntent.Action.ACCEPT_CALL)
@@ -693,6 +696,7 @@ class MessageNotificationUtil @Inject constructor(
             .withRoomName(callName)
             .withConversationId(conversationId)
             .withCallRole(CallRole.CALLEE.type)
+            .withNeedAppLock(needAppLock)
             .build()
         val acceptPendingIntent = createPendingIntent(context, notificationID, acceptIntent)
 
@@ -755,7 +759,7 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
-    private fun createCallIntent(context: Context, callType: CallType, callerId: String, roomId: String, conversationId: String?, action: String? = null, roomName: String): Intent {
+    private fun createCallIntent(context: Context, callType: CallType, callerId: String, roomId: String, conversationId: String?, action: String? = null, roomName: String, isNeedAppLock: Boolean): Intent {
         return CallIntent.Builder(context, activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL))
             .withAction(CallIntent.Action.INCOMING_CALL)
             .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -765,6 +769,7 @@ class MessageNotificationUtil @Inject constructor(
             .withRoomName(roomName)
             .withConversationId(conversationId)
             .withCallRole(CallRole.CALLEE.type)
+            .withNeedAppLock(isNeedAppLock)
             .build()
     }
 
@@ -778,12 +783,26 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun createMessageForegroundNotification(): Notification {
+        // 创建点击跳转到后台连接设置页面的 Intent
+        val intent = Intent(context, activityProvider.getActivityClass(ActivityType.MAIN)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_BACKGROUND_CONNECTION_SETTINGS)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            MessageForegroundService.FOREGROUND_ID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_BACKGROUND)
             .setContentTitle(PackageUtil.getAppName())
             .setContentText(ResUtils.getString(R.string.background_connection_enabled))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setWhen(0)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
+            .setContentIntent(pendingIntent) //点击跳转到后台连接设置
             .build()
 
         return notification
@@ -1049,17 +1068,33 @@ class MessageNotificationUtil @Inject constructor(
         }
     }
 
+    @Synchronized
     fun showCriticalAlertNotification(forWhat: For, alertTitle: String, alertContent: String, timestamp: Long) {
-        L.i { "[MessageNotificationUtil] showCriticalAlertNotification for ${forWhat.id}"}
         val title = "🚨$alertTitle"
         val notificationId = timestamp.hashCode()
+        L.i { "[MessageNotificationUtil] showCriticalAlertNotification for ${forWhat.id}, timestamp=$timestamp, notificationId=$notificationId"}
 
-        if(isNotificationShowing(notificationId)) {
-            L.i { "[MessageNotificationUtil] Critical alert notification is already showing, skip"}
+        // 先检查本地缓存中是否已经处理过该通知（最快检查）
+        if (criticalAlertManager.isCriticalAlertNotificationProcessed(forWhat.id, notificationId)) {
+            L.w { "[MessageNotificationUtil] Critical alert notification (id=$notificationId) already processed in cache, skip.}"}
             return
         }
 
-        addCriticalAlertNotification(forWhat.id, notificationId)
+        // 检查通知是否正在显示（系统级别检查）
+        if(isNotificationShowing(notificationId)) {
+            L.w { "[MessageNotificationUtil] Critical alert notification (id=$notificationId) is already showing, skip.}"}
+            // 即使系统显示中，也要添加到缓存，防止重复处理
+            criticalAlertManager.addCriticalAlertNotification(forWhat.id, notificationId)
+            return
+        }
+
+        // 先添加到缓存，防止并发调用时重复处理
+        L.i { "[MessageNotificationUtil] Adding critical alert notification to cache: conversationId=${forWhat.id}, notificationId=$notificationId"}
+        val added = criticalAlertManager.addCriticalAlertNotificationIfNotExists(forWhat.id, notificationId)
+        if (!added) {
+            L.w { "[MessageNotificationUtil] Failed to add notification to cache (may be concurrent call), skip showing"}
+            return
+        }
 
         val intent = createConversationIntent(forWhat)
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
@@ -1068,6 +1103,11 @@ class MessageNotificationUtil @Inject constructor(
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+
+        // 使用 BigTextStyle 固定通知样式，避免锁屏时布局跳动
+        val bigTextStyle = NotificationCompat.BigTextStyle()
+            .bigText(alertContent)
+            .setBigContentTitle(title)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
             .setContentTitle(title)
@@ -1081,19 +1121,29 @@ class MessageNotificationUtil @Inject constructor(
             .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
             .setOnlyAlertOnce(false)
             .setDeleteIntent(createStopSoundIntent(context, notificationId))
+            .setStyle(bigTextStyle) // 固定通知样式，避免布局跳动
+            .setWhen(timestamp) // 使用固定的时间戳，避免时间变化导致重新排序
+            .setShowWhen(true) // 显示时间，但使用固定时间戳
+            .setUsesChronometer(false) // 不使用计时器，避免时间变化
 
         try {
-            nm.notify(notificationId, builder.build())
+            val notification = builder.build()
+            L.i { "[MessageNotificationUtil] Notifying critical alert: notificationId=$notificationId, title='$title', content='$alertContent', timestamp=$timestamp"}
+            nm.notify(notificationId, notification)
+            L.d { "[MessageNotificationUtil] Critical alert notification posted successfully: notificationId=$notificationId"}
         } catch (e: Exception) {
-            L.e { "[MessageNotificationUtil] showCriticalAlertNotification failed:${e.message}" }
+            L.e { "[MessageNotificationUtil] showCriticalAlertNotification failed: notificationId=$notificationId, error=${e.message}, stackTrace=${e.stackTraceToString()}" }
         }
 
         // 播放critical alert声音
         CriticalAlertSoundPlayer.play(context, notificationId)
 
-        // 闪烁闪光灯，持续30秒
+        // 启动闪光灯
         if (FlashLightBlinker.hasCameraPermission(context)) {
-            FlashLightBlinker.startBlinking(context, durationMs = 30000)
+            appScope.launch(Dispatchers.IO) {
+                delay(500) // 延迟500ms，让通知先稳定显示
+                FlashLightBlinker.startBlinking(context, durationMs = 30000)
+            }
         }
     }
 
@@ -1113,8 +1163,6 @@ class MessageNotificationUtil @Inject constructor(
 
     @Synchronized
     fun cancelCriticalAlertNotification(conversationId: String? = null) {
-        if (criticalAlertNotificationInfos.isEmpty()) return
-
         val shouldCancelAll = conversationId == null
         val canceledIds = mutableListOf<Int>()
 
@@ -1123,38 +1171,45 @@ class MessageNotificationUtil @Inject constructor(
             CriticalAlertSoundPlayer.stop()
         }
 
-        val iterator = criticalAlertNotificationInfos.entries.iterator()
-        while (iterator.hasNext()) {
-            val (convId, notificationIds) = iterator.next()
-            L.i { "[MessageNotificationUtil] cancelCriticalAlertNotification for convId=$convId" }
-            // 如果只取消特定会话，跳过其他
-            if (!shouldCancelAll && convId != conversationId) continue
+        // 如果只取消特定会话，需要从持久化存储中读取该会话的信息
+        if (!shouldCancelAll) {
+            val hashKey = criticalAlertManager.hashConversationId(conversationId!!)
+            val infos = criticalAlertManager.getCriticalAlertInfos()
+            val info = infos[hashKey]
 
-            notificationIds.forEach { notificationId ->
-                try {
-                    // 检查通知是否还在展示
-                    if(isNotificationShowing(notificationId)){
-                        nm.cancel(notificationId)
-                        L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId for convId=$convId" }
+            if (info != null) {
+                info.notificationIds.forEach { notificationId ->
+                    try {
+                        // 检查通知是否还在展示
+                        if (isNotificationShowing(notificationId)) {
+                            nm.cancel(notificationId)
+                            L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
+                        }
+                        // 停止匹配的声音
+                        CriticalAlertSoundPlayer.stopIfMatch(notificationId)
+                        canceledIds.add(notificationId)
+                    } catch (e: Exception) {
+                        L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
                     }
-                    // 停止匹配的声音
-                    CriticalAlertSoundPlayer.stopIfMatch(notificationId)
-                    canceledIds.add(notificationId)
-                } catch (e: Exception) {
-                    L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
                 }
             }
-
-            // 清理缓存
-            if (shouldCancelAll) {
-                iterator.remove()
-            } else {
-                // 保留但标记已取消，用于防止旧 FCM 重复触发
-                val remainingIds = notificationIds - canceledIds.toSet()
-                if (remainingIds.isEmpty()) {
-                    iterator.remove()
-                } else {
-                    criticalAlertNotificationInfos[convId] = remainingIds
+        } else {
+            // 取消所有通知：遍历所有持久化数据
+            val infos = criticalAlertManager.getCriticalAlertInfos()
+            infos.forEach { (hashKey, info) ->
+                info.notificationIds.forEach { notificationId ->
+                    try {
+                        // 检查通知是否还在展示
+                        if (isNotificationShowing(notificationId)) {
+                            nm.cancel(notificationId)
+                            L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
+                        }
+                        // 停止匹配的声音
+                        CriticalAlertSoundPlayer.stopIfMatch(notificationId)
+                        canceledIds.add(notificationId)
+                    } catch (e: Exception) {
+                        L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
+                    }
                 }
             }
         }
@@ -1165,14 +1220,6 @@ class MessageNotificationUtil @Inject constructor(
         }
 
         L.i { "[MessageNotificationUtil] cancelCriticalAlertNotification finished. conversationId=$conversationId, canceledIds=${canceledIds.size}" }
-    }
-
-    private fun addCriticalAlertNotification(key: String, value: Int) {
-        val list = criticalAlertNotificationInfos[key]?.toMutableList() ?: mutableListOf()
-        if (!list.contains(value)) {
-            list.add(value)
-            criticalAlertNotificationInfos[key] = list
-        }
     }
 
 }

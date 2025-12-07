@@ -2,6 +2,13 @@ package difft.android.messageserialization.model
 
 import java.io.Serializable
 
+/**
+ * Content type for long text messages converted to file attachments.
+ * This type indicates that the attachment contains plain text content
+ * that should be displayed as text rather than as a file attachment.
+ */
+const val CONTENT_TYPE_LONG_TEXT = "text/x-signal-plain"
+
 data class Attachment(
     val id: String,
     var authorityId: Long, //authorityId
@@ -97,6 +104,13 @@ fun Attachment.isAudioMessage(): Boolean {
 //是否是音频文件
 fun Attachment.isAudioFile(): Boolean {
     return flags == 0 && this.contentType.contains("audio")
+}
+
+/**
+ * Check if the attachment is a long text file (oversized text converted to file)
+ */
+fun Attachment.isLongText(): Boolean {
+    return this.contentType == CONTENT_TYPE_LONG_TEXT
 }
 
 enum class AttachmentStatus(val code: Int) {

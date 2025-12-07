@@ -325,7 +325,8 @@ object LCallManager {
                     roomName = callName,
                     callerId = callerId,
                     callType = callType,
-                    conversationId = conversationId
+                    conversationId = conversationId,
+                    isNeedAppLock = false
                 ) { status ->
                     onComplete(status)
                 }
@@ -565,11 +566,12 @@ object LCallManager {
                 .withCallerId(callerId)
                 .withConversationId(conversationId)
                 .withCallRole(CallRole.CALLEE.type)
+                .withNeedAppLock(false)
                 .build()
             application.startActivity(intentActivity)
         } else {
             L.i { "[call] LCallManager startIncomingCallService showCallNotification roomId:$roomId" }
-            callToChatController.showCallNotification(roomId, callName, callerId, conversationId, callType)
+            callToChatController.showCallNotification(roomId, callName, callerId, conversationId, callType, true)
         }
 
         L.i { "[call] LCallManager enable incoming call timeout detection" }

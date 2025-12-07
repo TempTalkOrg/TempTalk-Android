@@ -2,7 +2,6 @@ package com.difft.android.network
 
 import android.net.Uri
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.Host
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Lazy
@@ -10,6 +9,7 @@ import javax.inject.Inject
 
 
 private interface UrlProtocol {
+    val defaultHost: String
     val default: String
     val chat: String
     val call: String
@@ -17,12 +17,12 @@ private interface UrlProtocol {
     val avatarStorage: String
     val inviteGroupUrl: String
     val installationGuideUrl: String
-
     val appVersionConfigUrl: String
 }
 
 private class ChativeOnlineUrlProtocol : UrlProtocol {
-    val defaultChatUrl = "https://chat.chative.im"
+    override val defaultHost = "chat.chative.im"
+    private val defaultChatUrl = "https://$defaultHost"
 
     override val default: String = defaultChatUrl
     override val chat: String = "$defaultChatUrl/chat/"
@@ -31,38 +31,28 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
     override val inviteGroupUrl: String = "https://yelling.pro/"
     override val installationGuideUrl: String = "https://yelling.pro/"
-
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/prod-buildversion/insider-version.json"
 }
 
 private class ChativeDevelopmentUrlProtocol : UrlProtocol {
-    val defaultChatUrl = "https://chat.test.chative.im"
+    override val defaultHost = "chat.test.chative.im"
+    private val defaultChatUrl = "https://$defaultHost"
 
     override val default: String = defaultChatUrl
-
     override val chat: String = "$defaultChatUrl/chat/"
     override val call: String = "$defaultChatUrl/call/"
     override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
     override val inviteGroupUrl: String = "https://yelling.pro/"
     override val installationGuideUrl: String = "https://test.yelling.pro/"
-
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/test-buildversion/insider-version.json"
 }
 
 class UrlManager @Inject constructor(
     val environmentHelper: EnvironmentHelper,
-    private val globalConfigsManager: Lazy<GlobalConfigsManager>
+    private val globalConfigsManager: Lazy<GlobalConfigsManager>,
+    private val hostManager: HostManager
 ) {
-
-    companion object {
-        private var hostPosition: Int = 0
-
-        fun changeToOtherHost() {
-            hostPosition += 1
-            L.d { "[Net] changeToOtherHost:$hostPosition" }
-        }
-    }
 
     private val protocol: UrlProtocol = when {
         environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_ONLINE) -> ChativeOnlineUrlProtocol()
@@ -70,72 +60,98 @@ class UrlManager @Inject constructor(
         else -> throw IllegalArgumentException("Unknown Environment.")
     }
 
-
     private val newGlobalConfig by lazy {
         globalConfigsManager.get().getNewGlobalConfigs()
     }
 
-    private fun findHost(serviceType: String): Host? {
-        val hosts = newGlobalConfig?.data?.hosts?.filter { it.servTo == serviceType }
-        if (!hosts.isNullOrEmpty()) {
-            if (hostPosition >= hosts.size) {
-                hostPosition = 0
-            }
-            return hosts[hostPosition]
-        }
-        return null
+    // ==================== HTTP 相关 ====================
+
+    /**
+     * 获取 HTTP 请求的 host（优先使用 GlobalConfig，fallback 到 protocol 默认值）
+     */
+    private fun getHttpHost(): String {
+        return hostManager.getHost(HostManager.SERVICE_TYPE_CHAT, HostManager.FAILED_HOST_KEY_HTTP_CHAT)
+            ?: protocol.defaultHost
     }
 
+    /**
+     * 记录 HTTP 请求失败的 host
+     */
+    fun recordFailedHost(hostName: String) {
+        hostManager.recordFailedHost(HostManager.FAILED_HOST_KEY_HTTP_CHAT, hostName)
+    }
+
+    /**
+     * 根据旧 host 查找同 serviceType 的所有 hosts
+     */
     fun findHostsByOldHost(oldHostName: String): List<String> {
-        val oldHost = newGlobalConfig?.data?.hosts?.find { it.name == oldHostName }
-        return newGlobalConfig?.data?.hosts?.filter { it.servTo == oldHost?.servTo }?.mapNotNull { it.name } ?: emptyList()
+        val serviceType = hostManager.findServiceTypeByHost(oldHostName)
+        return if (serviceType != null) {
+            hostManager.getAllHosts(serviceType)
+        } else {
+            emptyList()
+        }
     }
 
     val default: String
         get() {
-            val host = findHost("chat")
-            return if (host != null) {
-                "https://${host.name}/"
-            } else {
-                protocol.default
-            }
+            val host = getHttpHost()
+            return "https://$host/"
         }
 
     val chat: String
         get() {
-            val host = findHost("chat")
-            val path = newGlobalConfig?.data?.srvs?.chat
-            return if (host != null && path != null) {
-                "https://" + host.name + path + "/"
-            } else {
-                protocol.chat
-            }
+            val host = getHttpHost()
+            val path = newGlobalConfig?.data?.srvs?.chat ?: "/chat"
+            return "https://$host$path/"
         }
 
     val call: String
         get() {
-            val host = findHost("chat")
-            val path = newGlobalConfig?.data?.srvs?.call
-            return if (host != null && path != null) {
-                "https://" + host.name + path + "/"
-            } else {
-                protocol.call
-            }
+            val host = getHttpHost()
+            val path = newGlobalConfig?.data?.srvs?.call ?: "/call"
+            return "https://$host$path/"
         }
+
     val fileSharing: String
         get() {
-            val host = findHost("chat")
-            val path = newGlobalConfig?.data?.srvs?.fileSharing
-            return if (host != null && path != null) {
-                "https://" + host.name + path + "/"
-            } else {
-                protocol.fileSharing
-            }
+            val host = getHttpHost()
+            val path = newGlobalConfig?.data?.srvs?.fileSharing ?: "/fileshare"
+            return "https://$host$path/"
         }
+
+    // ==================== WebSocket 相关 ====================
+
+    /**
+     * 获取 WebSocket 的 host（优先使用 GlobalConfig，fallback 到 protocol 默认值）
+     */
+    private fun getWebSocketHost(): String {
+        return hostManager.getHost(HostManager.SERVICE_TYPE_CHAT, HostManager.FAILED_HOST_KEY_WS_CHAT)
+            ?: protocol.defaultHost
+    }
+
+    /**
+     * 获取 Chat WebSocket URL
+     */
+    fun getChatWebsocketUrl(): String {
+        val chatHost = getWebSocketHost()
+        val path = newGlobalConfig?.data?.srvs?.chat ?: "/chat"
+        return "wss://$chatHost$path/v1/websocket/"
+    }
+
+    /**
+     * 记录当前 WebSocket host 为失败，下次获取时会优先使用其他 host
+     */
+    fun switchToNextChatWebsocketHost() {
+        val currentHost = getWebSocketHost()
+        hostManager.recordFailedHost(HostManager.FAILED_HOST_KEY_WS_CHAT, currentHost)
+        L.i { "[Net] UrlManager switchToNextChatWebsocketHost: recorded failed host=$currentHost" }
+    }
+
+    // ==================== 其他 ====================
 
     private val avatarStorage
         get() = newGlobalConfig?.data?.avatarFile ?: protocol.avatarStorage
-
 
     val inviteGroupUrl
         get() = protocol.inviteGroupUrl

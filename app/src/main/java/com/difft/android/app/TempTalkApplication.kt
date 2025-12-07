@@ -216,6 +216,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 if (startedActivityCount == 1) {
                     L.d { "[ScreenLock] App entered foreground" }
                     onAppForeground()
+                } else if (shouldCheckScreenLockForCall())
+                {
+                    scheduleQuickScreenLockCheck()
                 }
             }
 
@@ -377,12 +380,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 2. 通话相关
-        if (LCallActivity.isInCalling()) {
+        if (LCallActivity.isInCalling() && !LCallActivity.isNeedAppLock()) {
             L.d { "[ScreenLock] Skip: in call" }
             return false
         }
 
-        if (LIncomingCallActivity.isActivityShowing()) {
+        if (LIncomingCallActivity.isActivityShowing() && !LIncomingCallActivity.isNeedAppLock()) {
             L.d { "[ScreenLock] Skip: incoming call" }
             return false
         }
@@ -464,5 +467,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 FeatureGrayManager.checkUpdateConfigFromServer(it.lastUseTime)
             }
         }
+    }
+
+    private fun shouldCheckScreenLockForCall(): Boolean {
+        val incomingCallNeedsLock = LIncomingCallActivity.isActivityShowing() && LIncomingCallActivity.isNeedAppLock()
+        val activeCallNeedsLock = LCallActivity.isInCalling() && LCallActivity.isNeedAppLock()
+        return incomingCallNeedsLock || activeCallNeedsLock
     }
 }

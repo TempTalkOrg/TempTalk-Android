@@ -69,13 +69,11 @@ import com.difft.android.me.MeFragment
 import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.config.UserAgentManager
+import com.difft.android.push.FcmInitResult
 import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
 import com.difft.android.setting.UpdateManager
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
-import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -84,9 +82,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataMigrationManager
@@ -98,7 +94,6 @@ import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.WindowUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
 import java.io.File
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.system.exitProcess
@@ -160,6 +155,9 @@ class IndexActivity : BaseActivity() {
 
     @Inject
     lateinit var messageServiceManager: MessageServiceManager
+
+    @Inject
+    lateinit var pushUtil: PushUtil
 
     @SuppressLint("ClickableViewAccessibility")
     @RequiresApi(Build.VERSION_CODES.O)
@@ -257,6 +255,8 @@ class IndexActivity : BaseActivity() {
         WCDBUpdateService.start()
 
         initFCMPush()
+
+        observeFcmInitResult()
 
         checkEmulator()
 
@@ -408,52 +408,27 @@ class IndexActivity : BaseActivity() {
     }
 
     private fun initFCMPush() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            // 在子线程检查 Google Play Services 是否可用（避免 ANR）
-            val playServiceStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this@IndexActivity)
+        // 触发 FCM 初始化（PushUtil 内部使用独立 scope，不持有 Activity 引用）
+        pushUtil.initFCMPush()
+    }
 
-            if (playServiceStatus != ConnectionResult.SUCCESS) {
-                L.w { "[fcm] Google Play Services not available, status:$playServiceStatus" }
-                withContext(Dispatchers.Main) {
-                    handleFcmUnavailable()
-                }
-                return@launch
-            }
-
-            // Google Play Services 可用，尝试获取 FCM token（设置超时避免长时间等待）
-            withContext(Dispatchers.Main) {
-                val tokenTask = FirebaseMessaging.getInstance().token
-
-                // 使用协程超时机制（15秒超时）
-                val tokenResult = withTimeoutOrNull(15000L) {
-                    suspendCancellableCoroutine { continuation ->
-                        tokenTask.addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                continuation.resumeWith(Result.success(task.result))
-                            } else {
-                                continuation.resumeWith(Result.success(null))
-                            }
-                        }
+    private fun observeFcmInitResult() {
+        // 只监听失败状态，成功情况由 PushUtil 内部自动处理
+        lifecycleScope.launch {
+            pushUtil.fcmInitResult.collect { result ->
+                when (result) {
+                    is FcmInitResult.PlayServicesUnavailable -> {
+                        L.w { "[Push][fcm] Google Play Services not available, status:${result.statusCode}" }
+                        handleFcmUnavailable()
                     }
-                }
 
-                when {
-                    tokenResult == null -> {
-                        // Token 获取失败（可能是网络问题、无法连接 Google 服务器等）
-                        // 当作 FCM 不可用处理，下次打开 app 时会重新检查
-                        L.w { "[fcm] Fetching FCM registration token timeout or failed" }
+                    is FcmInitResult.Failure -> {
+                        L.w { "[Push][fcm] FCM initialization failed: ${result.reason}" }
                         handleFcmUnavailable()
                     }
 
                     else -> {
-                        // FCM token 获取成功
-                        L.i { "[fcm] Fetching FCM registration token success ${tokenResult.length}" }
-                        PushUtil.sendRegistrationToServer(null, tokenResult)
-
-//                        // FCM可用，自动停止Service并禁用保活
-//                        messageServiceManager.onFcmAvailable()
-
-                        FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
+                        // Idle, Loading, Success 都不需要处理
                     }
                 }
             }
@@ -606,8 +581,19 @@ class IndexActivity : BaseActivity() {
      * - 如果用户点击"前往设置"，不记录版本号，下次还会弹窗
      */
     private fun showStartMessageServiceTipsDialog() {
+        if (!pushUtil.canShowFcmUnavailableDialog()) {
+            L.d { "[MessageService] Dialog already shown in this application session" }
+            return
+        }
+
         val messageServiceTipsShowedVersion = userManager.getUserData()?.messageServiceTipsShowedVersion
-        if (messageServiceTipsShowedVersion == PackageUtil.getAppVersionName()) return
+        if (messageServiceTipsShowedVersion == PackageUtil.getAppVersionName()) {
+            L.i { "[MessageService] Tips dialog already shown in this version" }
+            return
+        }
+
+        // 设置标记，防止重复弹窗
+        pushUtil.markFcmUnavailableDialogShown()
 
         ComposeDialogManager.showMessageDialog(
             context = this@IndexActivity,
@@ -683,6 +669,10 @@ class IndexActivity : BaseActivity() {
                 } else {
                     ToastUtil.showLong(R.string.not_supported_link)
                 }
+            }
+
+            LinkDataEntity.CATEGORY_BACKGROUND_CONNECTION_SETTINGS -> {
+                BackgroundConnectionSettingsActivity.startActivity(this)
             }
 
             else -> {

@@ -285,7 +285,7 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
 }
 
 
-fun generateMessageFromForward(record: Forward): ChatMessage {
+fun generateMessageFromForward(record: Forward, mode: Int = 0): ChatMessage {
     return TextChatMessage().apply {
         val attachmentID = if (!record.attachments.isNullOrEmpty()) {
             record.attachments?.firstOrNull()?.authorityId.toString()
@@ -305,6 +305,7 @@ fun generateMessageFromForward(record: Forward): ChatMessage {
         this.readMaxSId = 0
         this.message = record.text
         this.attachment = record.attachments?.firstOrNull()
+        this.mode = mode
         if (!record.forwards.isNullOrEmpty()) {
             var isFromGroup = false
             record.forwards?.forEach { forward ->

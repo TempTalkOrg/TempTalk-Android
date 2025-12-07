@@ -169,7 +169,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun sendRegistrationToServer(token: String) {
-        PushUtil.sendRegistrationToServer(null, token)
+        val entryPoint = EntryPointAccessors.fromApplication(baseContext, EntryPoint::class.java)
+        appScope.launch {
+            entryPoint.pushUtil.sendRegistrationToServer(token)
+        }
     }
 
     @dagger.hilt.EntryPoint
@@ -178,5 +181,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val messageNotificationUtil: MessageNotificationUtil
         val envelopToMessageProcessor: EnvelopToMessageProcessor
         val pendingMessageHelper: PendingMessageHelper
+        val pushUtil: PushUtil
     }
 }

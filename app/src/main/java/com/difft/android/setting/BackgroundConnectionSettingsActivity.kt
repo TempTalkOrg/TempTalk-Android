@@ -367,7 +367,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                     R.color.t_secondary
                 )
             ),
-            modifier = Modifier.padding(top = 16.dp)
+            modifier = Modifier.padding(top = 16.dp, start = 16.dp, end = 16.dp)
         )
     }
 

@@ -51,6 +51,7 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.base.user.AutoLeave
 import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
@@ -93,6 +94,7 @@ import kotlinx.coroutines.withContext
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 
@@ -148,6 +150,10 @@ class LCallActivity : AppCompatActivity() {
 
     private var checkFloatingWindowPermissionDialog: ComposeDialog? = null
 
+    private lateinit var appUnlockListener: (Boolean) -> Unit
+
+    private val callbackId = "LCallActivity_${System.identityHashCode(this)}"
+
     private val viewModel: LCallViewModel by viewModelByFactory {
         LCallViewModel(
             e2eeEnable = true,
@@ -165,6 +171,13 @@ class LCallActivity : AppCompatActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         inCalling = true
+
+        if (isAppLockEnabled()) {
+            needAppLock.set(callIntent.needAppLock)
+        } else {
+            needAppLock.set(false)
+        }
+
         LCallManager.dismissWaitDialog()
 
         viewModel.getRoomId()?.let { setCurrentRoomId(it) }
@@ -192,6 +205,10 @@ class LCallActivity : AppCompatActivity() {
         initializeFaceFittingScreen()
 
         registerOnBackPressedHandler()
+
+        registerAppUnlockListener()
+
+        allowOnLockScreen()
     }
 
     private fun getCallIntent(): CallIntent {
@@ -536,6 +553,8 @@ class LCallActivity : AppCompatActivity() {
 
 
     companion object {
+        private val needAppLock = AtomicBoolean(true)
+
         var isInForeground = false
         private var inCalling = false
         private var inCallEnding = false
@@ -570,6 +589,7 @@ class LCallActivity : AppCompatActivity() {
             return mConversationId
         }
 
+        fun isNeedAppLock(): Boolean = needAppLock.get()
     }
 
     private fun showErrorAndFinish(tips: String) {
@@ -615,7 +635,7 @@ class LCallActivity : AppCompatActivity() {
         inCallEnding = false
         currentRoomId = null
         isInForeground = false
-
+        needAppLock.set(true)
         audioProcessor.release()
 
         proximitySensorListener = null
@@ -629,6 +649,8 @@ class LCallActivity : AppCompatActivity() {
         }
 
         sendDeclineCallBroadcast()
+
+        AppLockCallbackManager.removeListener(callbackId)
 
         L.i { "[Call] LCallActivity onDestroy end." }
     }
@@ -707,6 +729,15 @@ class LCallActivity : AppCompatActivity() {
 
     }
 
+    private fun registerAppUnlockListener() {
+        appUnlockListener = {
+            if (it) {
+                // 用户刚刚通过应用锁解锁
+                needAppLock.set(false)
+            }
+        }
+        AppLockCallbackManager.addListener(callbackId, appUnlockListener)
+    }
 
     @SuppressLint("WrongConstant")
     private fun registerCallActivityReceiver() {
@@ -954,6 +985,28 @@ class LCallActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Updates the foreground service type when permissions are granted after service start.
+     * This ensures the service can use microphone/camera in the background.
+     */
+    fun updateForegroundServiceType() {
+        L.i { "[Call] LCallActivity updateForegroundServiceType" }
+        if (!ForegroundService.isServiceRunning) {
+            L.i { "[Call] LCallActivity updateForegroundServiceType - ForegroundService is not running" }
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(this, ForegroundService::class.java).apply {
+                    action = ForegroundService.ACTION_UPDATE_SERVICE_TYPE
+                }
+                callToChatController.startForegroundService(this, intent)
+            } catch (e: Exception) {
+                L.e { "[Call] LCallActivity Failed to update foreground service type: ${e.message}" }
+            }
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         val callIntent = getCallIntent()
         L.d { "[Call] LCallActivity onNewIntent:$callIntent" }
@@ -976,6 +1029,11 @@ class LCallActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         L.i { "[Call] LCallActivity onResume" }
+        // Update foreground service type when returning from settings or other activities
+        // This ensures service type is updated if permissions were granted while away
+        if (ForegroundService.isServiceRunning && isInCalling()) {
+            updateForegroundServiceType()
+        }
 
         proximitySensor?.let {
             sensorManager.registerListener(
@@ -1251,5 +1309,27 @@ class LCallActivity : AppCompatActivity() {
             checkFloatingWindowPermissionDialog?.dismiss()
             checkFloatingWindowPermissionDialog = null
         }
+    }
+
+    private fun allowOnLockScreen() {
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+    }
+
+    private fun isAppLockEnabled(): Boolean {
+        if (!::userManager.isInitialized) return false
+        val user = userManager.getUserData() ?: return false
+        val hasPattern = !user.pattern.isNullOrEmpty()
+        val hasPasscode = !user.passcode.isNullOrEmpty()
+        return hasPattern || hasPasscode
     }
 }

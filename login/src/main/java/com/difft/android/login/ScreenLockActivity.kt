@@ -15,6 +15,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.widget.ComposeDialogManager
@@ -338,6 +339,7 @@ class ScreenLockActivity : BaseActivity() {
         val salt = storedPatternHash.split(":")[1]
         if (PasscodeUtil.verifyPassword(hash, salt, patternAttempt)) {
             onVerificationSuccess()
+            AppLockCallbackManager.notifyUnlockSuccess()
         } else {
             // Pattern incorrect
             mBinding.patternLockView.setViewMode(PatternLockView.PatternViewMode.WRONG)
@@ -386,6 +388,7 @@ class ScreenLockActivity : BaseActivity() {
 
         if (PasscodeUtil.verifyPassword(hash, salt, passcode)) {
             onVerificationSuccess()
+            AppLockCallbackManager.notifyUnlockSuccess()
         } else {
             if (isManualVerify) {
                 // 清空输入框

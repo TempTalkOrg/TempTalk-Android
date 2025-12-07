@@ -658,6 +658,7 @@ class LChatToCallControllerImpl @Inject constructor(
             .withConversationId(forWhat.id)
             .withStartCallParams(startCallParams)
             .withAppToken(token)
+            .withNeedAppLock(false)
 
         val cachedUrls = LCallEngine.getAvailableServerUrls()
         if (cachedUrls.isNotEmpty()) {
