@@ -42,6 +42,7 @@ import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSo
 import org.whispersystems.signalservice.internal.websocket.webSocketMessage
 import java.io.IOException
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
@@ -65,7 +66,7 @@ class WebSocketConnection @AssistedInject constructor(
 
     private val incomingRequests = LinkedBlockingQueue<WebSocketRequestMessage>()
 
-    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = HashMap()
+    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = ConcurrentHashMap()
 
     val name: String = "[ws][chat:" + System.identityHashCode(this) + "]"
 
@@ -375,11 +376,14 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     private fun cleanupAfterShutdown() {
         // Handle outgoing requests
-        val iterator = outgoingRequests.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            entry.value.onError(IOException("$name Closed unexpectedly"))
-            iterator.remove()
+        // Create a copy of the keys to avoid ConcurrentModificationException
+        val requestIds = outgoingRequests.keys.toList()
+        for (requestId in requestIds) {
+            try {
+                outgoingRequests.remove(requestId)?.onError(IOException("$name Closed unexpectedly"))
+            } catch (e: Exception) {
+                e(e) { "$name Error while cleaning up request $requestId" }
+            }
         }
 
         currentWebsocket = null // Allow garbage collection

@@ -3,19 +3,14 @@ package com.difft.android.chat.ui
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
-import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.chat.widget.VoiceMessageView
-import difft.android.messageserialization.model.AttachmentStatus
 
 open class AudioContentAdapter : MessageContentAdapter() {
     override val layoutRes: Int = R.layout.chat_item_content_audio
@@ -41,21 +36,17 @@ open class AudioContentAdapter : MessageContentAdapter() {
             viewHolder.tvCover.visibility = View.GONE
             viewHolder.tvCover.setOnClickListener(null)
         }
-
-        viewHolder.failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
     override fun createViewHolder(viewGroup: ViewGroup): ContentViewHolder {
         return AudioContentViewHolder(
             viewGroup.findViewById(R.id.voice_message_view),
-            viewGroup.findViewById(R.id.v_cover),
-            viewGroup.findViewById(R.id.cl_fail),
+            viewGroup.findViewById(R.id.v_cover)
         )
     }
 
     class AudioContentViewHolder(
         val voiceMessageView: VoiceMessageView,
-        val tvCover: TextView,
-        val failView: ConstraintLayout
+        val tvCover: TextView
     ) : MessageContentAdapter.ContentViewHolder()
 }

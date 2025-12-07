@@ -36,7 +36,7 @@ class GroupEditInfoActivity : BaseActivity() {
         binding.editGroupName.setText(groupName)
 
         binding.save.setOnClickListener {
-            val text = binding.editGroupName.text
+            val text = binding.editGroupName.text.toString()
             if (text.length in 1..64) {
                 groupRepo.changeGroupSettings(groupId, ChangeGroupSettingsReq(name = text.toString()))
                     .toObservable()

@@ -4,15 +4,11 @@ import android.text.TextUtils
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isConfidential
-import com.difft.android.chat.message.shouldShowFail
 import com.difft.android.chat.widget.ImageAndVideoMessageView
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 
@@ -20,8 +16,7 @@ open class ImageContentAdapter : MessageContentAdapter() {
     class ImageContentViewHolder(
         val imageMessageView: ImageAndVideoMessageView,
         val textView: TextView,
-        val coverView: TextView,
-        val failView: ConstraintLayout
+        val coverView: TextView
     ) : ContentViewHolder()
 
     val application = ApplicationDependencies.getApplication()
@@ -48,16 +43,13 @@ open class ImageContentAdapter : MessageContentAdapter() {
         } else {
             viewHolder.coverView.visibility = View.GONE
         }
-
-        viewHolder.failView.visibility = if (message.shouldShowFail()) View.VISIBLE else View.GONE
     }
 
     override fun createViewHolder(viewGroup: ViewGroup): ContentViewHolder {
         return ImageContentViewHolder(
             viewGroup.findViewById(R.id.imageMessageView),
             viewGroup.findViewById(R.id.textView),
-            viewGroup.findViewById(R.id.v_cover),
-            viewGroup.findViewById(R.id.cl_fail)
+            viewGroup.findViewById(R.id.v_cover)
         )
     }
 }

@@ -37,9 +37,12 @@ public class ChargingConstraintObserver implements ConstraintObserver {
         Intent intent = application.registerReceiver(new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                // 使用 goAsync() 和 TTExecutors.UNBOUNDED 避免主线程累积开销
+                // 使用 goAsync() 避免主线程阻塞
+                // 将整个执行器调用也放到异步处理中，避免在主线程上调用 execute()
                 final PendingResult pendingResult = goAsync();
-                TTExecutors.UNBOUNDED.execute(() -> {
+
+                // 使用一个专用的后台线程来调度任务，避免在主线程上调用 ThreadPoolExecutor.execute()
+                new Thread(() -> {
                     try {
                         boolean wasCharging = charging;
 
@@ -48,10 +51,12 @@ public class ChargingConstraintObserver implements ConstraintObserver {
                         if (charging && !wasCharging) {
                             notifier.onConstraintMet(REASON);
                         }
+                    } catch (Exception e) {
+                        L.e(() -> REASON + " Error processing charging constraint: " + e.getMessage());
                     } finally {
                         pendingResult.finish();
                     }
-                });
+                }, "ChargingObserver-Worker").start();
             }
         }, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
 

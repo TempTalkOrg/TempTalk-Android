@@ -61,6 +61,8 @@ import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.util.FullScreenPermissionHelper
+
 @Singleton
 class MessageNotificationUtil @Inject constructor(
     @ApplicationContext
@@ -743,13 +745,17 @@ class MessageNotificationUtil @Inject constructor(
 
     fun openFullScreenNotificationSettings(activity: Activity) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                    setData(("package:" + activity.packageName).toUri())
+            if(FullScreenPermissionHelper.isMainStreamChinaMobile()){
+                FullScreenPermissionHelper.jumpToPermissionSettingActivity(activity)
+            }else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                        setData(("package:" + activity.packageName).toUri())
+                    }
+                    activity.startActivity(intent)
+                } else {
+                    openNotificationSettings(activity)
                 }
-                activity.startActivity(intent)
-            } else {
-                openNotificationSettings(activity)
             }
         } catch (e: Exception) {
             L.i { "[MessageNotificationUtil] openFullScreenNotificationSettings fail:" + e.stackTraceToString() }
@@ -770,12 +776,16 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun hasFullScreenNotificationPermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        return if(FullScreenPermissionHelper.isMainStreamChinaMobile()) {
+            FullScreenPermissionHelper.canBackgroundStart(context)
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
 //            userManager.getUserData()?.supportFullScreenNotification == false
-            return nm.canUseFullScreenIntent()
+                nm.canUseFullScreenIntent()
+            } else {
+                true
+            }
         }
-
-        return true
     }
 
     fun isNotificationsEnabled(): Boolean {

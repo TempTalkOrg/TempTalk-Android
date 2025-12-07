@@ -12,3 +12,4 @@ local.properties
 app.log
 .cursor
 .cursorignore
+.claude

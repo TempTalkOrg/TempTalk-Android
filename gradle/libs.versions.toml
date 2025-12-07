@@ -106,7 +106,7 @@ mnPasswordEditText = "V1.0.4"
 
 accompanistSystemuicontroller = "0.36.0"
 coil = "3.0.4"
-livekitAndroid = "2.20.3.1"
+livekitAndroid = "2.20.3.2"
 denoiseFilter = "1.0.3"
 kotlinxSerializationCore = "1.5.0"
 kotlinxSerializationJson = "1.5.0"

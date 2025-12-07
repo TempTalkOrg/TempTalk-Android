@@ -1,11 +1,14 @@
 package com.difft.android.login
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
 import androidx.activity.OnBackPressedCallback
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.doAfterTextChanged
@@ -22,8 +25,6 @@ import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
-import net.yslibrary.android.keyboardvisibilityevent.Unregistrar
 import org.thoughtcrime.securesms.util.ViewUtil
 import javax.inject.Inject
 
@@ -48,16 +49,18 @@ class ScreenLockActivity : BaseActivity() {
     @Inject
     lateinit var logoutManager: LogoutManager
 
-    private var keyboardVisibilityEventListener: Unregistrar? = null
-
     // 当前解锁模式：true = Pattern, false = Passcode
     private var isPatternMode = false
 
     // 是否为验证模式（用于关闭锁定时的身份验证）
     private var isVerificationMode = false
 
+    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 禁用横屏，强制竖屏显示
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         PasscodeUtil.needRecordLastUseTime = false
 
@@ -76,14 +79,6 @@ class ScreenLockActivity : BaseActivity() {
                 // 正常解锁模式不允许返回（保持原有逻辑）
             }
         })
-
-        keyboardVisibilityEventListener = KeyboardVisibilityEvent.registerEventListener(this) {
-            if (it) { //键盘弹出
-                mBinding.root.post {
-                    mBinding.root.fullScroll(View.FOCUS_DOWN)
-                }
-            }
-        }
     }
 
     private fun initView() {
@@ -171,9 +166,12 @@ class ScreenLockActivity : BaseActivity() {
         if (isPatternMode) {
             // 显示Pattern模式
             mBinding.tvTitle.text = getString(R.string.settings_draw_pattern)
-            mBinding.llPasscode.visibility = View.GONE
-            mBinding.patternLockView.visibility = View.VISIBLE
+            mBinding.etPasscode1.visibility = View.GONE
             mBinding.btnSubmit.visibility = View.GONE
+            mBinding.patternLockView.visibility = View.VISIBLE
+
+            // Pattern模式下，options固定在底部50dp
+            updateOptionsPosition(true)
 
             // 清除输入框焦点，隐藏键盘
             mBinding.etPasscode1.clearFocus()
@@ -191,9 +189,12 @@ class ScreenLockActivity : BaseActivity() {
         } else {
             // 显示Passcode模式
             mBinding.tvTitle.text = getString(R.string.settings_enter_passcode)
-            mBinding.llPasscode.visibility = View.VISIBLE
-            mBinding.patternLockView.visibility = View.GONE
+            mBinding.etPasscode1.visibility = View.VISIBLE
             mBinding.btnSubmit.visibility = View.VISIBLE
+            mBinding.patternLockView.visibility = View.GONE
+
+            // Passcode模式下，options跟随btn_submit，距离20dp
+            updateOptionsPosition(false)
 
             // 请求输入框焦点，显示键盘
             mBinding.etPasscode1.requestFocus()
@@ -217,6 +218,26 @@ class ScreenLockActivity : BaseActivity() {
 
         // 根据当前模式显示相应的延迟提示
         checkAndShowDelayTips(isPatternMode)
+    }
+
+    private fun updateOptionsPosition(isPatternMode: Boolean) {
+        val layoutParams = mBinding.llOptions.layoutParams as ConstraintLayout.LayoutParams
+
+        if (isPatternMode) {
+            // Pattern模式：固定在底部50dp
+            layoutParams.topToBottom = ConstraintLayout.LayoutParams.UNSET
+            layoutParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+            layoutParams.topMargin = 0
+            layoutParams.bottomMargin = (50 * resources.displayMetrics.density).toInt()
+        } else {
+            // Passcode模式：跟随btn_submit，距离20dp
+            layoutParams.topToBottom = mBinding.btnSubmit.id
+            layoutParams.bottomToBottom = ConstraintLayout.LayoutParams.UNSET
+            layoutParams.topMargin = (20 * resources.displayMetrics.density).toInt()
+            layoutParams.bottomMargin = 0
+        }
+
+        mBinding.llOptions.layoutParams = layoutParams
     }
 
     private fun setupPatternView() {

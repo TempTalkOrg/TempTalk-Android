@@ -26,6 +26,9 @@ object FileUtil {
     const val DRAFT_ATTACHMENTS_DIRECTORY: String = "draft_blobs"
     const val TEMP_ATTACHMENTS_DIRECTORY: String = "temp_attachments"
 
+    /** Large file threshold for manual download prompt (10MB) */
+    const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
+
 
     fun isFileValid(path: String): Boolean {
         // prevent directory traversal attacks by checking for ".." in path
