@@ -9,8 +9,8 @@ import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
 import com.difft.android.base.log.lumberjack.L
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.subjects.BehaviorSubject
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
@@ -156,22 +156,17 @@ object FileUtil {
 
     private val progressMap = hashMapOf<String, Int>()
 
-    private val mProgressUpdateSubject = BehaviorSubject.create<String>()
+    private val _progressUpdate = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 64)
+    val progressUpdate: SharedFlow<String> = _progressUpdate
+
     fun emitProgressUpdate(id: String, progress: Int) {
         progressMap[id] = progress
-        mProgressUpdateSubject.onNext(id)
+        _progressUpdate.tryEmit(id)
     }
 
     fun getProgress(id: String): Int? {
         return progressMap[id]
     }
-
-//    fun removeProgress(id: String) {
-//        progressMap.remove(id)
-//        mProgressUpdateSubject.onNext(id)
-//    }
-
-    val progressUpdate: Observable<String> = mProgressUpdateSubject
 
     private val downloadingMap = hashMapOf<Long, String>()
 

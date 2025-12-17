@@ -1,6 +1,7 @@
 package com.difft.android.chat.recent
 
 import com.difft.android.base.call.CallData
+import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 
 data class RoomViewData(
@@ -15,6 +16,7 @@ data class RoomViewData(
     val muteStatus: Int = 0, //   MUTED(1), UNMUTED(0);
     val pinnedTime: Long? = 0L,
     val mentionType: Int = MENTIONS_TYPE_NONE,
+    val criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE, // Critical Alert 类型
     val messageExpiry: Long? = null, //消息过期时间
     var isInstantCall: Boolean = false,
     var isLiveStream: Boolean = false,

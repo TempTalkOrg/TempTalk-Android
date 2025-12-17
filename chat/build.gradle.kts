@@ -84,7 +84,6 @@ dependencies {
 
     // Other dependencies
     implementation(libs.annimon.stream)
-    implementation(libs.eventbus)
     implementation(libs.guava)
     implementation(libs.keyboard.visibility.event)
     implementation(libs.circle.imageview)

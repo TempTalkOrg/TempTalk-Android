@@ -15,6 +15,9 @@ import com.difft.android.base.log.lumberjack.data.StackData
 import org.slf4j.LoggerFactory
 import org.slf4j.MarkerFactory
 import timber.log.BaseTree
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 /**
@@ -100,11 +103,20 @@ class FileLoggingTree(
         root.level = Level.ALL
     }
 
+    // 时间格式化器，使用调用时捕获的时间戳
+    private val dateFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss,SSS", Locale.US)
+
     override fun log(priority: Int, prefix: String, message: String, t: Throwable?, stackData: StackData) {
+        // 获取调用时捕获的时间戳（如果有），否则使用当前时间
+        val timestamp = getLogTimestamp() ?: System.currentTimeMillis()
+        val formattedTime = dateFormatter.format(Date(timestamp))
+
         val logMessage = formatLine(prefix, message)
+        // 在 message 前添加调用时的时间戳，保证时间准确性
+        val logMessageWithTime = "$formattedTime $logMessage"
 
         //L.kt已经将日志处理整个放在子线程
-        doRealLog(priority, logMessage)
+        doRealLog(priority, logMessageWithTime)
     }
 
     private val WTF_MARKER = MarkerFactory.getMarker("WTF-")

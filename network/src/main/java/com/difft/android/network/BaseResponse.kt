@@ -17,7 +17,8 @@ data class BaseResponse<T>(
 
     val requirePasscode: Boolean = false,
     val passcodeSalt: String? = null,
-    val screenLockTimeout: Int? = null
+    val screenLockTimeout: Int? = null,
+    val serverTimestamp: Long? = null
 ) {
     fun isSuccess() = status == 0
 

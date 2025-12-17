@@ -14,16 +14,13 @@ import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.coroutines.launch
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
 import com.difft.android.base.fragment.DisposableManageFragment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.smoothScrollToPositionWithHelper
-import com.difft.android.base.user.FloatMenuAction
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
@@ -56,10 +53,10 @@ import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
@@ -392,7 +389,7 @@ class RecentChatFragment : DisposableManageFragment() {
         mAdapter.stopUpdateCallBar()
     }
 
-    private fun initActions(floatMenuActions: List<FloatMenuAction>? = null) {
+    private fun initActions() {
         popupItemList = mutableListOf<ChativePopupView.Item>().apply {
             add(
                 ChativePopupView.Item(
@@ -435,20 +432,6 @@ class RecentChatFragment : DisposableManageFragment() {
                     recentChatViewModel.markAllAsRead(requireActivity())
                     popupWindow?.dismiss()
                 })
-
-
-            floatMenuActions?.forEach { menu ->
-                add(
-                    ChativePopupView.Item(
-                        drawableUrl = menu.iconUrl,
-                        label = if (LanguageUtils.getLanguage(requireContext()).language == "zh") menu.name?.zhCn else menu.name?.enUs
-                    ) {
-                        if (!menu.jumpUrl.isNullOrEmpty()) {
-//                        WebActivity.startActivity(requireActivity(), menu.jumpUrl!!)
-                        }
-                        popupWindow?.dismiss()
-                    })
-            }
         }
         binding.addOptions.setOnClickListener {
             popupWindow = ChativePopupWindow.showAsDropDown2(

@@ -10,8 +10,6 @@ import android.os.BatteryManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.difft.android.base.log.lumberjack.L;
-
 import org.thoughtcrime.securesms.jobmanager.ConstraintObserver;
 
 /**
@@ -19,7 +17,8 @@ import org.thoughtcrime.securesms.jobmanager.ConstraintObserver;
  */
 public class ChargingConstraintObserver implements ConstraintObserver {
 
-    private static final String REASON = L.INSTANCE.tag(ChargingConstraintObserver.class);
+    // 使用字符串常量避免类加载时触发 L.INSTANCE 初始化导致ANR
+    private static final String REASON = "ChargingConstraint";
     private static final int STATUS_BATTERY = 0;
 
     private final Application application;

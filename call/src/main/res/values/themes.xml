@@ -16,6 +16,13 @@
         <item name="android:windowBackground">@color/bg1.night</item>
     </style>
 
+    <style name="TransparentActivityTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <style name="Theme.Livekitandroid.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
 
     <style name="Theme.Livekitandroid.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />

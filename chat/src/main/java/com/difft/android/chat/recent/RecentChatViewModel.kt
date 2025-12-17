@@ -152,6 +152,7 @@ class RecentChatViewModel @Inject constructor(
                         it.muteStatus,
                         it.pinnedTime,
                         it.mentionType,
+                        it.criticalAlertType,
                         it.messageExpiry,
                         callData = LCallManager.getCallDataByConversationId(it.roomId),
                         draftPreview = allDrafts[it.roomId]?.content,

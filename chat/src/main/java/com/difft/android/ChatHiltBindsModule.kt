@@ -28,6 +28,7 @@ abstract class ChatHiltBindsModule {
 
     //Bind ChativeWebSocketHealthMonitor to HealthMonitor
     @Binds
+    @Singleton
     abstract fun bindWebSocketHealthMonitor(webSocketHealthMonitor: WebSocketHealthMonitor): HealthMonitor
 
     @Binds

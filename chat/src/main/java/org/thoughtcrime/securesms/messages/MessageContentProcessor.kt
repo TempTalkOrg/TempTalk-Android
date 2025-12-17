@@ -4,8 +4,8 @@ import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ValidatorUtil
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.delete
@@ -17,7 +17,8 @@ import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.ContactsUpdater
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupUpdater
-import com.difft.android.chat.setting.ChatSettingUtils
+import com.difft.android.chat.message.LocalMessageCreator
+import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.widget.AudioMessageManager
 import difft.android.messageserialization.For
@@ -74,7 +75,9 @@ class MessageContentProcessor @Inject constructor(
     private val wcdb: WCDB,
     private val lCallManager: LChatToCallController,
     private val receiptMessageHelper: ReceiptMessageHelper,
-    private val messageNotificationUtil: MessageNotificationUtil
+    private val messageNotificationUtil: MessageNotificationUtil,
+    private val conversationSettingsManager: ConversationSettingsManager,
+    private val localMessageCreator: LocalMessageCreator
 ) {
 
     private var tag: String = ""
@@ -113,7 +116,7 @@ class MessageContentProcessor @Inject constructor(
                     isScheduleMessage = false
                 )
             } else if (serviceContent.hasSyncMessage()) {
-                if(content.senderId != globalServices.myId) {
+                if (content.senderId != globalServices.myId) {
                     L.w { "[Message][${tag}] received sync message from another id, senderId:${content.senderId}." }
                     return null
                 }
@@ -472,8 +475,10 @@ class MessageContentProcessor @Inject constructor(
                     kotlin.runCatching {
                         val notifyConversation = Gson().fromJson(it.toString(), NotifyConversation::class.java)
                         dbRoomStore.updateMuteStatus(notifyConversation.conversation, notifyConversation.muteStatus).await()
-                        ContactorUtil.updateRemark(notifyConversation.conversation, notifyConversation.remark)
-                        ChatSettingUtils.emitConversationSettingUpdate(notifyConversation.conversation)
+                        if (!notifyConversation.remark.isNullOrEmpty()) {
+                            ContactorUtil.updateRemark(notifyConversation.conversation, notifyConversation.remark)
+                        }
+                        conversationSettingsManager.emitConversationSettingUpdate(notifyConversation.conversation)
                     }.onFailure {
                         L.e { "[Message][${tag}] handle conversation setting notify message fail: ${it.stackTraceToString()}" }
                     }
@@ -512,20 +517,41 @@ class MessageContentProcessor @Inject constructor(
                 val data = message.data ?: return
                 val operator = data.operator ?: return
                 messageArchiveManager.archiveMessagesByResetIdentityKey(operator, data.resetIdentityKeyTime)
-            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT) {
-                L.i { "[Message][${tag}] process critical alert notify message -> timestamp:${message.data?.timestamp}" }
+            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT || message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2) {
+                L.i { "[Message][${tag}] process critical alert notify message -> data:${message.data}" }
                 val data = message.data ?: return
+
+                if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT && !data.showCriticalAlert) {
+                    L.i { "[Message][${tag}] critical alert notify message 20 is not show" }
+                    return
+                }
+
+                // 忽略自己的消息，避免重复提醒
+                if (data.source == globalServices.myId && data.sourceDevice == DEFAULT_DEVICE_ID) {
+                    L.i { "[Message][${tag}] critical alert notify message is from myself" }
+                    return
+                }
+
                 val conversationId = data.conversation?.asString ?: return
+                val source = data.source ?: return
                 val forWhat = if (ValidatorUtil.isGid(conversationId)) {
                     For.Group(conversationId)
                 } else {
                     For.Account(conversationId)
                 }
-                val alertTitle = data.alertTitle ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
-                val alertContent = data.alertBody ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
+                val (title, content) = LCallManager.getCriticalAlertNotificationContent(conversationId, source)
                 val timestamp = data.timestamp
-                L.i { "[Call] handle notify critical alert: conversationId=$conversationId, timestamp=$timestamp" }
-                messageNotificationUtil.showCriticalAlertNotification(forWhat, alertTitle, alertContent, timestamp)
+                val serverTimestamp = data.serverTimestamp
+                L.i { "[Message][${tag}] handle notify critical alert: conversationId=$conversationId, timestamp=$timestamp, serverTimestamp=$serverTimestamp" }
+                if (data.source != globalServices.myId && data.showCriticalAlert) {
+                    messageNotificationUtil.showCriticalAlertNotification(forWhat, title, content, timestamp)
+                } else {
+                    L.i { "[Message][${tag}] critical alert notification not shown (source=myself or showCriticalAlert=false)" }
+                }
+
+                // 本地生成 critical alert 文本消息
+                createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice)
+
             }
         }
     }
@@ -602,5 +628,21 @@ class MessageContentProcessor @Inject constructor(
 
     private fun updateDisappearingTime(forWhat: For, messageExpiry: Int, messageClearAnchor: Long) {
         messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor)
+    }
+
+    /**
+     * 创建本地 Critical Alert 文本消息
+     * @param serverTimestamp 服务器时间戳
+     * @param source 消息发送者ID
+     * @param forWhat 消息所属会话
+     * @param showCriticalAlert 控制会话的 Critical Alert 高亮状态
+     * @param sourceDevice 消息所属设备类型
+     */
+    private suspend fun createCriticalAlertMessage(serverTimestamp: Long, timestamp: Long, source: String, forWhat: For, showCriticalAlert: Boolean, sourceDevice: Int) {
+        localMessageCreator.createCriticalAlertMessage(serverTimestamp, timestamp, For.Account(source), forWhat, sourceDevice)
+        // 设置会话列表高亮（仅当消息未读时）
+        if (source != globalServices.myId && showCriticalAlert) {
+            dbRoomStore.setCriticalAlertIfUnread(forWhat.id, serverTimestamp)
+        }
     }
 }

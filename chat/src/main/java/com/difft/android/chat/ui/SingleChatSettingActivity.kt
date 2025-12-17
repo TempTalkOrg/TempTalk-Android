@@ -31,9 +31,6 @@ import com.difft.android.chat.databinding.ChatActivitySettingBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
-import com.difft.android.chat.setting.ChatSettingUtils
-import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
@@ -45,9 +42,11 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
@@ -58,9 +57,6 @@ import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class SingleChatSettingActivity : BaseActivity() {
-
-    @Inject
-    lateinit var messageArchiveManager: MessageArchiveManager
 
     @Inject
     lateinit var dbMessageStore: DBMessageStore
@@ -102,8 +98,6 @@ class SingleChatSettingActivity : BaseActivity() {
         mBinding.ibBack.setOnClickListener { finish() }
 
         if (TextUtils.isEmpty(contactId)) return
-
-        // chatSettingViewModel.setCurrentTarget(For.Account(contactId)) - 不再需要，因为通过构造方法传递
 
         if (contactId.isBotId()) {
             mBinding.relMember.visibility = View.GONE
@@ -164,22 +158,24 @@ class SingleChatSettingActivity : BaseActivity() {
                 error.printStackTrace()
             })
 
-        refreshConversationSetting()
-
+        // 统一订阅 conversationSet，处理所有配置相关的 UI 更新
         chatSettingViewModel.conversationSet
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.blockStatus == 1) {
+            .filterNotNull()
+            .onEach { conversationSet ->
+                // 更新 block 状态
+                if (conversationSet.blockStatus == 1) {
                     mBinding.tvUnblock.visibility = View.VISIBLE
                     mBinding.tvBlock.visibility = View.GONE
                 } else {
                     mBinding.tvUnblock.visibility = View.GONE
                     mBinding.tvBlock.visibility = View.VISIBLE
                 }
-            }, {
-                it.printStackTrace()
-            })
+                // 更新 mute 状态
+                mBinding.switch2mute1on1.isChecked = conversationSet.isMuted
+                // 更新 disappearing time
+                mBinding.disappearingTimeText.text = conversationSet.messageExpiry.toArchiveTimeDisplayText()
+            }
+            .launchIn(lifecycleScope)
 
         mBinding.tvUnblock.setOnClickListener {
             chatSettingViewModel.setConversationConfigs(this, contactId, null, null, 0, null, false, getString(R.string.contact_unblocked))
@@ -204,14 +200,6 @@ class SingleChatSettingActivity : BaseActivity() {
                 }
             }
         }
-        // 20230803@w --------------------------------------------------------->
-        // Purpose: Setup mute switch for conversation
-        chatSettingViewModel.conversationSet.observeOn(AndroidSchedulers.mainThread())
-            .autoDispose(this)
-            .subscribe {
-                L.i { "BH_Lin: settings of conversation=$it" }
-                mBinding.switch2mute1on1.isChecked = it.isMuted == true
-            }
         mBinding.switch2mute1on1.setOnClickListener {
             var muteStatus = MuteStatus.UNMUTED.value
             if (mBinding.switch2mute1on1.isChecked) {
@@ -223,18 +211,6 @@ class SingleChatSettingActivity : BaseActivity() {
                 muteStatus = muteStatus
             )
         }
-        // 20230803@w ---------------------------------------------------------<
-
-        ChatSettingUtils.conversationSettingUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it == contactId) {
-                    refreshConversationSetting()
-                }
-            }, {
-                it.printStackTrace()
-            })
 
         mBinding.switchStick.isChecked = isPined()
         mBinding.switchStick.setOnClickListener {
@@ -244,26 +220,6 @@ class SingleChatSettingActivity : BaseActivity() {
                 pinChattingRoom(true)
             }
         }
-
-        messageArchiveManager.getMessageArchiveTime(For.Account(contactId))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mBinding.disappearingTimeText.text = it.toArchiveTimeDisplayText()
-            }, { it.printStackTrace() })
-
-        MessageArchiveUtil.archiveTimeUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.first == contactId) {
-                    mBinding.disappearingTimeText.text = it.second.toArchiveTimeDisplayText()
-                }
-            }, { it.printStackTrace() })
-    }
-
-    private fun refreshConversationSetting() {
-        chatSettingViewModel.getConversationConfigs(this, listOf(contactId))
     }
 
     override fun onResume() {

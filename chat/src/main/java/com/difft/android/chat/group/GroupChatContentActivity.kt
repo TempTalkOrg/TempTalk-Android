@@ -21,25 +21,30 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.ScreenShotUtil
 import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.databinding.ChatActivityGroupChatContentBinding
-import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
 import com.difft.android.chat.ui.ChatBackgroundDrawable
+import com.difft.android.chat.ui.ChatMessageListFragment
+import com.difft.android.chat.ui.ChatMessageListProvider
 import com.difft.android.chat.ui.ChatMessageViewModel
 import com.difft.android.chat.widget.RecordingState
 import com.difft.android.create
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.hi.dhl.binding.viewbind
-import com.difft.android.base.widget.ComposeDialogManager
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import io.reactivex.rxjava3.core.Observable
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.difft.app.database.models.GroupModel
 import org.thoughtcrime.securesms.components.reaction.MotionEventRelay
@@ -47,9 +52,7 @@ import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-import com.difft.android.base.widget.ToastUtil
-import com.difft.android.chat.ui.ChatMessageListFragment
-import com.difft.android.chat.ui.ChatMessageListProvider
+
 @AndroidEntryPoint
 class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
     companion object {
@@ -90,9 +93,6 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
     lateinit var groupRepo: GroupRepo
 
     @Inject
-    lateinit var messageArchiveManager: MessageArchiveManager
-
-    @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
 
     private val mBinding: ChatActivityGroupChatContentBinding by viewbind()
@@ -121,8 +121,6 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
         }
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
 
-        // chatSettingViewModel.setCurrentTarget(chatViewModel.forWhat) - 不再需要，因为通过构造方法传递
-
         getGroupInfo(false)
 
         Observable.just(Unit)
@@ -145,13 +143,6 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
             }, {
                 it.printStackTrace()
             })
-
-        chatSettingViewModel.getConversationConfigs(this, listOf(chatViewModel.forWhat.id))
-
-        messageArchiveManager.getMessageArchiveTime(chatViewModel.forWhat, true)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({}, { it.printStackTrace() })
 
         chatViewModel.voiceVisibilityChange
             .compose(RxUtil.getSchedulerComposer())
@@ -243,11 +234,11 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
 
         updateConfidential()
         chatSettingViewModel.conversationSet
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .filterNotNull()
+            .onEach {
                 updateConfidential(it)
-            }, { it.printStackTrace() })
+            }
+            .launchIn(lifecycleScope)
     }
 
     private fun updateConfidential(conversationSet: ConversationSetResponseBody? = null) {
@@ -284,21 +275,6 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
         } else
             return super.onBackPressed()
     }
-//    private var defaultArchiveTimeCreated = false
-//    private fun createDefaultArchiveTime() {
-//        if (defaultArchiveTimeCreated) return
-//        chatSettingViewModel
-//            .loadSelectedOption()
-//            .compose(RxUtil.getSingleSchedulerComposer())
-//            .to(RxUtil.autoDispose(this))
-//            .subscribe({
-//                ContactorUtil.createDefaultArchiveTimeNotify(groupID, it.toDuration().inWholeMilliseconds, true)
-//            }, {
-//                it.printStackTrace()
-//            })
-//        defaultArchiveTimeCreated = true
-//    }
-
     private fun getGroupInfo(forceUpdate: Boolean = false) {
         GroupUtil.getSingleGroupInfo(this, chatViewModel.forWhat.id, forceUpdate)
             .compose(RxUtil.getSchedulerComposer())

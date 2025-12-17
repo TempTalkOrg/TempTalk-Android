@@ -55,7 +55,7 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
     val countDownStartColor = Color(0xFF82C1FC)
 
     var preCountDownDurationStr by remember { mutableStateOf("00:00") }
-    val shakingThreshold = callConfig.countdownTimer.shakingThreshold / 1000L
+    val shakingThreshold = (callConfig.countdownTimer?.shakingThreshold ?: 3000L) / 1000L
 
     LaunchedEffect(speakerCountDownDurationStr) {
         if(countDownEnabled && countDownSeconds> shakingThreshold && countDownShakeAnim.isRunning){
@@ -97,7 +97,7 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
         verticalAlignment = Alignment.CenterVertically,
     ){
         Image(
-            painter = painterResource(id = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer.warningThreshold) || countDownShakeAnim.isRunning) R.drawable.call_countdown_stopwatch else R.drawable.call_countdown_startwatch),
+            painter = painterResource(id = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer?.warningThreshold ?: 3000L) || countDownShakeAnim.isRunning) R.drawable.call_countdown_stopwatch else R.drawable.call_countdown_startwatch),
             contentDescription = "image description",
             contentScale = ContentScale.None
         )
@@ -108,7 +108,7 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
                 fontWeight = FontWeight(400),
-                color = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer.warningThreshold) || countDownShakeAnim.isRunning) countDownEndColor else countDownStartColor,
+                color = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer?.warningThreshold ?: 3000L) || countDownShakeAnim.isRunning) countDownEndColor else countDownStartColor,
             )
         )
 

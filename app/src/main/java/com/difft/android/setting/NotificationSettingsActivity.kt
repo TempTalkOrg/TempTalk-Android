@@ -129,13 +129,14 @@ class NotificationSettingsActivity : BaseActivity() {
             val hasNotification = messageNotificationUtil.canShowNotifications()
             val hasBgConnection = MessageForegroundService.isRunning
             val dndSettingsEnabled = messageNotificationUtil.isNotificationPolicyAccessGranted()
+            val fullScreenNotificationEnabled = messageNotificationUtil.hasFullScreenNotificationPermission()
 
             if (dndSettingsEnabled) {
                 openDndSettings()
                 return@setOnClickListener
             }
 
-            val canOpenDnd = if (hasFcm) hasNotification else (hasNotification && hasBgConnection)
+            val canOpenDnd = if (hasFcm) hasNotification && fullScreenNotificationEnabled else (hasNotification && hasBgConnection && fullScreenNotificationEnabled)
 
             if (canOpenDnd) {
                 openDndSettings()
@@ -143,8 +144,9 @@ class NotificationSettingsActivity : BaseActivity() {
             }
 
             val errorMessageRes = when {
-                !hasNotification && (!hasFcm && !hasBgConnection) -> R.string.critical_alert_all_permission_check_failed
+                !hasNotification && (!hasFcm && !hasBgConnection) && !fullScreenNotificationEnabled -> R.string.critical_alert_all_permission_check_failed
                 !hasNotification -> R.string.critical_alert_notification_permission_check_failed
+                !fullScreenNotificationEnabled -> R.string.critical_alert_fullscreen_permission_check_failed
                 else -> R.string.critical_alert_background_connection_permission_check_failed
             }
 

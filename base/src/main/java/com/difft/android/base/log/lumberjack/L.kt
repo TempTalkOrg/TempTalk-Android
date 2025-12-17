@@ -4,10 +4,14 @@ import com.difft.android.base.log.lumberjack.core.DefaultFormatter
 import com.difft.android.base.log.lumberjack.data.StackData
 import com.difft.android.base.log.lumberjack.interfaces.IFilter
 import com.difft.android.base.log.lumberjack.interfaces.IFormatter
-import com.difft.android.base.utils.appScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import timber.log.BaseTree
 import timber.log.Timber
+import java.util.concurrent.Executors
 
 /*
 logs LAZILY and at the callers place via kotlin inline functions
@@ -44,6 +48,44 @@ object L {
      * by default nothing is filtered
      */
     var filter: IFilter? = null
+
+    // --------------
+    // 日志处理 - 单线程Channel保证顺序，避免Coroutine调度器锁竞争
+    // --------------
+
+    private data class LogEntry(
+        val t: Throwable?,
+        val t2: Throwable,
+        val timestamp: Long,  // 调用时捕获的时间戳，保证时间准确性
+        val logBlock: () -> Unit
+    )
+
+    // 独立的单线程调度器，避免Dispatchers.Default的Worker锁竞争
+    private val logDispatcher = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "L-Logger").apply {
+            isDaemon = true
+            priority = Thread.MIN_PRIORITY
+        }
+    }.asCoroutineDispatcher()
+
+    private val logScope = CoroutineScope(logDispatcher + SupervisorJob())
+
+    // UNLIMITED容量确保不丢失日志
+    private val logChannel = Channel<LogEntry>(Channel.UNLIMITED)
+
+    init {
+        // 单个消费者顺序处理，保证日志顺序
+        logScope.launch {
+            for (entry in logChannel) {
+                try {
+                    executeLog(entry.t, entry.t2, entry.timestamp, entry.logBlock)
+                } catch (_: Exception) {
+                    // 单条日志失败不影响后续日志
+                }
+            }
+        }
+    }
+
     // --------------
     // special functions
     // --------------
@@ -159,21 +201,32 @@ object L {
     }
 
     private fun processLogAsync(t: Throwable?, t2: Throwable, logBlock: () -> Unit) {
-        appScope.launch {
-            executeLog(t, t2, logBlock)
-        }
+        // 调用时立即捕获时间戳，保证时间准确性
+        val timestamp = System.currentTimeMillis()
+        // 非阻塞发送到Channel，UNLIMITED容量不会失败
+        logChannel.trySend(LogEntry(t, t2, timestamp, logBlock))
     }
 
-    private fun executeLog(t: Throwable?, t2: Throwable, logBlock: () -> Unit) {
+    private fun executeLog(t: Throwable?, t2: Throwable, timestamp: Long, logBlock: () -> Unit) {
         try {
             val stackTrace = StackData(t ?: t2, if (t == null) 1 else 0)
             if (filter?.isPackageNameEnabled(stackTrace.getCallingPackageName()) != false) {
                 setStackTraceData(stackTrace)
+                setLogTimestamp(timestamp)
                 logBlock()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // 如果StackData创建失败，降级到直接执行
             logBlock()
+        }
+    }
+
+    private fun setLogTimestamp(timestamp: Long) {
+        val forest = Timber.forest()
+        for (tree in forest) {
+            if (tree is BaseTree) {
+                tree.setLogTimestamp(timestamp)
+            }
         }
     }
 

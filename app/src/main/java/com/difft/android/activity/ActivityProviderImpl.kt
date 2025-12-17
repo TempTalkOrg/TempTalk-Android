@@ -7,6 +7,7 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.call.LIncomingCallActivity
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
+import com.difft.android.call.CriticalAlertActivity
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,6 +26,7 @@ class ActivityProviderImpl @Inject constructor() : ActivityProvider {
             ActivityType.SEARCH -> SearchActivity::class.java
             ActivityType.CONTACT_DETAIL -> ContactDetailActivity::class.java
             ActivityType.L_INCOMING_CALL -> LIncomingCallActivity::class.java
+            ActivityType.CRITICAL_ALERT -> CriticalAlertActivity::class.java
         }
     }
 }

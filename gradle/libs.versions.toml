@@ -79,7 +79,6 @@ jacksonModuleKotlin = "2.12.0"
 jwtdecode = "2.0.2"
 jwt = "0.11.5"
 annimonStream = "1.1.8"
-eventbus = "3.0.0"
 junit = "4.13.2"
 protobuf = "3.25.5"
 libPhoneNumber = "8.12.54"
@@ -250,7 +249,6 @@ jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-
 jwtdecode = { module = "com.auth0.android:jwtdecode", version.ref = "jwtdecode" }
 jwt = { module = "io.jsonwebtoken:jjwt-gson", version.ref = "jwt" }
 annimon-stream = { module = "com.annimon:stream", version.ref = "annimonStream" }
-eventbus = { module = "org.greenrobot:eventbus", version.ref = "eventbus" }
 junit = { module = "junit:junit", version.ref = "junit" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-kotlin-lite = { module = "com.google.protobuf:protobuf-kotlin-lite", version.ref = "protobuf" }

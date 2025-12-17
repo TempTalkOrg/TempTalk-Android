@@ -13,6 +13,7 @@ import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.TranslateData
+import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
@@ -31,6 +32,7 @@ open class TextChatMessage : ChatMessage() {
     var translateData: TranslateData? = null
     var speechToTextData: SpeechToTextData? = null
     var playStatus: Int = AudioMessageManager.PLAY_STATUS_PLAYED
+    var criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is TextChatMessage) return false
@@ -49,6 +51,7 @@ open class TextChatMessage : ChatMessage() {
         if (sharedContacts != other.sharedContacts) return false
         if (translateData != other.translateData) return false
         if (speechToTextData != other.speechToTextData) return false
+        if (criticalAlertType != other.criticalAlertType) return false
 
         return true
     }
@@ -58,6 +61,7 @@ open class TextChatMessage : ChatMessage() {
         result = 31 * result + readStatus
         result = 31 * result + readContactNumber
         result = 31 * result + playStatus
+        result = 31 * result + criticalAlertType
         result = 31 * result + (message?.hashCode() ?: 0)
         result = 31 * result + (attachment?.hashCode() ?: 0)
         result = 31 * result + (quote?.hashCode() ?: 0)
@@ -97,7 +101,7 @@ fun TextChatMessage.getAttachmentProgress(): Int? {
  * For single forward messages, uses the forward attachment ID if available,
  * otherwise falls back to the message ID.
  */
-private fun TextChatMessage.getAttachmentIdForProgress(): String {
+fun TextChatMessage.getAttachmentIdForProgress(): String {
     return forwardContext?.forwards
         ?.takeIf { it.size == 1 }
         ?.firstOrNull()

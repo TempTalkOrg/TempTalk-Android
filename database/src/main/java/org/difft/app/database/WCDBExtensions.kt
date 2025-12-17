@@ -260,6 +260,7 @@ fun MessageModel.convertToTextMessage(): TextMessage {
         translateData = translateData,
         speechToTextData = speechToTextData,
         receiverIds = receiverIds,
+        criticalAlertType = criticalAlertType,
     )
 }
 
@@ -697,6 +698,7 @@ fun WCDB.convertToMessageModel(message: TextMessage): MessageModel {
         type = messageType
         playStatus = message.playStatus
         receiverIds = message.receiverIds
+        criticalAlertType = message.criticalAlertType
         this.quoteDatabaseId = quoteDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
         this.cardModelDatabaseId = cardModelDatabaseId
@@ -930,9 +932,27 @@ fun RoomModel.updateRoomUnreadState(readPosition: Long = this.readPosition) {
         }
     }
 
+    // 如果当前有 critical alert 高亮，检查是否还有未读的 critical alert 消息
+    val newCriticalAlertType = if (this.criticalAlertType == difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT) {
+        val hasUnreadCriticalAlert = wcdb.message.getValue(
+            DBMessageModel.criticalAlertType,
+            DBMessageModel.roomId.eq(roomId)
+                .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
+                .and(DBMessageModel.criticalAlertType.eq(difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT))
+        )?.int ?: 0
+
+        if (hasUnreadCriticalAlert > 0) {
+            difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT
+        } else {
+            difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
+        }
+    } else {
+        this.criticalAlertType
+    }
+
     wcdb.room.updateRow(
-        arrayOf(Value(readPosition), Value(unreadMessageNum), Value(mentionType)),
-        arrayOf(DBRoomModel.readPosition, DBRoomModel.unreadMessageNum, DBRoomModel.mentionType),
+        arrayOf(Value(readPosition), Value(unreadMessageNum), Value(mentionType), Value(newCriticalAlertType)),
+        arrayOf(DBRoomModel.readPosition, DBRoomModel.unreadMessageNum, DBRoomModel.mentionType, DBRoomModel.criticalAlertType),
         DBRoomModel.roomId.eq(roomId)
     )
 }
@@ -941,8 +961,8 @@ fun RoomModel.resetRoomUnreadState() {
     if (unreadMessageNum != 0) {
         L.d { "reset room unread state:$roomName" }
         wcdb.room.updateRow(
-            arrayOf(Value(0), Value(MENTIONS_TYPE_NONE)),
-            arrayOf(DBRoomModel.unreadMessageNum, DBRoomModel.mentionType),
+            arrayOf(Value(0), Value(MENTIONS_TYPE_NONE), Value(difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE)),
+            arrayOf(DBRoomModel.unreadMessageNum, DBRoomModel.mentionType, DBRoomModel.criticalAlertType),
             DBRoomModel.roomId.eq(roomId)
         )
     }

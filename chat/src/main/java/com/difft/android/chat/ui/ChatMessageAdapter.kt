@@ -5,8 +5,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
-import com.difft.android.chat.R
 import com.difft.android.chat.MessageContactsCacheUtil
+import com.difft.android.chat.R
+import com.difft.android.chat.compose.SelectMessageState
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
@@ -92,6 +93,7 @@ abstract class ChatMessageAdapter(
         // 解析 ViewType
         private fun isMineType(viewType: Int): Boolean = viewType < OTHERS_OFFSET
         private fun getContentType(viewType: Int): Int = viewType % OTHERS_OFFSET
+
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -118,16 +120,20 @@ abstract class ChatMessageAdapter(
                     forwardAttachment?.isImage() == true -> {
                         if (message.isMine) VIEW_TYPE_MINE_IMAGE else VIEW_TYPE_OTHERS_IMAGE
                     }
+
                     forwardAttachment?.isVideo() == true -> {
                         if (message.isMine) VIEW_TYPE_MINE_VIDEO else VIEW_TYPE_OTHERS_VIDEO
                     }
+
                     forwardAttachment?.isAudioMessage() == true || forwardAttachment?.isAudioFile() == true -> {
                         if (message.isMine) VIEW_TYPE_MINE_AUDIO else VIEW_TYPE_OTHERS_AUDIO
                     }
+
                     forwardAttachment != null -> {
                         // 其他附件类型（包括长文本）
                         if (message.isMine) VIEW_TYPE_MINE_ATTACH else VIEW_TYPE_OTHERS_ATTACH
                     }
+
                     else -> {
                         // 单条转发的纯文本消息
                         if (message.isMine) VIEW_TYPE_MINE_TEXT else VIEW_TYPE_OTHERS_TEXT
@@ -213,6 +219,10 @@ abstract class ChatMessageAdapter(
     ) {
         val data = getItem(position)
 
+        // 应用当前选择状态
+        data.editMode = selectMessageState.editModel
+        data.selectedStatus = data.id in selectMessageState.selectedMessageIds
+
         // 根据 ViewHolder 类型创建对应的 callbacks
         val callbacks = when (holder) {
             is ChatMessageViewHolder.Notify -> {
@@ -252,6 +262,19 @@ abstract class ChatMessageAdapter(
     @SuppressLint("NotifyDataSetChanged")
     fun highlightItem(ids: ArrayList<Long>) {
         mHighlightItemIds = ids
+        notifyDataSetChanged()
+    }
+
+    // ========== 选择状态管理 ==========
+    private var selectMessageState = SelectMessageState(false, emptySet(), 0)
+
+    /**
+     * 更新选择状态
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    fun updateSelectionState(newState: SelectMessageState) {
+        if (selectMessageState == newState) return
+        selectMessageState = newState
         notifyDataSetChanged()
     }
 

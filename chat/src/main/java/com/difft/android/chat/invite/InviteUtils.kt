@@ -63,12 +63,8 @@ class InviteUtils @Inject constructor() {
     @Inject
     lateinit var groupRepo: GroupRepo
 
-
-    private var mInviteDialog: InviteBottomSheetFragment? = null
-
     fun showInviteDialog(context: Activity) {
         val fragment = InviteBottomSheetFragment()
-        mInviteDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "InviteDialog")
     }
 
@@ -84,7 +80,8 @@ class InviteUtils @Inject constructor() {
         clCopy: ConstraintLayout?,
         tvCode: AppCompatTextView?,
         progressBar: LinearProgressBar?,
-        tvError: AppCompatTextView?
+        tvError: AppCompatTextView?,
+        onCopyDismiss: (() -> Unit)? = null
     ) {
         if (regenerate == 0 && currentAutoRefreshTimes >= maxAutoRefreshTimes) { //强制刷新不限制次数
             return
@@ -108,7 +105,7 @@ class InviteUtils @Inject constructor() {
 
                         clCopy?.setOnClickListener {
                             Util.copyToClipboard(context, content)
-                            mInviteDialog?.dismiss()
+                            onCopyDismiss?.invoke()
                         }
                     }
 
@@ -251,8 +248,6 @@ class InviteUtils @Inject constructor() {
         }
     }
 
-    private var mGroupInviteDialog: GroupInviteBottomSheetFragment? = null
-
     fun showGroupInviteDialog(
         context: Activity,
         myName: String = "",
@@ -261,7 +256,6 @@ class InviteUtils @Inject constructor() {
         inviteCode: String = "",
     ) {
         val fragment = GroupInviteBottomSheetFragment.newInstance(myName, groupName, groupAvatar, inviteCode)
-        mGroupInviteDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "GroupInviteDialog")
     }
 
@@ -272,11 +266,21 @@ class InviteUtils @Inject constructor() {
         if (countdownDispose?.isDisposed == false) {
             countdownDispose?.dispose()
         }
+        countdownDispose = null
         cancelCodeTextAnimation()
         currentAutoRefreshTimes = 0
     }
 
-    fun getGroupInviteCode(context: Activity, inviteCode: String, myName: String, groupName: String, imageView: AppCompatImageView?, clShare: ConstraintLayout?, clCopy: ConstraintLayout?) {
+    fun getGroupInviteCode(
+        context: Activity,
+        inviteCode: String,
+        myName: String,
+        groupName: String,
+        imageView: AppCompatImageView?,
+        clShare: ConstraintLayout?,
+        clCopy: ConstraintLayout?,
+        onCopyDismiss: (() -> Unit)? = null
+    ) {
         val url = "${urlManager.inviteGroupUrl.trimEnd('/')}/u/g.html?i=$inviteCode"
         val content = context.getString(R.string.invite_group_tips, myName, groupName, url)
 
@@ -288,7 +292,7 @@ class InviteUtils @Inject constructor() {
 
         clCopy?.setOnClickListener {
             Util.copyToClipboard(context, content)
-            mGroupInviteDialog?.dismiss()
+            onCopyDismiss?.invoke()
         }
     }
 
@@ -310,11 +314,8 @@ class InviteUtils @Inject constructor() {
             })
     }
 
-    private var mJoinGroupDialog: JoinGroupBottomSheetFragment? = null
-
     private fun showJoinGroupDialog(activity: Activity, data: GroupInfoByInviteCodeResp, inviteCode: String) {
         val fragment = JoinGroupBottomSheetFragment.newInstance(data, inviteCode)
-        mJoinGroupDialog = fragment
         fragment.show((activity as FragmentActivity).supportFragmentManager, "JoinGroupDialog")
     }
 
@@ -581,8 +582,10 @@ class GroupInviteBottomSheetFragment() : BottomSheetDialogFragment() {
             dismiss()
         }
 
-        // 初始化群组邀请码
-        inviteUtils.getGroupInviteCode(requireActivity(), inviteCode, myName, groupName, ivQR, clShare, clCopy)
+        // 初始化群组邀请码，传入 dismiss 回调
+        inviteUtils.getGroupInviteCode(requireActivity(), inviteCode, myName, groupName, ivQR, clShare, clCopy) {
+            dismiss()
+        }
     }
 }
 

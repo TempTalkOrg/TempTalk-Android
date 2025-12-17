@@ -7,8 +7,6 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.message.TextChatMessage
 import difft.android.messageserialization.model.isAudioMessage
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.subjects.PublishSubject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,13 +25,14 @@ object AudioMessageManager {
     const val PLAY_STATUS_PLAYED = 0
     const val PLAY_STATUS_NOT_PLAY = 1
 
-    private val mPlayStatusUpdateSubject = PublishSubject.create<Pair<TextChatMessage, Int>>()
+    private val _playStatusUpdate = MutableSharedFlow<Pair<TextChatMessage, Int>>(replay = 0, extraBufferCapacity = 64)
+    val playStatusUpdate: SharedFlow<Pair<TextChatMessage, Int>> = _playStatusUpdate
 
-    private fun emitPlayStatusUpdate(message: TextChatMessage, status: Int) = mPlayStatusUpdateSubject.onNext(message to status)
+    private fun emitPlayStatusUpdate(message: TextChatMessage, status: Int) {
+        _playStatusUpdate.tryEmit(message to status)
+    }
 
-    val playStatusUpdate: Observable<Pair<TextChatMessage, Int>> = mPlayStatusUpdateSubject
-
-    private val _progressUpdate = MutableSharedFlow<Pair<TextChatMessage, Float>>(replay = 0)
+    private val _progressUpdate = MutableSharedFlow<Pair<TextChatMessage, Float>>(replay = 0, extraBufferCapacity = 64)
     val progressUpdate: SharedFlow<Pair<TextChatMessage, Float>> = _progressUpdate
 
     private var mediaPlayer: MediaPlayer? = null
@@ -227,29 +226,31 @@ object AudioMessageManager {
 
     // 播放完成后调用
     private fun onPlayComplete() {
-        currentPlayingMessage?.let {
+        val completedMessage = currentPlayingMessage
+        completedMessage?.let {
             L.d { "[AudioMessageManager] COMPLETE: ${it.id}" }
             emitPlayStatusUpdate(it, PLAY_STATUS_COMPLETE)
+            deleteCurrentFile(it)
         }
-        stopAudio()
-    }
 
-    // 停止播放当前音频
-    private fun stopAudio() {
+        // Reset state - but DON'T cancel playJob because auto-play might have already started
+        currentFilePath = null
+        currentPlayingMessage = null
+        isPaused = false
+        currentPlayPosition = 0
+        currentProgress = 0f
+
         try {
-            mediaPlayer?.apply {
-                if (isPlaying) {
-                    pause()
-                    currentPlayPosition = currentPosition // 保存当前播放进度
-                }
-                stop() // 停止播放
-                reset() // 重置播放器
-            }
+            mediaPlayer?.reset()  // Reset for reuse, don't release
         } catch (e: Exception) {
-            L.e { "[AudioMessageManager] stopAudio IllegalStateException: ${e.stackTraceToString()}" }
-        } finally {
-            releasePlayer()
+            L.e { "[AudioMessageManager] onPlayComplete reset error: ${e.message}" }
         }
+
+        ProximitySensorManager.stop()
+        progressJob?.cancel()
+        progressJob = null
+        prepareTimeoutJob?.cancel()
+        prepareTimeoutJob = null
     }
 
     // 删除当前播放的文件

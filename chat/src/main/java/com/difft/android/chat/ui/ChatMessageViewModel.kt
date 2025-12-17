@@ -64,6 +64,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -125,9 +126,9 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
     )
 
-    private val _chatMessageListUIState = MutableStateFlow(ChatMessageListUIState(emptyList(), -2))
+    private val _chatMessageListUIState = MutableStateFlow<ChatMessageListUIState?>(null)
 
-    val chatMessageListUIState: StateFlow<ChatMessageListUIState> =
+    val chatMessageListUIState: StateFlow<ChatMessageListUIState?> =
         _chatMessageListUIState.asStateFlow()
 
     private val _readInfoList = MutableStateFlow<List<ReadInfoModel>>(emptyList())
@@ -136,6 +137,9 @@ class ChatMessageViewModel @AssistedInject constructor(
     val saveMultiMessageToNote = MutableStateFlow<ForwardContextData?>(null)
 
     val selectMessagesState = MutableStateFlow(SelectMessageState(false, emptySet(), 0))
+
+    // 用于判断消息数据是否真正变化，避免 _readInfoList 变化时重复触发滚动
+    private var lastMessageListTimestamp: Long = 0
 
     // 添加输入框高度变化事件 Flow
     private val _inputHeightChanged = MutableSharedFlow<Unit>()
@@ -201,11 +205,10 @@ class ChatMessageViewModel @AssistedInject constructor(
     fun initialize() {
         bindCoroutineScope(viewModelScope)
         combine(
-            chatMessagesStateFlow,
-            selectMessagesState,
+            chatMessagesStateFlow.filterNotNull(), // 过滤初始 null 状态
             _readInfoList
-        ) { chatMessageListBehavior, selectMessageModelData, readInfoList ->
-            assembleMessagesUIData(chatMessageListBehavior, selectMessageModelData, readInfoList)
+        ) { chatMessageListBehavior, readInfoList ->
+            assembleMessagesUIData(chatMessageListBehavior, readInfoList)
         }
             .distinctUntilChanged()
             .flowOn(Dispatchers.Default)
@@ -264,7 +267,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     fun addOneMessage(message: TextMessage) {
-        _chatMessageListUIState.value.chatMessages.lastOrNull()?.systemShowTimestamp?.let {
+        _chatMessageListUIState.value?.chatMessages?.lastOrNull()?.systemShowTimestamp?.let {
             if (message.systemShowTimestamp < it) {
                 message.systemShowTimestamp = it + 1
             }
@@ -535,7 +538,6 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     private suspend fun assembleMessagesUIData(
         chatMessageListBehavior: ChatMessageListBehavior,
-        selectMessageState: SelectMessageState,
         readInfoList: List<ReadInfoModel>
     ): ChatMessageListUIState {
         // 1. 先批量查询消息发送者的联系人信息（generateMessageTwo需要用于设置nickname）
@@ -563,10 +565,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
 
         val chatMessages = chatMessageListBehavior.messageList.mapNotNull { msg ->
-            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup)?.apply {
-                editMode = selectMessageState.editModel
-                selectedStatus = id in selectMessageState.selectedMessageIds
-            }
+            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup)
         }
 
         // 4. 从已生成的 ChatMessage 中收集所有联系人ID（不触发新查询）
@@ -621,11 +620,18 @@ class ChatMessageViewModel @AssistedInject constructor(
             message
         }
 
-        L.i { "[${forWhat.id}] Finally to be submit to recyclerview adapter with chat message size: ${newList.size}" }
+        // 只有消息数据真正变化时才传递 scrollAction，避免 _readInfoList 变化时重复触发滚动
+        val scrollAction = if (chatMessageListBehavior.updateTimestamp != lastMessageListTimestamp) {
+            lastMessageListTimestamp = chatMessageListBehavior.updateTimestamp
+            chatMessageListBehavior.scrollAction
+        } else {
+            null
+        }
+
+        L.i { "[${forWhat.id}] Finally to be submit to recyclerview adapter with chat message size: ${newList.size}, scrollAction: $scrollAction" }
         return ChatMessageListUIState(
-            newList,
-            chatMessageListBehavior.scrollToPosition,
-            chatMessageListBehavior.stateTriggeredByUser,
+            chatMessages = newList,
+            scrollAction = scrollAction
         )
     }
 
@@ -771,7 +777,13 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     fun selectModel(enable: Boolean) {
         val totalMessageCount = dbMessageStore.selectableMessageCount(forWhat)
-        selectMessagesState.value = selectMessagesState.value.copy(editModel = enable, totalMessageCount = totalMessageCount)
+        // 关闭选择模式时清空已选消息
+        val selectedIds = if (enable) selectMessagesState.value.selectedMessageIds else emptySet()
+        selectMessagesState.value = selectMessagesState.value.copy(
+            editModel = enable,
+            selectedMessageIds = selectedIds,
+            totalMessageCount = totalMessageCount
+        )
     }
 
     fun onForwardClick() = viewModelScope.launch(Dispatchers.IO) {

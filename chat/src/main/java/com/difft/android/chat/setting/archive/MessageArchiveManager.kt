@@ -29,9 +29,8 @@ import com.tencent.wcdb.winq.Order
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subjects.BehaviorSubject
-import io.reactivex.rxjava3.subjects.Subject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.difft.app.database.models.DBMessageModel
@@ -217,9 +216,7 @@ class MessageArchiveManager @Inject constructor(
     }
 
     fun getDefaultArchiveTimeList(): List<Long> {
-        return globalConfigsManager.getNewGlobalConfigs()?.data?.disappearanceTimeInterval?.let { interval ->
-            interval.messageArchivingTimeOptionValues ?: interval.otherMessageArchivingTimeOptionValues
-        } ?: emptyList()
+        return globalConfigsManager.getNewGlobalConfigs()?.data?.disappearanceTimeInterval?.messageArchivingTimeOptionValues ?: emptyList()
     }
 
     fun getGroupDefaultArchiveTimeList(): List<Long> {
@@ -438,9 +435,10 @@ fun Long.toArchiveTimeDisplayText(): String {
 }
 
 object MessageArchiveUtil {
-    var archiveTimeUpdate: Subject<Pair<String, Long>> = BehaviorSubject.create()
+    private val _archiveTimeUpdate = kotlinx.coroutines.flow.MutableSharedFlow<Pair<String, Long>>(extraBufferCapacity = 1)
+    val archiveTimeUpdate: kotlinx.coroutines.flow.SharedFlow<Pair<String, Long>> = _archiveTimeUpdate.asSharedFlow()
 
     fun updateArchiveTime(id: String, time: Long) {
-        archiveTimeUpdate.onNext(id to time)
+        _archiveTimeUpdate.tryEmit(id to time)
     }
 }

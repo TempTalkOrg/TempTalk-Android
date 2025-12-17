@@ -114,4 +114,8 @@
     <string name="fullscreen_notification_no_permission_huawei_tip">请为%s开启“后台弹窗”权限，以确保您在设备锁屏时也能正常接听来电。</string>
     <string name="fullscreen_notification_no_permission_xiaomi_tip">请为%s开启“后台弹出界面”权限，以确保您在设备锁屏时也能正常接听来电。</string>
     <string name="fullscreen_notification_no_permission_china_default_tip">请为%s启用“横幅通知”，以确保您在设备锁屏时也能正常接听来电。</string>
+    <string name="notification_critical_alert_title_default">重要提醒</string>
+    <string name="notification_critical_alert_content_default">点击立即联系。</string>
+    <string name="notification_critical_alert_content_from">来自 %s 的重要提醒。</string>
+    <string name="join_call">加入</string>
 </resources>

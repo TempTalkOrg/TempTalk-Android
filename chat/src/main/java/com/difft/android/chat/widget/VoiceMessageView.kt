@@ -10,6 +10,8 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.databinding.VoiceMessageViewBinding
@@ -20,6 +22,11 @@ import com.difft.android.chat.message.shouldDecrypt
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isAudioFile
 import com.hi.dhl.binding.viewbind
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import java.util.Date
@@ -31,17 +38,21 @@ class VoiceMessageView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
 
-    companion object {
-        private const val TAG = "VoiceMessageView"
-    }
-
     val binding: VoiceMessageViewBinding by viewbind(this)
 
     private var message: TextChatMessage? = null
     private var attachmentPath: String = ""
+    private var currentAttachmentId: String? = null
+
+    // Jobs for lifecycle-aware subscriptions
+    private var downloadProgressJob: Job? = null
+    private var playStatusJob: Job? = null
+    private var audioProgressJob: Job? = null
+    private var amplitudeJob: Job? = null
 
     @SuppressLint("SetTextI18n")
     fun setAudioMessage(audioMessage: TextChatMessage) {
+        currentAttachmentId = audioMessage.id
         this.message = audioMessage
         val attachment = audioMessage.attachment ?: return
         val fileName: String = attachment.fileName ?: ""
@@ -120,24 +131,115 @@ class VoiceMessageView @JvmOverloads constructor(
             }
         }
 
-        if (AudioMessageManager.currentPlayingMessage?.id == message?.id) {
-            if (AudioMessageManager.isPaused) {
-                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
-                binding.audioWaveProgressBar.setProgress(AudioMessageManager.currentProgress)
-            } else {
-                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_pause)
-                binding.audioWaveProgressBar.setProgress(AudioMessageManager.currentProgress)
-            }
-        } else {
-            binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
-            binding.audioWaveProgressBar.setProgress(0f)
-//            playTime.text = formatTime(attachment.totalTime ?: 0L)
+        // Sync play state UI - single source of truth
+        syncPlayStateUI()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        setupSubscriptions()
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelSubscriptions()
+        super.onDetachedFromWindow()
+    }
+
+    private fun setupSubscriptions() {
+        val lifecycleScope = findViewTreeLifecycleOwner()?.lifecycleScope ?: return
+
+        // 1. Download progress subscription
+        if (downloadProgressJob == null) {
+            lifecycleScope.launch {
+                FileUtil.progressUpdate
+                    .filter { it == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            message?.let { setAudioMessage(it) }
+                        }
+                    }
+            }.also { downloadProgressJob = it }
         }
 
-        if (AudioMessageManager.currentPlayingMessage?.id == message?.id) {
+        // 2. Play status subscription
+        if (playStatusJob == null) {
+            lifecycleScope.launch {
+                AudioMessageManager.playStatusUpdate
+                    .filter { it.first.id == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            syncPlayStateUI()
+                        }
+                    }
+            }.also { playStatusJob = it }
+        }
+
+        // 3. Audio playback progress subscription
+        if (audioProgressJob == null) {
+            lifecycleScope.launch {
+                AudioMessageManager.progressUpdate
+                    .filter { it.first.id == currentAttachmentId }
+                    .collect { (msg, progress) ->
+                        withContext(Dispatchers.Main) {
+                            binding.audioWaveProgressBar.setProgress(progress)
+                            val totalTime = msg.attachment?.totalTime ?: 0L
+                            binding.playTime.text = formatTime((totalTime * (1 - progress)).toLong())
+                        }
+                    }
+            }.also { audioProgressJob = it }
+        }
+
+        // 4. Amplitude extraction complete subscription
+        if (amplitudeJob == null) {
+            lifecycleScope.launch {
+                AudioAmplitudesHelper.amplitudeExtractionComplete
+                    .filter { it.id == currentAttachmentId }
+                    .collect { updatedMessage ->
+                        withContext(Dispatchers.Main) {
+                            message = updatedMessage
+                            binding.audioWaveProgressBar.setAmplitudes(updatedMessage.attachment?.amplitudes ?: emptyList())
+                            binding.playTime.text = formatTime(updatedMessage.attachment?.totalTime ?: 0)
+                        }
+                    }
+            }.also { amplitudeJob = it }
+        }
+    }
+
+    private fun cancelSubscriptions() {
+        downloadProgressJob?.cancel()
+        downloadProgressJob = null
+        playStatusJob?.cancel()
+        playStatusJob = null
+        audioProgressJob?.cancel()
+        audioProgressJob = null
+        amplitudeJob?.cancel()
+        amplitudeJob = null
+    }
+
+    /**
+     * Syncs play state UI based on AudioMessageManager's current state.
+     * This is the single source of truth for play/pause UI states.
+     * Called by both setAudioMessage() and playStatusJob subscription.
+     */
+    private fun syncPlayStateUI() {
+        val msg = message ?: return
+
+        val isCurrentlyPlaying = AudioMessageManager.currentPlayingMessage?.id == msg.id
+
+        if (isCurrentlyPlaying) {
+            if (AudioMessageManager.isPaused) {
+                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
+            } else {
+                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_pause)
+            }
             binding.audioWaveProgressBar.setProgress(AudioMessageManager.currentProgress)
-            val currentTotalTime = message?.attachment?.totalTime ?: 0L
-            binding.playTime.text = formatTime((currentTotalTime * (1 - AudioMessageManager.currentProgress)).toLong())
+            val totalTime = msg.attachment?.totalTime ?: 0L
+            binding.playTime.text = formatTime((totalTime * (1 - AudioMessageManager.currentProgress)).toLong())
+        } else {
+            // Not playing - show default state
+            binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
+            binding.audioWaveProgressBar.setProgress(0f)
+            binding.playTime.text = formatTime(msg.attachment?.totalTime ?: 0)
         }
     }
 

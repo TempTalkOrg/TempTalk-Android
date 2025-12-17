@@ -68,6 +68,22 @@ object TextTruncationUtil {
             // 添加 "Read more" 可点击链接（不添加 "..."）
             val readMoreText = context.getString(R.string.SpanUtil__read_more)
             val builder = SpannableStringBuilder(truncatedText)
+
+            // 修复：防止边界处的 ClickableSpan 扩展到 "Read more" 区域
+            // 获取所有在截断边界处结束的 ClickableSpan，重新设置为 EXCLUSIVE 模式
+            val truncatedLength = builder.length
+            val clickableSpans = builder.getSpans(0, truncatedLength, ClickableSpan::class.java)
+            for (span in clickableSpans) {
+                val spanStart = builder.getSpanStart(span)
+                val spanEnd = builder.getSpanEnd(span)
+                // 如果 span 在边界处结束，需要重新设置以防止扩展
+                // 添加防御性检查确保索引有效
+                if (spanEnd == truncatedLength && spanStart >= 0 && spanStart <= spanEnd) {
+                    builder.removeSpan(span)
+                    builder.setSpan(span, spanStart, spanEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+
             builder.append("\n")
 
             val readMoreStart = builder.length

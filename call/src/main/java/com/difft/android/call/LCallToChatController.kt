@@ -46,6 +46,16 @@ interface LCallToChatController {
 
     fun sendOrCreateCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For, callType: CallType, createCallMsg: Boolean, inviteeLIst: List<String> = emptyList())
 
+    /**
+     * 创建本地 Critical Alert 文本消息
+     * @param systemShowTimestamp 服务端时间戳
+     * @param timestamp 消息时间戳
+     * @param fromWho 消息发送者
+     * @param forWhat 消息所属会话
+     * @param sourceDevice 消息所属设备类型
+     */
+    suspend fun createCriticalAlertMessage(systemShowTimestamp: Long, timestamp: Long, fromWho: For, forWhat: For, sourceDevice: Int)
+
     fun getLocalPrivateKey(): ByteArray?
 
     fun getTheirPublicKey(uid: String): String?
@@ -65,4 +75,8 @@ interface LCallToChatController {
     fun startForegroundService(context: Context, intent: Intent)
 
     fun getIncomingCallRoomId(): String?
+
+    fun dismissCriticalAlertIfActive()
+
+    fun dismissCriticalAlertByConId(conversationId: String)
 }

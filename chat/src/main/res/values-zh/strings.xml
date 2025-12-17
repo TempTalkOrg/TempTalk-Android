@@ -118,6 +118,8 @@
     <string name="chat_at_all">所有人</string>
     <string name="chat_list_at_you">[@您]</string>
     <string name="chat_list_at_all">[@所有人]</string>
+    <string name="chat_list_critical_alert">[🚨重要提醒]</string>
+    <string name="chat_message_critical_alert">🚨Sent a Critical Alert.</string>
     <string name="chat_status_sending">发送中</string>
     <string name="chat_status_sent">已发送</string>
     <string name="chat_status_fail">发送失败</string>
@@ -502,8 +504,6 @@
     <string name="notification_message_notification">消息通知</string>
     <string name="notification_critical_alert_title">%s 的未接呼叫</string>
     <string name="notification_critical_alert_content">紧急：请立即接听。</string>
-    <string name="notification_critical_alert_title_default">Urgent Call</string>
-    <string name="notification_critical_alert_content_default">Tap to connect now.</string>
 
     <string name="no_permission_camera_and_voice_tip">应用没有视频语音的权限，您可以在系统设置的应用权限设置中启用摄像头和麦克风权限。</string>
     <string name="no_permission_voice_tip">应用没有语音的权限，您可以在系统设置的应用权限设置中启用麦克风权限。</string>
@@ -632,7 +632,8 @@
 
     <string name="critical_alert_notification_permission_check_failed">请先开启通知权限，以确保重要提醒正常接收。</string>
     <string name="critical_alert_background_connection_permission_check_failed">请先开启后台连接，以确保重要提醒正常接收。</string>
-    <string name="critical_alert_all_permission_check_failed">请先开启通知权限和后台连接，以确保重要提醒正常接收。</string>
+    <string name="critical_alert_all_permission_check_failed">请先开启通知、全屏提醒和后台连接权限，以确保重要提醒能够及时送达。</string>
+    <string name="critical_alert_fullscreen_permission_check_failed">请先开启全屏通知权限，以确保重要提醒正常接收。</string>
 
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_notify_content">以下消息将在阅读后的 %1$s 内被删除。</string>

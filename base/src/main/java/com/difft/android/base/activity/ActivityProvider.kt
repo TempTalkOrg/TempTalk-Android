@@ -21,5 +21,6 @@ enum class ActivityType {
     SEARCH,
     CONTACT_DETAIL,
     L_INCOMING_CALL,
-    INDEX
+    INDEX,
+    CRITICAL_ALERT
 }

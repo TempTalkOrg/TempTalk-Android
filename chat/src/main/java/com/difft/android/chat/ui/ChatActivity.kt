@@ -30,8 +30,6 @@ import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE_TYPE
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.databinding.ChatActivityChatBinding
 import com.difft.android.chat.group.ChatUIData
-import com.difft.android.chat.setting.ChatSettingUtils
-import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.widget.RecordingState
 import com.difft.android.create
@@ -40,6 +38,9 @@ import com.hi.dhl.binding.viewbind
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.difft.app.database.models.ContactorModel
 import org.thoughtcrime.securesms.components.reaction.MotionEventRelay
@@ -111,9 +112,6 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
 
-    @Inject
-    lateinit var messageArchiveManager: MessageArchiveManager
-
     private val onAudioPermissionForMessage = registerPermission {
         onAudioPermissionForMessageResult(it)
     }
@@ -138,7 +136,6 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
             finish()
             return
         }
-        // chatSettingViewModel.setCurrentTarget(chatViewModel.forWhat) - 不再需要，因为通过构造方法传递
 
         refreshContact()
 
@@ -152,22 +149,6 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
             }, {
                 it.printStackTrace()
             })
-
-        ChatSettingUtils.conversationSettingUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it == chatViewModel.forWhat.id) {
-                    refreshConversationSetting()
-                }
-            }, {
-                it.printStackTrace()
-            })
-
-        messageArchiveManager.getMessageArchiveTime(chatViewModel.forWhat, true)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({}, { it.printStackTrace() })
 
         chatViewModel.voiceVisibilityChange
             .compose(RxUtil.getSchedulerComposer())
@@ -259,11 +240,11 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
 
         updateConfidential()
         chatSettingViewModel.conversationSet
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .filterNotNull()
+            .onEach {
                 updateConfidential(it)
-            }, { it.printStackTrace() })
+            }
+            .launchIn(lifecycleScope)
     }
 
     private fun updateConfidential(conversationSet: ConversationSetResponseBody? = null) {
@@ -292,8 +273,6 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
     override fun onResume() {
         super.onResume()
 
-        refreshConversationSetting()
-
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
         messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
@@ -302,10 +281,6 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider {
     override fun onPause() {
         super.onPause()
         SendMessageUtils.removeFromCurrentChat(chatViewModel.forWhat.id)
-    }
-
-    private fun refreshConversationSetting() {
-        chatSettingViewModel.getConversationConfigs(this, listOf(chatViewModel.forWhat.id))
     }
 
     private fun refreshContact() {

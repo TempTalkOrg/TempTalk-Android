@@ -146,6 +146,7 @@ fun generateMessageTwo(
             this.playStatus = record.playStatus
             this.translateData = record.translateData()
             this.speechToTextData = record.speechToTextData()
+            this.criticalAlertType = record.criticalAlertType
         }
     } else if (record.type == 2) {
         NotifyChatMessage().apply {

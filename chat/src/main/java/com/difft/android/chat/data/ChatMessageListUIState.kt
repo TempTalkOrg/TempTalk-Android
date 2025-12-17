@@ -1,29 +1,14 @@
 package com.difft.android.chat.data
 
+import com.difft.android.chat.ScrollAction
 import com.difft.android.chat.message.ChatMessage
 
+/**
+ * 聊天消息列表 UI 状态
+ * @param chatMessages 消息列表
+ * @param scrollAction 滚动动作，null 表示不强制滚动，由 Fragment 根据 isAtBottom 自行判断
+ */
 data class ChatMessageListUIState(
     val chatMessages: List<ChatMessage>,
-    val scrollToPosition: Int,
-    val stateTriggeredByUser: Boolean = true //means if the state is triggered by user action
-){
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as ChatMessageListUIState
-
-        if (chatMessages != other.chatMessages) return false
-        if (scrollToPosition != other.scrollToPosition) return false
-        if (stateTriggeredByUser != other.stateTriggeredByUser) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = chatMessages.hashCode()
-        result = 31 * result + scrollToPosition
-        result = 31 * result + stateTriggeredByUser.hashCode()
-        return result
-    }
-}
+    val scrollAction: ScrollAction? = null
+)
