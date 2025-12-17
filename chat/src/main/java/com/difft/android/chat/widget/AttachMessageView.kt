@@ -6,6 +6,8 @@ import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutAttachMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
@@ -14,6 +16,11 @@ import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.AttachmentStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import org.thoughtcrime.securesms.util.viewFile
@@ -24,7 +31,14 @@ class AttachMessageView @JvmOverloads constructor(
 
     val binding: LayoutAttachMessageViewBinding by viewbind(this)
 
+    private var progressJob: Job? = null
+    private var currentAttachmentId: String? = null
+    private var currentMessage: TextChatMessage? = null
+
     fun setupAttachmentView(message: TextChatMessage) {
+        currentAttachmentId = message.id
+        currentMessage = message
+
         val attachment = message.attachment ?: return
 
         val fileName: String = attachment.fileName ?: ""
@@ -98,6 +112,28 @@ class AttachMessageView @JvmOverloads constructor(
                 binding.progress.setProgress(progress)
             }
         }
+
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (progressJob == null) {
+            findViewTreeLifecycleOwner()?.lifecycleScope?.launch {
+                FileUtil.progressUpdate
+                    .filter { it == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            currentMessage?.let { setupAttachmentView(it) }
+                        }
+                    }
+            }?.also { progressJob = it }
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        progressJob?.cancel()
+        progressJob = null
+        super.onDetachedFromWindow()
     }
 
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {

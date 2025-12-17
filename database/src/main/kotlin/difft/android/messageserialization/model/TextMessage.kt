@@ -30,6 +30,7 @@ open class TextMessage(
     var speechToTextData: SpeechToTextData? = null,
     var playStatus: Int = 0,
     var receiverIds: String? = null,
+    var criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE,
 ) : Message(
     id,
     fromWho,

@@ -230,6 +230,16 @@
             android:taskAffinity="com.difft.android.call.task" />
 
         <activity
+            android:name=".call.CriticalAlertActivity"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
+            android:launchMode="singleTask"
+            android:theme="@style/TransparentActivityTheme"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
             android:name=".setting.TestActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />

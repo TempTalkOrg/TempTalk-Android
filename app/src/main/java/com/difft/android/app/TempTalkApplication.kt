@@ -177,7 +177,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         scheduleGrayConfigUpdateCheck()
         LCallManager.restoreCallActivityIfInCalling()
         LCallManager.restoreIncomingCallActivityIfIncoming()
-        messageNotificationUtil.cancelCriticalAlertNotification()
     }
 
     override fun onBackground() {

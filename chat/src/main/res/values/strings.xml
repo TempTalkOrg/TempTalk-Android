@@ -120,6 +120,8 @@
     <string name="chat_at_all">All</string>
     <string name="chat_list_at_you">[@You]</string>
     <string name="chat_list_at_all">[@All]</string>
+    <string name="chat_list_critical_alert">[🚨Critical Alert]</string>
+    <string name="chat_message_critical_alert">🚨Sent a Critical Alert.</string>
     <string name="chat_status_sending">Sending</string>
     <string name="chat_status_sent">Sent</string>
     <string name="chat_status_fail">Fail</string>
@@ -607,8 +609,6 @@
     <string name="notification_message_notification">Message Notification</string>
     <string name="notification_critical_alert_title">Missed Call from %s</string>
     <string name="notification_critical_alert_content">Urgent: Please answer the call now.</string>
-    <string name="notification_critical_alert_title_default">Urgent Call</string>
-    <string name="notification_critical_alert_content_default">Tap to connect now.</string>
 
     <string name="no_permission_camera_and_voice_tip">Application has no permission for video and voice. You can enable camera and microphone permissions in app permissions settings of the system settings.</string>
     <string name="no_permission_voice_tip">Application has no permission for voice. You can enable microphone permissions in app permissions settings of the system settings.</string>
@@ -750,7 +750,8 @@
 
     <string name="critical_alert_notification_permission_check_failed">Please enable notification to receive important alerts.</string>
     <string name="critical_alert_background_connection_permission_check_failed">Please enable background connection to receive important alerts.</string>
-    <string name="critical_alert_all_permission_check_failed">Please enable notification and background connection to receive important alerts.</string>
+    <string name="critical_alert_all_permission_check_failed">Please enable notification, full-screen alert, and background connection permissions to ensure important alerts are delivered promptly.</string>
+    <string name="critical_alert_fullscreen_permission_check_failed">Please enable full-screen notification permission to receive important alerts.</string>
 
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>

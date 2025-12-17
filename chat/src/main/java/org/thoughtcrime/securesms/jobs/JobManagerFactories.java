@@ -11,8 +11,6 @@ import org.thoughtcrime.securesms.jobmanager.impl.ChargingConstraint;
 import org.thoughtcrime.securesms.jobmanager.impl.ChargingConstraintObserver;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraintObserver;
-import org.thoughtcrime.securesms.jobmanager.impl.SqlCipherMigrationConstraint;
-import org.thoughtcrime.securesms.jobmanager.impl.SqlCipherMigrationConstraintObserver;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -34,14 +32,12 @@ public final class JobManagerFactories {
         return new HashMap<>() {{
             put(ChargingConstraint.KEY, new ChargingConstraint.Factory());
             put(NetworkConstraint.KEY, new NetworkConstraint.Factory(application));
-            put(SqlCipherMigrationConstraint.KEY, new SqlCipherMigrationConstraint.Factory(application));
         }};
     }
 
     public static List<ConstraintObserver> getConstraintObservers(@NonNull Application application) {
         return Arrays.asList(new ChargingConstraintObserver(application),
-                new NetworkConstraintObserver(application),
-                new SqlCipherMigrationConstraintObserver());
+                new NetworkConstraintObserver(application));
     }
 
 }

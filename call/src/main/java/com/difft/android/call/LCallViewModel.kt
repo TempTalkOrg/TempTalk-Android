@@ -21,6 +21,7 @@ import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils.getString
@@ -503,7 +504,7 @@ class LCallViewModel (
                         isNoSpeakerChecking = true; isOnePersonChecking = false
                         noSpeakJob?.cancel()
                         noSpeakJob = viewModelScope.launch(Dispatchers.IO) {
-                            delay(config.autoLeave.promptReminder.silenceTimeout)
+                            delay(config.autoLeave?.promptReminder?.silenceTimeout ?: PromptReminder().silenceTimeout)
                             withContext(Dispatchers.Main) { roomCtl.updateNoSpeakSoloTimeout(true) }
                         }
                     }
@@ -515,7 +516,7 @@ class LCallViewModel (
                     isOnePersonChecking = true; isNoSpeakerChecking = false
                     noSpeakJob?.cancel()
                     noSpeakJob = viewModelScope.launch(Dispatchers.IO) {
-                        delay(config.autoLeave.promptReminder.soloMemberTimeout)
+                        delay(config.autoLeave?.promptReminder?.soloMemberTimeout ?: PromptReminder().soloMemberTimeout)
                         withContext(Dispatchers.Main) { roomCtl.updateNoSpeakSoloTimeout(true) }
                     }
                 }
@@ -939,6 +940,11 @@ class LCallViewModel (
         timerManager.stopCallTimer(); timerManager.stopCountdown()
         setConnectedServerUrl(null)
         resetFeedbackData()
+        // 取消所有协程Job，防止内存泄漏
+        noSpeakJob?.cancel()
+        noSpeakJob = null
+        debounceSpeakerUpdateJob?.cancel()
+        debounceSpeakerUpdateJob = null
         L.i { "[Call] LCallViewModel onCleared done." }
     }
 
@@ -1158,7 +1164,8 @@ class LCallViewModel (
         viewModelScope.launch {
             val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).httpClient()
             val auth = SecureSharedPrefsUtil.getBasicAuth()
-            val request = CriticalAlertRequestBody(destination = uid, gid = gid)
+            val timestamp = System.currentTimeMillis() // 用于本地critical alert消息生成
+            val request = CriticalAlertRequestBody(destination = uid, gid = gid, timestamp = timestamp)
             withContext(Dispatchers.IO) {
                 chatHttpClient.httpService.sendCriticalAlert(auth, request)
                     .subscribe({
@@ -1168,6 +1175,23 @@ class LCallViewModel (
                                 room.localParticipant,
                                 getString(R.string.call_barrage_message_critical_alert_success)
                             )
+
+                            it.serverTimestamp?.let { serverTimestamp ->
+                                L.i { "[Call] sendCriticalAlert response serverTimestamp:$serverTimestamp" }
+                                // 本地生成 critical alert 文本消息
+                                val myUid = callToChatController.getMySelfUid()
+                                val fromWho = difft.android.messageserialization.For.Account(myUid)
+                                val forWhat = if (gid != null) {
+                                    difft.android.messageserialization.For.Group(gid)
+                                } else {
+                                    uid?.let { difft.android.messageserialization.For.Account(it) }
+                                }
+                                forWhat?.let { target ->
+                                    viewModelScope.launch {
+                                        callToChatController.createCriticalAlertMessage(serverTimestamp, timestamp, fromWho, target, DEFAULT_DEVICE_ID)
+                                    }
+                                }
+                            }
                         }else {
                             L.e { "[Call] handleCriticalAlert failed, status = ${it.status} reason = ${it.reason}" }
                             callback?.invoke(false)

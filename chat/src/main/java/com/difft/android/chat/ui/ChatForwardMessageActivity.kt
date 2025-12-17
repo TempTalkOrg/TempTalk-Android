@@ -102,29 +102,6 @@ class ChatForwardMessageActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         initView()
-
-        FileUtil.progressUpdate
-            .map { messageId ->
-                val message = chatMessageAdapter.currentList.find { it.id == messageId }
-                var position = -1
-                if (message != null && message is TextChatMessage) {
-                    val attachment = wcdb.attachment.getFirstObject(
-                        DBAttachmentModel.authorityId.eq(message.id)
-                    )
-                    if (attachment != null) {
-                        message.attachment?.status = attachment.status
-                        position = chatMessageAdapter.currentList.indexOf(message)
-                    }
-                }
-                position
-            }
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this@ChatForwardMessageActivity))
-            .subscribe({ position ->
-                if (position != -1) {
-                    chatMessageAdapter.notifyItemChanged(position)
-                }
-            }, { it.printStackTrace() })
     }
 
     private lateinit var reactionDelegate: ConversationReactionDelegate

@@ -16,6 +16,9 @@ import com.tencent.wcdb.base.Value
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.DBRoomModel
@@ -29,6 +32,16 @@ class ConversationSettingsManager @Inject constructor(
     private val httpClient: ChativeHttpClient,
     private val messageArchiveManager: MessageArchiveManager
 ) : CoroutineScope by appScope {
+
+    private val _conversationSettingUpdate = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val conversationSettingUpdate: SharedFlow<String> = _conversationSettingUpdate.asSharedFlow()
+
+    /**
+     * 通知会话配置已更新，触发聊天页面刷新配置
+     */
+    fun emitConversationSettingUpdate(conversationId: String) {
+        _conversationSettingUpdate.tryEmit(conversationId)
+    }
     /**
      * 同步会话设置从服务器
      * 此方法将从数据库获取所有房间对象并同步其设置
@@ -98,7 +111,7 @@ class ConversationSettingsManager @Inject constructor(
     /**
      * 更新房间设置
      */
-    private suspend fun updateRoomSettings(
+    private fun updateRoomSettings(
         roomModels: List<RoomModel>,
         conversationSettings: List<ConversationSetResponseBody>
     ) {
@@ -141,30 +154,33 @@ class ConversationSettingsManager @Inject constructor(
     ): Boolean {
         return room.muteStatus != setting.muteStatus ||
                 room.messageExpiry != finalMessageExpiry ||
-                room.messageClearAnchor != setting.messageClearAnchor
+                room.messageClearAnchor != setting.messageClearAnchor ||
+                room.confidentialMode != setting.confidentialMode
     }
 
     /**
      * 更新单个房间的设置
      */
-    private suspend fun updateRoomSetting(
+    private fun updateRoomSetting(
         room: RoomModel,
         setting: ConversationSetResponseBody,
         finalMessageExpiry: Long
     ) {
         try {
-            L.i { "[ConversationSettingsManager] Updating settings for room: ${room.roomId}" }
+            L.i { "[ConversationSettingsManager] Updating room ${room.roomId}: muteStatus=${setting.muteStatus}, confidentialMode=${setting.confidentialMode}, messageExpiry=$finalMessageExpiry, messageClearAnchor=${setting.messageClearAnchor}" }
 
             wcdb.room.updateRow(
                 arrayOf(
                     Value(setting.muteStatus),
                     Value(finalMessageExpiry),
-                    Value(setting.messageClearAnchor)
+                    Value(setting.messageClearAnchor),
+                    Value(setting.confidentialMode)
                 ),
                 arrayOf(
                     DBRoomModel.muteStatus,
                     DBRoomModel.messageExpiry,
-                    DBRoomModel.messageClearAnchor
+                    DBRoomModel.messageClearAnchor,
+                    DBRoomModel.confidentialMode
                 ),
                 DBRoomModel.roomId.eq(room.roomId)
             )

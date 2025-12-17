@@ -16,6 +16,7 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
@@ -23,15 +24,16 @@ import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupUtil
+import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.recent.InviteParticipantsActivity
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
+import com.difft.android.messageserialization.db.store.DBRoomStore
 import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.CompletableSubject
 import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.ContactorModel
@@ -51,10 +53,11 @@ import java.util.ArrayList
 import java.util.Optional
 import javax.inject.Inject
 import com.difft.android.network.config.WsTokenManager
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.difft.app.database.models.DBGroupMemberContactorModel
+import org.difft.app.database.wcdb
 import util.ScreenLockUtil
 
 
@@ -68,7 +71,9 @@ class LCallToChatControllerImpl @Inject constructor(
     private val conversationManager: ConversationManager,
     private val dbMessageStore: DBMessageStore,
     private val encryptionDataManager: EncryptionDataManager,
-    private val wsTokenManager: WsTokenManager
+    private val wsTokenManager: WsTokenManager,
+    private val localMessageCreator: LocalMessageCreator,
+    private val dbRoomStore: DBRoomStore
 ) : LCallToChatController {
 
     private val autoDisposeCompletable = CompletableSubject.create()
@@ -93,9 +98,15 @@ class LCallToChatControllerImpl @Inject constructor(
     ) {
         LCallManager.showWaitDialog(context)
 
-        // 启动协程
-        CoroutineScope(Dispatchers.IO).launch {
+        appScope.launch(Dispatchers.IO) {
             try {
+                // 检查并取消critical alert通知
+                conversationId?.let { messageNotificationUtil.cancelCriticalAlertNotification(it) }
+                // 检查并关闭critical alert全屏通知页面
+                conversationId?.let { LCallManager.dismissCriticalAlertByConId(it) }
+                // 清除会话列表 critical alert 高亮状态
+                conversationId?.let { dbRoomStore.clearCriticalAlert(it) }
+
                 val body = StartCallRequestBody(
                     callType.type,
                     LCallConstants.CALL_VERSION,
@@ -166,7 +177,7 @@ class LCallToChatControllerImpl @Inject constructor(
     }
 
     override fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit) {
-        val callType = CallType.fromString(type)?:CallType.ONE_ON_ONE
+        val callType = CallType.fromString(type) ?: CallType.ONE_ON_ONE
 
         val forWhat = if (callType == CallType.GROUP) {
             conversationId?.let { For.Group(it) }
@@ -212,7 +223,7 @@ class LCallToChatControllerImpl @Inject constructor(
     }
 
     override fun cancelCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit) {
-        val callType = CallType.fromString(type)?:CallType.ONE_ON_ONE
+        val callType = CallType.fromString(type) ?: CallType.ONE_ON_ONE
         val forWhat = if (callType == CallType.GROUP) {
             conversationId?.let { For.Group(it) }
         } else {
@@ -240,20 +251,20 @@ class LCallToChatControllerImpl @Inject constructor(
             )
             callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
         }
-        .compose(RxUtil.getSingleSchedulerComposer())
-        .doFinally { onComplete() }
-        .autoDispose(autoDisposeCompletable)
-        .subscribe({
-            if (it.status == 0) {
-                it.data?.let { data ->
-                    L.d { "[Call] cancelCall, request success, response data:$data" }
+            .compose(RxUtil.getSingleSchedulerComposer())
+            .doFinally { onComplete() }
+            .autoDispose(autoDisposeCompletable)
+            .subscribe({
+                if (it.status == 0) {
+                    it.data?.let { data ->
+                        L.d { "[Call] cancelCall, request success, response data:$data" }
+                    }
+                } else {
+                    L.e { "[Call] cancelCall, response status fail, reason:${it.reason}" }
                 }
-            } else {
-                L.e { "[Call] cancelCall, response status fail, reason:${it.reason}" }
-            }
-        }, {
-            L.e { "[Call] cancelCall, request fail, error:${it.message}" }
-        })
+            }, {
+                L.e { "[Call] cancelCall, request fail, error:${it.message}" }
+            })
 
     }
 
@@ -271,9 +282,11 @@ class LCallToChatControllerImpl @Inject constructor(
             CallType.GROUP -> {
                 conversationId?.let { groupId -> For.Group(groupId) }
             }
+
             CallType.ONE_ON_ONE -> {
-                if(callRole == CallRole.CALLER) For.Account(conversationId!!) else For.Account(callerId)
+                if (callRole == CallRole.CALLER) For.Account(conversationId!!) else For.Account(callerId)
             }
+
             else -> {
                 For.Account(callerId)
             }
@@ -292,7 +305,7 @@ class LCallToChatControllerImpl @Inject constructor(
             callerId,
             null,
             callUidList,
-            ).concatMap { callEncryptResult ->
+        ).concatMap { callEncryptResult ->
             val body = ControlMessageRequestBody(
                 roomId = roomId,
                 System.currentTimeMillis(),
@@ -320,7 +333,7 @@ class LCallToChatControllerImpl @Inject constructor(
 
     override fun syncJoinedMessage(receiverId: String, callRole: CallRole?, callerId: String, type: String, roomId: String, conversationId: String?, mKey: ByteArray?) {
         val forWhat = For.Account(receiverId)
-        val callType = CallType.fromString(type)?:CallType.ONE_ON_ONE
+        val callType = CallType.fromString(type) ?: CallType.ONE_ON_ONE
         callMessageCreator.createCallMessage(
             forWhat,
             callType,
@@ -366,13 +379,13 @@ class LCallToChatControllerImpl @Inject constructor(
         }
         var displayName: String? = null
         val contactor = ContactorUtil.getContactWithID(context, userId).blockingGet()
-        if (contactor.isPresent){
+        if (contactor.isPresent) {
             displayName = contactor.get().getDisplayNameForUI()
         }
         return displayName
     }
 
-    override fun getAvatarByContactor(context:Context, contactor: ContactorModel): ConstraintLayout {
+    override fun getAvatarByContactor(context: Context, contactor: ContactorModel): ConstraintLayout {
 
         val avatarView = AvatarView(context)
 
@@ -386,11 +399,11 @@ class LCallToChatControllerImpl @Inject constructor(
         if (userId.contains(".")) {
             userId = userId.split(".")[0]
         }
-        val firstLetter = if(!name.isNullOrEmpty()){
+        val firstLetter = if (!name.isNullOrEmpty()) {
             name.substring(0, 1)
         } else {
             LCallManager.convertToBase58UserName(userId).let {
-                if(!it.isNullOrEmpty()){
+                if (!it.isNullOrEmpty()) {
                     it.substring(0, 1)
                 } else {
                     userId
@@ -456,7 +469,7 @@ class LCallToChatControllerImpl @Inject constructor(
     }
 
     override fun cancelNotificationById(notificationId: Int) {
-        if(messageNotificationUtil.isNotificationShowing(notificationId)){
+        if (messageNotificationUtil.isNotificationShowing(notificationId)) {
             messageNotificationUtil.cancelNotificationsById(notificationId)
         }
     }
@@ -493,66 +506,86 @@ class LCallToChatControllerImpl @Inject constructor(
         createCallMsg: Boolean,
         inviteeLIst: List<String>
     ) {
+        appScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val time = messageArchiveManager.getMessageArchiveTime(forWhat, false).await()
 
-        messageArchiveManager.getMessageArchiveTime(forWhat, false)
-            .subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .autoDispose(autoDisposeCompletable)
-            .subscribe({ time ->
-
-                val callMessageTime = when (callActionType) {
-                    CallActionType.INVITE -> {
-                        timestamp + inviteeLIst.indexOf(forWhat.id)
+                    val callMessageTime = when (callActionType) {
+                        CallActionType.INVITE -> {
+                            timestamp + inviteeLIst.indexOf(forWhat.id)
+                        }
+                        else -> {
+                            timestamp
+                        }
                     }
-                    else -> {
-                        timestamp
+
+                    L.i { "[call] sendOrLocalCallTextMessage  callMessageTime:$callMessageTime forWhat.id:${forWhat.id}" }
+
+                    val messageId = StringBuilder().apply {
+                        append(callMessageTime)
+                        append(fromWho.id.replace("+", ""))
+                        append(sourceDevice)
+                    }.toString()
+
+                    val textMessage = TextMessage(
+                        id = messageId,
+                        fromWho = fromWho,
+                        forWhat = forWhat,
+                        text = textContent,
+                        systemShowTimestamp = systemShowTime,
+                        timeStamp = callMessageTime,
+                        receivedTimeStamp = System.currentTimeMillis(),
+                        sendType = 1,
+                        expiresInSeconds = time.toInt(),
+                        notifySequenceId = 0,
+                        sequenceId = 0,
+                        atPersons = null,
+                        quote = null,
+                        forwardContext = null,
+                        recall = null,
+                        card = null,
+                        mode = 0
+                    ).apply {
+                        if (forWhat is For.Group) {
+                            val receiverIds = wcdb.groupMemberContactor
+                                .getAllObjects(DBGroupMemberContactorModel.gid.eq(forWhat.id))
+                                .asSequence()
+                                .map { it.id }
+                                .filter { it != globalServices.myId }
+                                .toMutableSet()
+                            if (receiverIds.isNotEmpty()) {
+                                this.receiverIds = globalServices.gson.toJson(receiverIds)
+                            }
+                        }
                     }
-                }
 
-                L.i { "[call] sendOrLocalCallTextMessage  callMessageTime:$callMessageTime forWhat.id:${forWhat.id}" }
-
-                val messageId = StringBuilder().apply {
-                    append(callMessageTime)
-                    append(fromWho.id.replace("+", ""))
-                    append(sourceDevice)
-                }.toString()
-
-
-                val textMessage = TextMessage(
-                    id = messageId,
-                    fromWho = fromWho,
-                    forWhat = forWhat,
-                    text = textContent,
-                    systemShowTimestamp = systemShowTime,
-                    timeStamp = callMessageTime,
-                    receivedTimeStamp = System.currentTimeMillis(),
-                    sendType = 1,
-                    expiresInSeconds = time.toInt(),
-                    notifySequenceId = 0,
-                    sequenceId = 0,
-                    atPersons = null,
-                    quote = null,
-                    forwardContext = null,
-                    recall = null,
-                    card = null,
-                    mode = 0
-                )
-
-                if(createCallMsg){
-                    // 客户端本地生成call消息
-                    runCatching{
+                    if (createCallMsg) {
+                        // 客户端本地生成call消息
                         dbMessageStore.putWhenNonExist(textMessage)
+                    } else {
+                        // 会议发起方需发送call展示消息
+                        ApplicationDependencies.getJobManager().add(
+                            pushTextJobFactory.create(null, textMessage, null)
+                        )
                     }
-//                    dbMessageStore.putMessage(textMessage).subscribeOn(Schedulers.io()).subscribe()
-                }else {
-                    // 会议发起方需发送call展示消息
-                    ApplicationDependencies.getJobManager().add(
-                        pushTextJobFactory.create(null, textMessage, null)
-                    )
                 }
-            }, { error ->
-                L.e { "[Call] pushCallTextMessage Error: ${error.message}" }
-            })
+            } catch (e: Exception) {
+                L.e { "[Call] pushCallTextMessage Error: ${e.message}" }
+            }
+        }
+    }
+
+    /**
+     * 创建本地 Critical Alert 文本消息
+     * @param systemShowTimestamp 服务端系统时间戳
+     * @param timestamp 消息时间戳
+     * @param fromWho 消息发送者
+     * @param forWhat 消息所属会话
+     * @param sourceDevice 消息所属设备类型
+     */
+    override suspend fun createCriticalAlertMessage(systemShowTimestamp: Long, timestamp: Long, fromWho: For, forWhat: For, sourceDevice: Int) {
+        localMessageCreator.createCriticalAlertMessage(systemShowTimestamp, timestamp, fromWho, forWhat, sourceDevice)
     }
 
     /**
@@ -560,7 +593,7 @@ class LCallToChatControllerImpl @Inject constructor(
      * @return ByteArray containing the private key, or null if not available
      */
     override fun getLocalPrivateKey(): ByteArray? {
-        return  encryptionDataManager.getAciIdentityKey().privateKey.serialize()
+        return encryptionDataManager.getAciIdentityKey().privateKey.serialize()
     }
 
     /**
@@ -574,13 +607,13 @@ class LCallToChatControllerImpl @Inject constructor(
             userId = userId.split(".")[0]
         }
 
-        if(!ValidatorUtil.isUid(userId)){
+        if (!ValidatorUtil.isUid(userId)) {
             L.e { "[Call] geTheirPublicKey Error: $userId is not a valid uid" }
             return null
         }
 
-        val publicKeyInfos: List<PublicKeyInfo>?  = conversationManager.getPublicKeyInfos(listOf(userId))
-        if(publicKeyInfos.isNullOrEmpty()){
+        val publicKeyInfos: List<PublicKeyInfo>? = conversationManager.getPublicKeyInfos(listOf(userId))
+        if (publicKeyInfos.isNullOrEmpty()) {
             L.e { "[Call] geTheirPublicKey Error: $userId get public key is null" }
             return null
         }
@@ -664,6 +697,25 @@ class LCallToChatControllerImpl @Inject constructor(
         return LIncomingCallActivity.getCurrentRoomId()
     }
 
+    override fun dismissCriticalAlertIfActive() {
+        if (CriticalAlertActivity.isShowing) {
+            val intent = Intent(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS).apply {
+                `package` = application.packageName
+            }
+            application.sendBroadcast(intent)
+        }
+    }
+
+    override fun dismissCriticalAlertByConId(conversationId: String) {
+        if (CriticalAlertActivity.isShowing) {
+            val intent = Intent(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_CONID).apply {
+                `package` = application.packageName
+                putExtra(LCallConstants.CRITICAL_ALERT_PARAM_CONVERSATION, conversationId)
+            }
+            application.sendBroadcast(intent)
+        }
+    }
+
     private suspend fun startCallInternal(context: Context, intent: Intent, onComplete: (Boolean) -> Unit) {
         withContext(Dispatchers.Main) {
             try {
@@ -676,5 +728,6 @@ class LCallToChatControllerImpl @Inject constructor(
             }
         }
     }
+
 
 }

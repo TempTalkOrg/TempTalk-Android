@@ -114,4 +114,9 @@
     <string name="fullscreen_notification_no_permission_huawei_tip">Please allow the “Background Popup” permission for %s so you can receive calls while your device is locked.</string>
     <string name="fullscreen_notification_no_permission_xiaomi_tip">Please allow the “Background Popup Interface” permission for %s so you can receive calls while your device is locked.</string>
     <string name="fullscreen_notification_no_permission_china_default_tip">Please allow “Banner Notifications” for %s so you can receive calls while your device is locked.</string>
+    <string name="notification_critical_alert_title_default">Urgent Call</string>
+    <string name="notification_critical_alert_content_default">Tap to connect now.</string>
+    <string name="notification_critical_alert_content_from">Critical Alert from %s.</string>
+    <string name="join_call">Join</string>
+
 </resources>

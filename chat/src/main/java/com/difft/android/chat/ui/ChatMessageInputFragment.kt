@@ -58,7 +58,6 @@ import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.source
 import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
@@ -70,7 +69,6 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.GetConversationShareRequestBody
-import com.difft.android.network.responses.ConversationSetResponseBody
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
 import com.luck.picture.lib.config.SelectModeConfig
@@ -84,6 +82,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.Draft
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
@@ -99,7 +98,6 @@ import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
 import difft.android.messageserialization.model.TextMessage
-import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
@@ -168,10 +166,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     private var mentionsSearchKeyStartPos = -1
     private var mentionsSearchKey: String? = null
     private var prevInputTextLength = 0
-
-    private var disappearingTime: Int = 0
-
-    private var conversationSet: ConversationSetResponseBody? = null
 
     private var currentDraft = Draft()   // hold in-memory copy
 
@@ -314,13 +308,12 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatSettingViewModel.conversationSet
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                conversationSet = it
+            .filterNotNull()
+            .onEach {
                 updateConfidential()
                 updateBottomView()
-            }, { it.printStackTrace() })
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         ContactorUtil.contactsUpdate
             .compose(RxUtil.getSchedulerComposer())
@@ -458,15 +451,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             .subscribe({ message ->
                 resendMessage(message.id)
             }, {})
-
-        MessageArchiveUtil.archiveTimeUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.first == chatViewModel.forWhat.id) {
-                    disappearingTime = it.second.toInt()
-                }
-            }, { it.printStackTrace() })
 
         chatViewModel.showReactionShade
             .compose(RxUtil.getSchedulerComposer())
@@ -1352,7 +1336,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     binding.clSendMessage.visibility = View.GONE
                     binding.clFriends.visibility = View.VISIBLE
 //                    binding.llFriends.visibility = View.VISIBLE
-                    setFoundYouText(conversationSet?.findyouDescribe)
+                    setFoundYouText(chatSettingViewModel.currentConversationSet?.findyouDescribe)
                 } else {
                     binding.clSendMessage.visibility = View.VISIBLE
                     binding.clFriends.visibility = View.GONE
@@ -1363,7 +1347,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
 //            }
 
-            if (conversationSet?.blockStatus == 1) {
+            if (chatSettingViewModel.currentConversationSet?.blockStatus == 1) {
                 binding.tvUnblock.visibility = View.VISIBLE
                 binding.clFriends.visibility = View.GONE
                 binding.clSendMessage.visibility = View.GONE
@@ -1414,7 +1398,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
     private fun updateConfidential() {
         listOf(binding.ivConfidential, binding.ivConfidentialRight).forEach { view ->
-            if (conversationSet?.confidentialMode == 1) {
+            if (chatSettingViewModel.currentConversationSet?.confidentialMode == 1) {
                 val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
                 view.setImageDrawable(drawable)
                 view.tag = 1
@@ -1491,7 +1475,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         var screenShot: ScreenShot? = null
         if (isScreenShot) {
             screenShot = ScreenShot(RealSource(globalServices.myId, 1, timeStamp, timeStamp))
-            ContactorUtil.createScreenShotMessage(messageId, if (isGroup) globalServices.myId else chatViewModel.forWhat.id, if (isGroup) chatViewModel.forWhat.id else null, disappearingTime, 0, 0, true)
+            ContactorUtil.createScreenShotMessage(messageId, if (isGroup) globalServices.myId else chatViewModel.forWhat.id, if (isGroup) chatViewModel.forWhat.id else null, chatSettingViewModel.getMessageExpirySeconds(), 0, 0, true)
         }
 
         var atPersonsString: String? = null
@@ -1539,10 +1523,10 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 timeStamp,
                 System.currentTimeMillis(),
                 SendType.Sending.rawValue,
-                disappearingTime,
+                chatSettingViewModel.getMessageExpirySeconds(),
                 0,
                 0,
-                conversationSet?.confidentialMode ?: 0,
+                chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0,
                 content ?: "",
                 if (attachment != null) mutableListOf(attachment) else null,
                 quote,

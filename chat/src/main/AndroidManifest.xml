@@ -151,6 +151,10 @@
             android:name=".common.StopCriticalAlertSoundReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".common.CriticalAlertNotificationClickReceiver"
+            android:exported="false" />
+
         <!-- 系统启动广播接收器 -->
         <receiver
             android:name="org.thoughtcrime.securesms.messages.BootCompletedReceiver"

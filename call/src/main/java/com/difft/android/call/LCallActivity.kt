@@ -82,18 +82,15 @@ import com.difft.android.network.config.GlobalConfigsManager
 import dagger.hilt.android.AndroidEntryPoint
 import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.room.Room
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
-import io.reactivex.rxjava3.schedulers.Schedulers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -136,7 +133,7 @@ class LCallActivity : AppCompatActivity() {
         callConfig.muteOtherEnabled
     }
 
-    private var countdownDispose: Disposable? = null
+    private var countdownJob: Job? = null
 
     private val audioProcessor = DenoisePluginAudioProcessor()
 
@@ -307,7 +304,7 @@ class LCallActivity : AppCompatActivity() {
                                 L.i { "[Call] LCallActivity Show CallingEnd Reminder" }
                                 isShowCallingEndReminder = true
                                 callConfig.let { config ->
-                                    val waitingSeconds = config.autoLeave.runAfterReminderTimeout
+                                    val waitingSeconds = config.autoLeave?.runAfterReminderTimeout ?: AutoLeave().runAfterReminderTimeout
                                     val secondsToLeaveMeeting = waitingSeconds / 1000
                                     showCallingEndReminder(secondsToLeaveMeeting)
                                 }
@@ -338,9 +335,10 @@ class LCallActivity : AppCompatActivity() {
         callEndReminderDialog?.dismiss()
         isShowCallingEndReminder = false
         callEndReminderDialog = null
-        if (countdownDispose?.isDisposed == false) {
-            countdownDispose?.dispose()
-        }
+        callEndReminderMessageView = null
+        // 清理协程Job（使用lifecycle-aware的协程）
+        countdownJob?.cancel()
+        countdownJob = null
     }
 
     @SuppressLint("AutoDispose")
@@ -380,9 +378,8 @@ class LCallActivity : AppCompatActivity() {
                     }
                 },
                 onDismiss = {
-                    if (countdownDispose?.isDisposed == false) {
-                        countdownDispose?.dispose()
-                    }
+                    countdownJob?.cancel()
+                    countdownJob = null
                 },
                 onViewCreated = { view ->
                     val messageView = view.findViewById<android.widget.TextView>(R.id.tv_message)
@@ -399,12 +396,10 @@ class LCallActivity : AppCompatActivity() {
                     .withIntentFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT).build()
 
                 startActivity(intent)
-                handler.postDelayed({
-                    remainingSecondsToLeaveMeeting = secondsToLeaveMeeting
-                    callEndReminderMessageView?.text = "${remainingSecondsToLeaveMeeting}s left"
-                }, 2000)
             }
         } else {
+            // 如果对话框已存在，更新剩余时间显示
+            // 注意：实际的倒计时由下面的协程Job处理，这里只是更新当前显示
             remainingSecondsToLeaveMeeting -= 1
             callEndReminderMessageView?.text = "${remainingSecondsToLeaveMeeting}s left"
             if (remainingSecondsToLeaveMeeting <= 0) {
@@ -412,21 +407,36 @@ class LCallActivity : AppCompatActivity() {
             }
         }
 
-        countdownDispose = Observable.interval(1, TimeUnit.SECONDS, Schedulers.io())
-            .take(secondsToLeaveMeeting + 1) // 发射 countDownSeconds + 1 次，因为区间是从 0 开始的
-            .map { secondsToLeaveMeeting - it } // 将发射的数字转换为剩余的秒数
-            .observeOn(AndroidSchedulers.mainThread()) // 切换到主线程来更新 UI 或执行其他操作
-            .subscribe({ remainingSeconds ->
-                callEndReminderMessageView?.text = "${remainingSeconds}s left"
-                if (remainingSeconds <= 0) {
-                    endCallAndClearResources()
+        // 先清理之前的Job，避免重复启动
+        countdownJob?.cancel()
+        
+        // 使用协程替代RxJava，自动绑定Activity生命周期，更安全
+        countdownJob = lifecycleScope.launch {
+            try {
+                for (remainingSeconds in secondsToLeaveMeeting downTo 0) {
+                    // 检查Activity是否还存在，避免在销毁后更新UI
+                    if (!isActive || isFinishing || isDestroyed) {
+                        return@launch
+                    }
+                    // 检查视图是否还存在
+                    callEndReminderMessageView?.text = "${remainingSeconds}s left"
+                    if (remainingSeconds <= 0) {
+                        endCallAndClearResources()
+                        return@launch
+                    }
+                    // 等待1秒，如果Activity被销毁，协程会自动取消
+                    delay(1000)
                 }
-            }, { throwable ->
-                // 处理错误
-                L.e { "[Call] LCallActivity showCallingEndReminder countdownDispose error:" + throwable.message }
-            }, {
-                // 倒计时结束
-            })
+            } catch (e: CancellationException) {
+                // 协程被取消是正常情况，不需要处理
+                L.d { "[Call] LCallActivity countdown cancelled" }
+            } catch (e: Exception) {
+                L.e { "[Call] LCallActivity showCallingEndReminder countdown error: ${e.message}" }
+            } finally {
+                // 清理引用
+                countdownJob = null
+            }
+        }
 
     }
 
@@ -613,18 +623,42 @@ class LCallActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         L.i { "[Call] LCallActivity onDestroy start." }
+        
+        // 清理对话框
         checkFloatingWindowPermissionDialog?.dismiss()
         checkFloatingWindowPermissionDialog = null
 
-        countdownDispose?.takeIf { !it.isDisposed }?.dispose()
+        // 清理倒计时相关的资源
+        countdownJob?.cancel()
+        countdownJob = null
         callEndReminderDialog?.apply {
             dismiss()
             this@LCallActivity.callEndReminderDialog = null
         }
+        callEndReminderMessageView = null
+
+        // 清理Handler的所有延迟任务，防止内存泄漏
+        handler.removeCallbacksAndMessages(null)
+
+        // 注销传感器监听器，防止内存泄漏
+        try {
+            proximitySensorListener?.let {
+                sensorManager.unregisterListener(it)
+            }
+        } catch (e: Exception) {
+            L.e { "[Call] LCallActivity onDestroy unregisterListener error: ${e.message}" }
+        }
+        proximitySensorListener = null
+
+        // 注销BroadcastReceiver
+        try {
+            unregisterReceiver(lCallActivityReceiver)
+        } catch (e: Exception) {
+            L.e { "[Call] LCallActivity onDestroy unregisterReceiver error: ${e.message}" }
+        }
 
         LCallManager.stopRingTone()
         LCallManager.stopVibration()
-        unregisterReceiver(lCallActivityReceiver)
         LCallManager.clearContactorCache()
         LCallManager.clearControlMessage()
         LCallManager.setCallScreenSharing(false)
@@ -637,8 +671,6 @@ class LCallActivity : AppCompatActivity() {
         isInForeground = false
         needAppLock.set(true)
         audioProcessor.release()
-
-        proximitySensorListener = null
 
         viewModel.getRoomId()?.let { roomId ->
             LCallManager.updateCallingState(roomId, false)
@@ -1023,7 +1055,14 @@ class LCallActivity : AppCompatActivity() {
             updateOngoingCallNotification(true)
         }
 
-        sensorManager.unregisterListener(proximitySensorListener)
+        // 注销传感器监听器，防止内存泄漏
+        try {
+            proximitySensorListener?.let {
+                sensorManager.unregisterListener(it)
+            }
+        } catch (e: Exception) {
+            L.e { "[Call] LCallActivity onPause unregisterListener error: ${e.message}" }
+        }
     }
 
     override fun onResume() {

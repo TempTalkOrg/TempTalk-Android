@@ -42,7 +42,6 @@ class ChatNormalPaginationController @AssistedInject constructor(
     }
 
     private suspend fun loadNormalChatDefaultMessages() {
-        val scrollToPosition: Int
         val readPosition =
             wcdb.room.getValue(DBRoomModel.readPosition, DBRoomModel.roomId.eq(forWhat.id))?.long ?: 0L
 
@@ -97,7 +96,8 @@ class ChatNormalPaginationController @AssistedInject constructor(
             anchorMessageAfter = if (hasAfterAnchor) sortedMessages.last() else null
         }
 
-        scrollToPosition = if (expectedUnreadMessages.isNotEmpty()) {
+        // 计算初始滚动位置
+        val scrollToPosition = if (expectedUnreadMessages.isNotEmpty()) {
             val firstUnreadInPage = expectedUnreadMessages.firstOrNull { it in pageMessages }
             if (firstUnreadInPage != null) {
                 pageMessages.indexOfFirst { it.id == firstUnreadInPage.id }
@@ -113,8 +113,8 @@ class ChatNormalPaginationController @AssistedInject constructor(
         }
 
         _chatMessagesStateFlow.value = ChatMessageListBehavior(
-            pageMessages,
-            scrollToPosition,
+            messageList = pageMessages,
+            scrollAction = if (scrollToPosition >= 0) ScrollAction.ToPosition(scrollToPosition) else null,
             updateTimestamp = System.currentTimeMillis(),
             anchorMessageBefore = anchorMessageBefore,
             anchorMessageAfter = anchorMessageAfter,
@@ -125,7 +125,7 @@ class ChatNormalPaginationController @AssistedInject constructor(
 
     override
     suspend fun loadPreviousPage(): Boolean = withContext(Dispatchers.IO) {// true indicates done loading data, false indicates still has messages left
-        val currentMessages = chatMessagesStateFlow.value.messageList
+        val currentMessages = chatMessagesStateFlow.value?.messageList ?: emptyList()
         val oldestMessageSystemShowTimeStamp: Long =
             currentMessages.minOfOrNull { it.systemShowTimestamp } ?: Long.MAX_VALUE
         val previewPageQueryCondition = commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.lt(oldestMessageSystemShowTimeStamp))
@@ -152,15 +152,15 @@ class ChatNormalPaginationController @AssistedInject constructor(
 
         _chatMessagesStateFlow.value =
             ChatMessageListBehavior(
-                newMessageList,
-                -1,
+                messageList = newMessageList,
+                scrollAction = null, // 加载上一页不滚动，保持当前位置
                 updateTimestamp = System.currentTimeMillis(),
                 anchorMessageBefore = anchorMessageBefore,
                 anchorMessageAfter = anchorMessageAfter
             )
         observerMessagesChanges()
         val displayMinSystemShowTimestamp =
-            chatMessagesStateFlow.value.messageList.minOfOrNull { it.systemShowTimestamp } ?: Long.MIN_VALUE
+            chatMessagesStateFlow.value?.messageList?.minOfOrNull { it.systemShowTimestamp } ?: Long.MIN_VALUE
         return@withContext wcdb.message.getValue(
             DBMessageModel.id.count(),
             commonMessageQueryCondition.and(
@@ -171,7 +171,7 @@ class ChatNormalPaginationController @AssistedInject constructor(
 
     override
     suspend fun loadNextPage(): Boolean = withContext(Dispatchers.IO) { // true indicates done loading data, false indicates still has messages left
-        val currentMessages = chatMessagesStateFlow.value.messageList
+        val currentMessages = chatMessagesStateFlow.value?.messageList ?: emptyList()
         val latestMessageSystemShowTimeStamp: Long =
             currentMessages.maxOfOrNull { it.systemShowTimestamp }
                 ?: Long.MIN_VALUE
@@ -205,15 +205,15 @@ class ChatNormalPaginationController @AssistedInject constructor(
 
         _chatMessagesStateFlow.value =
             ChatMessageListBehavior(
-                messageList,
-                -1,
+                messageList = messageList,
+                scrollAction = null, // 加载下一页不滚动，保持当前位置
                 updateTimestamp = System.currentTimeMillis(),
                 anchorMessageBefore = anchorMessageBefore,
                 anchorMessageAfter = anchorMessageAfter
             )
         observerMessagesChanges()
         val displayMaxSystemShowTimestamp =
-            chatMessagesStateFlow.value.messageList.maxOfOrNull { it.systemShowTimestamp }
+            chatMessagesStateFlow.value?.messageList?.maxOfOrNull { it.systemShowTimestamp }
                 ?: return@withContext false
         return@withContext wcdb.message.getValue(
             DBMessageModel.id.count(),
@@ -287,11 +287,10 @@ class ChatNormalPaginationController @AssistedInject constructor(
 
             L.i { "[${forWhat.id}] jumpToMessage, after make up hot data and convert from message Model, pageMessages: ${pageMessages.size}" }
 
-            val scrollToPosition = pageMessages.indexOfFirst { it.id == targetMessage.id }
             _chatMessagesStateFlow.value =
                 ChatMessageListBehavior(
-                    pageMessages,
-                    scrollToPosition,
+                    messageList = pageMessages,
+                    scrollAction = ScrollAction.ToMessage(messageTimeStamp), // 滚动到目标消息
                     updateTimestamp = System.currentTimeMillis(),
                     anchorMessageBefore = anchorMessageBefore,
                     anchorMessageAfter = anchorMessageAfter
@@ -322,11 +321,10 @@ class ChatNormalPaginationController @AssistedInject constructor(
             sortedMessages
         }
 
-        val scrollToPosition = pageMessages.size - 1
         _chatMessagesStateFlow.value =
             ChatMessageListBehavior(
-                pageMessages,
-                scrollToPosition,
+                messageList = pageMessages,
+                scrollAction = ScrollAction.ToBottom, // 滚动到底部
                 updateTimestamp = System.currentTimeMillis(),
                 anchorMessageBefore = anchorMessageBefore
             )
@@ -344,17 +342,16 @@ class ChatNormalPaginationController @AssistedInject constructor(
             // Order by descending systemShowTimestamp to get the most recent entry
             DBMessageModel.systemShowTimestamp.order(Order.Desc)
         )?.text
-        val existMessageIds = chatMessagesStateFlow.value.messageList.map { it.id }.toTypedArray()
-        var needAutoScrollToBottom = false
+        val currentMessageList = chatMessagesStateFlow.value?.messageList ?: emptyList()
+        val existMessageIds = currentMessageList.map { it.id }.toTypedArray()
         val minSystemShowTimeStamp =
-            chatMessagesStateFlow.value.messageList.minOfOrNull { it.systemShowTimestamp }
+            currentMessageList.minOfOrNull { it.systemShowTimestamp }
                 ?: Long.MIN_VALUE
         val maxSystemShowTimeStamp =
-            chatMessagesStateFlow.value.messageList.maxOfOrNull { it.systemShowTimestamp }
+            currentMessageList.maxOfOrNull { it.systemShowTimestamp }
                 ?: Long.MAX_VALUE
         val queryCondition = if (lastMessageId == null || lastMessageId in existMessageIds) {
             L.i { "[${forWhat.id}] observerMessagesChanges, include new incoming messages" }
-            needAutoScrollToBottom = true
             commonMessageQueryCondition.and(
                 DBMessageModel.systemShowTimestamp.ge(
                     minSystemShowTimeStamp
@@ -379,12 +376,11 @@ class ChatNormalPaginationController @AssistedInject constructor(
                     queryCondition,
                     DBMessageModel.systemShowTimestamp.order(Order.Asc)
                 )
-                val scrollToPosition = if (needAutoScrollToBottom) updatedMessages.size - 1 else -1
                 L.i { "[${forWhat.id}] observerMessagesChanges, newMessageList: ${updatedMessages.size}" }
+                // scrollAction = null，让 Fragment 根据 isAtBottom 自己判断是否滚动
                 _chatMessagesStateFlow.value = ChatMessageListBehavior(
                     messageList = updatedMessages,
-                    scrollToPosition = scrollToPosition,
-                    stateTriggeredByUser = false,
+                    scrollAction = null,
                     updateTimestamp = System.currentTimeMillis()
                 )
             }
@@ -393,12 +389,11 @@ class ChatNormalPaginationController @AssistedInject constructor(
     }
 
     override fun addOneMessage(messageModel: MessageModel) {
-        val currentMessages = chatMessagesStateFlow.value.messageList
+        val currentMessages = chatMessagesStateFlow.value?.messageList ?: emptyList()
         val newMessageList = (currentMessages + messageModel)
         _chatMessagesStateFlow.value = ChatMessageListBehavior(
-            newMessageList,
-            newMessageList.size - 1,
-            true,
+            messageList = newMessageList,
+            scrollAction = ScrollAction.ToBottom, // 发送消息后滚动到底部
             updateTimestamp = System.currentTimeMillis()
         )
     }

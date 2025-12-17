@@ -14,11 +14,12 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.databinding.ChatFragmentGroupHeaderBinding
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
+import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatMessageViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -32,6 +33,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
     private lateinit var binding: ChatFragmentGroupHeaderBinding
 
     private val chatViewModel: ChatMessageViewModel by activityViewModels()
+    private val chatSettingViewModel: ChatSettingViewModel by activityViewModels()
 
 
     override fun onCreateView(
@@ -105,28 +107,23 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                 binding.reactionsShade.visibility = if (it) View.VISIBLE else View.GONE
             }, {})
 
-        MessageArchiveUtil.archiveTimeUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                binding.textviewTimer.visibility = View.GONE
-                if (it.first == chatViewModel.forWhat.id && it.second > 0L) {
-                    binding.textviewTimer.visibility = View.VISIBLE
-                    val text = " [" + it.second.toArchiveTimeDisplayText() + "]"
-                    binding.textviewTimer.text = text
-                }
-            }, {})
+        // 统一订阅 conversationSet，处理配置相关的 UI 更新
+        chatSettingViewModel.conversationSet
+            .filterNotNull()
+            .onEach {
+                updateArchiveTimeUI(it.messageExpiry)
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        chatViewModel.chatMessageListUIState.onEach {
-
-            if (it.chatMessages.any { it.editMode }) {
+        // 观察选择状态来切换返回按钮行为
+        chatViewModel.selectMessagesState.onEach {
+            if (it.editModel) {
                 binding.ibBack.setImageResource(R.drawable.chat_icon_close)
                 binding.ibBack.setOnClickListener { chatViewModel.selectModel(false) }
             } else {
                 binding.ibBack.setImageResource(R.mipmap.chat_tabler_arrow_left)
                 binding.ibBack.setOnClickListener { activity?.finish() }
             }
-
         }.launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
@@ -145,6 +142,19 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                 }
                 startActivity(intent)
             }
+        }
+    }
+
+    /**
+     * 更新 archiveTime UI 显示
+     */
+    private fun updateArchiveTimeUI(archiveTime: Long) {
+        if (archiveTime > 0L) {
+            binding.textviewTimer.visibility = View.VISIBLE
+            val text = " [" + archiveTime.toArchiveTimeDisplayText() + "]"
+            binding.textviewTimer.text = text
+        } else {
+            binding.textviewTimer.visibility = View.GONE
         }
     }
 }

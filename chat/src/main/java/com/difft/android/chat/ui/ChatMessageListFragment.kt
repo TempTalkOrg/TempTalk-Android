@@ -22,7 +22,6 @@ import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.widget.AppCompatImageView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -34,6 +33,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DefaultItemAnimator
@@ -60,6 +60,7 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
+import com.difft.android.chat.ScrollAction
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.common.ScreenShotUtil
 import com.difft.android.chat.common.SendType
@@ -78,7 +79,6 @@ import com.difft.android.chat.message.isLongTextAttachment
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.widget.AudioAmplitudesHelper
 import com.difft.android.chat.widget.AudioMessageManager
-import com.difft.android.chat.widget.AudioWaveProgressBar
 import com.difft.android.chat.widget.VoiceMessageView
 import com.difft.android.network.config.GlobalConfigsManager
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -105,9 +105,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
 import net.yslibrary.android.keyboardvisibilityevent.Unregistrar
@@ -214,11 +213,7 @@ class ChatMessageListFragment : Fragment() {
                         openPreview(data)
                     } else if (attachment.isAudioMessage() || attachment.isAudioFile()) {
                         if (data.isConfidential()) {
-                            val filePath = FileUtil.getMessageAttachmentFilePath(data.id) + data.attachment?.fileName
-                            if (!FileUtil.isFileValid(filePath) && !FileUtil.isFileValid("$filePath.encrypt")) {
-                                ToastUtil.showLong(R.string.file_load_error)
-                                return
-                            }
+                            // VoiceMessageView handles download progress internally
                             showConfidentialAudioDialog(data)
                             if (!data.isMine) {
                                 chatViewModel.setConfidentialRecipient(data)
@@ -508,21 +503,22 @@ class ChatMessageListFragment : Fragment() {
                 }
 
                 override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                    // 临时启用 DefaultItemAnimator，让 notifyItemChanged 触发平滑的复位动画
                     binding.recyclerViewMessage.itemAnimator = DefaultItemAnimator()
                     val position = viewHolder.bindingAdapterPosition
-                    chatMessageAdapter.currentList.getOrNull(position)?.let { message ->
-                        if (canQuote(message)) {
-                            chatViewModel.quoteMessage(message)
-                        }
-                    }
 
                     lifecycleScope.launch {
-                        delay(100)
                         chatMessageAdapter.notifyItemChanged(position)
-                        viewHolder.itemView.translationX = 0f
 
-                        delay(500)
+                        // 等待动画完成后（DefaultItemAnimator 默认 changeDuration 为 250ms）触发引用
+                        delay(300)
                         binding.recyclerViewMessage.itemAnimator = null
+
+                        chatMessageAdapter.currentList.getOrNull(position)?.let { message ->
+                            if (canQuote(message)) {
+                                chatViewModel.quoteMessage(message)
+                            }
+                        }
                     }
                 }
 
@@ -633,16 +629,6 @@ class ChatMessageListFragment : Fragment() {
         binding.clToBottom.setOnClickListener {
             scrollToBottom()
         }
-        FileUtil.progressUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ messageId ->
-                val position = chatMessageAdapter.currentList.indexOfFirst {
-                    it.id == messageId || (it is TextChatMessage && it.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()?.authorityId.toString() == messageId)
-                }
-//                L.d { "===progressUpdate===${messageId} position:${position}" }
-                chatMessageAdapter.notifyItemChanged(position)
-            }, { it.printStackTrace() })
 
         chatViewModel.translateEvent
             .compose(RxUtil.getSchedulerComposer())
@@ -667,6 +653,7 @@ class ChatMessageListFragment : Fragment() {
         setAudioObservers()
 
         observeChatMessageListState()
+        observeSelectMessagesState()
 
         // 监听输入框高度变化事件
         viewLifecycleOwner.lifecycleScope.launch {
@@ -699,35 +686,79 @@ class ChatMessageListFragment : Fragment() {
     private fun observeChatMessageListState() {
         viewLifecycleOwner.lifecycleScope.launch {
             //页面不可见时，不进行刷新，防止触发已读逻辑等
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                chatViewModel.chatMessageListUIState
-                    .dropWhile { it.scrollToPosition == -2 }
-                    .collect { handleChatMessageListState(it) }
+            chatViewModel.chatMessageListUIState
+                .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+                .filterNotNull() // 跳过初始 null 状态，null = 未加载，非 null = 已加载（包括空列表）
+                .distinctUntilChanged()
+                .collect { handleChatMessageListState(it) }
+        }
+    }
+
+    /**
+     * 单独观察选择状态，不通过 ViewModel combine
+     *
+     * 选择状态变化只更新 Adapter 的选择 UI，不重新组装整个消息列表
+     * 这样可以避免选择消息时触发不必要的数据重组和滚动
+     */
+    private fun observeSelectMessagesState() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.selectMessagesState.collect { selectState ->
+                chatMessageAdapter.updateSelectionState(selectState)
             }
         }
     }
 
-    private fun handleChatMessageListState(it: ChatMessageListUIState) {
-        L.i { "[Temp] Hide the loading UI, all the received values are " }
+    private fun handleChatMessageListState(state: ChatMessageListUIState) {
+        L.i { "[${chatViewModel.forWhat.id}] handleChatMessageListState: size=${state.chatMessages.size}, scrollAction=${state.scrollAction}" }
         if (!isAdded || view == null || !this::binding.isInitialized) return
 
         binding.lottieViewLoading.clearAnimation()
         binding.lottieViewLoading.visibility = View.GONE
-        val (list, scrollToPosition, triggeredByUser) = it
+
+        val list = state.chatMessages
+        val scrollAction = state.scrollAction
+        val previousListSize = chatMessageAdapter.currentList.size
         val isAtBottomBeforeUpdateList = isAtBottom(binding.recyclerViewMessage.layoutManager as LinearLayoutManager)
+
         chatMessageAdapter.submitList(list) {
-            if (triggeredByUser) {
-                scrollTo(scrollToPosition)
-            } else if (isAtBottomBeforeUpdateList && list.size - 1 == scrollToPosition) { // if the list is at bottom before update list, also expected to scroll to bottom the do it
-                scrollTo(scrollToPosition)
-            } else {
-                lifecycleScope.launch {
-                    updateBottomFloatingButton()
+            // 1. 如果有 scrollAction，执行强制滚动
+            when (scrollAction) {
+                is ScrollAction.ToPosition -> {
+                    scrollTo(scrollAction.position)
+                }
+
+                is ScrollAction.ToMessage -> {
+                    val position = list.indexOfFirst { it.timeStamp == scrollAction.messageTimeStamp }
+                    if (position >= 0) {
+                        scrollTo(position)
+                    }
+                }
+
+                is ScrollAction.ToBottom -> {
+                    scrollTo(list.size - 1)
+                }
+                // 2. 没有 scrollAction，走自动滚动逻辑
+                null -> {
+                    // 如果之前在底部且有新消息，自动滚动到底部
+                    if (isAtBottomBeforeUpdateList && list.size > previousListSize) {
+                        scrollTo(list.size - 1)
+                    } else {
+                        // 不滚动，只更新悬浮按钮
+                        lifecycleScope.launch {
+                            updateBottomFloatingButton()
+                        }
+                    }
                 }
             }
         }
+
         if (isFirstShow) {
-            mScrollToPosition = scrollToPosition
+            mScrollToPosition = when (scrollAction) {
+                is ScrollAction.ToPosition -> scrollAction.position
+                is ScrollAction.ToBottom -> list.size - 1
+                is ScrollAction.ToMessage -> list.indexOfFirst { it.timeStamp == scrollAction.messageTimeStamp }
+                null -> -1
+            }
             binding.recyclerViewMessage.post {
                 doAfterFirstRender()
             }
@@ -808,7 +839,7 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun scrollTo(pos: Int) {
-        val currentMessageCount = chatViewModel.chatMessageListUIState.value.chatMessages.size
+        val currentMessageCount = chatViewModel.chatMessageListUIState.value?.chatMessages?.size ?: 0
 
         //如果当前消息数量和上次消息数量相同，且滚动位置没有变化，则不进行滚动
         if (pos < 0 || (pos == lastScrollPos && currentMessageCount == lastMessageCount)) return
@@ -915,6 +946,7 @@ class ChatMessageListFragment : Fragment() {
             }
         }
         currentAudioMessage = null
+        mConfidentialAudioDialog = null
     }
 
     private var mConfidentialTextDialog: ConfidentialTextBottomSheetFragment? = null
@@ -949,6 +981,7 @@ class ChatMessageListFragment : Fragment() {
             }
         }
         currentTextMessage = null
+        mConfidentialTextDialog = null
     }
 
     private var mConfidentialAttachmentDialog: ConfidentialAttachmentBottomSheetFragment? = null
@@ -984,6 +1017,7 @@ class ChatMessageListFragment : Fragment() {
             }
         }
         currentAttachmentMessage = null
+        mConfidentialAttachmentDialog = null
     }
 
     fun isScrollViewScrollable(scrollView: ScrollView): Boolean {
@@ -1612,23 +1646,16 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun setAudioObservers() {
-        AudioMessageManager.playStatusUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                val message = it.first
-                when (it.second) {
-                    AudioMessageManager.PLAY_STATUS_START -> {
-                    }
-
-                    AudioMessageManager.PLAY_STATUS_PAUSED -> {
-                    }
-
+        // Only handle business logic here, UI updates are handled by VoiceMessageView
+        viewLifecycleOwner.lifecycleScope.launch {
+            AudioMessageManager.playStatusUpdate.collect { (message, status) ->
+                when (status) {
                     AudioMessageManager.PLAY_STATUS_COMPLETE -> {
+                        // Update play status in database
                         if (message.playStatus == AudioMessageManager.PLAY_STATUS_NOT_PLAY) {
                             chatViewModel.updatePlayStatus(message, AudioMessageManager.PLAY_STATUS_PLAYED)
                         }
-                        //找到下一个自动播放的消息
+                        // Find next auto-play message
                         val nextAutoPlayMessage = chatMessageAdapter.currentList.filter { msg ->
                             msg.systemShowTimestamp > message.systemShowTimestamp
                                     && msg is TextChatMessage
@@ -1642,60 +1669,8 @@ class ChatMessageListFragment : Fragment() {
                             val fileName: String = (next as TextChatMessage).attachment?.fileName ?: ""
                             val attachmentPath = FileUtil.getMessageAttachmentFilePath(next.id) + fileName
                             AudioMessageManager.playOrPauseAudio(next, attachmentPath)
-                            val pos = chatMessageAdapter.currentList.indexOfFirst { msg -> next.id == msg.id }
-                            chatMessageAdapter.notifyItemChanged(pos)
                         }
                     }
-                }
-
-                val pos = chatMessageAdapter.currentList.indexOfFirst { msg ->
-                    message.id == msg.id ||
-                            (msg is TextChatMessage && msg.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()?.authorityId.toString() == message.id)
-                }
-                chatMessageAdapter.notifyItemChanged(pos)
-
-                voiceMessageView?.let { view ->
-                    val playButton = view.findViewById<AppCompatImageView>(R.id.play_button)
-                    val progressBar = view.findViewById<AudioWaveProgressBar>(R.id.audioWaveProgressBar)
-                    if (AudioMessageManager.currentPlayingMessage?.id == message.id) {
-                        if (AudioMessageManager.isPaused) {
-                            playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
-                        } else {
-                            playButton.setImageResource(R.drawable.ic_chat_audio_item_pause)
-                        }
-                    } else {
-                        playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
-                        progressBar.setProgress(0f)
-                    }
-                }
-            }, { it.printStackTrace() })
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            AudioMessageManager.progressUpdate
-                .collect { (message, progress) ->
-                    val pos = chatMessageAdapter.currentList.indexOfFirst { msg ->
-                        message.id == msg.id ||
-                                (msg is TextChatMessage && msg.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()?.authorityId.toString() == message.id)
-                    }
-                    chatMessageAdapter.notifyItemChanged(pos)
-
-                    voiceMessageView?.let { view ->
-                        val progressBar = view.findViewById<AudioWaveProgressBar>(R.id.audioWaveProgressBar)
-                        progressBar.setProgress(progress)
-                    }
-                }
-
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            AudioAmplitudesHelper.amplitudeExtractionComplete.collect { message ->
-                val currentList = chatMessageAdapter.currentList.toMutableList()
-                val pos = currentList.indexOfFirst { it.id == message.id }
-
-                if (pos != -1) {
-                    currentList[pos] = message
-                    chatMessageAdapter.submitList(currentList)
-                    chatMessageAdapter.notifyItemChanged(pos)
                 }
             }
         }
@@ -2156,17 +2131,6 @@ class ChatMessageListFragment : Fragment() {
                 } else {
                     ToastUtil.showLong(R.string.file_load_error)
                 }
-            }
-
-            // 使用协程订阅下载进度更新，实时刷新附件视图
-            viewLifecycleOwner.lifecycleScope.launch {
-                FileUtil.progressUpdate
-                    .asFlow()
-                    .collect { messageId ->
-                        if (messageId == message.id) {
-                            attachMessageView?.setupAttachmentView(message)
-                        }
-                    }
             }
         }
 

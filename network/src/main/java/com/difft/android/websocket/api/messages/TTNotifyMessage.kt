@@ -5,6 +5,7 @@
  */
 package com.difft.android.websocket.api.messages
 
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.google.gson.JsonElement
 
 /**
@@ -34,6 +35,8 @@ data class TTNotifyMessage(
         const val NOTIFY_MESSAGE_TYPE_RESET_IDENTITY_KEY = 19 // reset Identity Key
 
         const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 // critical alert
+
+        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2 = 22 // new critical alert
 
         //本地创建 type
         const val NOTIFY_MESSAGE_TYPE_LOCAL = 10000
@@ -101,8 +104,11 @@ data class Data(
     val resetIdentityKeyTime: Long = 0,
     val messageClearAnchor: Long = 0,
     val timestamp: Long = 0,
+    val serverTimestamp: Long = 0,
     val alertTitle: String? = null,
     val alertBody: String? = null,
+    val showCriticalAlert: Boolean = false,
+    val sourceDevice: Int = DEFAULT_DEVICE_ID,
     )
 
 data class Group(

@@ -33,6 +33,7 @@ import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -78,6 +79,7 @@ object LCallManager {
     private val handler = Handler(Looper.getMainLooper())
     private var ringtone: Ringtone? = null
     private var isLooping = false
+    private var loopingRunnable: Runnable? = null
     private const val DEF_INCOMING_CALL_TIMEOUT = 56L // Seconds
     const val DEF_ONGOING_CALL_TIMEOUT = 60L // Seconds
     const val DEF_LEAVE_CALL_TIMEOUT = 60L // Seconds
@@ -271,6 +273,36 @@ object LCallManager {
         return getDisplayName(id) ?: convertToBase58UserName(id)
     }
 
+    suspend fun getDisplayGroupNameById(id: String?): String? {
+        if (id.isNullOrEmpty()) return null
+        val group = callToChatController.getSingleGroupInfo(com.difft.android.base.utils.application, id)
+        if (group.isPresent) {
+            return group.get().name
+        } else {
+            L.i { "[Call] getDisplayGroupNameById No group name found for id: $id" }
+            return null
+        }
+    }
+
+    suspend fun getCriticalAlertNotificationContent(
+        conversationId: String,
+        sourceId: String
+    ): Pair<String, String> {
+        val title = if (ValidatorUtil.isGid(conversationId)) {
+            getDisplayGroupNameById(conversationId)
+        } else {
+            getDisplayNameById(conversationId)
+        }
+        val alertTitle = title ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
+
+        val callerName = getDisplayNameById(sourceId)
+        val alertContent = callerName?.let {
+            ResUtils.getString(R.string.notification_critical_alert_content_from, it)
+        } ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
+
+        return alertTitle to alertContent
+    }
+
     suspend fun getAvatarByUid(context: Context, id: String?): ConstraintLayout? {
         id?.let {
             val userId = it.split(".").firstOrNull() ?: it
@@ -413,24 +445,43 @@ object LCallManager {
 
     private fun startLoopingRingtone() {
         ringtone?.play()
+        // 清理之前的Runnable，防止重复创建
+        loopingRunnable?.let { handler.removeCallbacks(it) }
         // 通过 Handler 延迟一定时间后再次调用 play() 来模拟循环播放
         val ringtoneDuration = 3000 // 假设铃声时长为 3 秒
-        handler.postDelayed(object : Runnable {
+        // 保存当前Runnable的引用，用于后续检查
+        val currentRunnable = object : Runnable {
             override fun run() {
+                // 检查Runnable是否仍然有效（防止被新的Runnable替换或已清理）
+                if (loopingRunnable !== this) {
+                    return
+                }
+                // 检查是否还需要循环播放，避免在stopRingTone后继续执行
+                if (!isLooping) {
+                    loopingRunnable = null
+                    return
+                }
                 ringtone?.stop()
                 ringtone?.play()
                 // 如果仍然需要循环播放，继续延迟调用
-                if (isLooping) {
+                if (isLooping && loopingRunnable === this) {
                     handler.postDelayed(this, ringtoneDuration.toLong())
+                } else {
+                    loopingRunnable = null
                 }
             }
-        }, ringtoneDuration.toLong())
+        }
+        loopingRunnable = currentRunnable
+        handler.postDelayed(currentRunnable, ringtoneDuration.toLong())
     }
 
     fun stopRingTone(tag: String? = null) {
         L.d { "[Call] LCallManager: stopRingTone, tag=$tag" }
         try {
             isLooping = false
+            // 清理循环播放的Runnable，防止内存泄漏
+            loopingRunnable?.let { handler.removeCallbacks(it) }
+            loopingRunnable = null
             handler.removeCallbacksAndMessages(null) // 停止循環播放
             ringtone?.let {
                 if (it.isPlaying) {
@@ -585,8 +636,8 @@ object LCallManager {
     }
 
     fun cancelCallWithTimeout(roomId: String) {
-        checkCallTimeoutTaskMap[roomId]?.dispose()
-        checkCallTimeoutTaskMap.remove(roomId)
+        // 清理CompositeDisposable，防止内存泄漏
+        checkCallTimeoutTaskMap.remove(roomId)?.dispose()
     }
 
     private val checkCallTimeoutTaskMap = mutableMapOf<String, CompositeDisposable>()
@@ -911,5 +962,13 @@ object LCallManager {
         } catch (e: Exception) {
             L.e { "[Call] LCallManager checkQuicFeatureGrayStatus error: ${e.message}" }
         }
+    }
+
+    fun dismissCriticalAlertIfActive() {
+        callToChatController.dismissCriticalAlertIfActive()
+    }
+
+    fun dismissCriticalAlertByConId(conversationId: String) {
+        callToChatController.dismissCriticalAlertByConId(conversationId)
     }
 }

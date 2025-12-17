@@ -271,6 +271,7 @@ class SearchActivity : BaseActivity() {
                     muteStatus = room.muteStatus,
                     pinnedTime = room.pinnedTime,
                     mentionType = room.mentionType,
+                    criticalAlertType = room.criticalAlertType,
                     messageExpiry = room.messageExpiry,
                     groupMembersNumber = room.groupMembersNumber
                 )

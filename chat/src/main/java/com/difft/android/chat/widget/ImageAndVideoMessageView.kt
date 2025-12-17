@@ -10,6 +10,8 @@ import androidx.core.net.toUri
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
@@ -22,6 +24,11 @@ import com.difft.android.chat.message.shouldDecrypt
 import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isVideo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import org.thoughtcrime.securesms.util.MediaUtil
@@ -34,8 +41,14 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
 
     val binding: LayoutImageMessageViewBinding by viewbind(this)
 
+    private var progressJob: Job? = null
+    private var currentAttachmentId: String? = null
+    private var currentMessage: TextChatMessage? = null
+
     @SuppressLint("SetTextI18n")
     fun setupImageView(message: TextChatMessage) {
+        currentAttachmentId = message.id
+        currentMessage = message
 
         binding.imageView.setImageResource(com.luck.picture.lib.R.drawable.ps_image_placeholder)
         binding.progressView.visibility = View.GONE
@@ -168,7 +181,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         }
 
         if (isFileValid) {
-            loadImage(attachmentPath, finalWidth, finalHeight)
+            loadImage(attachmentPath)
         }
 
         // Priority 3: Show progress or auto download (for files <= 10M)
@@ -182,9 +195,31 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
                 binding.progressBar.progress = progress
             }
         }
+
     }
 
-    private fun loadImage(attachmentPath: String, width: Int, height: Int) {
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (progressJob == null) {
+            findViewTreeLifecycleOwner()?.lifecycleScope?.launch {
+                FileUtil.progressUpdate
+                    .filter { it == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            currentMessage?.let { setupImageView(it) }
+                        }
+                    }
+            }?.also { progressJob = it }
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        progressJob?.cancel()
+        progressJob = null
+        super.onDetachedFromWindow()
+    }
+
+    private fun loadImage(attachmentPath: String) {
         Glide.with(context)
             .load(attachmentPath)
 //            .override(width, height)

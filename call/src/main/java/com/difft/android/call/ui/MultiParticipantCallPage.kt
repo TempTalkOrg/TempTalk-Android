@@ -126,7 +126,7 @@ fun MultiParticipantCallPage(
         viewModel,
         config = BarrageMessageConfig(
             false,
-            callConfig.chatPresets,
+            callConfig.chatPresets ?: emptyList(),
             displayDurationMillis = autoHideTimeout
         ),
         { message, topic ->

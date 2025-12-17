@@ -19,9 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rxjava3.subscribeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,6 +48,8 @@ import difft.android.messageserialization.For
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -109,7 +111,7 @@ class ChatArchiveSettingsActivity : BaseActivity() {
             .archiveTimeUpdate
             .filter { it.first == target.id }
             .map { it.second }
-            .subscribeAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
+            .collectAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
 
         Column(
             Modifier.fillMaxSize()

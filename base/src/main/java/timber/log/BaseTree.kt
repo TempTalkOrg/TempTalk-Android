@@ -259,4 +259,20 @@ abstract class BaseTree : Timber.Tree() {
     internal fun setStackTrace(trace: StackData) {
         stackTrace.set(trace)
     }
+
+    // --------------------
+    // custom code - timestamp (调用时捕获，保证时间准确)
+    // --------------------
+
+    private val logTimestamp = ThreadLocal<Long>()
+
+    internal fun getLogTimestamp(): Long? {
+        val ts = logTimestamp.get()
+        logTimestamp.remove()
+        return ts
+    }
+
+    internal fun setLogTimestamp(timestamp: Long) {
+        logTimestamp.set(timestamp)
+    }
 }

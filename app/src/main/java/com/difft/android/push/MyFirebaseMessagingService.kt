@@ -2,12 +2,12 @@ package com.difft.android.push
 
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.globalServices
+import com.difft.android.call.LCallManager
 import com.difft.android.chat.PendingMessageHelper
-import com.difft.android.chat.R
 import com.difft.android.chat.data.NOTIFY_TYPE_CALL_HANGUP
 import com.difft.android.chat.data.PushCustomContent
 import com.difft.android.websocket.api.util.EnvelopDeserializer
@@ -34,11 +34,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // message, here is where that should be initiated. See sendNotification method below.
 
         try {
-//            L.d { "[fcm] onMessageReceived:${Gson().toJson(remoteMessage)}" }
             L.i { "[fcm] onMessageReceived notification:${remoteMessage.notification?.title} ${remoteMessage.notification?.body} data:${remoteMessage.data.keys.joinToString(",")}" }
-
-            val title = remoteMessage.data["title"]
-            val content = remoteMessage.data["body"]
             val customContent = remoteMessage.data["custom_content"]
             val entryPoint = EntryPointAccessors.fromApplication(baseContext, EntryPoint::class.java)
             if (!TextUtils.isEmpty(customContent)) {
@@ -49,13 +45,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
                 when(pushCustomContent.critical) {
                     0 -> handleNormalMessage(entryPoint, pushCustomContent)
-                    1 -> handleCriticalAlertMessage(entryPoint, pushCustomContent, title, content)
+                    1 -> handleCriticalAlertMessage(entryPoint, pushCustomContent)
                     else -> {
                         L.w { "[fcm] Unknown critical value: ${pushCustomContent.critical}" }
                     }
                 }
             } else {
-                L.i { "[fcm] customContent is null, title:${title} content:${content}, ignore" }
+                L.i { "[fcm] customContent is null, ignore" }
             }
 
             // 主动拉取和处理消息
@@ -66,7 +62,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun handleCriticalAlertMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent, title: String?, content: String?)  {
+    private fun handleCriticalAlertMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent)  {
 
         val gid = pushCustomContent.gid
         val uid = pushCustomContent.uid
@@ -77,15 +73,25 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             else -> null
         } ?: return // 没有 gid 或 uid，直接退出
 
-        val alertTitle = title ?: ResUtils.getString(R.string.notification_critical_alert_title_default)
-        val alertContent = content ?: ResUtils.getString(R.string.notification_critical_alert_content_default)
         val timestamp = pushCustomContent.timestamp
 
         appScope.launch {
             withContext(Dispatchers.IO) {
                 L.i { "[Call] handle fcm critical alert: id=${forWhat.id}, timestamp=$timestamp" }
+                val conversationId = forWhat.id
+                val source = pushCustomContent.uid
+                if (source == null) {
+                    L.w { "[Call] handle fcm critical alert: no source uid" }
+                    return@withContext
+                }
+                if (source == globalServices.myId) {
+                    L.w { "[Call] handle fcm critical alert: source is myself, do not show notification" }
+                    return@withContext
+                }
+
+                val (title, content) = LCallManager.getCriticalAlertNotificationContent(conversationId, source)
                 entryPoint.messageNotificationUtil
-                    .showCriticalAlertNotification(forWhat, alertTitle, alertContent, timestamp)
+                    .showCriticalAlertNotification(forWhat, title, content, timestamp)
             }
         }
     }

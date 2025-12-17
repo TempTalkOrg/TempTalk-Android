@@ -163,6 +163,54 @@ class DBRoomStore @Inject constructor(
             .switchIfEmpty(Single.just(Optional.empty()))
     }
 
+    fun getConfidentialMode(roomId: String): Int {
+        return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.confidentialMode ?: 0
+    }
+
+    fun updateConfidentialMode(roomId: String, confidentialMode: Int) {
+        L.i { "[DBRoomStore] updateConfidentialMode id:$roomId confidentialMode: $confidentialMode" }
+        wcdb.room.updateValue(confidentialMode, DBRoomModel.confidentialMode, DBRoomModel.roomId.eq(roomId))
+
+        // ✅ 通知UI刷新
+        RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
+    }
+
+    /**
+     * 更新会话的 Critical Alert 状态
+     * @param roomId 会话ID
+     * @param criticalAlertType Critical Alert 类型（0: 无, 1: 有）
+     */
+    fun updateCriticalAlertType(roomId: String, criticalAlertType: Int) {
+        L.i { "[DBRoomStore] updateCriticalAlertType id:$roomId criticalAlertType: $criticalAlertType" }
+        wcdb.room.updateValue(criticalAlertType, DBRoomModel.criticalAlertType, DBRoomModel.roomId.eq(roomId))
+
+        // ✅ 通知UI刷新
+        RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
+    }
+
+    /**
+     * 设置会话的 Critical Alert 高亮状态（仅当消息未读时才设置）
+     * @param roomId 会话ID
+     * @param messageTimestamp Critical Alert 消息的 systemShowTimestamp
+     */
+    fun setCriticalAlertIfUnread(roomId: String, messageTimestamp: Long) {
+        val room = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId)) ?: return
+        if (messageTimestamp > room.readPosition) {
+            L.i { "[DBRoomStore] setCriticalAlertIfUnread id:$roomId, messageTimestamp:$messageTimestamp > readPosition:${room.readPosition}" }
+            updateCriticalAlertType(roomId, difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT)
+        } else {
+            L.i { "[DBRoomStore] setCriticalAlertIfUnread id:$roomId, messageTimestamp:$messageTimestamp <= readPosition:${room.readPosition}, skip" }
+        }
+    }
+
+    /**
+     * 清除会话的 Critical Alert 高亮状态
+     * @param roomId 会话ID
+     */
+    fun clearCriticalAlert(roomId: String) {
+        updateCriticalAlertType(roomId, difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE)
+    }
+
     override fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?): Completable = Completable.fromAction {
         L.i { "[DBRoomStore] updatePublicKeyInfo  id:${forWhat.id} publicKeyInfo: ${publicKeyInfo?.length}" }
         wcdb.room.updateValue(

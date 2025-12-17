@@ -84,7 +84,8 @@ sealed class FileLoggingSetup : IFileLoggingSetup {
     @Parcelize
     class Setup(
         val logsToKeep: Int = 7,
-        val logPattern: String = "%d %marker%-5level %msg%n",
+        // 去掉 %d，时间戳由 L.kt 在调用时捕获并添加，保证时间准确性
+        val logPattern: String = "%marker%-5level %msg%n",
         val fileName: String = "log",
         val fileExtension: String = "log"
     ) : Parcelable

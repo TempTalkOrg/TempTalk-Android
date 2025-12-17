@@ -30,8 +30,6 @@ import com.difft.android.chat.databinding.ChatActivityGroupInfoBinding
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
-import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
@@ -43,8 +41,10 @@ import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupMemberContactorModel
@@ -75,9 +75,6 @@ class GroupInfoActivity : BaseActivity() {
     lateinit var groupRepo: GroupRepo
 
     @Inject
-    lateinit var messageArchiveManager: MessageArchiveManager
-
-    @Inject
     lateinit var dbRoomStore: DBRoomStore
 
     @Inject
@@ -97,16 +94,16 @@ class GroupInfoActivity : BaseActivity() {
 
         binding.ibBack.setOnClickListener { finish() }
 
-        chatSettingViewModel.conversationSet.observeOn(AndroidSchedulers.mainThread())
-            .autoDispose(this)
-            .subscribe {
-                L.i { "BH_Lin: settings of conversation=$it" }
-                binding.switch2mute.isChecked = it.isMuted == true
+        // 统一订阅 conversationSet，处理所有配置相关的 UI 更新
+        chatSettingViewModel.conversationSet
+            .filterNotNull()
+            .onEach { conversationSet ->
+                // 更新 mute 状态
+                binding.switch2mute.isChecked = conversationSet.isMuted
+                // 更新 disappearing time
+                binding.disappearingTimeText.text = conversationSet.messageExpiry.toArchiveTimeDisplayText()
             }
-        chatSettingViewModel.getConversationConfigs(
-            activity = this,
-            conversations = arrayListOf(groupId),
-        )
+            .launchIn(lifecycleScope)
 
         binding.switch2mute.setOnClickListener {
             var muteStatus = MuteStatus.UNMUTED.value
@@ -141,22 +138,6 @@ class GroupInfoActivity : BaseActivity() {
                         role = info.groupRole ?: GROUP_ROLE_MEMBER
                     }
                     initView()
-                }
-            }, { it.printStackTrace() })
-
-        messageArchiveManager.getMessageArchiveTime(For.Group(groupId))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                binding.disappearingTimeText.text = it.toArchiveTimeDisplayText()
-            }, { it.printStackTrace() })
-
-        MessageArchiveUtil.archiveTimeUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.first == groupId) {
-                    binding.disappearingTimeText.text = it.second.toArchiveTimeDisplayText()
                 }
             }, { it.printStackTrace() })
 

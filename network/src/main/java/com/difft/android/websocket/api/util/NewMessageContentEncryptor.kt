@@ -17,8 +17,6 @@ interface INewMessageContentEncryptor {
         theirPubKeys: Map<String, String>
     ): EncryptResult
 
-    fun enableLegacyContent(): Boolean
-
     fun generateKey(): ByteArray
 
 //    fun encryptCallKey(pubKeys: Map<String, String>, mKey: String?): EncryptCallKeyResult

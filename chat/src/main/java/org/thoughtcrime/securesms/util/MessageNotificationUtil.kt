@@ -67,6 +67,7 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.util.FlashLightBlinker
 import com.difft.android.call.util.FullScreenPermissionHelper
+import com.difft.android.chat.common.CriticalAlertNotificationClickReceiver
 import com.difft.android.chat.common.CriticalAlertSoundPlayer
 import com.difft.android.chat.common.StopCriticalAlertSoundReceiver
 import kotlinx.coroutines.delay
@@ -96,6 +97,7 @@ class MessageNotificationUtil @Inject constructor(
         private const val CHANNEL_CONFIG_NAME_CRITICAL_ALERT = "CRITICAL_ALERT_V2"
         private const val CHANNEL_CONFIG_MESSAGE_GROUP = "MESSAGE_GROUP"
         const val STOP_CRITICAL_ALERT_SOUND = "STOP_CRITICAL_ALERT_SOUND"
+        const val ACTION_CRITICAL_ALERT_CLICK = "ACTION_CRITICAL_ALERT_CLICK"
     }
 
     private val nm: NotificationManager by lazy {
@@ -1027,6 +1029,14 @@ class MessageNotificationUtil @Inject constructor(
         fun notificationCacheManager(): NotificationCacheManager
     }
 
+    // Hilt EntryPoint for CriticalAlertNotificationClickReceiver
+    @dagger.hilt.EntryPoint
+    @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+    interface CriticalAlertReceiverEntryPoint {
+        fun messageNotificationUtil(): MessageNotificationUtil
+        fun activityProvider(): ActivityProvider
+    }
+
     /**
      * 跳转到默认消息通知设置页面
      */
@@ -1096,11 +1106,31 @@ class MessageNotificationUtil @Inject constructor(
             return
         }
 
-        val intent = createConversationIntent(forWhat)
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+        // 创建点击通知的 Intent，使用 BroadcastReceiver 处理点击逻辑
+        val clickIntent = Intent(context, CriticalAlertNotificationClickReceiver::class.java).apply {
+            action = ACTION_CRITICAL_ALERT_CLICK
+            `package` = context.packageName
+            putExtra("conversation_id", forWhat.id)
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getBroadcast(
             context,
             notificationId,
-            intent,
+            clickIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        LCallManager.dismissCriticalAlertIfActive()
+
+        val fullScreenIntent = Intent(context, activityProvider.getActivityClass(ActivityType.CRITICAL_ALERT)).apply {
+            putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, forWhat.id)
+            putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, alertTitle)
+            putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, alertContent)
+        }
+
+        val fullScreenPendingIntent: PendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            fullScreenIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
@@ -1113,6 +1143,7 @@ class MessageNotificationUtil @Inject constructor(
             .setContentTitle(title)
             .setContentText(alertContent)
             .setContentIntent(pendingIntent)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
@@ -1125,6 +1156,7 @@ class MessageNotificationUtil @Inject constructor(
             .setWhen(timestamp) // 使用固定的时间戳，避免时间变化导致重新排序
             .setShowWhen(true) // 显示时间，但使用固定时间戳
             .setUsesChronometer(false) // 不使用计时器，避免时间变化
+            .setOngoing(true)
 
         try {
             val notification = builder.build()

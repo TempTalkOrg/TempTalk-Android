@@ -1,10 +1,6 @@
 package org.thoughtcrime.securesms.util
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.network.config.GlobalConfigsManager
-import com.google.gson.Gson
-import org.json.JSONObject
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import com.difft.android.websocket.api.util.EncryptCallKeyResult
 import com.difft.android.websocket.api.util.EncryptResult
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
@@ -12,6 +8,9 @@ import com.difft.android.websocket.api.util.INewMessageContentEncryptor.Companio
 import com.difft.android.websocket.api.util.RtmEncryptedMessage
 import com.difft.android.websocket.api.util.RustEncryptionException
 import com.difft.android.websocket.api.util.paddedMessageBody
+import com.google.gson.Gson
+import org.json.JSONObject
+import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import uniffi.dtproto.DtProto
 import java.util.UUID
 import javax.inject.Inject
@@ -19,7 +18,6 @@ import javax.inject.Singleton
 
 @Singleton
 class NewMessageEncryptor @Inject constructor(
-    private val globalConfigsManager: GlobalConfigsManager,
     private val encryptionDataManager: EncryptionDataManager
 ) : INewMessageContentEncryptor {
     companion object {
@@ -70,10 +68,6 @@ class NewMessageEncryptor @Inject constructor(
         return if (size == 33) {
             if (first() == DJB_TYPE.toUByte()) drop(1) else throw Exception("Invalid key type")
         } else this
-    }
-
-    override fun enableLegacyContent(): Boolean {
-        return globalConfigsManager.getNewGlobalConfigs()?.data?.message?.tunnelSecurityEnable ?: false
     }
 
 //    override fun encryptCallKey(pubKeys: Map<String, String>, mKey: String?): EncryptCallKeyResult {
@@ -162,7 +156,7 @@ class NewMessageEncryptor @Inject constructor(
                     .put("payload", String(payloadByteArray, Charsets.UTF_8))
                 return encryptedMessage.toString()
             }
-        }catch (e: Exception) {
+        } catch (e: Exception) {
             throw RustEncryptionException(e)
         }
     }
@@ -178,15 +172,15 @@ class NewMessageEncryptor @Inject constructor(
             val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
             dtProto.use {
                 val decryptedMessage = it.decryptRtmMessage(signatureUBytes, publicKey, mAesKey, encryptedTextUBytes)
-                if(decryptedMessage.verifiedIdResult){
+                if (decryptedMessage.verifiedIdResult) {
                     val plainTextByteArray = decryptedMessage.plainText.map { it.toByte() }.toByteArray()
                     return plainTextByteArray
-                }else{
-                    throw RustEncryptionException( Exception("RTM message signature verification failed for public key: $hisPublicKey") )
+                } else {
+                    throw RustEncryptionException(Exception("RTM message signature verification failed for public key: $hisPublicKey"))
                 }
             }
         } catch (e: Exception) {
-            L.e { "decryptRtmMessage Failed to decrypt RTM message"}
+            L.e { "decryptRtmMessage Failed to decrypt RTM message" }
             throw RustEncryptionException(e)
         }
     }

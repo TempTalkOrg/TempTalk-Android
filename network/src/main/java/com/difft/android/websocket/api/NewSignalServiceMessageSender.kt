@@ -303,8 +303,6 @@ class NewSignalServiceMessageSender @Inject constructor(
             throw IOException(error)
         }
 
-        val contentString = if (messageEncryptor.enableLegacyContent()) Base64.encodeBytes(content.toByteArray()) else null
-
         val msgType = getMsgType(content)
 
         /**
@@ -416,7 +414,6 @@ class NewSignalServiceMessageSender @Inject constructor(
             .type(Envelope.Type.ENCRYPTEDTEXT_VALUE)
             .msgType(msgType)
             .detailMessageType(detailMessageType.value)
-            .legacyContent(contentString)
             .content(encryptContentString)
             .recipients(recipients)
             .realSource(realSourceEntity)

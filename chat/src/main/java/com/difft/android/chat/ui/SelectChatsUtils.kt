@@ -108,18 +108,6 @@ class SelectChatsUtils @Inject constructor() {
     @Inject
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
 
-    private var mChatSelectDialog: ChatSelectBottomSheetFragment? = null
-
-    private fun clearDialog() {
-        mChatSelectDialog?.dismiss()
-        mChatSelectDialog = null
-        dismissWaitDialog()
-    }
-
-    // 获取当前Dialog的CoroutineScope，如果Dialog存在则使用其lifecycleScope，否则使用appScope作为fallback
-    private val dialogScope: CoroutineScope
-        get() = mChatSelectDialog?.lifecycleScope ?: appScope
-
     private fun showWaitDialog(activity: Activity, message: String = "") {
         ComposeDialogManager.showWait(activity, message, cancelable = false)
     }
@@ -131,12 +119,14 @@ class SelectChatsUtils @Inject constructor() {
     /**
      * 任务成功完成后的统一处理
      * @param message 成功提示消息的资源ID
+     * @param onDismiss 关闭 dialog 的回调
      */
-    private suspend fun handleTaskSuccess(message: Int) {
+    private suspend fun handleTaskSuccess(message: Int, onDismiss: () -> Unit) {
         L.i { "[SelectChatsUtils] forward message success" }
         withContext(Dispatchers.Main) {
+            dismissWaitDialog()
             ToastUtil.show(message)
-            clearDialog()
+            onDismiss()
         }
     }
 
@@ -167,13 +157,14 @@ class SelectChatsUtils @Inject constructor() {
         forwardContexts: List<ForwardContext>? = null,
         card: Card? = null,
     ) {
-        showChatSelectDialog(context) { data ->
-            if (data == null) return@showChatSelectDialog
+        val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = false)
+        fragment.onSelected = onSelected@{ data ->
+            if (data == null) return@onSelected
             if (data.isGroup) {
                 val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.id))
                 if (group != null && !GroupUtil.canSpeak(group, globalServices.myId)) {
                     ToastUtil.show(context.getString(R.string.group_only_moderators_can_speak_tip))
-                    return@showChatSelectDialog
+                    return@onSelected
                 }
             }
             showSendToDialog(
@@ -183,25 +174,11 @@ class SelectChatsUtils @Inject constructor() {
                 title,
                 logFile,
                 forwardContexts,
-                card
+                card,
+                scope = fragment.lifecycleScope,
+                onDismiss = { fragment.dismiss() }
             )
         }
-    }
-
-    private fun showChatSelectDialog(
-        context: Activity,
-        onSelected: (ChatsContact?) -> Unit
-    ) {
-        val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = false)
-        fragment.onSelected = { data ->
-            onSelected(data)
-            // 选择会话后不关闭弹窗，只有取消时才关闭
-            if (data == null) {
-                clearDialog()
-            }
-        }
-
-        mChatSelectDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "ChatSelectDialog")
     }
 
@@ -211,14 +188,11 @@ class SelectChatsUtils @Inject constructor() {
     ) {
         val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = true)
         fragment.onSelected = onSelected
-
-        mChatSelectDialog = fragment
         fragment.show((context as FragmentActivity).supportFragmentManager, "ContactSelectDialog")
     }
 
-
-    fun search() {
-        dialogScope.launch(Dispatchers.IO) {
+    fun search(scope: CoroutineScope) {
+        scope.launch(Dispatchers.IO) {
             // 并发查询所有数据
             val roomsDeferred = async { queryRooms() }
             val groupsDeferred = async { queryGroups() }
@@ -317,7 +291,9 @@ class SelectChatsUtils @Inject constructor() {
         title: String? = null,
         file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
-        card: Card? = null
+        card: Card? = null,
+        scope: CoroutineScope,
+        onDismiss: () -> Unit
     ) {
         ComposeDialogManager.showMessageDialog(
             context = context,
@@ -382,12 +358,12 @@ class SelectChatsUtils @Inject constructor() {
                 }
 
                 // 顺序执行所有发送任务
-                dialogScope.launch(Dispatchers.IO) {
+                scope.launch(Dispatchers.IO) {
                     try {
                         sendTasks.forEach { task ->
                             task()
                         }
-                        handleTaskSuccess(R.string.chat_sent)
+                        handleTaskSuccess(R.string.chat_sent, onDismiss)
                     } catch (e: Exception) {
                         handleTaskError(e)
                     }
@@ -396,6 +372,9 @@ class SelectChatsUtils @Inject constructor() {
         )
     }
 
+    /**
+     * 保存到收藏（无关联 dialog，使用 appScope）
+     */
     fun saveToNotes(
         context: Activity,
         content: String,
@@ -407,7 +386,7 @@ class SelectChatsUtils @Inject constructor() {
         if (forwardContext != null) {
             val list = checkForwardAttachments(forwardContext)
             if (list.isNotEmpty()) {
-                dialogScope.launch(Dispatchers.IO) {
+                appScope.launch(Dispatchers.IO) {
                     try {
                         givePermissionForAttachments(
                             context,
@@ -417,13 +396,13 @@ class SelectChatsUtils @Inject constructor() {
                             list,
                             forwardContext
                         )
-                        handleTaskSuccess(R.string.chat_saved)
+                        handleTaskSuccess(R.string.chat_saved) {}
                     } catch (e: Exception) {
                         handleTaskError(e)
                     }
                 }
             } else {
-                dialogScope.launch(Dispatchers.IO) {
+                appScope.launch(Dispatchers.IO) {
                     try {
                         sendTextPush(
                             context,
@@ -434,17 +413,17 @@ class SelectChatsUtils @Inject constructor() {
                             sharedContactId = forwardContext.sharedContactId,
                             sharedContactName = forwardContext.sharedContactName
                         )
-                        handleTaskSuccess(R.string.chat_saved)
+                        handleTaskSuccess(R.string.chat_saved) {}
                     } catch (e: Exception) {
                         handleTaskError(e)
                     }
                 }
             }
         } else {
-            dialogScope.launch(Dispatchers.IO) {
+            appScope.launch(Dispatchers.IO) {
                 try {
                     sendTextPush(context, content, globalServices.myId, false)
-                    handleTaskSuccess(R.string.chat_sent)
+                    handleTaskSuccess(R.string.chat_sent) {}
                 } catch (e: Exception) {
                     handleTaskError(e)
                 }
@@ -879,8 +858,7 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
 
         val tvClose = view.findViewById<AppCompatTextView>(R.id.tv_close)
         tvClose.setOnClickListener {
-            onSelected?.invoke(null)
-            dismiss()
+            dismiss()  // onDismiss 中会处理回调和清理
         }
 
         val btnClear = view.findViewById<AppCompatImageButton>(R.id.button_clear)
@@ -893,7 +871,7 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
 
         etSearch.addTextChangedListener {
             selectChatsUtils.searchKey = it.toString().trim()
-            selectChatsUtils.search()
+            selectChatsUtils.search(lifecycleScope)
             selectChatsUtils.resetButtonClear(btnClear)
         }
 
@@ -1025,12 +1003,15 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
             }
         }
 
-        selectChatsUtils.search()
+        selectChatsUtils.search(lifecycleScope)
     }
 
     override fun onDismiss(dialog: android.content.DialogInterface) {
         super.onDismiss(dialog)
         L.i { "onDismiss" }
+        // 通过回调通知 dialog 关闭，让原始实例清除引用（避免系统返回键关闭时的内存泄漏）
+        onSelected?.invoke(null)
+        onSelected = null  // 清除回调引用
         selectChatsUtils.searchKey = ""
     }
 }

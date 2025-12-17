@@ -9,13 +9,12 @@ import android.net.ConnectivityManager;
 
 import androidx.annotation.NonNull;
 
-import com.difft.android.base.log.lumberjack.L;
-
 import org.thoughtcrime.securesms.jobmanager.ConstraintObserver;
 
 public class NetworkConstraintObserver implements ConstraintObserver {
 
-    private static final String REASON = L.INSTANCE.tag(NetworkConstraintObserver.class);
+    // 使用字符串常量避免类加载时触发 L.INSTANCE 初始化导致ANR
+    private static final String REASON = "NetworkConstraint";
 
     private final Application application;
 

@@ -256,20 +256,32 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         binding.textviewMissedNumber.text =
             if (data.unreadMessageNum > 99) "99+" else data.unreadMessageNum.toString()
 
+        // 构建标签文本: Critical Alert 在最前面，然后是 mention
+        val alertTagBuilder = StringBuilder()
+
+        // 检查是否有 Critical Alert
+        if (data.criticalAlertType == difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT) {
+            alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_critical_alert))
+        }
+
+        // 检查是否有 mention
         when (data.mentionType) {
             MENTIONS_TYPE_ME -> {
-                binding.textviewAt.visibility = View.VISIBLE
-                binding.textviewAt.text = binding.root.context.getString(R.string.chat_list_at_you)
+                if (alertTagBuilder.isNotEmpty()) alertTagBuilder.append(" ")
+                alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_at_you))
             }
-
             MENTIONS_TYPE_ALL -> {
-                binding.textviewAt.visibility = View.VISIBLE
-                binding.textviewAt.text = binding.root.context.getString(R.string.chat_list_at_all)
+                if (alertTagBuilder.isNotEmpty()) alertTagBuilder.append(" ")
+                alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_at_all))
             }
+        }
 
-            else -> {
-                binding.textviewAt.visibility = View.GONE
-            }
+        // 设置显示
+        if (alertTagBuilder.isNotEmpty()) {
+            binding.textviewAt.visibility = View.VISIBLE
+            binding.textviewAt.text = alertTagBuilder.toString()
+        } else {
+            binding.textviewAt.visibility = View.GONE
         }
 
         showMissingNumber(data.unreadMessageNum, data.isMuted)

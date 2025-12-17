@@ -46,7 +46,7 @@
     <string name="settings_build_version">Build Version</string>
     <string name="settings_build_time">Build Time</string>
     <string name="settings_check_new_version">Check New Version</string>
-    <string name="settings_obtain_desktop_version">Join Desktop App</string>
+    <string name="settings_obtain_desktop_version">Website</string>
 
     <string name="settings_version_is_latest">The current version is the latest version</string>
     <string name="settings_new_version_found">A new version found</string>

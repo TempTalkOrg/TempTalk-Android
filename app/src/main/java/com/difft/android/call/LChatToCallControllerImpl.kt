@@ -56,6 +56,7 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.network.config.WsTokenManager
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.yield
+import org.thoughtcrime.securesms.util.MessageNotificationUtil
 
 class LChatToCallControllerImpl @Inject constructor(
     @ChativeHttpClientModule.Call
@@ -63,7 +64,8 @@ class LChatToCallControllerImpl @Inject constructor(
     private val callMessageCreator: CallMessageCreator,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val dbRoomStore: DBRoomStore,
-    private val wsTokenManager: WsTokenManager
+    private val wsTokenManager: WsTokenManager,
+    private val messageNotificationUtil: MessageNotificationUtil,
 ) : LChatToCallController {
 
     @Inject
@@ -354,6 +356,15 @@ class LChatToCallControllerImpl @Inject constructor(
                     LCallManager.getCallListData()?.let { callingData ->
                         callingData[roomId]?.hasAnotherDeviceJoined = true
                         LCallManager.updateCallingListData(callingData)
+                    }
+
+                    // 其他设备入会时，清除会话列表 critical alert 高亮状态
+                    LCallManager.getCallData(roomId)?.conversation?.let { conversationId ->
+                        dbRoomStore.clearCriticalAlert(conversationId)
+                        messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
+                        LCallManager.dismissCriticalAlertByConId(conversationId)
+                    } ?: run {
+                        L.w { "[Call] handleCallMessage joined: conversationId is null for roomId=$roomId, cannot dismiss critical alert" }
                     }
                 }
             }

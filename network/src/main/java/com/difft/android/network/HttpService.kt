@@ -154,9 +154,9 @@ interface HttpService {
     ): Single<BaseResponse<Any>>
 
     @GET
-    fun getNewGlobalConfigs(
+    suspend fun getNewGlobalConfigs(
         @Url url: String
-    ): Observable<NewGlobalConfig>
+    ): NewGlobalConfig
 
     @GET
     fun getAppVersionConfigs(
