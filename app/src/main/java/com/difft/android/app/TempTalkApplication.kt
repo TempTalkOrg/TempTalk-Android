@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.fragment.app.FragmentActivity
+import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
@@ -23,6 +24,10 @@ import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallEngine
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LIncomingCallActivity
+import com.difft.android.call.manager.CriticalAlertManager
+import com.difft.android.call.state.CriticalAlertStateManager
+import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.chat.common.ScreenShotUtil
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.login.PasscodeUtil
@@ -70,6 +75,18 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     @Inject
     lateinit var environmentHelper: EnvironmentHelper
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var inComingCallStateManager: InComingCallStateManager
+
+    @Inject
+    lateinit var criticalAlertManager: CriticalAlertManager
+
+    @Inject
+    lateinit var criticalAlertStateManager: CriticalAlertStateManager
 
     // 追踪当前 resumed 的 Activity
     private var currentResumedActivity: WeakReference<FragmentActivity>? = null
@@ -175,7 +192,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     override fun onForeground() {
         recordLastUseTime()
         scheduleGrayConfigUpdateCheck()
-        LCallManager.restoreCallActivityIfInCalling()
         LCallManager.restoreIncomingCallActivityIfIncoming()
     }
 
@@ -218,6 +234,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 } else if (shouldCheckScreenLockForCall())
                 {
                     scheduleQuickScreenLockCheck()
+                }
+
+                // 进入会话列表时停止critical alert
+                if (activity is IndexActivity && criticalAlertManager.isCriticalAlertRunning() && !criticalAlertStateManager.isJoining()) {
+                    LCallManager.dismissCriticalAlertIfActive()
                 }
             }
 
@@ -379,12 +400,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 2. 通话相关
-        if (LCallActivity.isInCalling() && !LCallActivity.isNeedAppLock()) {
+        if (onGoingCallStateManager.isInCalling() && !onGoingCallStateManager.needAppLock) {
             L.d { "[ScreenLock] Skip: in call" }
             return false
         }
 
-        if (LIncomingCallActivity.isActivityShowing() && !LIncomingCallActivity.isNeedAppLock()) {
+        if (inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isNeedAppLock()) {
             L.d { "[ScreenLock] Skip: incoming call" }
             return false
         }
@@ -469,8 +490,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun shouldCheckScreenLockForCall(): Boolean {
-        val incomingCallNeedsLock = LIncomingCallActivity.isActivityShowing() && LIncomingCallActivity.isNeedAppLock()
-        val activeCallNeedsLock = LCallActivity.isInCalling() && LCallActivity.isNeedAppLock()
+        val incomingCallNeedsLock = inComingCallStateManager.isActivityShowing() && inComingCallStateManager.isNeedAppLock()
+        val activeCallNeedsLock = onGoingCallStateManager.isInCalling() && onGoingCallStateManager.needAppLock
         return incomingCallNeedsLock || activeCallNeedsLock
     }
 }

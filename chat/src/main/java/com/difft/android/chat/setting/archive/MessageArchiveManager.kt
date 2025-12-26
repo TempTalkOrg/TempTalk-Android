@@ -8,12 +8,9 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
-import org.difft.app.database.delete
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.data.ContactorUtil
-import difft.android.messageserialization.For
+import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
@@ -24,21 +21,24 @@ import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.requests.ConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
+import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
+import difft.android.messageserialization.For
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import org.difft.app.database.delete
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBResetIdentityKeyModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.ResetIdentityKeyModel
+import org.difft.app.database.wcdb
 import util.TimeUtils
-import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -50,7 +50,8 @@ class MessageArchiveManager @Inject constructor(
     private val globalConfigsManager: GlobalConfigsManager,
     @ChativeHttpClientModule.Chat
     private val chatHttpClient: ChativeHttpClient,
-    private val dbMessageStore: DBMessageStore
+    private val dbMessageStore: DBMessageStore,
+    private val localMessageCreator: dagger.Lazy<LocalMessageCreator>
 ) {
     fun startCheckTask() {
         appScope.launch(Dispatchers.IO) {
@@ -86,16 +87,17 @@ class MessageArchiveManager @Inject constructor(
 
                 val messageExpiryMillis = (room.messageExpiry ?: 0L) * 1000L
                 val messageClearAnchor = room.messageClearAnchor ?: 0L
+                val readPosition = room.readPosition
 
                 // 构建查询条件
                 val baseCondition = DBMessageModel.roomId.eq(room.roomId)
-                    .and(DBMessageModel.readTime.gt(0))
 
                 val finalCondition = buildMessageClearCondition(
                     baseCondition = baseCondition,
                     messageClearAnchor = messageClearAnchor,
                     messageExpiryMillis = messageExpiryMillis,
-                    currentTimeMillis = currentTimeMillis
+                    currentTimeMillis = currentTimeMillis,
+                    readPosition = readPosition
                 )
 
                 // 如果没有需要清除的消息，跳过这个房间
@@ -130,7 +132,7 @@ class MessageArchiveManager @Inject constructor(
                     L.i { "[MessageArchiveManager] processed $totalProcessedCount messages for room ${room.roomId}" }
                     wcdb.message.getFirstObject(DBMessageModel.roomId.eq(room.roomId), DBMessageModel.systemShowTimestamp.order(Order.Asc))?.let { earliestMessage ->
                         L.i { "[MessageArchiveManager] created earlier messages expired message for room $room.roomId" }
-                        ContactorUtil.createEarlierMessagesExpiredMessage(
+                        localMessageCreator.get().createEarlierMessagesExpiredMessage(
                             room.roomId,
                             room.roomType,
                             earliestMessage.systemShowTimestamp - 1,
@@ -149,28 +151,65 @@ class MessageArchiveManager @Inject constructor(
         L.i { "[MessageArchiveManager] finished archiving messages" }
     }
 
+    /**
+     * 构建消息清除条件
+     *
+     * 对于有 readTime 的消息（正常流程）:
+     * - readTime <= messageClearAnchor，或
+     * - readTime + messageExpiry < currentTime
+     *
+     * 对于 readTime = 0 的老消息（弥补机制）:
+     * - 当 messageExpiry > 0 且 systemShowTimestamp < readPosition 时，
+     *   用 systemShowTimestamp 代替 readTime 计算过期时间
+     */
     private fun buildMessageClearCondition(
         baseCondition: Expression,
         messageClearAnchor: Long,
         messageExpiryMillis: Long,
-        currentTimeMillis: Long
-    ): Expression? = when {
-        // 有messageClearAnchor且messageExpiry > 0时，检查两个条件之一
-        messageClearAnchor > 0 && messageExpiryMillis > 0 -> {
-            val clearAnchorCondition = DBMessageModel.readTime.le(messageClearAnchor)
-            val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
-            baseCondition.and(clearAnchorCondition.or(expiryCondition))
+        currentTimeMillis: Long,
+        readPosition: Long
+    ): Expression? {
+        // 弥补机制：readTime = 0 但 systemShowTimestamp <= readPosition 的老消息
+        // 仅当 messageExpiry > 0 且 readPosition > 0 时才启用
+        val legacyFallback = if (messageExpiryMillis > 0 && readPosition > 0) {
+            DBMessageModel.readTime.eq(0)
+                .and(DBMessageModel.systemShowTimestamp.le(readPosition))
+                .and(DBMessageModel.systemShowTimestamp.add(messageExpiryMillis).lt(currentTimeMillis))
+        } else null
+
+        return when {
+            // 有messageClearAnchor且messageExpiry > 0时，检查两个条件之一
+            messageClearAnchor > 0 && messageExpiryMillis > 0 -> {
+                val hasReadTime = DBMessageModel.readTime.gt(0)
+                val clearAnchorCondition = DBMessageModel.readTime.le(messageClearAnchor)
+                val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
+                val normalCondition = hasReadTime.and(clearAnchorCondition.or(expiryCondition))
+
+                if (legacyFallback != null) {
+                    baseCondition.and(normalCondition.or(legacyFallback))
+                } else {
+                    baseCondition.and(normalCondition)
+                }
+            }
+            // 只有messageClearAnchor时，只检查clearAnchor条件（不需要弥补机制，clearAnchor是明确的时间点）
+            messageClearAnchor > 0 -> {
+                baseCondition.and(DBMessageModel.readTime.gt(0)).and(DBMessageModel.readTime.le(messageClearAnchor))
+            }
+            // 只有messageExpiry > 0时，只检查过期条件
+            messageExpiryMillis > 0 -> {
+                val hasReadTime = DBMessageModel.readTime.gt(0)
+                val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
+                val normalCondition = hasReadTime.and(expiryCondition)
+
+                if (legacyFallback != null) {
+                    baseCondition.and(normalCondition.or(legacyFallback))
+                } else {
+                    baseCondition.and(normalCondition)
+                }
+            }
+            // 都没有时，不删除任何消息
+            else -> null
         }
-        // 只有messageClearAnchor时，只检查clearAnchor条件
-        messageClearAnchor > 0 -> {
-            baseCondition.and(DBMessageModel.readTime.le(messageClearAnchor))
-        }
-        // 只有messageExpiry > 0时，只检查过期条件
-        messageExpiryMillis > 0 -> {
-            baseCondition.and(DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis))
-        }
-        // 都没有时，不删除任何消息
-        else -> null
     }
 
 //    /**
@@ -401,7 +440,7 @@ class MessageArchiveManager @Inject constructor(
         if (operator == globalServices.myId) { //如果是自己重置identityKey，需要检查自己所有的1v1会话是否存在，创建提示消息
             wcdb.room.getAllObjects(DBRoomModel.roomId.notEq(globalServices.myId).and(DBRoomModel.roomType.eq(0)))
                 .map { room ->
-                    ContactorUtil.createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry)
+                    localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry)
                 }.let { messages ->
                     L.i { "[MessageArchiveManager] create reset identity key notify message for self, rooms size:${messages.size}" }
                     dbMessageStore.putWhenNonExist(*messages.toTypedArray())
@@ -409,7 +448,7 @@ class MessageArchiveManager @Inject constructor(
         } else {//如果不是自己重置identityKey，需要检查1v1会话是否存在，并创建提示消息
             wcdb.room.getFirstObject(DBRoomModel.roomId.eq(operator))?.let {
                 L.i { "[MessageArchiveManager] create reset identity key message -> operator:${operator}  resetIdentityKeyTime:${resetIdentityKeyTime}" }
-                ContactorUtil.createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry).let { message ->
+                localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry).let { message ->
                     dbMessageStore.putWhenNonExist(message)
                 }
             } ?: run {

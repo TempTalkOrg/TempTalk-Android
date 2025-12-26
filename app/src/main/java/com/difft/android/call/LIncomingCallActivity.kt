@@ -40,13 +40,20 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
-import java.util.concurrent.atomic.AtomicBoolean
+import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.state.InComingCallStateManager
 
 @AndroidEntryPoint
 class LIncomingCallActivity : AppCompatActivity() {
 
     @Inject
     lateinit var callToChatController: LCallToChatController
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var inComingCallStateManager: InComingCallStateManager
 
     val binding: CallActivityIncomingCallBinding by viewbind()
 
@@ -67,18 +74,6 @@ class LIncomingCallActivity : AppCompatActivity() {
     @Inject
     lateinit var userManager: UserManager
 
-    companion object {
-        private val needAppLock = AtomicBoolean(true)
-        private var isActivityShowing: Boolean = false
-        private var isInForeground: Boolean = false
-        private var currentRoomId: String? = null
-
-        fun isActivityShowing(): Boolean = isActivityShowing
-        fun isInForeground(): Boolean = isInForeground
-        fun getCurrentRoomId(): String? = currentRoomId
-        fun isNeedAppLock(): Boolean = needAppLock.get()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
@@ -89,7 +84,7 @@ class LIncomingCallActivity : AppCompatActivity() {
 
         registerIncomingCallReceiver()
 
-        if (LCallActivity.isInCalling()) {
+        if (onGoingCallStateManager.isInCalling()) {
             showNewCallToastAndHangUp()
             return
         } else {
@@ -109,17 +104,17 @@ class LIncomingCallActivity : AppCompatActivity() {
     }
 
     private fun initializeActivityState() {
-        isActivityShowing = true
+        inComingCallStateManager.setIsActivityShowing(true)
         LCallManager.isIncomingCalling = true
         callIntent = getCallIntent()
 
         if (isAppLockEnabled()) {
-            needAppLock.set(callIntent.needAppLock)
+            inComingCallStateManager.setNeedAppLock(callIntent.needAppLock)
         } else {
-            needAppLock.set(false)
+            inComingCallStateManager.setNeedAppLock(false)
         }
 
-        currentRoomId = callIntent.roomId
+        inComingCallStateManager.setCurrentRoomId(callIntent.roomId)
     }
 
     private fun showNewCallToastAndHangUp() {
@@ -140,7 +135,7 @@ class LIncomingCallActivity : AppCompatActivity() {
     private fun handleCallNotificationAction() {
         if (callIntent.action == CallIntent.Action.ACCEPT_CALL) {
             L.i { "[Call] LIncomingCallActivity handleCallNotificationAction ACCEPT_CALL roomId:${callIntent.roomId}" }
-            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, needAppLock.get()) { status ->
+            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, inComingCallStateManager.isNeedAppLock()) { status ->
                 handleJoinCallResponse(status)
             }
         }
@@ -230,9 +225,9 @@ class LIncomingCallActivity : AppCompatActivity() {
         binding.tipMessage.text = tipMessage
 
         binding.acceptCallBtn.setOnClickListener {
-            if (!LCallActivity.isInCalling()) {
+            if (!onGoingCallStateManager.isInCalling()) {
                 L.i { "[Call] LIncomingCallActivity initUI: acceptCallBtn click: callIntent:$callIntent" }
-                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, needAppLock.get()) { status ->
+                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, inComingCallStateManager.isNeedAppLock()) { status ->
                     handleJoinCallResponse(status)
                 }
             } else {
@@ -260,13 +255,13 @@ class LIncomingCallActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         L.i { "[Call] LIncomingCallActivity onPause" }
-        isInForeground = false
+        inComingCallStateManager.setIsInForeground(false)
     }
 
     override fun onResume() {
         super.onResume()
         L.i { "[Call] LIncomingCallActivity onResume" }
-        isInForeground = true
+        inComingCallStateManager.setIsInForeground(true)
     }
 
 
@@ -274,11 +269,8 @@ class LIncomingCallActivity : AppCompatActivity() {
         super.onDestroy()
         L.d { "[Call] LIncomingCallActivity onDestroy: onDestroy" }
         unregisterReceiver(inComingCallReceiver)
-        isActivityShowing = false
-        needAppLock.set(true)
-        isInForeground = false
+        inComingCallStateManager.reset() // 一次性重置所有状态
         LCallManager.isIncomingCalling = false
-        currentRoomId = null
         LCallManager.clearControlMessage()
         if (::backPressedCallback.isInitialized) {
             backPressedCallback.remove()
@@ -363,7 +355,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         L.i { "[Call] LIncomingCallActivity onNewIntent" }
         CallIntent(intent).roomId?.let { roomId ->
-            if (isActivityShowing && roomId.isNotEmpty() && currentRoomId != roomId) {
+            if (inComingCallStateManager.isActivityShowing() && roomId.isNotEmpty() && inComingCallStateManager.getCurrentRoomId() != roomId) {
                 Toast.makeText(this, R.string.call_newcall_tip, Toast.LENGTH_SHORT).show()
             }
         }
@@ -445,7 +437,7 @@ class LIncomingCallActivity : AppCompatActivity() {
         appUnlockListener = {
             if (it) {
                 // 用户刚刚通过应用锁解锁
-                needAppLock.set(false)
+                inComingCallStateManager.setNeedAppLock(false)
             }
         }
         AppLockCallbackManager.addListener(callbackId, appUnlockListener)

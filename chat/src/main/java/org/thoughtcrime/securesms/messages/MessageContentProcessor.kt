@@ -379,15 +379,16 @@ class MessageContentProcessor @Inject constructor(
             )
             messageStore.updateMessageReaction(content.conversation.id, reaction, content.messageId, content.signalServiceEnvelope.toByteArray())
         } else if (message.hasScreenShot()) {
-            return ContactorUtil.createScreenShotMessageNew(
-                content.conversation,
-                content.messageId,
-                message.screenShot.source.source,
-                content.signalServiceEnvelope.notifySequenceId,
-                content.sequenceId,
-                content.signalServiceEnvelope.timestamp,
-                content.signalServiceEnvelope.systemShowTimestamp,
-                message.expireTimer,
+            return localMessageCreator.createScreenShotMessage(
+                forWhat = content.conversation,
+                messageId = content.messageId,
+                userId = message.screenShot.source.source,
+                notifySequenceId = content.signalServiceEnvelope.notifySequenceId,
+                sequenceId = content.sequenceId,
+                timestamp = content.signalServiceEnvelope.timestamp,
+                systemShowTimestamp = content.signalServiceEnvelope.systemShowTimestamp,
+                expiresInSeconds = message.expireTimer,
+                saveToLocal = false
             )
         } else {
             val contentText = if ((TextUtils.isEmpty(messageBody)
@@ -544,7 +545,7 @@ class MessageContentProcessor @Inject constructor(
                 val serverTimestamp = data.serverTimestamp
                 L.i { "[Message][${tag}] handle notify critical alert: conversationId=$conversationId, timestamp=$timestamp, serverTimestamp=$serverTimestamp" }
                 if (data.source != globalServices.myId && data.showCriticalAlert) {
-                    messageNotificationUtil.showCriticalAlertNotification(forWhat, title, content, timestamp)
+                    messageNotificationUtil.showCriticalAlert(forWhat, title, content, timestamp)
                 } else {
                     L.i { "[Message][${tag}] critical alert notification not shown (source=myself or showCriticalAlert=false)" }
                 }

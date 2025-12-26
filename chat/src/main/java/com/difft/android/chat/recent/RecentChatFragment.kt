@@ -12,7 +12,6 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
@@ -51,12 +50,11 @@ import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
 import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
@@ -137,8 +135,6 @@ class RecentChatFragment : DisposableManageFragment() {
         }
     }
 
-    private var callingDispose: Disposable? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -146,14 +142,15 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun registerCallingListener() {
-        callingDispose = LCallManager.callingList
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ callingList ->
+        LCallManager.callingList
+            .asFlow()
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach { callingList ->
                 L.d { "[Call] RecentChatFragment registerCallingListener: callingList = $callingList" }
                 val currentList: List<RoomViewData> = recentChatViewModel.allRecentRoomsStateFlow.value
                 sortingChatRoomsByCall(currentList, callingList)
-            }, { it.printStackTrace() })
+            }
+            .launchIn(lifecycleScope)
     }
 
 
@@ -286,11 +283,7 @@ class RecentChatFragment : DisposableManageFragment() {
         items.add(ListItem.SearchInput)
         val sortedList = moveCallingRoomsToTheTop(currentList, callingList)
         items.addAll(sortedList.map { ListItem.ChatItem(it) })
-        mAdapter.submitList(items) {
-            if (callingDispose == null) {
-                registerCallingListener()
-            }
-        }
+        mAdapter.submitList(items)
     }
 
     override fun onCreateView(
@@ -319,18 +312,21 @@ class RecentChatFragment : DisposableManageFragment() {
 
         observeChatWSConnection()
 
-        recentChatViewModel.allRecentRoomsStateFlow.onEach { list ->
-            L.i { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
-            sortingChatRooms(list)
-        }.launchIn(lifecycleScope)
+        recentChatViewModel.allRecentRoomsStateFlow
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { list ->
+                L.i { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
+                sortingChatRooms(list)
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         recentChatViewModel.createNote()
 
         RecentChatUtil.chatDoubleTab
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                val layoutManager = binding.recyclerViewRecentMessage.layoutManager as? LinearLayoutManager ?: return@subscribe
+            .asFlow()
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach {
+                val layoutManager = binding.recyclerViewRecentMessage.layoutManager as? LinearLayoutManager ?: return@onEach
                 val firstVisible = layoutManager.findFirstVisibleItemPosition()
 
                 val firstUnreadItemPosition = mAdapter.currentList.indexOfFirst { data ->
@@ -356,20 +352,16 @@ class RecentChatFragment : DisposableManageFragment() {
                     if (canScrollDown) {
                         binding.recyclerViewRecentMessage.smoothScrollToPositionWithHelper(requireContext(), nextUnreadItemPosition, 100f)
                     } else {
-                        // 如果无法向下滑动，不使用动画方式滚动，防止跳动
                         binding.recyclerViewRecentMessage.scrollToPosition(nextUnreadItemPosition)
                     }
                 }
-            }, { it.printStackTrace() })
-
-        // Collect text size changes at Fragment level and notify adapter
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                TextSizeUtil.textSizeState.collect {
-                    mAdapter.notifyDataSetChanged()
-                }
             }
-        }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
+
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { mAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
     override fun onResume() {

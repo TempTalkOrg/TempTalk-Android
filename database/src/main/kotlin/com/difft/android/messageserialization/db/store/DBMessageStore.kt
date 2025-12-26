@@ -4,10 +4,8 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.appScope
-import org.difft.app.database.delete
-import org.difft.app.database.putMessageIfNotExists
-import org.difft.app.database.putOrUpdateMessage
-import org.difft.app.database.wcdb
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.tencent.wcdb.base.WCDBException
 import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
 import difft.android.messageserialization.model.Message
@@ -15,13 +13,10 @@ import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.mapToMessageId
-import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.tencent.wcdb.base.Value
-import com.tencent.wcdb.base.WCDBException
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.rxCompletable
+import org.difft.app.database.delete
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBRoomModel
@@ -31,6 +26,8 @@ import org.difft.app.database.models.PendingMessageModelNew
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.SpeechToTextModel
 import org.difft.app.database.models.TranslateModel
+import org.difft.app.database.putMessageIfNotExists
+import org.difft.app.database.wcdb
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,25 +38,15 @@ constructor(
     private val dbRoomStore: DBRoomStore,
 ) : MessageStore {
 
-    override fun putWhenNonExist(vararg messages: Message, useTransaction: Boolean) {
-        L.d { "[Message] putWhenNonExist size:${messages.size} useTransaction:${useTransaction}" }
+    override fun putWhenNonExist(vararg messages: Message) {
+        L.d { "[Message] putWhenNonExist size:${messages.size}" }
         val startTime = System.currentTimeMillis()
         try {
-            if (!useTransaction) {
-                messages.forEach {
-                    dbRoomStore.createRoomIfNotExist(it.forWhat)
-                    wcdb.putMessageIfNotExists(it)
-                }
-            } else {
-                wcdb.db.runTransaction {
-                    messages.forEach {
-                        dbRoomStore.createRoomIfNotExist(it.forWhat)
-                        wcdb.putMessageIfNotExists(it)
-                    }
-                    true
-                }
+            messages.forEach {
+                val room = dbRoomStore.createRoomIfNotExist(it.forWhat)
+                wcdb.putMessageIfNotExists(it, room.readPosition)
             }
-            // 只在事务成功后发送变更通知
+            // 只在入库成功后发送变更通知
             messages.groupBy { it.forWhat.id }.forEach { (roomId, _) ->
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
             }
@@ -69,36 +56,9 @@ constructor(
                 FirebaseCrashlytics.getInstance().recordException(Exception("[putMessageException] putWhenNonExist took ${tookTime}ms for ${messages.size} messages"))
             }
         } catch (e: Exception) {
-            L.e { "[Message] Failed to put messages: ${e.message}" }
+            L.e { "[Message] Failed to put messages: ${e.stackTraceToString()}" }
             FirebaseCrashlytics.getInstance().recordException(Exception("[putMessageException] ${e.stackTraceToString()}"))
             throw e
-        }
-    }
-
-    override fun putMessage(vararg messages: Message): Completable {
-        return rxCompletable {
-            val startTime = System.currentTimeMillis()
-            try {
-                wcdb.db.runTransaction {
-                    messages.forEach {
-                        dbRoomStore.createRoomIfNotExist(it.forWhat)
-                        wcdb.putOrUpdateMessage(it)
-                    }
-                    true
-                }
-                // 只在事务成功后发送变更通知
-                messages.groupBy { it.forWhat.id }.forEach { (roomId, _) ->
-                    RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
-                }
-                val tookTime = System.currentTimeMillis() - startTime
-                L.i { "[Message] putMessage batch took ${tookTime}ms for ${messages.size} messages" }
-                if (tookTime > 5000) {
-                    FirebaseCrashlytics.getInstance().recordException(Exception("[putMessageException] putMessage took ${tookTime}ms for ${messages.size} messages"))
-                }
-            } catch (e: Exception) {
-                L.e { "[Message] Failed to put messages: ${e.message}" }
-                FirebaseCrashlytics.getInstance().recordException(Exception("[putMessageException] ${e.stackTraceToString()}"))
-            }
         }
     }
 
@@ -314,25 +274,6 @@ constructor(
                     DBMessageModel.readTime,
                     expression
                 )
-            }
-        }
-    }
-
-    override fun updateSendStatus(message: Message, status: Int): Completable {
-        return Completable.fromAction {
-            val messageInDb = wcdb.message.getFirstObject(
-                DBMessageModel.id.eq(message.id)
-            )
-            if (messageInDb == null) {
-                message.sendType = status
-                putMessage(message).blockingAwait()
-            } else {
-                wcdb.message.updateRow(
-                    arrayOf(Value(message.systemShowTimestamp), Value(status)),
-                    arrayOf(DBMessageModel.systemShowTimestamp, DBMessageModel.sendType),
-                    DBMessageModel.id.eq(message.id)
-                )
-                RoomChangeTracker.trackRoom(message.forWhat.id, RoomChangeType.MESSAGE)
             }
         }
     }

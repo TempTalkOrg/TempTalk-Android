@@ -14,9 +14,9 @@ import com.difft.android.base.utils.application
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.repo.LCallHttpService
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -37,6 +37,9 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
     @Inject
     @ChativeHttpClientModule.Call
     lateinit var callHttpClient: ChativeHttpClient
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     private val callService by lazy {
         callHttpClient.getService(LCallHttpService::class.java)
@@ -71,7 +74,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             .subscribe(
                 { callingList ->
                     L.d { "[Call] ChatHeaderCallFragment listener callingList = $callingList" }
-                    val callData = if(!LCallActivity.isInCalling()) callingList.values.firstOrNull() else callingList.values.firstOrNull { LCallActivity.getCurrentRoomId() != it.roomId }
+                    val callData = if(!onGoingCallStateManager.isInCalling()) callingList.values.firstOrNull() else callingList.values.firstOrNull { onGoingCallStateManager.getCurrentRoomId() != it.roomId }
                     if(callData != null && callData.roomId.isNotEmpty()) {
                         callService.checkCall(SecureSharedPrefsUtil.getToken(), callData.roomId)
                             .subscribeOn(Schedulers.io())

@@ -3,15 +3,22 @@ package com.difft.android.chat.widget
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Resources
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.net.toUri
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.resource.bitmap.CenterCrop
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.load.resource.bitmap.CenterCrop
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
+import com.bumptech.glide.signature.ObjectKey
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
@@ -32,6 +39,7 @@ import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import org.thoughtcrime.securesms.util.MediaUtil
+import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
@@ -181,7 +189,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         }
 
         if (isFileValid) {
-            loadImage(attachmentPath)
+            loadImage(attachmentPath, attachment.size, attachment.contentType)
         }
 
         // Priority 3: Show progress or auto download (for files <= 10M)
@@ -219,13 +227,27 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    private fun loadImage(attachmentPath: String) {
+    private fun loadImage(attachmentPath: String, expectedSize: Int, contentType: String) {
+        val file = File(attachmentPath)
+        val fileLastModified = file.lastModified()
+        val actualFileSize = file.length()
+
         Glide.with(context)
             .load(attachmentPath)
-//            .override(width, height)
+            .signature(ObjectKey(fileLastModified))
             .placeholder(com.luck.picture.lib.R.drawable.ps_image_placeholder)
             .error(com.luck.picture.lib.R.drawable.ps_image_placeholder)
             .transform(CenterCrop(), RoundedCorners(6.dp))
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
+                    L.e { "[MediaMsg] Load FAILED - path: $attachmentPath, contentType: $contentType, expectedSize: $expectedSize, actualFileSize: $actualFileSize, lastModified: $fileLastModified, error: ${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }
+                    return false
+                }
+
+                override fun onResourceReady(resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean): Boolean {
+                    return false
+                }
+            })
             .into(binding.imageView)
     }
 

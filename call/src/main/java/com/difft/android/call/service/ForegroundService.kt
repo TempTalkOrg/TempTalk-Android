@@ -37,7 +37,9 @@ import com.difft.android.base.utils.PackageUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.PermissionUtil
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +47,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import javax.inject.Inject
 
 
 /**
@@ -60,7 +63,11 @@ import java.util.concurrent.Executors
  * trying to access them from the background.
  */
 
+@AndroidEntryPoint
 open class ForegroundService : Service() {
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     private var isForegroundStarted = false
 
@@ -178,7 +185,7 @@ open class ForegroundService : Service() {
                 when (intent.action) {
                     ACTION_UPDATE_NOTIFICATION -> {
                         L.i { "[Call] ForegroundService +++ Updating Notification +++" }
-                        if(LCallActivity.isInCalling()){
+                        if(onGoingCallStateManager.isInCalling()){
                             val useCallStyle =
                                 intent.getBooleanExtra(EXTRA_USE_CALL_STYLE, false)
                             updateNotification(useCallStyle)

@@ -18,7 +18,6 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
-import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LChatToCallController
 import com.difft.android.chat.R
@@ -53,11 +52,16 @@ import org.thoughtcrime.securesms.util.Util
 import java.util.Optional
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.state.OnGoingCallStateManager
+
 const val BUNDLE_KEY_SOURCE_TYPE = "BUNDLE_KEY_CONTACT_SOURCE_TYPE"
 const val BUNDLE_KEY_SOURCE = "BUNDLE_KEY_CONTACT_SOURCE"
 
 @AndroidEntryPoint
 class ContactDetailActivity : BaseActivity() {
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     companion object {
         private const val BUNDLE_KEY_CONTACT_ID = "BUNDLE_KEY_CONTACT_ID"
@@ -262,8 +266,8 @@ class ContactDetailActivity : BaseActivity() {
                     val chatRoomName = withContext(Dispatchers.IO) {
                         LCallManager.getDisplayName(contactId) ?: ""
                     }
-                    if (LCallActivity.isInCalling()) {
-                        if (LCallActivity.getConversationId() == contactId) {
+                    if (onGoingCallStateManager.isInCalling()) {
+                        if (onGoingCallStateManager.getConversationId() == contactId) {
                             L.i { "[call] ContactDetailActivity bringing back the current call." }
                             LCallManager.bringInCallScreenBack(this@ContactDetailActivity)
                         } else {
@@ -448,7 +452,7 @@ class ContactDetailActivity : BaseActivity() {
         ContactorUtil.fetchAddFriendRequest(this, SecureSharedPrefsUtil.getToken(), contactId, intent.sourceType, intent.source)
             .concatMap {
                 if (it.status == 0) {
-                    ContactorUtil.sendFriendRequestMessage(this, For.Account(contactId))
+                    ContactorUtil.sendFriendRequestMessage(lifecycleScope, getString(R.string.contact_friend_request), For.Account(contactId))
                     Single.just(it)
                 } else {
                     Single.error(NetworkException(message = it.reason ?: ""))

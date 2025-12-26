@@ -7,19 +7,30 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.difft.android.base.activity.ActivityProvider
+import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.repo.LCallHttpService
+import com.difft.android.call.state.CriticalAlertStateManager
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.CriticalAlertFullScreen
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -36,17 +47,20 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class CriticalAlertActivity: ComponentActivity() {
 
-    companion object {
-        @Volatile
-        var isShowing = false
-            private set
-
-        @Volatile
-        var mConversationId: String? = null
-    }
-
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var criticalAlertStateManager: CriticalAlertStateManager
+
+    @Inject
+    lateinit var criticalAlertManager: CriticalAlertManager
+
+    @Inject
+    lateinit var activityProvider: ActivityProvider
 
     @ChativeHttpClientModule.Call
     @Inject
@@ -56,9 +70,12 @@ class CriticalAlertActivity: ComponentActivity() {
     }
     
     private var autoFinishJob: Job? = null
+    
+    private lateinit var backPressedCallback: OnBackPressedCallback
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        L.i { "[CriticalAlert] onCreate" }
 
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
@@ -72,9 +89,11 @@ class CriticalAlertActivity: ComponentActivity() {
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
-        mConversationId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION)
-        if (mConversationId.isNullOrEmpty()) {
+
+        val conversationId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION)
+        if (conversationId.isNullOrEmpty()) {
             L.e { "[CriticalAlert] conversationId is null or empty" }
+            criticalAlertStateManager.reset()
             finish()
             return
         }
@@ -82,6 +101,7 @@ class CriticalAlertActivity: ComponentActivity() {
         val title = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE)
         if (title.isNullOrEmpty()) {
             L.e { "[CriticalAlert] title is null or empty" }
+            criticalAlertStateManager.reset()
             finish()
             return
         }
@@ -89,32 +109,59 @@ class CriticalAlertActivity: ComponentActivity() {
         val message = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE)
         if (message.isNullOrEmpty()) {
             L.e { "[CriticalAlert] message is null or empty" }
+            criticalAlertStateManager.reset()
             finish()
             return
         }
 
-        // 所有验证通过后，设置isShowing标志
-        isShowing = true
+        // 所有验证通过后，设置状态
+        criticalAlertStateManager.setConversationId(conversationId)
+        criticalAlertStateManager.setIsShowing(true)
 
-        mConversationId?.let {
-            setContent {
-                Content(
-                    title = title,
-                    message = message,
-                    conversationId = it
-                )
+        when(intent.action) {
+            LCallConstants.CRITICAL_ALERT_ACTION_CLICKED -> {
+                handleJoinAction(conversationId)
+                showBlankTransparentUI()
+            }
+            else -> {
+                showCriticalAlertUI(conversationId, title, message)
             }
         }
 
+        // 注册广播接收器，用于处理用户主动关闭或超时自动关闭的事件
         registerCriticalAlertReceiver()
+
+        // 注册返回按键和边缘手势拦截，防止用户意外退出
+        registerOnBackPressedHandler()
 
         // 默认延迟1分钟（60_000毫秒）后自动关闭
         scheduleAutoFinish()
     }
 
+    private fun showBlankTransparentUI() {
+        setContent {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Transparent)
+            )
+        }
+    }
+
+    private fun showCriticalAlertUI(conversationId: String, title: String, message: String) {
+        setContent {
+            Content(
+                title = title,
+                message = message,
+                conversationId = conversationId
+            )
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // 需要重新处理新的Intent
+        L.i { "[CriticalAlert] onNewIntent: Handling new intent" }
         setIntent(intent)
         val conversationId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION)
         val title = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE)
@@ -122,23 +169,27 @@ class CriticalAlertActivity: ComponentActivity() {
         
         if (conversationId.isNullOrEmpty() || title.isNullOrEmpty() || message.isNullOrEmpty()) {
             L.e { "[CriticalAlert] onNewIntent: Invalid parameters, finishing activity" }
+            criticalAlertStateManager.reset()
             finish()
             return
         }
         
-        // 更新共享的 conversationId，确保广播接收器能正确匹配
-        mConversationId = conversationId
+        // 更新共享的状态，确保广播接收器能正确匹配
+        criticalAlertStateManager.setConversationId(conversationId)
+        criticalAlertStateManager.setIsShowing(true)
         
         // 取消之前的自动关闭任务
         autoFinishJob?.cancel()
         
         // 更新UI
-        setContent {
-            Content(
-                title = title,
-                message = message,
-                conversationId = conversationId
-            )
+        when(intent.action) {
+            LCallConstants.CRITICAL_ALERT_ACTION_CLICKED -> {
+                handleJoinAction(conversationId)
+                showBlankTransparentUI()
+            }
+            else -> {
+                showCriticalAlertUI(conversationId, title, message)
+            }
         }
         
         // 重新启动自动关闭
@@ -157,6 +208,22 @@ class CriticalAlertActivity: ComponentActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
     }
+    
+    /**
+     * 注册返回按键和边缘手势拦截
+     * 防止用户通过左滑、右滑或返回键意外退出 CriticalAlertActivity
+     * 只有通过点击关闭按钮或收到广播才能关闭
+     */
+    private fun registerOnBackPressedHandler() {
+        backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                L.i { "[CriticalAlert] Back pressed or edge swipe detected, but ignoring to prevent accidental dismissal" }
+                // 不执行任何操作，防止用户意外退出
+                // 用户只能通过点击关闭按钮或收到广播来关闭页面
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
+    }
 
     private val criticalAlertReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -165,12 +232,13 @@ class CriticalAlertActivity: ComponentActivity() {
                     when (intent.action) {
                         LCallConstants.CRITICAL_ALERT_ACTION_DISMISS -> {
                             L.i { "[CriticalAlert] Received dismiss action" }
+                            messageNotificationUtil.cancelCriticalAlertNotification()
                             finishAndRemoveTask()
                         }
                         LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_CONID -> {
                             L.i { "[CriticalAlert] Received dismiss action by conversationId" }
                             val conversationId = it.getStringExtra(LCallConstants.CRITICAL_ALERT_PARAM_CONVERSATION)
-                            if (conversationId != null && conversationId == mConversationId) {
+                            if (conversationId != null && conversationId == criticalAlertStateManager.getConversationId()) {
                                 finishAndRemoveTask()
                             }
                         }
@@ -187,8 +255,15 @@ class CriticalAlertActivity: ComponentActivity() {
         // 取消自动关闭任务
         autoFinishJob?.cancel()
         autoFinishJob = null
-        isShowing = false
-        mConversationId = null
+        // 移除返回按键回调
+        if (::backPressedCallback.isInitialized) {
+            backPressedCallback.remove()
+        }
+        // 重置状态
+        criticalAlertStateManager.reset()
+        // 停止声音和闪光灯
+        criticalAlertManager.stopSoundAndFlashLight()
+
         try {
             unregisterReceiver(criticalAlertReceiver)
         } catch (e: Exception) {
@@ -215,10 +290,12 @@ class CriticalAlertActivity: ComponentActivity() {
         // 取消自动关闭任务
         autoFinishJob?.cancel()
         
+        criticalAlertStateManager.setIsJoining(true)
+        
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 // 1. 检查是否正在通话
-                if (LCallActivity.isInCalling()) {
+                if (onGoingCallStateManager.isInCalling()) {
                     L.i { "[CriticalAlert] Currently in call, canceling critical alert notification" }
                     // 关闭当前 critical alert 通知（包括通知、声音以及闪光灯）
                     messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
@@ -238,6 +315,7 @@ class CriticalAlertActivity: ComponentActivity() {
                         if (calls.isNullOrEmpty()) {
                             L.i { "[CriticalAlert] Calling list is empty, canceling critical alert notification" }
                             messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
+                            jumpToIndexActivity(this@CriticalAlertActivity)
                         } else {
                             // 4. 如果会议列表不为空，则将当前 critical alert 通知的 conversationId 与会议列表数据中的 conversation 匹配
                             val matchedCall = calls.firstOrNull { call ->
@@ -248,10 +326,11 @@ class CriticalAlertActivity: ComponentActivity() {
                                 // 5. 如果匹配失败，则关闭当前 critical alert 通知
                                 L.i { "[CriticalAlert] No matching call found for conversationId: $conversationId, canceling notification" }
                                 messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
+                                jumpToIndexActivity(this@CriticalAlertActivity)
                             } else {
                                 matchedCall.let { data ->
                                     if (data.callName.isNullOrEmpty()) {
-                                        L.e { "[CriticalAlert] Call name is null or empty for conversationId: $conversationId" }
+                                        L.w { "[CriticalAlert] Call name is null or empty for conversationId: $conversationId" }
                                         when (data.type) {
                                             CallType.ONE_ON_ONE.type -> {
                                                 data.callName = LCallManager.getDisplayNameById(data.conversation)
@@ -293,8 +372,12 @@ class CriticalAlertActivity: ComponentActivity() {
                 }
             } finally {
                 // 完成异步操作后关闭Activity
-                if (!isFinishing && !isDestroyed) {
-                    finish()
+                withContext(Dispatchers.Main) {
+                    criticalAlertStateManager.setIsJoining(false)
+                    // 确保在主线程中关闭Activity
+                    if (!isFinishing && !isDestroyed) {
+                        finish()
+                    }
                 }
             }
         }
@@ -318,4 +401,27 @@ class CriticalAlertActivity: ComponentActivity() {
             }
         }
     }
+
+    private fun jumpToIndexActivity(context: Context) {
+        try {
+            // 检查 Activity 是否仍然有效
+            if (isFinishing || isDestroyed) {
+                L.w { "[CriticalAlert] Activity is finishing or destroyed, skipping jumpToIndexActivity" }
+                return
+            }
+            
+            val intent = Intent(context.applicationContext, activityProvider.getActivityClass(ActivityType.INDEX)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.applicationContext.startActivity(intent)
+            
+            // 再次检查，防止在 startActivity 后 Activity 状态改变
+            if (!isFinishing && !isDestroyed) {
+                finishAndRemoveTask()
+            }
+        } catch (e: Exception) {
+            L.e { "[CriticalAlert] jumpToIndexActivity error: ${e.message}"}
+        }
+    }
+
 }

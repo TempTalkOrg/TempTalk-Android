@@ -28,6 +28,9 @@ class AvatarView @JvmOverloads constructor(
 
     private var currentJob: Job? = null
 
+    /** 缓存当前已成功加载的头像标识，避免重复加载 */
+    private var loadedAvatarId: String? = null
+
     private val glideContext: Context
         get() {
             return if (context is Activity && !(context as Activity).isFinishing && !(context as Activity).isDestroyed) {
@@ -49,6 +52,10 @@ class AvatarView @JvmOverloads constructor(
         binding.tvAvatar.text = firstLetter
         binding.tvAvatar.textSize = letterTextSizeDp.toFloat()
         if (!url.isNullOrEmpty()) {
+            // 如果头像标识相同且已成功加载，跳过重复加载
+            if (url == loadedAvatarId) {
+                return
+            }
             binding.ivFavorites.visibility = GONE
             binding.cvAvatar.visibility = GONE
             binding.ivAvatar.visibility = VISIBLE
@@ -57,6 +64,7 @@ class AvatarView @JvmOverloads constructor(
             binding.ivFavorites.visibility = GONE
             binding.cvAvatar.visibility = VISIBLE
             binding.ivAvatar.visibility = GONE
+            loadedAvatarId = null
         }
     }
 
@@ -70,7 +78,7 @@ class AvatarView @JvmOverloads constructor(
         currentJob?.cancel()
 
         currentJob = appScope.launch {
-            AvatarUtil.loadAvatar(
+            val success = AvatarUtil.loadAvatar(
                 glideContext,
                 url,
                 key ?: "",
@@ -78,10 +86,15 @@ class AvatarView @JvmOverloads constructor(
                 binding.cvAvatar,
                 AvatarUtil.AvatarCacheSize.SMALL
             )
+            // 只有加载成功才记录标识，失败时保持 null 以便下次重试
+            if (success) {
+                loadedAvatarId = url
+            }
         }
     }
 
     fun setAvatar(localPath: String) {
+        loadedAvatarId = null
         binding.ivFavorites.visibility = View.GONE
         binding.cvAvatar.visibility = View.GONE
         binding.ivAvatar.visibility = View.VISIBLE
@@ -92,6 +105,7 @@ class AvatarView @JvmOverloads constructor(
     }
 
     fun setAvatar(resId: Int) {
+        loadedAvatarId = null
         binding.ivFavorites.visibility = View.GONE
         binding.cvAvatar.visibility = View.GONE
         binding.ivAvatar.visibility = View.VISIBLE
@@ -99,6 +113,7 @@ class AvatarView @JvmOverloads constructor(
     }
 
     fun showFavorites() {
+        loadedAvatarId = null
         binding.ivFavorites.visibility = View.VISIBLE
         binding.cvAvatar.visibility = View.GONE
         binding.ivAvatar.visibility = View.GONE

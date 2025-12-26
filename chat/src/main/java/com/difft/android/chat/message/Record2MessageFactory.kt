@@ -77,7 +77,6 @@ fun generateMessageTwo(
     readInfoList: List<ReadInfoModel>?,
     isLargeGroup: Boolean = false
 ): ChatMessage? {
-    val myId = globalServices.myId
     val isFromMySelf = globalServices.myId == record.fromWho
     val authorId = record.fromWho
     val author =
@@ -129,8 +128,15 @@ fun generateMessageTwo(
                             val readInfos = readInfoList?.filter { it.readPosition >= systemShowTimestamp }
                             val receiverIds = parseReceiverIds(record.receiverIds)
 
-                            if (receiverIds == null || readInfos == null) {
+                            if (readInfos == null) {
                                 this.readContactNumber = 0
+                                this.readStatus = 0
+                            } else if (receiverIds == null) {
+                                // receiverIds 缺失时，直接使用 readInfos 的人数作为已读数（排除自己）
+                                L.w { "Group message receiverIds is null, messageId: ${record.id}, systemShowTimestamp: $systemShowTimestamp" }
+                                val readContactIds = readInfos.map { it.uid }.filter { it != globalServices.myId }.toSet()
+                                this.readContactNumber = readContactIds.size
+                                // 无法判断是否全部已读，保守设为 0
                                 this.readStatus = 0
                             } else {
                                 val readContactIds = readInfos.map { it.uid }.toSet()

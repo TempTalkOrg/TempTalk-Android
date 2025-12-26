@@ -139,15 +139,18 @@ object GroupAvatarUtil {
         }
     }
 
-    // 智能群头像加载方法，合并了下载、解密、加载和保存
+    /**
+     * 智能群头像加载方法，合并了下载、解密、加载和保存
+     * @return true if avatar loaded successfully, false otherwise
+     */
     suspend fun loadGroupAvatar(
         context: Context,
         groupAvatarData: GroupAvatarData,
         imageView: ImageView,
         size: AvatarCacheSize,
         forceRefresh: Boolean = false
-    ) = withContext(Dispatchers.IO) {
-        val serverId = groupAvatarData.serverId ?: return@withContext
+    ): Boolean = withContext(Dispatchers.IO) {
+        val serverId = groupAvatarData.serverId ?: return@withContext false
         try {
             // 1. 检查本地缓存
             val file = getGroupAvatarFile(serverId, size)
@@ -160,7 +163,7 @@ object GroupAvatarUtil {
                         .load(file)
                         .into(imageView)
                 }
-                return@withContext
+                return@withContext true
             }
 
             // 2. 本地文件不存在，从网络下载并解密
@@ -168,14 +171,17 @@ object GroupAvatarUtil {
 
             // 3. 加载并保存
             loadAndSaveBitmap(context, result, serverId, imageView, size)
+            return@withContext true
         } catch (e: Exception) {
-            L.e { "[AvatarUtil] loadAvatar first attempt failed: ${e.message}" }
+            L.e { "[GroupAvatarUtil] loadGroupAvatar first attempt failed: ${e.message}" }
             // 重试一次
             try {
                 val result = fetchGroupAvatar(context, groupAvatarData)
                 loadAndSaveBitmap(context, result, serverId, imageView, size)
+                return@withContext true
             } catch (retryException: Exception) {
-                L.e { "[AvatarUtil] loadAvatar retry also failed: ${retryException.message}" }
+                L.e { "[GroupAvatarUtil] loadGroupAvatar retry also failed: ${retryException.message}" }
+                return@withContext false
             }
         }
     }

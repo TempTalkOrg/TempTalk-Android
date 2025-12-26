@@ -35,7 +35,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -106,6 +105,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
@@ -401,6 +402,9 @@ class ChatMessageListFragment : Fragment() {
     private lateinit var backPressedCallback: BackPressedDelegate
 
     private var isHapticFeedbackTriggered = false
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private val touchSlop by lazy { android.view.ViewConfiguration.get(requireContext()).scaledTouchSlop }
 
     private val language by lazy {
         LanguageUtils.getLanguage(requireContext())
@@ -601,10 +605,16 @@ class ChatMessageListFragment : Fragment() {
 
 
         binding.recyclerViewMessage.setOnTouchListener { v, event ->
-            if (event.action == MotionEvent.ACTION_UP) {
-                if (isClick(event)) {
-                    ServiceUtil.getInputMethodManager(activity).hideSoftInputFromWindow(v.windowToken, 0)
-                    chatViewModel.clickList()
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchDownX = event.x
+                    touchDownY = event.y
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (isClick(event)) {
+                        ServiceUtil.getInputMethodManager(activity).hideSoftInputFromWindow(v.windowToken, 0)
+                        chatViewModel.clickList()
+                    }
                 }
             }
             false
@@ -663,24 +673,16 @@ class ChatMessageListFragment : Fragment() {
         }
 
         // Collect text size changes at Fragment level and notify adapter
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                TextSizeUtil.textSizeState.collect {
-                    chatMessageAdapter.notifyDataSetChanged()
-                }
-            }
-        }
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { chatMessageAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         // 监听联系人缓存刷新事件
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                chatViewModel.contactorCacheRefreshed.collect {
-                    L.d { "ChatMessageListFragment: Received contactor cache refresh event, calling notifyDataSetChanged()" }
-                    chatMessageAdapter.notifyDataSetChanged()
-                    L.d { "ChatMessageListFragment: notifyDataSetChanged() called" }
-                }
-            }
-        }
+        chatViewModel.contactorCacheRefreshed
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { chatMessageAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
     private fun observeChatMessageListState() {
@@ -768,8 +770,11 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun isClick(event: MotionEvent): Boolean {
-        // 这里可以根据需要设置阈值，判断是否为单击
-        return event.eventTime - event.downTime < 200
+        val timeDiff = event.eventTime - event.downTime
+        val moveX = abs(event.x - touchDownX)
+        val moveY = abs(event.y - touchDownY)
+        // A click must be quick (< 200ms) AND have minimal movement
+        return timeDiff < 200 && moveX < touchSlop && moveY < touchSlop
     }
 
     private var isFirstShow = true

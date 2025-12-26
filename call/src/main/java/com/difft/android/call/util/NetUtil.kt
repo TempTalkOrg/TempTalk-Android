@@ -24,26 +24,27 @@ object NetUtil {
     fun measureUrlResponseTime(url: String): UrlSpeedResponse {
         var status: SpeedResponseStatus
         val client = OkHttpClient.Builder()
-            .readTimeout(10, TimeUnit.SECONDS)
-            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(3, TimeUnit.SECONDS)
+            .connectTimeout(3, TimeUnit.SECONDS)
             .build()
 
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", UserAgentManager.getUserAgent())
-            .head()
+            .header("Range", "bytes=0-0")
+            .get()
             .build()
 
         val startTime = System.currentTimeMillis()
-        var response: Response? = null
         try {
-            response = client.newCall(request).execute()
-            status = SpeedResponseStatus.SUCCESS
+            client.newCall(request).execute().use { response ->
+                // 消费响应体以避免连接池资源泄漏（GET + Range 请求需要读取响应体）
+                response.body?.bytes()
+                status = SpeedResponseStatus.SUCCESS
+            }
         } catch (e: Throwable) {
             L.e { "[call] NetUtil measureUrlResponseTime, url:$url error: ${e.message}" }
             status = SpeedResponseStatus.ERROR
-        } finally {
-            response?.close()
         }
 
         val endTime = System.currentTimeMillis()

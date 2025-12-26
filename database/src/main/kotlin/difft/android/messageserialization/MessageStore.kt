@@ -8,11 +8,9 @@ import io.reactivex.rxjava3.core.Completable
 
 interface MessageStore {
     /**
-     * Only put messages when the message is not exist in the DB store compare to [putMessage]
+     * Only put messages when the message is not exist in the DB store
      */
-    fun putWhenNonExist(vararg messages: Message, useTransaction: Boolean = true)
-
-    fun putMessage(vararg messages: Message): Completable
+    fun putWhenNonExist(vararg messages: Message)
 
     fun deleteMessage(messageIds: List<String>)
 
@@ -32,8 +30,6 @@ interface MessageStore {
     fun deleteDatabase()
 
     fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long): Completable
-
-    fun updateSendStatus(message: Message, status: Int): Completable
 
     fun savePendingMessage(messageId: String, originalMessageTimeStamp: Long, messageEnvelopBytes: ByteArray)
 }

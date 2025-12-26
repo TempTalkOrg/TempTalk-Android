@@ -12,15 +12,20 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.R
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
+import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.withContext
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.common.AvatarUtil
@@ -169,14 +174,12 @@ class MeFragment : Fragment() {
             showTextSizeDialog()
         }
 
-        // Collect text size changes at Fragment level using StateFlow
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                TextSizeUtil.textSizeState.collect { textSize ->
-                    updateTextSizeSettings(textSize == TextSizeUtil.TEXT_SIZE_LAGER)
-                }
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { textSize ->
+                updateTextSizeSettings(textSize == TextSizeUtil.TEXT_SIZE_LAGER)
             }
-        }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         //测试环境显示测试页面入口
         if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT)) {
@@ -192,27 +195,31 @@ class MeFragment : Fragment() {
 
     private var myself: ContactorModel? = null
     private fun initData() {
-        ContactorUtil.getContactWithID(requireContext(), globalServices.myId)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    myself = it.get()
-                    binding.appCompatTextViewUserName.text = it.get().getDisplayNameForUI()
-                    binding.avatar.setAvatar(it.get())
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    ContactorUtil.getContactWithID(requireContext(), globalServices.myId).await()
                 }
-            }, { it.printStackTrace() })
+                if (result.isPresent) {
+                    myself = result.get()
+                    binding.appCompatTextViewUserName.text = result.get().getDisplayNameForUI()
+                    binding.avatar.setAvatar(result.get())
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun observeContactsUpdate() {
         ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.contains(globalServices.myId)) {
+            .asFlow()
+            .onEach { updatedIds ->
+                if (updatedIds.contains(globalServices.myId)) {
                     initData()
                 }
-            }, { it.printStackTrace() })
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
     var dialog: ComposeDialog? = null
