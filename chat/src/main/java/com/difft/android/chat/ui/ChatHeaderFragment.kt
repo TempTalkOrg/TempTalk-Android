@@ -173,7 +173,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 ComposeDialogManager.dismissWait()
                 if (it.status == 0) {
                     ToastUtil.show(R.string.contact_request_sent)
-                    ContactorUtil.sendFriendRequestMessage(requireActivity(), chatViewModel.forWhat)
+                    ContactorUtil.sendFriendRequestMessage(viewLifecycleOwner.lifecycleScope, getString(R.string.contact_friend_request), chatViewModel.forWhat)
                 } else {
                     it.reason?.let { message -> ToastUtil.show(message) }
                 }

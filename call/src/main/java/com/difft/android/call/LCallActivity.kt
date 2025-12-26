@@ -70,6 +70,7 @@ import com.difft.android.call.data.CallStatus
 import com.difft.android.call.exception.NetworkConnectionPoorException
 import com.difft.android.call.exception.StartCallException
 import com.difft.android.call.service.ForegroundService
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.MainPageWithBottomControlView
 import com.difft.android.call.ui.MainPageWithTopStatusView
 import com.difft.android.call.ui.MultiParticipantCallPage
@@ -91,7 +92,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
 import java.net.SocketTimeoutException
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 
@@ -106,6 +106,9 @@ class LCallActivity : AppCompatActivity() {
 
     @Inject
     lateinit var userManager: UserManager
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     private val mySelfId: String by lazy {
         globalServices.myId
@@ -167,17 +170,19 @@ class LCallActivity : AppCompatActivity() {
         callIntent = getCallIntent()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        inCalling = true
+        onGoingCallStateManager.setIsInCalling(true)
 
         if (isAppLockEnabled()) {
-            needAppLock.set(callIntent.needAppLock)
+            onGoingCallStateManager.setNeedAppLock(callIntent.needAppLock)
         } else {
-            needAppLock.set(false)
+            onGoingCallStateManager.setNeedAppLock(false)
         }
 
         LCallManager.dismissWaitDialog()
 
-        viewModel.getRoomId()?.let { setCurrentRoomId(it) }
+        viewModel.getRoomId()?.let {
+            onGoingCallStateManager.setCurrentRoomId(it)
+        }
 
         viewModel.callUiController.setPipModeEnabled(isInPictureInPictureMode)
 
@@ -218,7 +223,7 @@ class LCallActivity : AppCompatActivity() {
                 callType = callIntent.callType
             }
             conversationId = callIntent.conversationId
-            mConversationId = conversationId
+            onGoingCallStateManager.setConversationId(callIntent.conversationId)
         }
     }
 
@@ -290,8 +295,8 @@ class LCallActivity : AppCompatActivity() {
                     viewModel.callStatus.collect {
                         L.i { "[Call] LCallActivity callStatus:$it" }
                         if (it == CallStatus.CONNECTED) {
-                            currentRoomId?.let {
-                                callToChatController.cancelNotificationById(currentRoomId.hashCode())
+                            onGoingCallStateManager.getCurrentRoomId()?.let {
+                                callToChatController.cancelNotificationById(it.hashCode())
                             }
                         }
                     }
@@ -372,7 +377,7 @@ class LCallActivity : AppCompatActivity() {
                     dismissCallingEndReminder()
                 },
                 onCancel = {
-                    currentRoomId?.let { roomId ->
+                    onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
                         val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callType.value, conversationId)
                         handleExitClick(callExitParams)
                     }
@@ -563,43 +568,10 @@ class LCallActivity : AppCompatActivity() {
 
 
     companion object {
-        private val needAppLock = AtomicBoolean(true)
-
-        var isInForeground = false
-        private var inCalling = false
-        private var inCallEnding = false
-        private var currentRoomId: String? = null
-        private var mConversationId: String? = null
         const val ACTION_IN_CALLING_CONTROL = "ACTION_IN_CALLING_CONTROL"
         const val EXTRA_CONTROL_TYPE = "EXTRA_CONTROL_TYPE"
         const val EXTRA_PARAM_ROOM_ID = "EXTRA_PARAM_ROOM_ID"
         private const val DEFAULT_FONT_SCALE = 1.0f
-
-        fun isInCalling(): Boolean {
-            return inCalling
-        }
-
-        /**
-         * Returns whether the call is in the process of ending.
-         * This state is true between call termination initiation and final cleanup.
-         */
-        fun isInCallEnding(): Boolean {
-            return inCallEnding
-        }
-
-        fun getCurrentRoomId(): String? {
-            return currentRoomId
-        }
-
-        fun setCurrentRoomId(roomId: String?) {
-            currentRoomId = roomId
-        }
-
-        fun getConversationId(): String? {
-            return mConversationId
-        }
-
-        fun isNeedAppLock(): Boolean = needAppLock.get()
     }
 
     private fun showErrorAndFinish(tips: String) {
@@ -665,11 +637,7 @@ class LCallActivity : AppCompatActivity() {
 
         stopOngoingCallService()
 
-        inCalling = false
-        inCallEnding = false
-        currentRoomId = null
-        isInForeground = false
-        needAppLock.set(true)
+        onGoingCallStateManager.reset() // 一次性重置所有状态
         audioProcessor.release()
 
         viewModel.getRoomId()?.let { roomId ->
@@ -704,7 +672,7 @@ class LCallActivity : AppCompatActivity() {
 
     private fun endCallAndClearResources() {
         runOnUiThread {
-            inCallEnding = true
+            onGoingCallStateManager.setIsInCallEnding(true)
             viewModel.doExitClear()
             finishAndRemoveTask()
         }
@@ -746,11 +714,10 @@ class LCallActivity : AppCompatActivity() {
                     //when user click on Close button of PIP this will trigger, do what you want here
 //                    hangUpTheCall(tag = "onPictureInPictureModeChanged - Lifecycle.State.CREATED")
                     L.i { "[Call] LCallActivity onPictureInPictureModeChanged - not ScreenLocked handleExitClick " }
-                    currentRoomId?.let { roomId ->
+                    onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
                         val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callType.value, conversationId)
                         handleExitClick(callExitParams)
                     }
-
                 }
                 // 20241003@w -------------------------------------------------<
             }
@@ -765,7 +732,7 @@ class LCallActivity : AppCompatActivity() {
         appUnlockListener = {
             if (it) {
                 // 用户刚刚通过应用锁解锁
-                needAppLock.set(false)
+                onGoingCallStateManager.setNeedAppLock(false)
             }
         }
         AppLockCallbackManager.addListener(callbackId, appUnlockListener)
@@ -792,7 +759,7 @@ class LCallActivity : AppCompatActivity() {
                 LCallConstants.CALL_ONGOING_TIMEOUT -> {
                     L.i { "[Call] LCallActivity lCallActivityReceiver CALL_ONGOING_TIMEOUT" }
                     val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_ROOM_ID)
-                    if (roomId != null && roomId == currentRoomId) {
+                    if (roomId != null && roomId == onGoingCallStateManager.getCurrentRoomId()) {
                         showStyledPopTip(getString(R.string.call_callee_action_noanswer), onDismiss = { endCallAndClearResources() })
                     }
                 }
@@ -810,14 +777,14 @@ class LCallActivity : AppCompatActivity() {
     private fun handleCallAction(actionType: String, roomId: String) {
         L.i { "[Call] LCallActivity handleCallAction actionType:$actionType roomId:${roomId}" }
         if (actionType == CallActionType.DECLINE.type) {
-            currentRoomId?.let { roomId ->
+            onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
                 val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callType.value, conversationId)
                 handleExitClick(callExitParams)
             }
             return
         }
-        if (!inCallEnding && isInCalling() && roomId == currentRoomId) {
-            inCallEnding = true
+        if (!onGoingCallStateManager.isInCallEnding() && onGoingCallStateManager.isInCalling() && roomId == onGoingCallStateManager.getCurrentRoomId()) {
+            onGoingCallStateManager.setIsInCallEnding(true)
             when (actionType) {
                 CallActionType.CALLEND.type, CallActionType.REJECT.type -> {
                     stopOngoingCallService()
@@ -879,7 +846,7 @@ class LCallActivity : AppCompatActivity() {
 
     private fun sendCancelCallMessage(onComplete: () -> Unit) {
         L.d { "[Call] LCallActivity sendCancelCallMessage" }
-        currentRoomId?.let { roomId ->
+        onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
             callToChatController.cancelCall(callIntent.callerId, callRole, viewModel.callType.value, roomId, conversationId) {
                 onComplete()
             }
@@ -970,11 +937,11 @@ class LCallActivity : AppCompatActivity() {
                     LCallManager.getDisplayNameById(mySelfId) ?: mySelfId
                 }
                 val roomName = "${mySelfName}${getString(R.string.call_instant_call_title)}"
-                currentRoomId?.let { roomId ->
+                onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
                     callToChatController.inviteUsersToTheCall(this@LCallActivity, roomId, roomName, viewModel.getE2eeKey(), CallType.INSTANT.type, conversationId, ArrayList(excludedIds))
                 }
             } else {
-                currentRoomId?.let { roomId ->
+                onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
                     callToChatController.inviteUsersToTheCall(this@LCallActivity, roomId, callIntent.roomName, viewModel.getE2eeKey(), CallType.GROUP.type, conversationId, ArrayList(excludedIds))
                 }
             }
@@ -1050,8 +1017,8 @@ class LCallActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         L.i { "[Call] LCallActivity onPause" }
-        isInForeground = false
-        if (!inCallEnding) {
+        onGoingCallStateManager.setIsInForeground(false)
+        if (!onGoingCallStateManager.isInCallEnding()) {
             updateOngoingCallNotification(true)
         }
 
@@ -1070,7 +1037,7 @@ class LCallActivity : AppCompatActivity() {
         L.i { "[Call] LCallActivity onResume" }
         // Update foreground service type when returning from settings or other activities
         // This ensures service type is updated if permissions were granted while away
-        if (ForegroundService.isServiceRunning && isInCalling()) {
+        if (ForegroundService.isServiceRunning && onGoingCallStateManager.isInCalling()) {
             updateForegroundServiceType()
         }
 
@@ -1082,7 +1049,7 @@ class LCallActivity : AppCompatActivity() {
             )
         }
 
-        isInForeground = true
+        onGoingCallStateManager.setIsInForeground(true)
         updateOngoingCallNotification(false)
 
         if (viewModel.isRequestingPermission()) {

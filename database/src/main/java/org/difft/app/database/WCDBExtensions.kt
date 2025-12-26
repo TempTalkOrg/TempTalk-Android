@@ -536,40 +536,28 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
 // Extension functions on WCDB for CRUD Operations
 // ---------------------------
 
-fun WCDB.putMessageIfNotExists(message: Message) {
+fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L) {
     val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
     if (existing == null) {
-        putMessage(message)
+        putMessage(message, roomReadPosition)
     }
 }
 
-fun WCDB.putOrUpdateMessage(message: Message) {
-    val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
-    if (existing == null) {
-        putMessage(message)
-    } else {
-        existing.deleteRelatedDataForMessage()
-        this.message.deleteObjects(DBMessageModel.id.eq(message.id))
-        putMessage(message)
-    }
-}
-
-private fun WCDB.putMessage(message: Message) {
+private fun WCDB.putMessage(message: Message, roomReadPosition: Long = 0L) {
     when (message) {
-        is TextMessage -> putTextMessage(message)
-        is NotifyMessage -> putNotifyMessage(message)
+        is TextMessage -> putTextMessage(message, roomReadPosition)
+        is NotifyMessage -> putNotifyMessage(message, roomReadPosition)
         else -> throw IllegalArgumentException("Unknown message type ${message::class}")
     }
-    RoomChangeTracker.trackRoom(message.forWhat.id, RoomChangeType.MESSAGE)
 }
 
-private fun WCDB.putTextMessage(message: TextMessage) {
-    val messageModel = convertToMessageModel(message)
+private fun WCDB.putTextMessage(message: TextMessage, roomReadPosition: Long = 0L) {
+    val messageModel = convertToMessageModel(message, roomReadPosition)
     this.message.insertObject(messageModel)
     L.d { "observerMessagesChanges: Inserted message: ${messageModel.messageText}, time stamp is ${System.currentTimeMillis()}" }
 }
 
-fun WCDB.convertToMessageModel(message: TextMessage): MessageModel {
+fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
     val cardModelDatabaseId = message.card?.let { card ->
         val uniqueId = card.uniqueId ?: return@let null
         val cardModel = CardModel().apply {
@@ -679,6 +667,14 @@ fun WCDB.convertToMessageModel(message: TextMessage): MessageModel {
         this.speechToText.insertObject(speechToTextModel)
     }
     val messageType = if (message.isAttachmentMessage()) 1 else if (message.recall != null) 3 else 0
+    // 计算 readTime:
+    // 1. 如果是自己发的消息，直接设置 readTime = systemShowTimestamp（自己发的消息视为已读）
+    // 2. 如果消息的 systemShowTimestamp <= room.readPosition，说明这条消息已经被读过了
+    val calculatedReadTime = when {
+        message.fromWho.id == globalServices.myId -> message.systemShowTimestamp
+        roomReadPosition > 0 && message.systemShowTimestamp <= roomReadPosition -> roomReadPosition
+        else -> 0L
+    }
     val messageModel = MessageModel().apply {
         id = message.id
         fromWho = message.fromWho.id
@@ -699,6 +695,7 @@ fun WCDB.convertToMessageModel(message: TextMessage): MessageModel {
         playStatus = message.playStatus
         receiverIds = message.receiverIds
         criticalAlertType = message.criticalAlertType
+        readTime = calculatedReadTime
         this.quoteDatabaseId = quoteDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
         this.cardModelDatabaseId = cardModelDatabaseId
@@ -706,7 +703,14 @@ fun WCDB.convertToMessageModel(message: TextMessage): MessageModel {
     return messageModel
 }
 
-private fun WCDB.putNotifyMessage(message: NotifyMessage) {
+private fun WCDB.putNotifyMessage(message: NotifyMessage, roomReadPosition: Long = 0L) {
+    // 如果消息的 systemShowTimestamp <= room.readPosition，说明这条消息已经被读过了
+    // 设置 readTime 为 roomReadPosition，避免归档逻辑漏掉这条消息
+    val calculatedReadTime = if (roomReadPosition > 0 && message.systemShowTimestamp <= roomReadPosition) {
+        roomReadPosition
+    } else {
+        0L
+    }
     val messageModel = MessageModel().apply {
         id = message.id
         fromWho = message.fromWho.id
@@ -722,6 +726,7 @@ private fun WCDB.putNotifyMessage(message: NotifyMessage) {
         mode = message.mode
         messageText = message.notifyContent
         type = 2 // Notify
+        readTime = calculatedReadTime
     }
 
     this.message.insertObject(messageModel)

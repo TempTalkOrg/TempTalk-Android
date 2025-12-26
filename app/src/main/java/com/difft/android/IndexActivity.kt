@@ -20,8 +20,8 @@ import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.difft.android.base.BaseActivity
@@ -75,13 +75,13 @@ import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
 import com.difft.android.setting.UpdateManager
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
@@ -89,17 +89,15 @@ import org.thoughtcrime.securesms.cryptonew.EncryptionDataMigrationManager
 import org.thoughtcrime.securesms.messages.FailedMessageProcessor
 import org.thoughtcrime.securesms.messages.MessageForegroundService
 import org.thoughtcrime.securesms.messages.MessageServiceManager
+import org.thoughtcrime.securesms.messages.PendingMessageProcessor
 import org.thoughtcrime.securesms.util.AppIconBadgeManager
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.WindowUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
 import java.io.File
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.system.exitProcess
 
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @AndroidEntryPoint
 class IndexActivity : BaseActivity() {
     private lateinit var binding: ActivityIndexBinding
@@ -142,6 +140,9 @@ class IndexActivity : BaseActivity() {
     lateinit var failedMessageProcessor: FailedMessageProcessor
 
     @Inject
+    lateinit var pendingMessageProcessor: PendingMessageProcessor
+
+    @Inject
     lateinit var webSocketManager: WebSocketManager
 
     @Inject
@@ -163,22 +164,19 @@ class IndexActivity : BaseActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowUtil.setNavigationBarColor(this, ContextCompat.getColor(this, com.difft.android.base.R.color.bottom_tab_bg))
         binding = ActivityIndexBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         // Load and emit text size early to avoid ANR in UI components
         TextSizeUtil.loadAndEmitTextSize()
 
-        // Collect text size changes at Activity level and update all indicators
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                TextSizeUtil.textSizeState.collect { textSize ->
-                    val isLarger = textSize == TextSizeUtil.TEXT_SIZE_LAGER
-                    indicators.forEach { it.updateSize(isLarger) }
-                }
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach { textSize ->
+                val isLarger = textSize == TextSizeUtil.TEXT_SIZE_LAGER
+                indicators.forEach { it.updateSize(isLarger) }
             }
-        }
+            .launchIn(lifecycleScope)
 
         binding.viewpager.apply {
             offscreenPageLimit = 1
@@ -236,13 +234,10 @@ class IndexActivity : BaseActivity() {
         }
 
         DeeplinkUtils.deeplink
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ linkData ->
-                handleDeeplink(linkData)
-            }, { error ->
-                error.printStackTrace()
-            })
+            .asFlow()
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach { linkData -> handleDeeplink(linkData) }
+            .launchIn(lifecycleScope)
         handleShareIntent(intent)
         recordUA()
 
@@ -250,7 +245,7 @@ class IndexActivity : BaseActivity() {
 
         startReceivingMessages()
 
-        processFailedMessages()
+        processPendingAndFailedMessages()
 
         WCDBUpdateService.start()
 
@@ -305,29 +300,26 @@ class IndexActivity : BaseActivity() {
     }
 
     private fun observeAndUpdateUnreadMessageCountBadge() {
-        recentChatViewModel.allRecentRoomsStateFlow.onEach {
-            val unreadNotMuteMessageCount =
-                it.filter { it.isMuted.not() }.sumOf { room -> room.unreadMessageNum }
-            val unreadMuteMessageCount =
-                it.filter { it.isMuted }.sumOf { room -> room.unreadMessageNum }
-            L.i { "[IndexActivity] observeAndUpdateUnreadMessageCountBadge:$unreadNotMuteMessageCount unreadMuteMessageCount:$unreadMuteMessageCount " }
-            if (unreadNotMuteMessageCount != 0) {
-                displayBadge(
-                    R.drawable.chat_missing_number_bg,
-                    unreadNotMuteMessageCount
-                )
-            } else {
-                displayBadge(R.drawable.chat_missing_number_bg_muted, unreadMuteMessageCount)
+        recentChatViewModel.allRecentRoomsStateFlow
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach {
+                val unreadNotMuteMessageCount =
+                    it.filter { it.isMuted.not() }.sumOf { room -> room.unreadMessageNum }
+                val unreadMuteMessageCount =
+                    it.filter { it.isMuted }.sumOf { room -> room.unreadMessageNum }
+                L.i { "[IndexActivity] observeAndUpdateUnreadMessageCountBadge:$unreadNotMuteMessageCount unreadMuteMessageCount:$unreadMuteMessageCount " }
+                if (unreadNotMuteMessageCount != 0) {
+                    displayBadge(
+                        R.drawable.chat_missing_number_bg,
+                        unreadNotMuteMessageCount
+                    )
+                } else {
+                    displayBadge(R.drawable.chat_missing_number_bg_muted, unreadMuteMessageCount)
+                }
+                SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, unreadNotMuteMessageCount)
+                appIconBadgeManager.updateAppIconBadgeNum(unreadNotMuteMessageCount)
             }
-            SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, unreadNotMuteMessageCount)
-            appIconBadgeManager.updateAppIconBadgeNum(unreadNotMuteMessageCount)
-//            if (unreadNotMuteMessageCount == 0) { //if there is no unread message, cancel all notifications, let the app's icon's red point badge disappear
-//                L.i { "[Call] indexActivity cancelAllNotifications" }
-//                if (!LCallManager.hasCallDataNotifying()) {
-//                    messageNotificationUtil.cancelAllNotifications()
-//                }
-//            }
-        }.launchIn(lifecycleScope)
+            .launchIn(lifecycleScope)
     }
 
     private fun displayBadge(backgroundColorRes: Int, unreadMessageCount: Int) {
@@ -361,14 +353,9 @@ class IndexActivity : BaseActivity() {
         webSocketManager.start()
     }
 
-    private fun processFailedMessages() {
-        try {
-            lifecycleScope.launch {
-                failedMessageProcessor.processFailedMessages()
-            }
-        } catch (e: Exception) {
-            L.e { "[FailedMessageProcessor] Error processing failed messages: ${e.stackTraceToString()}" }
-        }
+    private fun processPendingAndFailedMessages() {
+        pendingMessageProcessor.triggerProcess()
+        failedMessageProcessor.triggerProcess()
     }
 
 
@@ -382,27 +369,22 @@ class IndexActivity : BaseActivity() {
 
     private fun checkUpdate() {
         if (environmentHelper.isInsiderChannel()) return
-        Observable.timer(2000, TimeUnit.MILLISECONDS)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this@IndexActivity))
-            .subscribe({
-                updateManager.checkUpdate(this@IndexActivity, false)
-            }, {})
+        lifecycleScope.launch {
+            delay(2000)
+            updateManager.checkUpdate(this@IndexActivity, false)
+        }
     }
 
     private var insiderUpdateChecked = false
 
-    //Insider版本每次回到前台，超过三十分钟会自动检查更新
     private fun checkInsiderUpdate() {
         if (!environmentHelper.isInsiderChannel()) return
         val lastCheckUpdateTime = userManager.getUserData()?.lastCheckUpdateTime ?: 0
         if (!insiderUpdateChecked || (System.currentTimeMillis() - lastCheckUpdateTime > 30 * 60 * 1000)) {
-            Observable.timer(2000, TimeUnit.MILLISECONDS)
-                .compose(RxUtil.getSchedulerComposer())
-                .to(RxUtil.autoDispose(this@IndexActivity))
-                .subscribe({
-                    updateManager.checkUpdate(this@IndexActivity, false)
-                }, {})
+            lifecycleScope.launch {
+                delay(2000)
+                updateManager.checkUpdate(this@IndexActivity, false)
+            }
             insiderUpdateChecked = true
         }
     }
@@ -413,9 +395,9 @@ class IndexActivity : BaseActivity() {
     }
 
     private fun observeFcmInitResult() {
-        // 只监听失败状态，成功情况由 PushUtil 内部自动处理
-        lifecycleScope.launch {
-            pushUtil.fcmInitResult.collect { result ->
+        pushUtil.fcmInitResult
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach { result ->
                 when (result) {
                     is FcmInitResult.PlayServicesUnavailable -> {
                         L.w { "[Push][fcm] Google Play Services not available, status:${result.statusCode}" }
@@ -432,7 +414,7 @@ class IndexActivity : BaseActivity() {
                     }
                 }
             }
-        }
+            .launchIn(lifecycleScope)
     }
 
     override fun onResume() {

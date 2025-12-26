@@ -29,6 +29,9 @@ class GroupAvatarView @JvmOverloads constructor(
 
     private var currentJob: Job? = null
 
+    /** 缓存当前已成功加载的头像标识，避免重复加载导致闪烁 */
+    private var loadedAvatarId: String? = null
+
     private val glideContext: Context
         get() {
             return if (context is Activity && !(context as Activity).isFinishing && !(context as Activity).isDestroyed) {
@@ -53,6 +56,7 @@ class GroupAvatarView @JvmOverloads constructor(
         binding.ivAvatar.setImageResource(com.difft.android.base.R.drawable.base_ic_group)
         binding.tvMembersNumber.text = ""
         binding.tvMembersNumber.visibility = View.GONE
+        loadedAvatarId = null
     }
 
     fun setAvatar(
@@ -61,20 +65,36 @@ class GroupAvatarView @JvmOverloads constructor(
         membersNumber: Int = 0,
         gid: String? = null
     ) {
+        val newAvatarId = groupAvatarData?.serverId
+
+        // 如果头像标识相同且已成功加载，只更新成员数量，不重新加载头像
+        if (newAvatarId != null && newAvatarId == loadedAvatarId) {
+            currentJob?.cancel()
+            currentJob = appScope.launch {
+                updateMembersNumber(showMembersNumber, membersNumber, gid)
+            }
+            return
+        }
+
+        // 头像标识变化或之前加载失败，需要重新加载
         resetView()
 
-        if (groupAvatarData != null) {
+        if (groupAvatarData != null && newAvatarId != null) {
             currentJob?.cancel()
 
             currentJob = appScope.launch {
-                GroupAvatarUtil.loadGroupAvatar(glideContext, groupAvatarData, binding.ivAvatar, GroupAvatarUtil.AvatarCacheSize.SMALL)
-
+                val success = GroupAvatarUtil.loadGroupAvatar(glideContext, groupAvatarData, binding.ivAvatar, GroupAvatarUtil.AvatarCacheSize.SMALL)
+                // 只有加载成功才记录标识，失败时保持 null 以便下次重试
+                if (success) {
+                    loadedAvatarId = newAvatarId
+                }
                 updateMembersNumber(showMembersNumber, membersNumber, gid)
             }
         }
     }
 
     fun setAvatar(localPath: String) {
+        loadedAvatarId = null
         Glide.with(glideContext)
             .asBitmap()
             .load(localPath)

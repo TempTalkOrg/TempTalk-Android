@@ -37,6 +37,10 @@ import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
 import java.util.concurrent.TimeUnit
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.LCallManager.EntryPoint
+import com.difft.android.call.state.OnGoingCallStateManager
+import dagger.hilt.android.EntryPointAccessors
+
 abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolean = false) : ListAdapter<ListItem, RecyclerView.ViewHolder>(
     object : DiffUtil.ItemCallback<ListItem>() {
         override fun areItemsTheSame(oldItem: ListItem, newItem: ListItem): Boolean {
@@ -360,7 +364,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 val showTime = LCallManager.callingTime.value?.takeIf { it.first == roomId }?.second
                 setupCallingJoinButton(binding.callBarDuration, showTime)
                 binding.callBarDuration.setOnClickListener {
-                    if (!LCallActivity.isInCalling()) {
+                    val callStateManager = getCallStateManager()
+                    if (!callStateManager.isInCalling()) {
                         L.i { "[call] CallBar Joining call for roomId:${roomId}." }
                         LCallManager.joinCall(activity, callData) { status ->
                             if(!status) {
@@ -369,7 +374,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                             }
                         }
                     } else {
-                        if (LCallActivity.getCurrentRoomId() == roomId) {
+                        if (callStateManager.getCurrentRoomId() == roomId) {
                             L.i { "[call] CallBar Bringing back current call for roomId:${roomId}." }
                             LCallManager.bringInCallScreenBack(ApplicationHelper.instance.applicationContext)
                         } else {
@@ -384,6 +389,13 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             }
             binding.callBarDuration.isVisible = false
         }
+    }
+
+    private fun getCallStateManager(): OnGoingCallStateManager {
+        val entryPoint = EntryPointAccessors.fromApplication<EntryPoint>(
+            activity.applicationContext
+        )
+        return entryPoint.onGoingCallStateManager
     }
 
 }

@@ -6,15 +6,10 @@ import com.difft.android.base.utils.ChunkingMethod
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.chunked
 import org.difft.app.database.wcdb
-import difft.android.messageserialization.MessageStore
-import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.tencent.wcdb.base.WCDBException
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -25,17 +20,17 @@ import com.difft.android.websocket.api.AppWebSocketHelper
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.system.measureTimeMillis
 
 @Singleton
 class IncomingEnvelopMessageProcessor @Inject constructor(
     @ApplicationContext
     private val context: Context,
-    private val messageStore: MessageStore,
+    private val dbMessageStore: DBMessageStore,
     private val webSocket: AppWebSocketHelper,
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
     private val asyncMessageJobsManager: AsyncMessageJobsManager,
     private val pendingMessageProcessor: PendingMessageProcessor,
+    private val failedMessageProcessor: FailedMessageProcessor,
     private val messageNotificationUtil: MessageNotificationUtil
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -44,58 +39,57 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
             this
                 .chunked(ChunkingMethod.ByTime(500, 30))
                 .onEach { batch ->
-                    L.i { "[Message] Processing batch of ${batch.size} messages, timestamps: ${batch.map { it.first.timestamp }}" }
-                    //sendAck for messages
+                    L.i { "[Message] Processing batch of ${batch.size} messages" }
+                    // Send ACK for messages first
                     batch.forEach { (envelop, requestId) -> sendAck(requestId, envelop.timestamp) }
 
-                    val executedTime = measureTimeMillis {
+                    val failedEnvelopes = mutableListOf<Envelope>()
+
+                    // Sort batch by systemShowTimestamp to ensure chronological order
+                    val sortedBatch = batch.sortedBy { it.first.systemShowTimestamp }
+
+                    // Process messages sequentially
+                    sortedBatch.forEach { (envelope, _) ->
                         try {
-                            val results = coroutineScope {
-                                batch.map { (envelop, _) ->
-                                    async {
-                                        envelopToMessageProcessor.process(envelop, "message")
-                                    }
-                                }.awaitAll().filterNotNull()
-                            }
-
-                            if (results.isNotEmpty()) {
-                                messageStore.putWhenNonExist(
-                                    messages = results.map { it.message }.toTypedArray()
-                                )
-                                L.i { "[Message] put ${results.size} messages to db ${results.map { it.message.timeStamp }}" }
-                            }
-
-                            results.filter { it.shouldShowNotification }
-                                .groupBy({ it.conversation }) { it.message }
-                                .forEach { (conversation, messages) ->
+                            val result = envelopToMessageProcessor.process(envelope, "message")
+                            if (result != null) {
+                                dbMessageStore.putWhenNonExist(result.message)
+                                if (result.shouldShowNotification) {
                                     appScope.launch {
                                         messageNotificationUtil.showNotificationSuspend(
                                             context = context,
-                                            message = messages.lastOrNull() ?: return@launch,
-                                            forWhat = conversation
+                                            message = result.message,
+                                            forWhat = result.conversation
                                         )
                                     }
                                 }
-                        } catch (e: Exception) {
-                            FirebaseCrashlytics.getInstance().recordException(Exception("handle message batch exception, size: ${batch.size}", e))
-                            L.e { "[Message] handle message batch exception -> ${e.stackTraceToString()}" }
-
-                            try {
-                                val messageModels = batch.map {
-                                    FailedMessageModel().apply {
-                                        this.timestamp = it.first.timestamp
-                                        this.messageEnvelopBytes = it.first.toByteArray()
-                                    }
-                                }
-                                wcdb.failedMessage.insertOrReplaceObjects(messageModels)
-                            } catch (e: WCDBException) {
-                                L.e { "[Message] saveFailedMessage error: ${e.stackTraceToString()}" }
                             }
+                        } catch (e: Exception) {
+                            // Exception reporting handled in EnvelopToMessageProcessor and DBMessageStore
+                            L.e { "[Message] process message ${envelope.timestamp} failed -> ${e.stackTraceToString()}" }
+                            failedEnvelopes.add(envelope)
                         }
                     }
-                    L.i { "[Message] handle message batch(${batch.size} messages) executed time: $executedTime ms" }
+
+                    // Save failed messages to database for retry
+                    if (failedEnvelopes.isNotEmpty()) {
+                        L.w { "[Message] ${failedEnvelopes.size} messages failed, saving to FailedMessage" }
+                        try {
+                            val messageModels = failedEnvelopes.map { envelope ->
+                                FailedMessageModel().apply {
+                                    this.timestamp = envelope.timestamp
+                                    this.messageEnvelopBytes = envelope.toByteArray()
+                                }
+                            }
+                            wcdb.failedMessage.insertOrReplaceObjects(messageModels)
+                        } catch (e: WCDBException) {
+                            L.e { "[Message] saveFailedMessage error: ${e.stackTraceToString()}" }
+                        }
+                    }
+
                     asyncMessageJobsManager.runAsyncJobs()
                     pendingMessageProcessor.triggerProcess()
+                    failedMessageProcessor.triggerProcess()
                 }
                 .launchIn(appScope)
         }

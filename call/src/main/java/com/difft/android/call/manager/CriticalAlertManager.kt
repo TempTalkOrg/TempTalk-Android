@@ -1,17 +1,48 @@
 package com.difft.android.call.manager
 
+import android.content.Context
+import android.content.Intent
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
+import com.difft.android.base.activity.ActivityProvider
+import com.difft.android.base.activity.ActivityType
+import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.application
+import com.difft.android.call.R
+import com.difft.android.call.state.CriticalAlertStateManager
+import com.difft.android.call.state.InComingCallStateManager
+import com.difft.android.call.util.FlashLightBlinker
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class CriticalAlertManager @Inject constructor(
+    @ApplicationContext
+    private val context: Context,
     private val gson: Gson,
-) {
+    private val criticalAlertStateManager: CriticalAlertStateManager,
+    private val activityProvider: ActivityProvider,
+    private val inComingCallStateManager: InComingCallStateManager,
+    ) {
+    // 用于防止并发竞争的互斥锁
+    private val soundMutex = Mutex()
+    
+    // 当前播放的 Ringtone 对象
+    private var currentRingtone: Ringtone? = null
     companion object {
         // Critical Alert 持久化存储相关常量
         private const val SP_KEY_CRITICAL_ALERT_INFOS = "SP_KEY_CRITICAL_ALERT_INFOS"
@@ -175,6 +206,144 @@ class CriticalAlertManager @Inject constructor(
             L.e { "[MessageNotificationUtil] Failed to check if critical alert notification is processed: ${e.message}" }
             false // 出错时返回false，允许继续处理
         }
+    }
+
+    /**
+     * 播放 Critical Alert 声音
+     * @param conversationId 会话ID
+     * @param notificationId 通知ID
+     */
+    fun playSound(conversationId: String, notificationId: Int) {
+        val token = System.currentTimeMillis()
+        appScope.launch(Dispatchers.IO) {
+            soundMutex.withLock {
+                // 更新当前 token，清除旧播放
+                criticalAlertStateManager.setCurrentPlayToken(token)
+                stopSoundInternal()
+            }
+
+            try {
+                val ringtoneUri =
+                    Uri.parse("android.resource://${context.packageName}/${R.raw.critical_alert}")
+                val ringtone = RingtoneManager.getRingtone(context, ringtoneUri)?.apply {
+                    audioAttributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                }
+
+                soundMutex.withLock {
+                    // 若此时已有更新的播放任务，则放弃当前任务
+                    if (token != criticalAlertStateManager.getCurrentPlayToken()) {
+                        L.i { "CriticalAlertManager Ignored old play call for id=$notificationId (token=$token)" }
+                        // 清理未使用的ringtone对象，防止资源泄漏
+                        try {
+                            ringtone?.stop()
+                        } catch (e: Exception) {
+                            L.e { "CriticalAlertManager Failed to stop ringtone during cleanup: ${e.message}" }
+                        }
+                        return@withLock
+                    }
+
+                    currentRingtone = ringtone
+                    criticalAlertStateManager.setCurrentNotificationId(notificationId)
+                    criticalAlertStateManager.setConversationId(conversationId)
+                    L.i { "CriticalAlertManager Playing ringtone for notification $notificationId" }
+                    ringtone?.play()
+                    criticalAlertStateManager.setIsPlayingSound(true)
+                }
+
+            } catch (e: Exception) {
+                L.e { "CriticalAlertManager Play failed: ${e.message}" }
+            }
+        }
+    }
+
+    /**
+     * 停止播放 Critical Alert 声音
+     */
+    fun stopSound() {
+        appScope.launch(Dispatchers.IO) {
+            soundMutex.withLock {
+                stopSoundInternal()
+            }
+        }
+    }
+
+    /**
+     * 如果通知ID匹配，则停止播放声音
+     * @param notificationId 通知ID
+     */
+    fun stopSoundIfMatch(notificationId: Int) {
+        appScope.launch(Dispatchers.IO) {
+            soundMutex.withLock {
+                if (notificationId == criticalAlertStateManager.getCurrentNotificationId()) {
+                    stopSoundInternal()
+                    L.i { "CriticalAlertManager Stopped ringtone for $notificationId" }
+                }
+            }
+        }
+    }
+
+    /**
+     * 内部方法：停止播放声音
+     */
+    private fun stopSoundInternal() {
+        try {
+            currentRingtone?.let {
+                if (it.isPlaying) it.stop()
+            }
+        } catch (e: Exception) {
+            L.e { "CriticalAlertManager Stop failed: ${e.message}" }
+        } finally {
+            currentRingtone = null
+            criticalAlertStateManager.resetSoundState()
+        }
+    }
+
+    fun isCriticalAlertShowing(conversationId: String?): Boolean {
+        if(conversationId == null) return false
+        // 使用原子性快照确保线程安全，避免并发状态更新导致的不一致
+        val snapshot = criticalAlertStateManager.getStateSnapshot()
+        return (snapshot.conversationId == conversationId) && (snapshot.isPlayingSound || snapshot.isShowing)
+    }
+
+    fun isCriticalAlertRunning(): Boolean {
+        val snapshot = criticalAlertStateManager.getStateSnapshot()
+        return snapshot.isPlayingSound || snapshot.isShowing
+    }
+
+    fun startCriticalAlertActivity(conversationId: String, title: String, content: String) {
+        // 如果 LIncomingCallActivity 正在显示，等待它关闭后再启动 CriticalAlertActivity
+        // 这样可以避免 CriticalAlertActivity 的背景显示为黑色（实际上是 LIncomingCallActivity 的窗口还在显示）
+        appScope.launch(Dispatchers.Main) {
+            // 等待 LIncomingCallActivity 关闭（最多等待500ms）
+            var retryCount = 0
+            val maxRetries = 10 // 10次 * 50ms = 500ms
+            while (inComingCallStateManager.isActivityShowing() && retryCount < maxRetries) {
+                delay(50)
+                retryCount++
+            }
+            
+            if (inComingCallStateManager.isActivityShowing()) {
+                L.w { "[CriticalAlert] LIncomingCallActivity is still showing after ${maxRetries * 50}ms, starting CriticalAlertActivity anyway" }
+            } else {
+                L.i { "[CriticalAlert] LIncomingCallActivity closed, starting CriticalAlertActivity after ${retryCount * 50}ms" }
+            }
+            
+            val intent = Intent(context, activityProvider.getActivityClass(ActivityType.CRITICAL_ALERT)).apply {
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, conversationId)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, title)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, content)
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+    }
+
+    fun stopSoundAndFlashLight() {
+        stopSound()
+        FlashLightBlinker.stopBlinking(application)
     }
 
 }

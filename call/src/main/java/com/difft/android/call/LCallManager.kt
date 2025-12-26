@@ -49,6 +49,8 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.FeedbackCallInfo
+import com.difft.android.call.manager.CriticalAlertManager
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.CallRatingFeedbackView
 import com.difft.android.call.util.CallComposeUiUtil
 import com.difft.android.network.config.FeatureGrayManager
@@ -116,6 +118,10 @@ object LCallManager {
 
         @ChativeHttpClientModule.Call
         fun callHttpClient(): ChativeHttpClient
+
+        var onGoingCallStateManager: OnGoingCallStateManager
+
+        var criticalAlertManager: CriticalAlertManager
     }
 
     data class ControlMessage(
@@ -144,6 +150,13 @@ object LCallManager {
         EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callToChatController
     }
 
+    private val onGoingCallStateManager: OnGoingCallStateManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).onGoingCallStateManager
+    }
+
+    private val criticalAlertManager: CriticalAlertManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).criticalAlertManager
+    }
 
     private val _chatHeaderCallVisibility: BehaviorSubject<Boolean> = BehaviorSubject.createDefault(false)
 
@@ -598,16 +611,14 @@ object LCallManager {
                 CallType.fromString(it)
             } ?: CallType.ONE_ON_ONE
 
-        if (!LCallActivity.isInCalling() && !hasCallDataNotifying()) {
-            startRingTone(intent)
-            startVibration()
-            setCallNotifyStatus(roomId, true)
-        }
-
         val callerId: String = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CALLER_ID) ?: ""
         val conversationId: String? = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CONVERSATION_ID)
         val callName: String = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CALL_NAME) ?: ""
-        if (!callToChatController.isIncomingCallActivityShowing() && !LCallActivity.isInCalling() && callToChatController.isAppForegrounded()) {
+
+        // 判断是否已有critical alert正在显示，如果是则不再显示incoming call页面 或 incoming call通知
+        if (criticalAlertManager.isCriticalAlertShowing(conversationId)) return
+
+        if (!callToChatController.isIncomingCallActivityShowing() && !onGoingCallStateManager.isInCalling() && callToChatController.isAppForegrounded()) {
             val intentActivity = CallIntent.Builder(application, globalServices.activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL))
                 .withAction(CallIntent.Action.INCOMING_CALL)
                 .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -623,6 +634,12 @@ object LCallManager {
         } else {
             L.i { "[call] LCallManager startIncomingCallService showCallNotification roomId:$roomId" }
             callToChatController.showCallNotification(roomId, callName, callerId, conversationId, callType, true)
+        }
+
+        if (!onGoingCallStateManager.isInCalling() && !hasCallDataNotifying()) {
+            startRingTone(intent)
+            startVibration()
+            setCallNotifyStatus(roomId, true)
         }
 
         L.i { "[call] LCallManager enable incoming call timeout detection" }
@@ -699,18 +716,6 @@ object LCallManager {
             CallState.ONGOING_CALL, CallState.LEAVE_CALL -> {
                 compositeDisposable.add(timeoutDisposable)
             }
-        }
-    }
-
-
-    fun restoreCallActivityIfInCalling() {
-        L.i { "[Call] LCallManager: Try to restoreCallActivityIfInMeeting - inCalling=${LCallActivity.isInCalling()}, isInForeground=${LCallActivity.isInForeground}" }
-        if (LCallActivity.isInCalling() && !LCallActivity.isInForeground && !isScreenLocked(
-                com.difft.android.base.utils.application
-            )
-        ) {
-            L.i { "[Call] LCallManager: OK> restoreCallActivityIfInMeeting - inCalling=${LCallActivity.isInCalling()}, isInForeground=${LCallActivity.isInForeground}" }
-            application.startActivity(createBackToCallIntent(application))
         }
     }
 
@@ -971,4 +976,12 @@ object LCallManager {
     fun dismissCriticalAlertByConId(conversationId: String) {
         callToChatController.dismissCriticalAlertByConId(conversationId)
     }
+
+    fun dismissIncomingNotificationByConId(conversationId: String) {
+        val callData = getCallDataByConversationId(conversationId)
+        callData?.roomId?.let { roomId ->
+            stopIncomingCallService(roomId = roomId, tag = "critical alert dismiss notification.")
+        }
+    }
+
 }

@@ -18,8 +18,8 @@
     <View
         android:id="@+id/view"
         android:layout_width="0dp"
-        android:layout_height="1dp"
-        android:background="@color/bottom_tab_divider"
+        android:layout_height="0.5dp"
+        android:background="@color/line"
         app:layout_constraintBottom_toTopOf="@+id/cl_tab"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
@@ -28,7 +28,6 @@
         android:id="@+id/cl_tab"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bottom_tab_bg"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <!--        <View-->

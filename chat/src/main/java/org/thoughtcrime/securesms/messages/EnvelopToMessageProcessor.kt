@@ -18,7 +18,7 @@ class EnvelopToMessageProcessor @Inject constructor(
     private val messageContentProcessor: MessageContentProcessor,
 ) {
 
-    suspend fun process(envelope: Envelope, tag: String) = withContext(Dispatchers.IO) {
+    suspend fun process(envelope: Envelope, tag: String) = withContext(Dispatchers.Default) {
         return@withContext try {
             envelope.takeIf {
                 envelopSizeNotExceedOneMillion(it, tag)

@@ -145,6 +145,19 @@
                     android:gravity="end"
                     android:textColor="@color/t.third"
                     android:textSize="14sp"
+                    tools:text="17151232132123" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_expires_in_seconds"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginTop="5dp"
+                    android:background="@null"
+                    android:gravity="end"
+                    android:textColor="@color/t.third"
+                    android:textSize="14sp"
                     tools:text="600" />
 
             </LinearLayout>
@@ -258,6 +271,17 @@
 
                 <androidx.appcompat.widget.AppCompatTextView
                     android:id="@+id/tv_received_time4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:background="@null"
+                    android:gravity="center"
+                    android:textColor="@color/t.third"
+                    android:textSize="14sp"
+                    tools:text="17151232132123" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_received_expires_in_seconds"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"

@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
 import org.difft.app.database.attachment
@@ -104,6 +105,7 @@ class MessageDetailActivity : BaseActivity() {
             setTime(message.timeStamp, binding.tvTime1)
             setTime(message.systemShowTimestamp, binding.tvTime3)
             setTime(message.readTime, binding.tvTime4)
+            binding.tvExpiresInSeconds.text = message.expiresInSeconds.toString()
 
             if (message.roomId != globalServices.myId) {
                 initMessageReadInfo(message)
@@ -131,7 +133,8 @@ class MessageDetailActivity : BaseActivity() {
             setTime(message.timeStamp, binding.tvReceivedTime1)
             setTime(message.receivedTimeStamp, binding.tvReceivedTime2)
             setTime(message.systemShowTimestamp, binding.tvReceivedTime3)
-            setTime(message.readTime, binding.tvTime4)
+            setTime(message.readTime, binding.tvReceivedTime4)
+            binding.tvReceivedExpiresInSeconds.text = message.expiresInSeconds.toString()
         }
 
         binding.llShare.visibility = View.GONE
@@ -169,9 +172,18 @@ class MessageDetailActivity : BaseActivity() {
                 listOf(message.roomId)
             }
 
-            val receivers = wcdb.getContactorsFromAllTable(receiverIds)
+            var receivers = wcdb.getContactorsFromAllTable(receiverIds)
 
             val readInfoList = wcdb.getReadInfoList(message.roomId).filter { it.readPosition >= message.systemShowTimestamp }
+
+            // 普通群消息：如果 receiverIds 缺失但有 readInfoList，直接用 readInfoList 中的 uid 获取联系人（排除自己）
+            if (message.roomType == 1 && message.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
+                if (receivers.isEmpty() && readInfoList.isNotEmpty()) {
+                    L.w { "Group message receiverIds is null, messageId: ${message.id}, systemShowTimestamp: ${message.systemShowTimestamp}" }
+                    val readUserIds = readInfoList.map { it.uid }.filter { it != globalServices.myId }
+                    receivers = wcdb.getContactorsFromAllTable(readUserIds)
+                }
+            }
 
             withContext(Dispatchers.Main) {
                 var readList: List<ContactorModel>? = null

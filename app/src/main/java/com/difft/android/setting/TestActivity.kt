@@ -3,6 +3,7 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.UserManager
 import org.difft.app.database.wcdb
@@ -38,15 +39,19 @@ class TestActivity : BaseActivity() {
 
         mBinding.clCreateGroups.setOnClickListener {
             val idsString = mBinding.etMember.text.toString().trim()
-            messageTestUtil.createTestGroups(this@TestActivity, if (idsString.isEmpty()) null else idsString.split(","))
+            messageTestUtil.createTestGroups(
+                this@TestActivity,
+                lifecycleScope,
+                if (idsString.isEmpty()) null else idsString.split(",")
+            )
         }
 
         mBinding.clDisbandGroups.setOnClickListener {
-            messageTestUtil.disbandOrLeaveTestGroups(this@TestActivity)
+            messageTestUtil.disbandOrLeaveTestGroups(this@TestActivity, lifecycleScope)
         }
 
         mBinding.clSendMessage.setOnClickListener {
-            messageTestUtil.sendTestMessageToAllTestGroups(this@TestActivity)
+            messageTestUtil.sendTestMessageToAllTestGroups(this@TestActivity, lifecycleScope)
         }
 
         mBinding.clCorruptDatabase.setOnClickListener {

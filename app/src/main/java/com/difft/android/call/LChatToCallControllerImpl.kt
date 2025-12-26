@@ -53,6 +53,8 @@ import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import java.util.ArrayList
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.network.config.WsTokenManager
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.yield
@@ -66,16 +68,12 @@ class LChatToCallControllerImpl @Inject constructor(
     private val dbRoomStore: DBRoomStore,
     private val wsTokenManager: WsTokenManager,
     private val messageNotificationUtil: MessageNotificationUtil,
+    private val groupRepo: GroupRepo,
+    private val callToChatController: LCallToChatController,
+    private val globalConfigsManager: GlobalConfigsManager,
+    private val onGoingCallStateManager: OnGoingCallStateManager,
+    private val inComingCallStateManager: InComingCallStateManager
 ) : LChatToCallController {
-
-    @Inject
-    lateinit var groupRepo: GroupRepo
-
-    @Inject
-    lateinit var callToChatController: LCallToChatController
-
-    @Inject
-    lateinit var globalConfigsManager: GlobalConfigsManager
 
     private val callConfig: CallConfig by lazy {
         globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(
@@ -299,7 +297,7 @@ class LChatToCallControllerImpl @Inject constructor(
 
                                     val existingCall = LCallManager.getCallListData()?.get(roomId)
 
-                                    if(existingCall == null || (existingCall.source != CallDataSourceType.MESSAGE && roomId != LCallActivity.getCurrentRoomId())){
+                                    if(existingCall == null || (existingCall.source != CallDataSourceType.MESSAGE && roomId != onGoingCallStateManager.getCurrentRoomId())){
                                         val callData = CallData(
                                             type = callType.type,
                                             version = 0,
@@ -343,7 +341,7 @@ class LChatToCallControllerImpl @Inject constructor(
                 joined.roomId?.let { roomId ->
                     // 处理会议邀请：本地被叫，自己另一端被叫加入会议时发出的joined消息
                     callToChatController.cancelNotificationById(roomId.hashCode()) // 检查并取消入会通知
-                    if(LIncomingCallActivity.isActivityShowing()){
+                    if(inComingCallStateManager.isActivityShowing()){
                         val controlMessage = LCallManager.ControlMessage(
                             actionType = CallActionType.JOINED,
                             roomId = roomId
@@ -376,7 +374,7 @@ class LChatToCallControllerImpl @Inject constructor(
                 cancel.roomId?.let { roomId ->
                     // 处理会议邀请：本地被叫，主叫取消会议时发出的cancel消息
                     callToChatController.cancelNotificationById(roomId.hashCode()) // 检查并取消入会通知
-                    if(LIncomingCallActivity.isActivityShowing()){
+                    if(inComingCallStateManager.isActivityShowing()){
                         val controlMessage = LCallManager.ControlMessage(
                             actionType = CallActionType.CANCEL,
                             roomId = roomId
@@ -398,7 +396,7 @@ class LChatToCallControllerImpl @Inject constructor(
                     if(!TextUtils.isEmpty(roomId)){
                         // 如果是自己另一端reject会，而自己本地已经入会，则本地忽略自己另一端的reject
                         callToChatController.cancelNotificationById(roomId.hashCode()) // 检查并取消入会通知
-                        if(message.senderId == mySelfId && LCallActivity.isInCalling() && LCallActivity.getCurrentRoomId() == roomId){
+                        if(message.senderId == mySelfId && onGoingCallStateManager.isInCalling() && onGoingCallStateManager.getCurrentRoomId() == roomId){
                             L.i { "[Call] handleCallMessage reject, remote myself device reject, but local has in meeting." }
                             return
                         }else{
@@ -412,7 +410,7 @@ class LChatToCallControllerImpl @Inject constructor(
                                 }
                             }
                             // 处理会议呼叫：本地主叫，被叫拒绝入会时发送的reject消息
-                            if(LCallActivity.isInCalling() && LCallActivity.getCurrentRoomId() == reject.roomId){
+                            if(onGoingCallStateManager.isInCalling() && onGoingCallStateManager.getCurrentRoomId() == reject.roomId){
                                 val controlMessage = LCallManager.ControlMessage(
                                     actionType = CallActionType.REJECT,
                                     roomId = roomId
@@ -421,7 +419,7 @@ class LChatToCallControllerImpl @Inject constructor(
                             }
 
                             // 处理会议邀请：本地被叫，自己另一端设备拒绝入会时发送的reject消息
-                            if(LIncomingCallActivity.isActivityShowing()){
+                            if(inComingCallStateManager.isActivityShowing()){
                                 val controlMessage = LCallManager.ControlMessage(
                                     actionType = CallActionType.REJECT,
                                     roomId = roomId
@@ -440,7 +438,7 @@ class LChatToCallControllerImpl @Inject constructor(
             L.i { "[Call] handleCallMessage, hasHangup Message:${content.hangup.roomId}" }
             content.hangup?.let { hangup ->
                 hangup.roomId?.let { roomId ->
-                    if(LCallActivity.isInCalling() && LCallActivity.getCurrentRoomId() == roomId){
+                    if(onGoingCallStateManager.isInCalling() && onGoingCallStateManager.getCurrentRoomId() == roomId){
                         val controlMessage = LCallManager.ControlMessage(
                             actionType = CallActionType.HANGUP,
                             roomId = roomId
@@ -459,7 +457,7 @@ class LChatToCallControllerImpl @Inject constructor(
             L.i { "[Call] handleCallEndNotification, params roomId:$roomId" }
             LCallManager.removeCallData(roomId)
             callToChatController.cancelNotificationById(roomId.hashCode())
-            if(LIncomingCallActivity.isActivityShowing()){
+            if(inComingCallStateManager.isActivityShowing()){
                 val controlMessage = LCallManager.ControlMessage(
                     actionType = CallActionType.CALLEND,
                     roomId = roomId
@@ -468,7 +466,7 @@ class LChatToCallControllerImpl @Inject constructor(
             }else{
                 LCallManager.stopIncomingCallService(roomId, tag = "ended: server call end notification")
             }
-            if(LCallActivity.isInCalling() && LCallActivity.getCurrentRoomId() == roomId){
+            if(onGoingCallStateManager.isInCalling() && onGoingCallStateManager.getCurrentRoomId() == roomId){
                 val controlMessage = LCallManager.ControlMessage(
                     actionType = CallActionType.CALLEND,
                     roomId = roomId
@@ -610,7 +608,7 @@ class LChatToCallControllerImpl @Inject constructor(
         return !anotherDeviceJoined &&
                 msgSenderId != mySelfId &&
                 !callToChatController.isIncomingCallNotifying(callData.roomId) &&
-                LCallActivity.getCurrentRoomId() != callData.roomId
+                onGoingCallStateManager.getCurrentRoomId() != callData.roomId
     }
 
     private suspend fun showIncomingNotificationOrActivity(callData: CallData) = withContext(Dispatchers.Main) {

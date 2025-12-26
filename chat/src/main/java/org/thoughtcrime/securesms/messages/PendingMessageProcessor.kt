@@ -3,10 +3,8 @@ package org.thoughtcrime.securesms.messages
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.sampleAfterFirst
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.difft.app.database.WCDB
@@ -17,7 +15,6 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@OptIn(FlowPreview::class)
 @Singleton
 class PendingMessageProcessor @Inject constructor(
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
@@ -26,7 +23,7 @@ class PendingMessageProcessor @Inject constructor(
     companion object {
         private const val CLEANUP_DAYS_THRESHOLD = 10L
     }
-    
+
     private val processEvents = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private var hasCleanedUp = false
 
@@ -55,16 +52,23 @@ class PendingMessageProcessor @Inject constructor(
 
             // 只处理已存在原始消息的待处理消息
             val messagesToProcess = pendingMessages.filter { it.originalMessageTimeStamp in existingMessages }
+            val processedTimestamps = mutableListOf<Long>()
 
-            // 处理所有待处理消息
+            // 处理所有待处理消息，单条异常不影响其他消息处理
             messagesToProcess.forEach { pendingMessage ->
-                envelopToMessageProcessor.process(Envelope.parseFrom(pendingMessage.messageEnvelopBytes), "pending-timestamp")
+                try {
+                    envelopToMessageProcessor.process(Envelope.parseFrom(pendingMessage.messageEnvelopBytes), "pending-timestamp")
+                    processedTimestamps.add(pendingMessage.originalMessageTimeStamp)
+                } catch (e: Exception) {
+                    L.e { "[PendingMessageProcessor] Failed to process pending message ${pendingMessage.originalMessageTimeStamp}: ${e.stackTraceToString()}" }
+                    // Continue processing other messages
+                }
             }
 
             // 批量删除已处理的消息
-            if (messagesToProcess.isNotEmpty()) {
+            if (processedTimestamps.isNotEmpty()) {
                 wcdb.pendingMessageNew.deleteObjects(
-                    DBPendingMessageModelNew.originalMessageTimeStamp.`in`(messagesToProcess.map { it.originalMessageTimeStamp })
+                    DBPendingMessageModelNew.originalMessageTimeStamp.`in`(processedTimestamps)
                 )
             }
 
@@ -72,7 +76,7 @@ class PendingMessageProcessor @Inject constructor(
             if (!hasCleanedUp) {
                 val cleanupThreshold = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(CLEANUP_DAYS_THRESHOLD)
                 val oldMessages = pendingMessages.filter { it.originalMessageTimeStamp < cleanupThreshold }
-                
+
                 if (oldMessages.isNotEmpty()) {
                     L.i { "[PendingMessageProcessor] Deleting ${oldMessages.size} old pending messages" }
                     wcdb.pendingMessageNew.deleteObjects(

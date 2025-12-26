@@ -15,9 +15,9 @@ import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LChatToCallController
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.ChatMessageListBehavior
 import com.difft.android.chat.IChatPaginationController
 import com.difft.android.chat.R
@@ -100,7 +100,8 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val callManager: LChatToCallController,
     private val translateManager: TranslateManager,
     private val speechToTextManager: SpeechToTextManager,
-    private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory
+    private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
+    private val onGoingCallStateManager: OnGoingCallStateManager
 ) : ViewModel(),
     IChatPaginationController by chatPaginationControllerFactory.create(forWhat) {
 
@@ -180,19 +181,11 @@ class ChatMessageViewModel @AssistedInject constructor(
                     val idsToRefresh = updatedContactIds.filter { cachedIds.contains(it) }.toSet()
 
                     if (idsToRefresh.isNotEmpty()) {
-                        L.d { "MessageContactsCacheUtil: Refreshing ${idsToRefresh.size} cached contactors: $idsToRefresh" }
-
-                        // 1. 先清除缓存中的旧数据
+                        // 清除缓存中的旧数据并重新加载
                         contactorCache.remove(idsToRefresh)
-                        L.d { "MessageContactsCacheUtil: Removed old cache entries" }
-
-                        // 2. 重新加载这些联系人
                         contactorCache.loadContactors(idsToRefresh)
-                        L.d { "MessageContactsCacheUtil: Reloaded contactors from database" }
-
-                        // 3. 发送刷新事件
                         _contactorCacheRefreshed.emit(Unit)
-                        L.d { "MessageContactsCacheUtil: Refresh event emitted" }
+                        L.i { "MessageContactsCacheUtil: Refreshed ${idsToRefresh.size} cached contactors" }
                     }
                 }
         }
@@ -315,8 +308,8 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     fun startCall(activity: Activity, chatRoomName: String?) {
-        if (LCallActivity.isInCalling()) {
-            if (LCallActivity.getConversationId() == forWhat.id) {
+        if (onGoingCallStateManager.isInCalling()) {
+            if (onGoingCallStateManager.getConversationId() == forWhat.id) {
                 L.i { "[call] Bringing back current call" }
                 LCallManager.bringInCallScreenBack(activity)
             } else {

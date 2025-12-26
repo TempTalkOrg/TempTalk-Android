@@ -17,6 +17,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
@@ -25,13 +26,18 @@ import com.difft.android.setting.data.CheckUpdateResponse
 import com.difft.android.setting.repo.SettingRepo
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
-import io.reactivex.rxjava3.core.Observable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import util.ScreenLockUtil
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import io.reactivex.rxjava3.core.Observable
+
 class UpdateManager @Inject constructor(
     private val settingRepo: SettingRepo,
     private val environmentHelper: EnvironmentHelper,
@@ -264,24 +270,60 @@ class UpdateManager @Inject constructor(
         val file = File(fileDir, filename)
         val filePath = file.absolutePath
         // Determine whether the file exists and verify the file hash value
-        if (file.exists() && verifyApk(filePath, apkHash)) {
-            L.i { "UpdateManager upgradeApk install downloaded apk package." }
-            if (isForce) {
-                closeForceUpdateDialog()
-                showInstallDialog(context, file, true)
-            } else {
-                showInstallDialog(context, file, false)
+        if (file.exists()) {
+            // 使用协程在后台线程执行 APK 验证，避免 ANR
+            appScope.launch {
+                try {
+                    // 在 IO 线程执行验证
+                    val isValid = withContext(Dispatchers.IO) {
+                        verifyApk(filePath, apkHash)
+                    }
+                    
+                    // 切换到主线程处理结果
+                    withContext(Dispatchers.Main) {
+                        if (isValid) {
+                            L.i { "UpdateManager upgradeApk install downloaded apk package." }
+                            if (isForce) {
+                                closeForceUpdateDialog()
+                                showInstallDialog(context, file, true)
+                            } else {
+                                showInstallDialog(context, file, false)
+                            }
+                        } else {
+                            // If the hash verification code fails, it will be downloaded.
+                            L.i { "UpdateManager upgradeApk verify failed, invoke service download and install." }
+                            startDownloadService(context, url, apkHash, filePath, isForce)
+                        }
+                    }
+                } catch (error: Exception) {
+                    // 正确处理 CancellationException，不要触发下载服务
+                    if (error is CancellationException) {
+                        L.i { "UpdateManager upgradeApk verify cancelled" }
+                        throw error // 重新抛出，让协程取消语义正确传播
+                    }
+                    
+                    L.e { "UpdateManager upgradeApk verify error: ${error.message}" }
+                    error.printStackTrace()
+                    // If verification fails, download the APK
+                    withContext(Dispatchers.Main) {
+                        startDownloadService(context, url, apkHash, filePath, isForce)
+                    }
+                }
             }
         } else {
-            // If the local update package does not exist or the hash verification code fails, it will be downloaded.
+            // If the local update package does not exist, it will be downloaded.
             L.i { "UpdateManager upgradeApk invoke service download and install." }
-            val intent = Intent(context, AppUpgradeService::class.java)
-            intent.putExtra(INTENT_PARAM_APK_DOWNLOAD_URL, url)
-            intent.putExtra(INTENT_PARAM_APK_VERIFY_HASH, apkHash)
-            intent.putExtra(INTENT_PARAM_APK_STORE_PATH, filePath)
-            intent.putExtra(INTENT_PARAM_APK_FORCE_UPGRADE, isForce)
-            context.startService(intent)
+            startDownloadService(context, url, apkHash, filePath, isForce)
         }
+    }
+
+    private fun startDownloadService(context: Context, url: String, apkHash: String, filePath: String, isForce: Boolean) {
+        val intent = Intent(context, AppUpgradeService::class.java)
+        intent.putExtra(INTENT_PARAM_APK_DOWNLOAD_URL, url)
+        intent.putExtra(INTENT_PARAM_APK_VERIFY_HASH, apkHash)
+        intent.putExtra(INTENT_PARAM_APK_STORE_PATH, filePath)
+        intent.putExtra(INTENT_PARAM_APK_FORCE_UPGRADE, isForce)
+        context.startService(intent)
     }
 
     private fun clearDownloadedApk(dirPath: String, excludeFileName: String) {
@@ -313,14 +355,31 @@ class UpdateManager @Inject constructor(
                 return false
             }
             try {
-                val hash = CryptoUtil.bytesToHex(CryptoUtil.sha256(FileUtil.readFile(File(apkPath))))
-                if (hash.equals(apkHash)) {
+                // 使用流式哈希计算，避免一次性读取整个文件到内存
+                val hash = calculateFileSha256(File(apkPath))
+                if (hash.equals(apkHash, ignoreCase = true)) {
                     return true
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
             return false
+        }
+
+        /**
+         * 流式计算文件的 SHA256 哈希值，避免一次性加载整个文件到内存
+         * 参考 FileUtils.getFileMD5 和 PushTextSendJob 的实现方式
+         */
+        private fun calculateFileSha256(file: File): String {
+            return file.inputStream().use { inputStream ->
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+                CryptoUtil.bytesToHex(digest.digest())
+            }
         }
 
         fun installAPK(context: Context, apkUri: Uri, apkFile: File?) {

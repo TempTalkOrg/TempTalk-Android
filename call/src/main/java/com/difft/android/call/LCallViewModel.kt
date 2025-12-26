@@ -24,6 +24,7 @@ import com.difft.android.base.user.CallConfig
 import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
@@ -51,6 +52,7 @@ import com.difft.android.call.manager.HandsUpManager
 import com.difft.android.call.manager.ParticipantManager
 import com.difft.android.call.manager.RtmMessageHandler
 import com.difft.android.call.manager.TimerManager
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.StringUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -116,6 +118,7 @@ class LCallViewModel (
     interface EntryPoint {
         var callToChatController: LCallToChatController
         var messageEncryptor: INewMessageContentEncryptor
+        var onGoingCallStateManager: OnGoingCallStateManager
 
         @ChativeHttpClientModule.Chat
         fun httpClient(): ChativeHttpClient
@@ -127,6 +130,11 @@ class LCallViewModel (
     private val messageEncryptor: INewMessageContentEncryptor by lazy {
         EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).messageEncryptor
     }
+
+    private val onGoingCallStateManager: OnGoingCallStateManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).onGoingCallStateManager
+    }
+
     private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
 
     private val mySelfId: String by lazy { globalServices.myId }
@@ -397,7 +405,7 @@ class LCallViewModel (
                 return@launch
             }
             roomId = response.body.roomId
-            LCallActivity.setCurrentRoomId(roomId)
+            onGoingCallStateManager.setCurrentRoomId(roomId)
             val callerId = callIntent.callerId
             val callType = CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
             val forWhat = when (callType) {
@@ -524,7 +532,7 @@ class LCallViewModel (
         }
     }
 
-    private fun isTimeoutCheckApplicable() = LCallActivity.isInCalling() && !LCallActivity.isInCallEnding()
+    private fun isTimeoutCheckApplicable() = onGoingCallStateManager.isInCalling() && !onGoingCallStateManager.isInCallEnding()
 
     /**
      * Handles various room events from the livekit sdk.
@@ -788,7 +796,7 @@ class LCallViewModel (
      * Handles the event when a participant disconnects from the call, with special handling for one-on-one calls.
      */
     private fun onParticipantDisconnected() {
-        if (getCurrentCallType() == CallType.ONE_ON_ONE.type && LCallActivity.isInCalling()) {
+        if (getCurrentCallType() == CallType.ONE_ON_ONE.type && onGoingCallStateManager.isInCalling()) {
             timeoutCheckState = TimeoutCheckState.PARTICIPANT_LEAVE
             roomId?.let { rid ->
                 LCallManager.checkCallWithTimeout(LCallManager.CallState.LEAVE_CALL, LCallManager.DEF_LEAVE_CALL_TIMEOUT, rid) { status ->
@@ -956,9 +964,8 @@ class LCallViewModel (
             try {
                 if (room.localParticipant.videoTrackPublications.isEmpty()) {
                     if (roomCtl.roomMetadata.value?.canPublishVideo == true) {
-                        if (enabled) withContext(Dispatchers.IO) {
-                            room.localParticipant.setCameraEnabled(true)
-                            roomCtl.updateCameraEnabled(true)
+                        if (enabled) {
+                            setCamera(true)
                         }
                     } else {
                         val intent = Intent(LCallConstants.CALL_NOTIFICATION_PUSH_STREAM_LIMIT)
@@ -966,13 +973,24 @@ class LCallViewModel (
                         ApplicationHelper.instance.sendBroadcast(intent)
                     }
                 } else {
-                    room.localParticipant.setCameraEnabled(enabled)
-                    roomCtl.updateCameraEnabled(enabled)
+                    setCamera(enabled)
                 }
-            } catch (e: Exception) {
-                L.e { "[Call] LCallViewModel setCameraEnabled error = ${e.message}" }
+            } catch (e: NotImplementedError) {
+                L.e { "[Call] LCallViewModel setCameraEnabled NotImplementedError, camera not supported on this device: ${e.message}" }
+                roomCtl.updateCameraEnabled(false)
+                showToastMessage(ResUtils.getString(R.string.call_enable_camera_not_implemented_error))
+            } catch (e: Throwable) {
+                L.e { "[Call] LCallViewModel setCameraEnabled error = ${e.stackTraceToString()}" }
+                roomCtl.updateCameraEnabled(false)
             }
         }
+    }
+
+    private suspend fun setCamera(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            room.localParticipant.setCameraEnabled(enabled)
+        }
+        roomCtl.updateCameraEnabled(enabled)
     }
 
     /**

@@ -141,7 +141,10 @@ object AvatarUtil {
         }
     }
 
-    // 智能头像加载方法，合并了下载、解密、加载和保存
+    /**
+     * 智能头像加载方法，合并了下载、解密、加载和保存
+     * @return true if avatar loaded successfully, false otherwise
+     */
     suspend fun loadAvatar(
         context: Context,
         url: String,
@@ -150,7 +153,7 @@ object AvatarUtil {
         defaultDisplayView: View,
         size: AvatarCacheSize,
         forceRefresh: Boolean = false
-    ) = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.IO) {
         try {
             // 1. 检查本地缓存
             val file = getFileFormUrl(url, size)
@@ -164,7 +167,7 @@ object AvatarUtil {
                         .load(file)
                         .into(imageView)
                 }
-                return@withContext
+                return@withContext true
             }
 
             // 2. 本地文件不存在，从网络下载并解密
@@ -172,6 +175,7 @@ object AvatarUtil {
 
             // 3. 加载并保存
             loadAndSaveBitmap(context, result, url, imageView, defaultDisplayView, size)
+            return@withContext true
         } catch (e: Exception) {
             L.e { "[AvatarUtil] loadAvatar first attempt failed: ${e.stackTraceToString()}" }
             withContext(Dispatchers.Main) {
@@ -182,8 +186,10 @@ object AvatarUtil {
             try {
                 val result = fetchAvatar(context, url, key)
                 loadAndSaveBitmap(context, result, url, imageView, defaultDisplayView, size)
+                return@withContext true
             } catch (retryException: Exception) {
                 L.e { "[AvatarUtil] loadAvatar retry also failed: ${retryException.message}" }
+                return@withContext false
             }
         }
     }

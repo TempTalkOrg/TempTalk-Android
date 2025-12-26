@@ -1,7 +1,5 @@
 package com.difft.android.chat.contacts.data
 
-import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.PushTextSendJobFactory
@@ -11,18 +9,13 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.sideBar.CharacterParser
 import com.difft.android.chat.R
-import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.contactsremark.ContactRemarkUtil
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.messageserialization.db.store.formatBase58Id
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.messageserialization.db.store.getOrNull
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
@@ -34,20 +27,15 @@ import com.difft.android.network.responses.AddContactorResponse
 import com.difft.android.network.responses.AvatarResponse
 import com.difft.android.network.responses.ContactResponse
 import com.difft.android.network.responses.ContactsDataResponse
-import com.difft.android.websocket.api.messages.Data
-import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
-import difft.android.messageserialization.model.Message
-import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.TextMessage
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +52,6 @@ import org.difft.app.database.covertToGroupMemberContactorModel
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
-import org.difft.app.database.models.MessageModel
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.util.Base64
@@ -401,228 +388,6 @@ object ContactorUtil {
         }
     }
 
-
-//    /**
-//     * 接受好友请求后，构建一条已接受的消息，进行展示
-//     */
-//    fun createFriendRequestAcceptMessage(messageId: String, accountId: String) {
-//        val description = MessageDescription.MessageId(messageId)
-//        val messages = ApplicationDependencies.getMessageLoader().loadMessages(For.Account(accountId), description, Date()).blockingGet()
-//        if (messages.isNotEmpty()) {
-//            val message = messages[0] as NotifyMessage
-//            val timeStamp = System.currentTimeMillis()
-//            val myID = LoginHelper.requestMyID(application).blockingGet()
-//            message.id = timeStamp.toString() + myID.replace("+", "") + DEFAULT_DEVICE_ID
-//            message.timeStamp = timeStamp
-//            message.systemShowTimestamp = timeStamp
-//            val signalNotifyMessage = Gson().fromJson(message.notifyContent, SignalNotifyMessage::class.java)
-//            signalNotifyMessage.data?.actionType = SignalNotifyMessage.NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST_DONE
-//            signalNotifyMessage.showContent = ResUtils.getString(R.string.contact_added)
-//            message.notifyContent = Gson().toJson(signalNotifyMessage)
-//            ApplicationDependencies.getMessageStore().putMessage(For.Account(accountId), message).blockingAwait()
-//        }
-//    }
-
-    /**
-     * TT
-     * 服务端增加限频，非好友每天只能发3条消息，
-     * 超出后拒绝，客户端消息发送失败（感叹号），
-     * 系统消息提示："You can only send up to 3 messages per day to a user who is not your friend. Please wait for the other party to accept your request."/"非好友每天最多发3条消息，请等待对方接受请求。"
-     */
-    fun createNonFriendLimitMessage(forWhat: For) {
-        val timeStamp = System.currentTimeMillis()
-        val myID = globalServices.myId
-        val messageId = timeStamp.toString() + myID.replace("+", "") + DEFAULT_DEVICE_ID
-        val signalNotifyMessage = TTNotifyMessage(Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_NON_FRIEND_LIMIT), timeStamp, TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL)
-        signalNotifyMessage.showContent = ResUtils.getString(R.string.contact_non_friend_limit_tips)
-        val message = NotifyMessage(
-            messageId,
-            For.Account(myID),
-            forWhat,
-            timeStamp,
-            timeStamp,
-            System.currentTimeMillis(),
-            SendType.Sent.rawValue,
-            0,
-            0,
-            0,
-            0,
-            Gson().toJson(signalNotifyMessage)
-        )
-        ApplicationDependencies.getMessageStore().putMessage(message).subscribeOn(Schedulers.io()).subscribe()
-    }
-
-    /**
-     * 构建一条对方离线或者账号禁用的消息，进行展示
-     */
-    @SuppressLint("CheckResult")
-    fun createOfflineMessage(forWhat: For, actionType: Int) {
-        val timeStamp = System.currentTimeMillis()
-        val messageId = timeStamp.toString() + forWhat.id.replace("+", "") + DEFAULT_DEVICE_ID
-        val signalNotifyMessage = TTNotifyMessage(Data(actionType, -1, null), timeStamp, TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL)
-        signalNotifyMessage.showContent = when (actionType) {
-            TTNotifyMessage.NOTIFY_ACTION_TYPE_OFFLINE -> ResUtils.getString(R.string.contact_offline_tips)
-            TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED -> ResUtils.getString(R.string.contact_account_exception_tips)
-            TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED -> ResUtils.getString(R.string.contact_unregistered_tips)
-            else -> ""
-        }
-
-        EntryPointAccessors.fromApplication<EntryPoint>(application).getMessageArchiveManager().getMessageArchiveTime(forWhat)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({ time ->
-                val myID = globalServices.myId
-
-                val message = NotifyMessage(
-                    messageId,
-                    For.Account(myID),
-                    forWhat,
-                    timeStamp,
-                    timeStamp,
-                    System.currentTimeMillis(),
-                    SendType.Sent.rawValue,
-                    time.toInt(),
-                    0,
-                    0,
-                    0,
-                    Gson().toJson(signalNotifyMessage)
-                )
-                ApplicationDependencies.getMessageStore().putMessage(message).subscribeOn(Schedulers.io()).subscribe()
-            }, { it.printStackTrace() })
-    }
-
-    /**
-     * 构建一条**拍摄了一张截图的消息，进行展示
-     */
-    @SuppressLint("CheckResult")
-    fun createScreenShotMessage(messageId: String, userId: String, groupID: String?, expiresInSeconds: Int, notifySequenceId: Long, sequenceId: Long, isMySelf: Boolean = false) {
-        val forWhat = groupID?.let { For.Group(groupID) } ?: For.Account(userId)
-        getContactWithID(application, userId)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({
-                if (it.isPresent) {
-                    val timeStamp = System.currentTimeMillis()
-                    val name = if (isMySelf) {
-                        ResUtils.getString(R.string.you)
-                    } else {
-                        it.get().getDisplayNameForUI()
-                    }
-                    val signalNotifyMessage = TTNotifyMessage(Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_SCREEN_SHOT), timeStamp, TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL)
-                    signalNotifyMessage.showContent = ResUtils.getString(R.string.chat_took_a_screen_shot, name)
-                    val message = NotifyMessage(
-                        messageId,
-                        For.Account(userId),
-                        forWhat,
-                        timeStamp,
-                        timeStamp,
-                        System.currentTimeMillis(),
-                        SendType.Sent.rawValue,
-                        expiresInSeconds,
-                        notifySequenceId,
-                        sequenceId,
-                        0,
-                        Gson().toJson(signalNotifyMessage)
-                    )
-                    ApplicationDependencies.getMessageStore().putMessage(message).subscribeOn(Schedulers.io()).subscribe()
-                }
-            }, { it.printStackTrace() })
-    }
-
-    suspend fun createScreenShotMessageNew(
-        forWhat: For,
-        messageId: String,
-        userId: String,
-        notifySequenceId: Long,
-        sequenceId: Long,
-        timestamp: Long,
-        systemShowTimestamp: Long,
-        expiresInSeconds: Int,
-    ): Message? {
-        val name = if (userId == globalServices.myId) {
-            ResUtils.getString(R.string.you)
-        } else {
-            runCatching { getContactWithID(application, userId).await().getOrNull()?.getDisplayNameForUI() }.getOrNull() ?: userId.formatBase58Id()
-        }
-        val signalNotifyMessage = TTNotifyMessage(
-            Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_SCREEN_SHOT),
-            timestamp,
-            TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL
-        )
-        signalNotifyMessage.showContent = ResUtils.getString(R.string.chat_took_a_screen_shot, name)
-
-        return NotifyMessage(
-            messageId,
-            For.Account(userId),
-            forWhat,
-            systemShowTimestamp,
-            timestamp,
-            System.currentTimeMillis(),
-            SendType.Sent.rawValue,
-            expiresInSeconds,
-            notifySequenceId,
-            sequenceId,
-            0,
-            Gson().toJson(signalNotifyMessage)
-        )
-    }
-
-    /**
-     * 创建一条reset identity key的notify消息
-     */
-    suspend fun createResetIdentityKeyMessage(operator: String, forWhat: For, operateTime: Long, messageArchiveTime: Long): NotifyMessage {
-        val contactorName = if (operator == globalServices.myId) {
-            ResUtils.getString(R.string.you)
-        } else {
-            getContactWithID(application, operator).await().getOrNull()?.getDisplayNameForUI() ?: forWhat.id.formatBase58Id()
-        }
-        val messageId = operateTime.toString() + forWhat.id.replace("+", "") + DEFAULT_DEVICE_ID
-        val signalNotifyMessage = TTNotifyMessage(Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_RESET_IDENTITY_KEY), operateTime, TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL)
-        signalNotifyMessage.showContent = ResUtils.getString(R.string.me_renew_identity_key_notify_tips, contactorName)
-        return NotifyMessage(
-            messageId,
-            forWhat,
-            forWhat,
-            operateTime,
-            operateTime,
-            System.currentTimeMillis(),
-            SendType.Sent.rawValue,
-            messageArchiveTime.toInt(),
-            0,
-            0,
-            0,
-            Gson().toJson(signalNotifyMessage)
-        )
-    }
-
-    /**
-     * 创建一条Earlier messages expired的系统消息
-     */
-    suspend fun createEarlierMessagesExpiredMessage(
-        messageRoomId: String,
-        messageRoomType: Int,
-        messageSystemShowTimestamp: Long,
-        messageReadTime: Long,
-        messageExpiresInSeconds: Int
-    ): MessageModel {
-        val operateTime = System.currentTimeMillis()
-        val messageId = operateTime.toString() + globalServices.myId.replace("+", "") + DEFAULT_DEVICE_ID
-        val signalNotifyMessage = TTNotifyMessage(Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED), operateTime, TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL)
-        signalNotifyMessage.showContent = ResUtils.getString(R.string.chat_archive_messages_expired)
-
-        return MessageModel().apply {
-            id = messageId
-            fromWho = globalServices.myId
-            roomId = messageRoomId
-            roomType = messageRoomType
-            systemShowTimestamp = messageSystemShowTimestamp
-            timeStamp = operateTime
-            readTime = messageReadTime
-            expiresInSeconds = messageExpiresInSeconds
-            mode = 0
-            messageText = globalServices.gson.toJson(signalNotifyMessage)
-            type = 2 // Notify
-        }
-    }
-
     fun updateContactRequestStatus(contactID: String, isDelete: Boolean = false) {
         try {
             val gson = Gson()
@@ -655,36 +420,36 @@ object ContactorUtil {
     }
 
     //发送好友请求消息，目前兼容老版本，后面可能移除
-    @SuppressLint("CheckResult")
-    fun sendFriendRequestMessage(activity: Activity, forWhat: For) {
-        try {
-            val myID = globalServices.myId
-            EntryPointAccessors.fromApplication<EntryPoint>(application).getMessageArchiveManager().getMessageArchiveTime(forWhat)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .subscribe({ time ->
-                    val timeStamp = System.currentTimeMillis()
-                    val messageId = "${timeStamp}${myID.replace("+", "")}${DEFAULT_DEVICE_ID}"
+    fun sendFriendRequestMessage(scope: CoroutineScope, friendRequestText: String, forWhat: For) {
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val myID = globalServices.myId
+                val time = EntryPointAccessors.fromApplication<EntryPoint>(application)
+                    .getMessageArchiveManager()
+                    .getMessageArchiveTime(forWhat)
+                    .await()
+                val timeStamp = System.currentTimeMillis()
+                val messageId = "${timeStamp}${myID.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
-                    val textMessage = TextMessage(
-                        messageId,
-                        For.Account(myID),
-                        forWhat,
-                        timeStamp,
-                        timeStamp,
-                        timeStamp,
-                        -1,
-                        time.toInt(),
-                        0,
-                        0,
-                        0,
-                        activity.getString(R.string.contact_friend_request)
-                    )
-                    val pushTextSendJobFactory = EntryPointAccessors.fromApplication<EntryPoint>(application).getPushTextSendJobFactory()
-                    ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
-                }, { it.printStackTrace() })
-        } catch (e: Exception) {
-            e.printStackTrace()
-            L.w { "[ContactorUtil] sendFriendRequestMessage error:" + e.stackTraceToString() }
+                val textMessage = TextMessage(
+                    messageId,
+                    For.Account(myID),
+                    forWhat,
+                    timeStamp,
+                    timeStamp,
+                    timeStamp,
+                    -1,
+                    time.toInt(),
+                    0,
+                    0,
+                    0,
+                    friendRequestText
+                )
+                val pushTextSendJobFactory = EntryPointAccessors.fromApplication<EntryPoint>(application).getPushTextSendJobFactory()
+                ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+            }.onFailure { e ->
+                L.w { "[ContactorUtil] sendFriendRequestMessage error:" + e.stackTraceToString() }
+            }
         }
     }
 

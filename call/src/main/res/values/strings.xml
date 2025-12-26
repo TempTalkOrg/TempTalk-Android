@@ -22,6 +22,7 @@
     <string name="call_connect_exception_error">Unable to connect to the server. Please try later.</string>
     <string name="call_no_internet_connection_tip">No internet connection. Please check your network and try again.</string>
     <string name="call_other_exception_error">Exception error</string>
+    <string name="call_enable_camera_not_implemented_error">The camera is not supported on this device. The call will proceed in audio-only mode.</string>
     <string name="call_all_mute_timeout_reminder">No one has been speaking for a while. Would you like to leave the meeting?</string>
     <string name="call_single_person_timeout_reminder">No other participants are in the meeting. Would you like to leave?</string>
     <string name="call_reminder_button_continue">Continue</string>

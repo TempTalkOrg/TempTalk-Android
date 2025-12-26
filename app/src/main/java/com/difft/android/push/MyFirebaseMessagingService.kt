@@ -77,7 +77,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         appScope.launch {
             withContext(Dispatchers.IO) {
-                L.i { "[Call] handle fcm critical alert: id=${forWhat.id}, timestamp=$timestamp" }
+                L.i { "[CriticalAlert] handle fcm critical alert: id=${forWhat.id}, timestamp=$timestamp" }
                 val conversationId = forWhat.id
                 val source = pushCustomContent.uid
                 if (source == null) {
@@ -85,13 +85,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     return@withContext
                 }
                 if (source == globalServices.myId) {
-                    L.w { "[Call] handle fcm critical alert: source is myself, do not show notification" }
+                    L.w { "[CriticalAlert] handle fcm critical alert: source is myself, do not show notification" }
                     return@withContext
                 }
 
                 val (title, content) = LCallManager.getCriticalAlertNotificationContent(conversationId, source)
                 entryPoint.messageNotificationUtil
-                    .showCriticalAlertNotification(forWhat, title, content, timestamp)
+                    .showCriticalAlert(forWhat, title, content, timestamp)
             }
         }
     }

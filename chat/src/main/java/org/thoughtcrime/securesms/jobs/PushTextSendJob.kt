@@ -8,15 +8,18 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.MD5Utils
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.common.SendType
-import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.fileshare.UploadInfoReq
 import com.difft.android.chat.group.GroupUtil
+import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.network.requests.ProgressListener
 import com.difft.android.network.requests.ProgressRequestBody
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
@@ -29,24 +32,26 @@ import com.difft.android.websocket.internal.push.exceptions.AccountOfflineExcept
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.tencent.wcdb.base.Value
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioMessage
+import kotlinx.coroutines.launch
 import okhttp3.RequestBody
 import org.difft.app.database.delete
 import org.difft.app.database.members
 import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
-import org.difft.app.database.toAttachmentModel
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobmanager.Data
@@ -77,6 +82,8 @@ class PushTextSendJob @AssistedInject constructor(
     private val gson: Gson,
     private val newSignalServiceMessageSender: NewSignalServiceMessageSender,
     private val dataMessageCreator: DataMessageCreator,
+    private val localMessageCreator: LocalMessageCreator,
+    private val messageStore: difft.android.messageserialization.MessageStore,
 ) : PushSendJob(parameters ?: buildParameters(textMessage.forWhat, textMessage.isAttachmentMessage())) {
 
     @dagger.hilt.EntryPoint
@@ -114,7 +121,7 @@ class PushTextSendJob @AssistedInject constructor(
                 textMessage.receiverIds = globalServices.gson.toJson(receiverIds)
             }
         }
-        updateSendStatus(SendType.Sending.rawValue)
+        updateMessage(SendType.Sending.rawValue)
     }
 
     public override fun onPushSend() {
@@ -147,16 +154,16 @@ class PushTextSendJob @AssistedInject constructor(
                     wcdb.message.getFirstObject(DBMessageModel.id.eq(textMessage.id))?.delete()
                 } else if (!textMessage.reactions.isNullOrEmpty()) { // emoji reaction消息成功，更新数据
                     textMessage.reactions?.firstOrNull()?.let { reaction ->
-                        ApplicationDependencies.getMessageStore().updateMessageReaction(textMessage.forWhat.id, reaction, null, null)
+                        messageStore.updateMessageReaction(textMessage.forWhat.id, reaction, null, null)
                     }
                 } else {
                     textMessage.systemShowTimestamp = it.systemShowTimestamp
                     textMessage.notifySequenceId = it.notifySequenceId
                     textMessage.sequenceId = it.sequenceId
                 }
-                updateSendStatus(SendType.Sent.rawValue)
+                updateMessage(SendType.Sent.rawValue)
             } ?: {
-                updateSendStatus(SendType.SentFailed.rawValue)
+                updateMessage(SendType.SentFailed.rawValue)
             }
         } catch (e: Exception) {
             L.e { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Send message exception, Exception: ${e.stackTraceToString()}, RetryCount: $runAttempt" }
@@ -165,40 +172,31 @@ class PushTextSendJob @AssistedInject constructor(
             if (e is NonSuccessfulResponseCodeException) {
                 when (e.code) {
                     430 -> {
-                        updateSendStatus(SendType.SentFailed.rawValue)
+                        updateMessage(SendType.SentFailed.rawValue)
                         return // 不重试，直接返回
                     }
 
                     432 -> { // 非好友限制为每天最多发送三条消息
-                        ContactorUtil.createNonFriendLimitMessage(textMessage.forWhat)
-                        updateSendStatus(SendType.SentFailed.rawValue)
+                        appScope.launch { localMessageCreator.createNonFriendLimitMessage(textMessage.forWhat) }
+                        updateMessage(SendType.SentFailed.rawValue)
                         return // 不重试，直接返回
                     }
 
                     404 -> {
                         if (e is AccountOfflineException) {
                             when (e.status) {
-                                10105 -> { // 对方离线
-                                    ContactorUtil.createOfflineMessage(
-                                        textMessage.forWhat,
-                                        TTNotifyMessage.NOTIFY_ACTION_TYPE_OFFLINE
-                                    )
+                                10105 -> appScope.launch { // 对方离线
+                                    localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_OFFLINE)
                                 }
 
-                                10110 -> { // 对方账号注销
-                                    ContactorUtil.createOfflineMessage(
-                                        textMessage.forWhat,
-                                        TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED
-                                    )
+                                10110 -> appScope.launch { // 对方账号注销
+                                    localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED)
                                 }
                             }
                         } else { // 账号不可用
-                            ContactorUtil.createOfflineMessage(
-                                textMessage.forWhat,
-                                TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED
-                            )
+                            appScope.launch { localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED) }
                         }
-                        updateSendStatus(SendType.SentFailed.rawValue)
+                        updateMessage(SendType.SentFailed.rawValue)
                         return // 不重试，直接返回
                     }
                 }
@@ -209,7 +207,7 @@ class PushTextSendJob @AssistedInject constructor(
                 throw e
             } else {
                 L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Exception no need to retry, failing directly, RetryCount: $runAttempt, Exception: ${e.stackTraceToString()}" }
-                updateSendStatus(SendType.SentFailed.rawValue)
+                updateMessage(SendType.SentFailed.rawValue)
             }
         }
         reportSendCostTime()
@@ -264,28 +262,74 @@ class PushTextSendJob @AssistedInject constructor(
         )
     }
 
-    private fun updateSendStatus(status: Int) {
-        if (textMessage.recall != null) return
-        if (textMessage.screenShot != null) return
-        if (textMessage.reactions?.isNotEmpty() == true) return
+    /**
+     * Update message with server timestamps and send status.
+     * This method replaces the old updateSendStatus approach by:
+     * 1. First trying to insert the message if it doesn't exist (putWhenNonExist)
+     * 2. Then updating timestamps and status in one database operation
+     */
+    private fun updateMessage(status: Int) {
+        // Skip update for screenshot, reaction, and recall messages
+        if (textMessage.screenShot != null || textMessage.recall != null || textMessage.reactions?.isNotEmpty() == true) {
+            return
+        }
 
-        ApplicationDependencies.getMessageStore().updateSendStatus(textMessage, status).blockingAwait()
+        L.i { "[Message] Updating message ${textMessage.id} - " + "roomId: ${textMessage.forWhat.id}, " + "systemShowTimestamp: ${textMessage.systemShowTimestamp}, " + "status: $status" }
+
+        textMessage.sendType = status
+
+        // Try to insert the message if it doesn't exist
+        messageStore.putWhenNonExist(textMessage)
+
+        // Update both timestamps and send status in one operation
+        wcdb.message.updateRow(
+            arrayOf(
+                Value(textMessage.systemShowTimestamp),
+                Value(textMessage.notifySequenceId),
+                Value(textMessage.sequenceId),
+                Value(status),
+                Value(textMessage.systemShowTimestamp)  // readTime = systemShowTimestamp for self-sent messages
+            ),
+            arrayOf(
+                DBMessageModel.systemShowTimestamp,
+                DBMessageModel.notifySequenceId,
+                DBMessageModel.sequenceId,
+                DBMessageModel.sendType,
+                DBMessageModel.readTime
+            ),
+            DBMessageModel.id.eq(textMessage.id)
+        )
+        RoomChangeTracker.trackRoom(textMessage.forWhat.id, RoomChangeType.MESSAGE)
     }
 
-    private fun updateAttachmentStatus(status: Int) {
-        val attachment = textMessage.attachments?.firstOrNull() ?: return
-        attachment.status = status
-
-        val newAttachment = attachment.toAttachmentModel(textMessage.id)
-        wcdb.attachment.deleteObjects(DBAttachmentModel.id.eq(attachment.id).and(DBAttachmentModel.messageId.eq(textMessage.id)))
-        wcdb.attachment.insertObject(newAttachment)
+    /**
+     * Update attachment with all relevant fields (authorityId, key, digest, status).
+     * Uses updateRow instead of DELETE + INSERT to avoid WCDB soft-delete issues.
+     */
+    private fun updateAttachment(attachment: Attachment) {
+        wcdb.attachment.updateRow(
+            arrayOf(
+                Value(attachment.authorityId),
+                Value(attachment.key),
+                Value(attachment.digest),
+                Value(attachment.status)
+            ),
+            arrayOf(
+                DBAttachmentModel.authorityId,
+                DBAttachmentModel.key,
+                DBAttachmentModel.digest,
+                DBAttachmentModel.status
+            ),
+            DBAttachmentModel.id.eq(attachment.id).and(DBAttachmentModel.messageId.eq(textMessage.id))
+        )
     }
 
     private fun uploadAttachment() {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
         attachment.path ?: return
 
-        updateAttachmentStatus(AttachmentStatus.LOADING.code)
+        attachment.status = AttachmentStatus.LOADING.code
+        updateAttachment(attachment)
         FileUtil.emitProgressUpdate(textMessage.id, 0)
 
         val buffer = ByteArray(8192)
@@ -442,8 +486,8 @@ class PushTextSendJob @AssistedInject constructor(
                 throw IOException("check attachment is exist fail" + fileExistResponse.message())
             }
             attachment.key = originKey
-
-            updateAttachmentStatus(AttachmentStatus.SUCCESS.code)
+            attachment.status = AttachmentStatus.SUCCESS.code
+            updateAttachment(attachment)
 
             //语音消息不要删除加密文件
             if (textMessage.attachments?.firstOrNull()?.isAudioMessage() != true) {
@@ -452,7 +496,8 @@ class PushTextSendJob @AssistedInject constructor(
             FileUtil.emitProgressUpdate(textMessage.id, 100)
         } catch (e: Exception) {
             L.e { "[PushTextSendJob] Upload failed, RetryCount: $runAttempt, Exception: ${e.stackTraceToString()}" }
-            updateAttachmentStatus(AttachmentStatus.FAILED.code)
+            attachment.status = AttachmentStatus.FAILED.code
+            updateAttachment(attachment)
             FileUtil.emitProgressUpdate(textMessage.id, -1)
             throw e
         } finally {
@@ -465,13 +510,13 @@ class PushTextSendJob @AssistedInject constructor(
 
     override fun onFailure() {
         L.w { "[Message] Job最终失败 - MessageID: ${textMessage.id}, Target: ${textMessage.forWhat.id}, 最终重试次数: ${getRunAttempt()}, JobID: ${getId()}" }
-        updateSendStatus(SendType.SentFailed.rawValue)
+        updateMessage(SendType.SentFailed.rawValue)
     }
 
     class Factory : Job.Factory<PushTextSendJob> {
 
         @dagger.hilt.EntryPoint
-        @InstallIn(dagger.hilt.components.SingletonComponent::class)
+        @InstallIn(SingletonComponent::class)
         interface EntryPoint {
             fun getPushTextJobFactory(): PushTextSendJobFactory
         }

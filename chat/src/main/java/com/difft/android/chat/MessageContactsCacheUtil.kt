@@ -59,12 +59,7 @@ class MessageContactsCacheUtil {
 
         // 过滤掉已在缓存中的ID
         val missingIds = ids.filter { cache[it] == null }.toSet()
-        if (missingIds.isEmpty()) {
-            L.d { "MessageContactsCacheUtil: All ${ids.size} contactors already in cache" }
-            return
-        }
-
-        L.d { "MessageContactsCacheUtil: Loading ${missingIds.size} contactors (${ids.size - missingIds.size} already cached)" }
+        if (missingIds.isEmpty()) return
 
         // 批量查询数据库
         val contactors = withContext(Dispatchers.IO) {
@@ -88,7 +83,6 @@ class MessageContactsCacheUtil {
      */
     fun put(contactor: ContactorModel) {
         cache[contactor.id] = contactor
-        L.d { "MessageContactsCacheUtil: Put contactor ${contactor.id} into cache" }
     }
 
     /**
@@ -100,7 +94,6 @@ class MessageContactsCacheUtil {
      */
     fun remove(id: String) {
         cache.remove(id)
-        L.d { "MessageContactsCacheUtil: Removed contactor $id from cache" }
     }
 
     /**
@@ -110,7 +103,6 @@ class MessageContactsCacheUtil {
      */
     fun remove(ids: Set<String>) {
         ids.forEach { cache.remove(it) }
-        L.d { "MessageContactsCacheUtil: Removed ${ids.size} contactors from cache" }
     }
 
     /**
@@ -120,7 +112,6 @@ class MessageContactsCacheUtil {
      */
     fun clear() {
         cache.clear()
-        L.d { "MessageContactsCacheUtil: Cache cleared" }
     }
 
     /**

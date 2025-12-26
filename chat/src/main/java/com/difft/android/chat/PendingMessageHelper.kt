@@ -10,7 +10,10 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.responses.PendingMessage
 import com.difft.android.websocket.util.Base64
 import com.google.protobuf.ByteString
+import com.tencent.wcdb.base.WCDBException
 import kotlinx.coroutines.Dispatchers
+import org.difft.app.database.models.FailedMessageModel
+import org.difft.app.database.wcdb
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -101,26 +104,45 @@ class PendingMessageHelper @Inject constructor(
             L.i { "[Message][PendingMessageHelper] obtainPendingMessage success size:${pendingMessageResponse.messages?.size} more:${more}" }
 
             val messages = pendingMessageResponse.messages ?: emptyList()
-            val results = messages.mapNotNull { msg ->
-                buildEnvelope(msg)?.let { envelope ->
-                    envelopToMessageProcessor.process(envelope, "PendingMessageHelper")
+
+            // Sort messages by systemShowTimestamp to ensure chronological order
+            val sortedMessages = messages.sortedBy { it.systemShowTimestamp }
+            val failedEnvelopes = mutableListOf<SignalServiceProtos.Envelope>()
+
+            // Process and save messages one by one with exception handling
+            sortedMessages.forEach { msg ->
+                try {
+                    val envelope = buildEnvelope(msg) ?: return@forEach
+                    val result = envelopToMessageProcessor.process(envelope, "PendingMessageHelper")
+                    if (result != null) {
+                        dbMessageStore.putWhenNonExist(result.message)
+                        L.d { "[Message][PendingMessageHelper] Successfully processed and saved message ${msg.timestamp}" }
+                    }
+                } catch (e: Exception) {
+                    L.e { "[Message][PendingMessageHelper] Failed to process message ${msg.timestamp}: ${e.stackTraceToString()}" }
+                    // Save failed envelope for retry via FailedMessageProcessor
+                    buildEnvelope(msg)?.let { failedEnvelopes.add(it) }
+                }
+            }
+
+            // Save failed messages to FailedMessage table for retry
+            if (failedEnvelopes.isNotEmpty()) {
+                L.w { "[Message][PendingMessageHelper] ${failedEnvelopes.size} messages failed, saving to FailedMessage" }
+                try {
+                    val messageModels = failedEnvelopes.map { envelope ->
+                        FailedMessageModel().apply {
+                            this.timestamp = envelope.timestamp
+                            this.messageEnvelopBytes = envelope.toByteArray()
+                        }
+                    }
+                    wcdb.failedMessage.insertOrReplaceObjects(messageModels)
+                } catch (e: WCDBException) {
+                    L.e { "[Message][PendingMessageHelper] saveFailedMessage error: ${e.stackTraceToString()}" }
                 }
             }
 
             WCDBUpdateService.updatingRooms()
-
-            // 批量保存消息
-            val validMessages = results.map { it.message }
-            if (validMessages.isNotEmpty()) {
-                L.i { "[Message][PendingMessageHelper] saving ${validMessages.size} messages to db" }
-                try {
-                    dbMessageStore.putWhenNonExist(*validMessages.toTypedArray(), useTransaction = false)
-                } catch (e: Exception) {
-                    L.e { "[Message][PendingMessageHelper] Failed to save messages to DB: ${e.stackTraceToString()}" }
-                    return false
-                }
-            }
-
+            // Delete all messages from server (successful ones are saved, failed ones are in FailedMessage table)
             deletePendingMessages(messages)
         }
         return true

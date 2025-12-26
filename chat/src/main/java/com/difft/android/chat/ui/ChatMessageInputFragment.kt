@@ -55,6 +55,7 @@ import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.setting.archive.MessageArchiveManager
@@ -93,7 +94,6 @@ import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.ReadPosition
 import difft.android.messageserialization.model.RealSource
 import difft.android.messageserialization.model.Recall
-import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
@@ -183,6 +183,9 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
     @Inject
     lateinit var messageArchiveManager: MessageArchiveManager
+
+    @Inject
+    lateinit var localMessageCreator: LocalMessageCreator
 
     private var keyboardVisibilityEventListener: Unregistrar? = null
 
@@ -1458,25 +1461,36 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     /**
      * Unified method to send text messages with optional attachment
      * @param content Text content (can be null for attachment-only messages)
-     * @param isScreenShot Whether this is a screenshot message
      * @param timeStamp Message timestamp
      * @param messageId Message ID (auto-generated if not provided)
      * @param attachmentInfo Attachment information (null for text-only messages)
      */
     private fun sendTextPush(
         content: String? = null,
-        isScreenShot: Boolean = false,
         timeStamp: Long = System.currentTimeMillis(),
         messageId: String = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}",
         attachmentInfo: AttachmentInfo? = null
     ) {
         val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
 
-        var screenShot: ScreenShot? = null
-        if (isScreenShot) {
-            screenShot = ScreenShot(RealSource(globalServices.myId, 1, timeStamp, timeStamp))
-            ContactorUtil.createScreenShotMessage(messageId, if (isGroup) globalServices.myId else chatViewModel.forWhat.id, if (isGroup) chatViewModel.forWhat.id else null, chatSettingViewModel.getMessageExpirySeconds(), 0, 0, true)
-        }
+        //暂时不支持这个功能
+//        var screenShot: ScreenShot? = null
+//        if (isScreenShot) {
+//            screenShot = ScreenShot(RealSource(globalServices.myId, 1, timeStamp, timeStamp))
+//            viewLifecycleOwner.lifecycleScope.launch {
+//                localMessageCreator.createScreenShotMessage(
+//                    forWhat = forWhat,
+//                    messageId = messageId,
+//                    userId = globalServices.myId,
+//                    notifySequenceId = 0,
+//                    sequenceId = 0,
+//                    timestamp = timeStamp,
+//                    systemShowTimestamp = timeStamp,
+//                    expiresInSeconds = chatSettingViewModel.getMessageExpirySeconds(),
+//                    saveToLocal = true
+//                )
+//            }
+//        }
 
         var atPersonsString: String? = null
         if (mentions.isNotEmpty()) {
@@ -1536,7 +1550,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 mentions.toMutableList(),
                 atPersonsString,
                 reactions.toMutableList(),
-                screenShot,
+                null,
                 sharedContacts.toMutableList(),
                 playStatus = if (attachmentInfo?.isAudioMessage == true) AudioMessageManager.PLAY_STATUS_NOT_PLAY else 0
             )

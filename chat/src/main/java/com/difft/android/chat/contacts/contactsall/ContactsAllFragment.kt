@@ -7,11 +7,15 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.difft.android.base.utils.RxUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
+import kotlinx.coroutines.withContext
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
@@ -24,7 +28,6 @@ import com.difft.android.base.widget.sideBar.SectionDecoration
 import com.difft.android.base.widget.sideBar.SideBar
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
 import java.util.Collections
@@ -81,47 +84,36 @@ class ContactsAllFragment : Fragment() {
         }
 
         ContactorUtil.getContactsStatusUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                binding.smartRefreshLayout.finishRefresh()
-            }, { it.printStackTrace() })
+            .asFlow()
+            .onEach { binding.smartRefreshLayout.finishRefresh() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                initData()
-            }, { it.printStackTrace() })
+            .asFlow()
+            .onEach { initData() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         initData()
 
-        // Collect text size changes at Fragment level and notify adapter
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                TextSizeUtil.textSizeState.collect {
-                    mAdapter.notifyDataSetChanged()
-                }
-            }
-        }
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { mAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
         return binding.root
     }
 
     private fun initData() {
-        Single.fromCallable {
-            val contacts = wcdb.contactor.allObjects
-            val contactList = contacts.toMutableList()
-            contactList.removeAll { it.id == getString(R.string.official_bot_id) }
-            Collections.sort(contactList, pinyinComparator)
-            contactList
-        }.compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contacts ->
-                mAdapter.submitList(contacts)
-                addLettersDecoration(contacts)
-            }, {
-                it.printStackTrace()
-            })
+        viewLifecycleOwner.lifecycleScope.launch {
+            val contacts = withContext(Dispatchers.IO) {
+                val contacts = wcdb.contactor.allObjects
+                val contactList = contacts.toMutableList()
+                contactList.removeAll { it.id == getString(R.string.official_bot_id) }
+                Collections.sort(contactList, pinyinComparator)
+                contactList
+            }
+            mAdapter.submitList(contacts)
+            addLettersDecoration(contacts)
+        }
     }
 
     private var decoration: SectionDecoration? = null
