@@ -29,9 +29,9 @@ public final class SqlCipherDeletingErrorHandler implements DatabaseErrorHandler
     }
 
     @Override
-    public void onCorruption(SQLiteDatabase db) {
+    public void onCorruption(SQLiteDatabase db, String message) {
         try {
-            L.e(() -> TAG + " Database '" + databaseName + "' corrupted! Message: " + ". Going to try to run some diagnostics.");
+            L.e(() -> TAG + " Database '" + databaseName + "' corrupted! Message: " + message + ". Going to try to run some diagnostics.");
             FirebaseCrashlytics.getInstance().recordException(new RuntimeException("[SqlCipherDeletingErrorHandler] Database '" + databaseName + "' corrupted"));
 
             L.w(() -> TAG + " ===== PRAGMA integrity_check =====");

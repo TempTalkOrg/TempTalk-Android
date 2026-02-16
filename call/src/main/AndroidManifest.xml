@@ -19,8 +19,7 @@
             android:showOnLockScreen="true"
             android:supportsPictureInPicture="true"
             android:finishOnTaskLaunch="true"
-            android:taskAffinity="com.difft.android.call.task"
-            android:theme="@style/Theme.Livekitandroid.NoActionBar" />
+            android:taskAffinity="com.difft.android.call.task" />
 
         <activity
             android:name=".node.LCallServerNodeActivity"
@@ -33,6 +32,14 @@
             android:name=".service.ForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync|microphone|camera" />
+
+        <receiver
+            android:name=".receiver.InComingCallNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="difft.intent.action.RECEIVE_CALL_OPERATION_ACCEPT" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

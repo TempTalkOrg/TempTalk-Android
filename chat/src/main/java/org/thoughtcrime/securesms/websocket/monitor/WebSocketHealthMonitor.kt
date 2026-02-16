@@ -25,7 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.thoughtcrime.securesms.jobmanager.impl.BackoffUtil
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint
-import org.thoughtcrime.securesms.util.AppForegroundObserver
+import util.AppForegroundObserver
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,7 +39,7 @@ import javax.inject.Singleton
 @Singleton
 class WebSocketHealthMonitor
 @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val urlManager: UrlManager,
 ) : HealthMonitor, CoroutineScope by appScope {

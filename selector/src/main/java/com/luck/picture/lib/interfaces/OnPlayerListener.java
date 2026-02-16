@@ -25,4 +25,16 @@ public interface OnPlayerListener {
      * end of playback
      */
     void onPlayerEnd();
+
+    /**
+     * Single tap on player view (for toggling UI visibility)
+     * Default implementation does nothing for backward compatibility
+     */
+    default void onPlayerTap() {}
+
+    /**
+     * Long press on player view (for save/download actions)
+     * Default implementation does nothing for backward compatibility
+     */
+    default void onPlayerLongPress() {}
 }

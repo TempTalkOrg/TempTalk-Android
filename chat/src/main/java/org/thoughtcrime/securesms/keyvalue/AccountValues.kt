@@ -3,7 +3,7 @@ package org.thoughtcrime.securesms.keyvalue
 import com.difft.android.base.log.lumberjack.L
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
-import org.signal.libsignal.protocol.ecc.Curve
+import org.signal.libsignal.protocol.ecc.ECPrivateKey
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
 
 class AccountValues internal constructor(store: KeyValueStore) : SignalStoreValues(store) {
@@ -38,7 +38,7 @@ class AccountValues internal constructor(store: KeyValueStore) : SignalStoreValu
             }
             return IdentityKeyPair(
                 IdentityKey(getBlob(KEY_ACI_IDENTITY_PUBLIC_KEY, null)),
-                Curve.decodePrivatePoint(getBlob(KEY_ACI_IDENTITY_PRIVATE_KEY, null))
+                ECPrivateKey(getBlob(KEY_ACI_IDENTITY_PRIVATE_KEY, null))
             )
         }
 
@@ -47,7 +47,7 @@ class AccountValues internal constructor(store: KeyValueStore) : SignalStoreValu
         get() {
             return IdentityKeyPair(
                 IdentityKey(getBlob(KEY_ACI_IDENTITY_OLD_PUBLIC_KEY, null)),
-                Curve.decodePrivatePoint(getBlob(KEY_ACI_IDENTITY_OLD_PRIVATE_KEY, null))
+                ECPrivateKey(getBlob(KEY_ACI_IDENTITY_OLD_PRIVATE_KEY, null))
             )
         }
 

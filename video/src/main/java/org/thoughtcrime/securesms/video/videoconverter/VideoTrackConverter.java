@@ -11,7 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.video.interfaces.MediaInput;
 import org.thoughtcrime.securesms.video.interfaces.Muxer;
 import org.thoughtcrime.securesms.video.videoconverter.utils.Extensions;
@@ -110,10 +110,10 @@ final class VideoTrackConverter {
         final MediaCodecInfo videoCodecInfo = MediaConverter.selectCodec(videoCodec);
         if (videoCodecInfo == null) {
             // Don't fail CTS if they don't have an AVC codec (not here, anyway).
-            Log.e(TAG, "Unable to find an appropriate codec for " + videoCodec);
+            L.e(() -> TAG + "Unable to find an appropriate codec for " + videoCodec);
             throw new FileNotFoundException();
         }
-        if (VERBOSE) Log.d(TAG, "video found codec: " + videoCodecInfo.getName());
+        L.i(() -> TAG + "Video encoder selected: " + videoCodecInfo.getName() + ", isHardwareAccelerated: " + (Build.VERSION.SDK_INT >= 29 ? videoCodecInfo.isHardwareAccelerated() : "unknown"));
 
         final MediaFormat inputVideoFormat = mVideoExtractor.getTrackFormat(videoInputTrack);
 
@@ -157,12 +157,13 @@ final class VideoTrackConverter {
         // configure() call to throw an unhelpful exception.
         outputVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         outputVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
+        outputVideoFormat.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
         outputVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, OUTPUT_VIDEO_FRAME_RATE);
         outputVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, OUTPUT_VIDEO_IFRAME_INTERVAL);
         if (Build.VERSION.SDK_INT >= 31 && isHdr(inputVideoFormat)) {
             outputVideoFormat.setInteger(MediaFormat.KEY_COLOR_TRANSFER_REQUEST, MediaFormat.COLOR_TRANSFER_SDR_VIDEO);
         }
-        if (VERBOSE) Log.d(TAG, "video format: " + outputVideoFormat);
+        L.i(() -> TAG + "Video encoder config: " + outputVideoFormat.toString());
 
         // Create a MediaCodec for the desired codec, then configure it as an encoder with
         // our desired properties. Request a Surface to use for input.
@@ -186,7 +187,7 @@ final class VideoTrackConverter {
 
         if (mTimeFrom > 0) {
             mVideoExtractor.seekTo(mTimeFrom * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-            Log.i(TAG, "Seek video:" + mTimeFrom + " " + mVideoExtractor.getSampleTime());
+            L.i(() -> TAG + "Seek video:" + mTimeFrom + " " + mVideoExtractor.getSampleTime());
         }
     }
 
@@ -206,7 +207,7 @@ final class VideoTrackConverter {
     void setMuxer(final @NonNull Muxer muxer) throws IOException {
         mMuxer = muxer;
         if (mEncoderOutputVideoFormat != null) {
-            Log.d(TAG, "muxer: adding video track.");
+            L.d(() -> TAG + "muxer: adding video track.");
             mOutputVideoTrack = muxer.addTrack(mEncoderOutputVideoFormat);
         }
     }
@@ -219,23 +220,23 @@ final class VideoTrackConverter {
                 && (mEncoderOutputVideoFormat == null || mMuxer != null)) {
             int decoderInputBufferIndex = mVideoDecoder.dequeueInputBuffer(TIMEOUT_USEC);
             if (decoderInputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                if (VERBOSE) Log.d(TAG, "no video decoder input buffer");
+                if (VERBOSE) L.d(() -> TAG + "no video decoder input buffer");
                 break;
             }
             if (VERBOSE) {
-                Log.d(TAG, "video decoder: returned input buffer: " + decoderInputBufferIndex);
+                L.d(() -> TAG + "video decoder: returned input buffer: " + decoderInputBufferIndex);
             }
             final ByteBuffer decoderInputBuffer = mVideoDecoderInputBuffers[decoderInputBufferIndex];
             final int size = mVideoExtractor.readSampleData(decoderInputBuffer, 0);
             final long presentationTime = mVideoExtractor.getSampleTime();
             if (VERBOSE) {
-                Log.d(TAG, "video extractor: returned buffer of size " + size);
-                Log.d(TAG, "video extractor: returned buffer for time " + presentationTime);
+                L.d(() -> TAG + "video extractor: returned buffer of size " + size);
+                L.d(() -> TAG + "video extractor: returned buffer for time " + presentationTime);
             }
             mVideoExtractorDone = size < 0 || (mTimeTo > 0 && presentationTime > mTimeTo * 1000);
 
             if (mVideoExtractorDone) {
-                if (VERBOSE) Log.d(TAG, "video extractor: EOS");
+                if (VERBOSE) L.d(() -> TAG + "video extractor: EOS");
                 mVideoDecoder.queueInputBuffer(
                         decoderInputBufferIndex,
                         0,
@@ -262,54 +263,54 @@ final class VideoTrackConverter {
                     mVideoDecoder.dequeueOutputBuffer(
                             mVideoDecoderOutputBufferInfo, TIMEOUT_USEC);
             if (decoderOutputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                if (VERBOSE) Log.d(TAG, "no video decoder output buffer");
+                if (VERBOSE) L.d(() -> TAG + "no video decoder output buffer");
                 break;
             }
             if (decoderOutputBufferIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                if (VERBOSE) Log.d(TAG, "video decoder: output buffers changed");
+                if (VERBOSE) L.d(() -> TAG + "video decoder: output buffers changed");
                 break;
             }
             if (decoderOutputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                 if (VERBOSE) {
-                    Log.d(TAG, "video decoder: output format changed: " + mVideoDecoder.getOutputFormat());
+                    L.d(() -> TAG + "video decoder: output format changed: " + mVideoDecoder.getOutputFormat());
                 }
                 break;
             }
             if (VERBOSE) {
-                Log.d(TAG, "video decoder: returned output buffer: "
+                L.d(() -> TAG + "video decoder: returned output buffer: "
                         + decoderOutputBufferIndex);
-                Log.d(TAG, "video decoder: returned buffer of size "
+                L.d(() -> TAG + "video decoder: returned buffer of size "
                         + mVideoDecoderOutputBufferInfo.size);
             }
             if ((mVideoDecoderOutputBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                if (VERBOSE) Log.d(TAG, "video decoder: codec config buffer");
+                if (VERBOSE) L.d(() -> TAG + "video decoder: codec config buffer");
                 mVideoDecoder.releaseOutputBuffer(decoderOutputBufferIndex, false);
                 break;
             }
             if (mVideoDecoderOutputBufferInfo.presentationTimeUs < mTimeFrom * 1000 &&
                     (mVideoDecoderOutputBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == 0) {
-                if (VERBOSE) Log.d(TAG, "video decoder: frame prior to " + mVideoDecoderOutputBufferInfo.presentationTimeUs);
+                if (VERBOSE) L.d(() -> TAG + "video decoder: frame prior to " + mVideoDecoderOutputBufferInfo.presentationTimeUs);
                 mVideoDecoder.releaseOutputBuffer(decoderOutputBufferIndex, false);
                 break;
             }
             if (VERBOSE) {
-                Log.d(TAG, "video decoder: returned buffer for time " + mVideoDecoderOutputBufferInfo.presentationTimeUs);
+                L.d(() -> TAG + "video decoder: returned buffer for time " + mVideoDecoderOutputBufferInfo.presentationTimeUs);
             }
             boolean render = mVideoDecoderOutputBufferInfo.size != 0;
             mVideoDecoder.releaseOutputBuffer(decoderOutputBufferIndex, render);
             if (render) {
-                if (VERBOSE) Log.d(TAG, "output surface: await new image");
+                if (VERBOSE) L.d(() -> TAG + "output surface: await new image");
                 mOutputSurface.awaitNewImage();
                 // Edit the frame and send it to the encoder.
-                if (VERBOSE) Log.d(TAG, "output surface: draw image");
+                if (VERBOSE) L.d(() -> TAG + "output surface: draw image");
                 mOutputSurface.drawImage();
                 mInputSurface.setPresentationTime(mVideoDecoderOutputBufferInfo.presentationTimeUs * 1000);
-                if (VERBOSE) Log.d(TAG, "input surface: swap buffers");
+                if (VERBOSE) L.d(() -> TAG + "input surface: swap buffers");
                 mInputSurface.swapBuffers();
-                if (VERBOSE) Log.d(TAG, "video encoder: notified of new frame");
+                if (VERBOSE) L.d(() -> TAG + "video encoder: notified of new frame");
             }
             if ((mVideoDecoderOutputBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                if (VERBOSE) Log.d(TAG, "video decoder: EOS");
+                if (VERBOSE) L.d(() -> TAG + "video decoder: EOS");
                 mVideoDecoderDone = true;
                 mVideoEncoder.signalEndOfInputStream();
             }
@@ -322,47 +323,47 @@ final class VideoTrackConverter {
         while (!mVideoEncoderDone && (mEncoderOutputVideoFormat == null || mMuxer != null)) {
             final int encoderOutputBufferIndex = mVideoEncoder.dequeueOutputBuffer(mVideoEncoderOutputBufferInfo, TIMEOUT_USEC);
             if (encoderOutputBufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                if (VERBOSE) Log.d(TAG, "no video encoder output buffer");
+                if (VERBOSE) L.d(() -> TAG + "no video encoder output buffer");
                 if (mVideoDecoderDone) {
                     // on some devices and encoder stops after signalEndOfInputStream
-                    Log.w(TAG, "mVideoDecoderDone, but didn't get BUFFER_FLAG_END_OF_STREAM");
+                    L.w(() -> TAG + "mVideoDecoderDone, but didn't get BUFFER_FLAG_END_OF_STREAM");
                     mVideoEncodedFrameCount = mVideoDecodedFrameCount;
                     mVideoEncoderDone = true;
                 }
                 break;
             }
             if (encoderOutputBufferIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                if (VERBOSE) Log.d(TAG, "video encoder: output buffers changed");
+                if (VERBOSE) L.d(() -> TAG + "video encoder: output buffers changed");
                 mVideoEncoderOutputBuffers = mVideoEncoder.getOutputBuffers();
                 break;
             }
             if (encoderOutputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                if (VERBOSE) Log.d(TAG, "video encoder: output format changed");
+                if (VERBOSE) L.d(() -> TAG + "video encoder: output format changed");
                 Preconditions.checkState("video encoder changed its output format again?", mOutputVideoTrack < 0);
                 mEncoderOutputVideoFormat = mVideoEncoder.getOutputFormat();
                 break;
             }
             Preconditions.checkState("should have added track before processing output", mMuxer != null);
             if (VERBOSE) {
-                Log.d(TAG, "video encoder: returned output buffer: " + encoderOutputBufferIndex);
-                Log.d(TAG, "video encoder: returned buffer of size " + mVideoEncoderOutputBufferInfo.size);
+                L.d(() -> TAG + "video encoder: returned output buffer: " + encoderOutputBufferIndex);
+                L.d(() -> TAG + "video encoder: returned buffer of size " + mVideoEncoderOutputBufferInfo.size);
             }
             final ByteBuffer encoderOutputBuffer = mVideoEncoderOutputBuffers[encoderOutputBufferIndex];
             if ((mVideoEncoderOutputBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                if (VERBOSE) Log.d(TAG, "video encoder: codec config buffer");
+                if (VERBOSE) L.d(() -> TAG + "video encoder: codec config buffer");
                 // Simply ignore codec config buffers.
                 mVideoEncoder.releaseOutputBuffer(encoderOutputBufferIndex, false);
                 break;
             }
             if (VERBOSE) {
-                Log.d(TAG, "video encoder: returned buffer for time " + mVideoEncoderOutputBufferInfo.presentationTimeUs);
+                L.d(() -> TAG + "video encoder: returned buffer for time " + mVideoEncoderOutputBufferInfo.presentationTimeUs);
             }
             if (mVideoEncoderOutputBufferInfo.size != 0) {
                 mMuxer.writeSampleData(mOutputVideoTrack, encoderOutputBuffer, mVideoEncoderOutputBufferInfo);
                 mMuxingVideoPresentationTime = Math.max(mMuxingVideoPresentationTime, mVideoEncoderOutputBufferInfo.presentationTimeUs);
             }
             if ((mVideoEncoderOutputBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                if (VERBOSE) Log.d(TAG, "video encoder: EOS");
+                if (VERBOSE) L.d(() -> TAG + "video encoder: EOS");
                 mVideoEncoderDone = true;
             }
             mVideoEncoder.releaseOutputBuffer(encoderOutputBufferIndex, false);
@@ -379,7 +380,7 @@ final class VideoTrackConverter {
                 mVideoExtractor.release();
             }
         } catch (Exception e) {
-            Log.e(TAG, "error while releasing mVideoExtractor", e);
+            L.e(e, () -> TAG + " error while releasing mVideoExtractor");
             exception = e;
         }
         try {
@@ -388,7 +389,7 @@ final class VideoTrackConverter {
                 mVideoDecoder.release();
             }
         } catch (Exception e) {
-            Log.e(TAG, "error while releasing mVideoDecoder", e);
+            L.e(e, () -> TAG + " error while releasing mVideoDecoder");
             if (exception == null) {
                 exception = e;
             }
@@ -398,7 +399,7 @@ final class VideoTrackConverter {
                 mOutputSurface.release();
             }
         } catch (Exception e) {
-            Log.e(TAG, "error while releasing mOutputSurface", e);
+            L.e(e, () -> TAG + " error while releasing mOutputSurface");
             if (exception == null) {
                 exception = e;
             }
@@ -408,7 +409,7 @@ final class VideoTrackConverter {
                 mInputSurface.release();
             }
         } catch (Exception e) {
-            Log.e(TAG, "error while releasing mInputSurface", e);
+            L.e(e, () -> TAG + " error while releasing mInputSurface");
             if (exception == null) {
                 exception = e;
             }
@@ -419,7 +420,7 @@ final class VideoTrackConverter {
                 mVideoEncoder.release();
             }
         } catch (Exception e) {
-            Log.e(TAG, "error while releasing mVideoEncoder", e);
+            L.e(e, () -> TAG + " error while releasing mVideoEncoder");
             if (exception == null) {
                 exception = e;
             }
@@ -454,7 +455,7 @@ final class VideoTrackConverter {
             final int dstHeight) {
         final float kernelSizeX = (float) srcWidth / (float) dstWidth;
         final float kernelSizeY = (float) srcHeight / (float) dstHeight;
-        Log.i(TAG, "kernel " + kernelSizeX + "x" + kernelSizeY);
+        L.i(() -> TAG + "kernel " + kernelSizeX + "x" + kernelSizeY);
         final String shader;
         if (kernelSizeX <= 2 && kernelSizeY <= 2) {
             shader =
@@ -491,7 +492,7 @@ final class VideoTrackConverter {
                             "    ) / " + sum + ";\n" +
                             "}\n";
         }
-        Log.i(TAG, shader);
+        L.i(() -> TAG + shader);
         return shader;
     }
 
@@ -515,7 +516,7 @@ final class VideoTrackConverter {
         final MediaCodec encoder = MediaCodec.createByCodecName(codecInfo.getName());
         encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         if (tonemapRequested && !isTonemapEnabled(format)) {
-            Log.d(TAG, "HDR tone-mapping requested but not supported by the decoder.");
+            L.d(() -> TAG + "HDR tone-mapping requested but not supported by the decoder.");
         }
         // Must be called before start()
         surfaceReference.set(encoder.createInputSurface());
@@ -539,7 +540,8 @@ final class VideoTrackConverter {
     private static int getAndSelectVideoTrackIndex(@NonNull MediaExtractor extractor) {
         for (int index = 0; index < extractor.getTrackCount(); ++index) {
             if (VERBOSE) {
-                Log.d(TAG, "format for track " + index + " is " + MediaConverter.getMimeTypeFor(extractor.getTrackFormat(index)));
+                final int currentIndex = index;
+                L.d(() -> TAG + "format for track " + currentIndex + " is " + MediaConverter.getMimeTypeFor(extractor.getTrackFormat(currentIndex)));
             }
             if (isVideoFormat(extractor.getTrackFormat(index))) {
                 extractor.selectTrack(index);

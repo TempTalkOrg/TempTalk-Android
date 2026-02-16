@@ -11,13 +11,14 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- 图片/视频显示，背景为纯色占位 -->
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/imageView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:adjustViewBounds="true"
+            android:background="@drawable/chat_image_placeholder_bg"
             android:scaleType="centerCrop"
-            android:src="@drawable/ps_image_placeholder"
             android:tag="imageAndVideoView"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -25,21 +26,29 @@
             tools:layout_height="400dp"
             tools:layout_width="248dp" />
 
-        <androidx.appcompat.widget.AppCompatImageView
+        <!-- 视频播放按钮 - 已下载完成时显示 -->
+        <FrameLayout
             android:id="@+id/playButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:src="@mipmap/chat_video_message_play_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_media_status_circle"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="@+id/imageView"
             app:layout_constraintEnd_toEndOf="@+id/imageView"
             app:layout_constraintStart_toStartOf="@+id/imageView"
             app:layout_constraintTop_toTopOf="@+id/imageView"
-            tools:visibility="visible" />
+            tools:visibility="visible">
 
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_media_play" />
+        </FrameLayout>
+
+        <!-- 上传进度视图 - 保持原有横向进度条样式 -->
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/progressView"
+            android:id="@+id/uploadProgressView"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:background="@color/transparent_black_25"
@@ -49,36 +58,124 @@
             app:layout_constraintEnd_toEndOf="@+id/imageView"
             app:layout_constraintStart_toStartOf="@+id/imageView"
             app:layout_constraintTop_toTopOf="@+id/imageView"
-            tools:visibility="visible">
+            tools:visibility="gone">
 
             <ProgressBar
-                android:id="@+id/progressBar"
-                style="@style/CustomProgressBarStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:layout_constraintBottom_toBottomOf="parent"
+                android:id="@+id/uploadProgressBar"
+                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                android:layout_width="100dp"
+                android:layout_height="8dp"
+                android:progressDrawable="@drawable/media_upload_progress_drawable"
+                app:layout_constraintBottom_toTopOf="@+id/uploadStatusText"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                tools:progress="20" />
+                app:layout_constraintVertical_chainStyle="packed"
+                tools:progress="50" />
 
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/uploadStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/uploading"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/uploadProgressBar" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_download_hint"
-            android:layout_width="0dp"
+        <!-- 下载状态视图 - 下载相关状态显示 -->
+        <LinearLayout
+            android:id="@+id/downloadStatusView"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="12dp"
-            android:background="@drawable/chat_message_image_fail_bg"
-            android:gravity="center"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="4dp"
-            android:text="@string/download_failed"
-            android:textColor="@color/t.primary"
-            android:textSize="14sp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toBottomOf="@+id/imageView"
             app:layout_constraintEnd_toEndOf="@+id/imageView"
             app:layout_constraintStart_toStartOf="@+id/imageView"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="@+id/imageView"
+            tools:visibility="visible">
+
+            <!-- 图标容器 (圆形背景 + 进度环 + 图标) -->
+            <FrameLayout
+                android:id="@+id/downloadIconContainer"
+                android:layout_width="48dp"
+                android:layout_height="48dp">
+
+                <!-- 圆形背景 - 过期状态时隐藏 -->
+                <View
+                    android:id="@+id/downloadCircleBg"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_media_status_circle" />
+
+                <!-- 下载进度环 - 仅下载中显示 -->
+                <com.difft.android.chat.common.CircleProgressBar
+                    android:id="@+id/downloadProgressRing"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone"
+                    app:circleBackgroundColor="@color/progress_bg_white_25"
+                    app:progressBarColor="@android:color/white"
+                    app:strokeWidth="3dp"
+                    tools:visibility="visible" />
+
+                <!-- 状态图标 (下载/重试/过期) -->
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/downloadStatusIcon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_media_download"
+                    tools:src="@drawable/ic_media_download" />
+            </FrameLayout>
+
+            <!-- 状态文字 (文件大小或过期提示) -->
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/downloadStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/t.disable"
+                android:textSize="12sp"
+                android:visibility="gone"
+                tools:text="12.6 KB"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <!-- 过期状态视图 - 单独处理，无圆形背景 -->
+        <LinearLayout
+            android:id="@+id/expiredStatusView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@+id/imageView"
+            app:layout_constraintEnd_toEndOf="@+id/imageView"
+            app:layout_constraintStart_toStartOf="@+id/imageView"
+            app:layout_constraintTop_toTopOf="@+id/imageView"
+            tools:visibility="gone">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_media_expired" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/file_expired"
+                android:textColor="@color/t.disable"
+                android:textSize="12sp" />
+        </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </merge>

@@ -134,7 +134,7 @@ class GroupInCommonActivity : BaseActivity() {
             .subscribe({ group ->
                 mBinding.edittextSearchInput.text = null
             }, {
-                it.printStackTrace()
+                L.w { "[GroupInCommonActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" }
             })
 
         searchGroups()
@@ -188,7 +188,6 @@ class GroupInCommonActivity : BaseActivity() {
 
             } catch (e: Exception) {
                 L.e { "[GroupInCommonActivity] Error searching common groups: ${e.stackTraceToString()}" }
-                e.printStackTrace()
                 // Fallback: show empty list on error
                 mGroupsAdapter.submitList(emptyList())
             }
@@ -228,7 +227,7 @@ class GroupInCommonActivity : BaseActivity() {
                 groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(myID)))
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { it.printStackTrace() })
+                    .subscribe({}, { L.w { "[GroupInCommonActivity] leaveGroup error: ${it.stackTraceToString()}" } })
             }
         )
     }
@@ -245,7 +244,7 @@ class GroupInCommonActivity : BaseActivity() {
                 groupRepo.deleteGroup(group.gid)
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { it.printStackTrace() })
+                    .subscribe({}, { L.w { "[GroupInCommonActivity] disbandGroup error: ${it.stackTraceToString()}" } })
             }
         )
     }

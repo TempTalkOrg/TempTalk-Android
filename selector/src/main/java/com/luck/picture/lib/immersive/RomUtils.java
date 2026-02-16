@@ -3,6 +3,8 @@ package com.luck.picture.lib.immersive;
 import android.os.Build;
 import android.text.TextUtils;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import com.luck.picture.lib.utils.ValueOf;
 
 import java.io.BufferedReader;
@@ -90,7 +92,7 @@ public class RomUtils {
                     return true;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                L.w(e, () -> "[RomUtils] isMIUIV6OrAbove error:");
             }
         }
         return false;
@@ -105,7 +107,7 @@ public class RomUtils {
                 miuiVersionCode = ValueOf.toInt(miuiVersionCodeStr);
                 return miuiVersionCode;
             } catch (Exception e) {
-                e.printStackTrace();
+                L.w(e, () -> "[RomUtils] getMIUIVersionCode error:");
             }
         }
         return miuiVersionCode;
@@ -133,7 +135,7 @@ public class RomUtils {
                 try {
                     input.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[RomUtils] getSystemProperty close error:");
                 }
             }
         }
@@ -166,7 +168,9 @@ public class RomUtils {
             if (!TextUtils.isEmpty(manufacturer)) {
                 return manufacturer.toLowerCase();
             }
-        } catch (Throwable ignore) {/**/}
+        } catch (Throwable ignore) {
+            L.w(ignore, () -> "[RomUtils] getManufacturer failed");
+        }
         return UNKNOWN;
     }
 
@@ -176,7 +180,9 @@ public class RomUtils {
             if (!TextUtils.isEmpty(brand)) {
                 return brand.toLowerCase();
             }
-        } catch (Throwable ignore) {/**/}
+        } catch (Throwable ignore) {
+            L.w(ignore, () -> "[RomUtils] getBrand failed");
+        }
         return UNKNOWN;
     }
 

@@ -7,11 +7,10 @@ import com.difft.android.network.requests.ContactsRequestBody
 import com.difft.android.network.requests.ConversationSetRequestBody
 import com.difft.android.network.requests.ConversationShareRequestBody
 import com.difft.android.network.requests.ConversationShareResponse
-import com.difft.android.network.requests.CriticalAlertRequestBody
+import com.difft.android.network.requests.CriticalAlertRequestBodyNew
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareResponse
-import com.difft.android.network.requests.GetTokenRequestBody
 import com.difft.android.network.requests.GrayCheckRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
 import com.difft.android.network.requests.SpeechToTextRequestBody
@@ -20,6 +19,7 @@ import com.difft.android.network.responses.AppVersionResponse
 import com.difft.android.network.responses.AuthToken
 import com.difft.android.network.responses.ContactsDataResponse
 import com.difft.android.network.responses.ConversationSetResponseBody
+import com.difft.android.network.responses.CriticalAlertResponse
 import com.difft.android.network.responses.GetConversationSetResponseBody
 import com.difft.android.network.responses.GrayConfigData
 import com.difft.android.network.responses.PendingMessageResponse
@@ -66,10 +66,9 @@ interface HttpService {
     ): Single<BaseResponse<ContactsDataResponse>>
 
     @PUT("v1/authorize/token")
-    fun fetchAuthToken(
-        @Header("Authorization") baseAuth: String,
-        @Body body: GetTokenRequestBody = GetTokenRequestBody(null, null)
-    ): Single<BaseResponse<AuthToken>>
+    suspend fun fetchAuthToken(
+        @Header("Authorization") baseAuth: String
+    ): BaseResponse<AuthToken>
 
     @POST("v3/friend/ask")
     fun fetchAddContactor(
@@ -198,11 +197,11 @@ interface HttpService {
         @Body req: GetPublicKeysReq
     ): Observable<BaseResponse<GetPublicKeysResp>>
 
-    @POST("/chat/v3/messages/criticalAlert")
-    fun sendCriticalAlert(
+    @POST("/chat/v3/messages/criticalAlertNew")
+    fun sendCriticalAlertNew(
         @Header("Authorization") baseAuth: String,
-        @Body req: CriticalAlertRequestBody
-    ): Single<BaseResponse<Any>>
+        @Body req: CriticalAlertRequestBodyNew
+    ): Single<BaseResponse<CriticalAlertResponse>>
 
     @POST("/grayCheck/v1/grayCheck")
     fun grayCheck(

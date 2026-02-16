@@ -117,11 +117,7 @@ class ChativePopupView @JvmOverloads constructor(
                     val iconColor = item.iconColor ?: ContextCompat.getColor(context, R.color.icon)
                     ImageViewCompat.setImageTintList(itemBinding.imageviewIcon, ColorStateList.valueOf(iconColor))
 
-                    item.textColor?.let {
-                        itemBinding.textviewLabel.setTextColor(it)
-                    } ?: {
-                        itemBinding.textviewLabel.setTextColor(iconColor)
-                    }
+                    itemBinding.textviewLabel.setTextColor(item.textColor ?: iconColor)
 
                     itemBinding.root.setOnClickListener(item.onClickListener)
                     itemBinding.root
@@ -164,8 +160,10 @@ class ChativePopupView @JvmOverloads constructor(
             layoutInflater, this, true
         )
 
-        ViewCompat.setPaddingRelative(this, 16.dp, 5.dp, 16.dp, 0)
+        // Padding to accommodate CardView shadow (elevation = 4dp)
+        ViewCompat.setPaddingRelative(this, 16.dp, 8.dp, 16.dp, 8.dp)
         clipToPadding = false
+        clipChildren = false
     }
 
 }
@@ -286,9 +284,10 @@ object ChativePopupWindow {
         val popupWidth = popupView.measuredWidth
         val popupHeight = popupView.measuredHeight
 
-        // 确定 X 和 Y 坐标
-        val screenWidth = context.resources.displayMetrics.widthPixels
-        val screenHeight = context.resources.displayMetrics.heightPixels
+        // 确定 X 和 Y 坐标（使用 anchorView 的根视图尺寸以支持多窗口模式）
+        val rootView = anchorView.rootView
+        val screenWidth = rootView.width
+        val screenHeight = rootView.height
 
         // 水平居中计算
         val adjustedX = when {
@@ -306,6 +305,7 @@ object ChativePopupWindow {
         // 创建并显示 PopupWindow
         val popupWindow = PopupWindow(popupView, popupWidth, popupHeight, true)
         popupWindow.isOutsideTouchable = true
+        popupWindow.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, adjustedX, adjustedY)
         return popupWindow
     }

@@ -25,7 +25,7 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.signal.imageeditor.core.Bounds;
 import org.signal.imageeditor.core.Renderer;
 import org.signal.imageeditor.core.RendererContext;
@@ -44,7 +44,7 @@ import java.util.concurrent.ExecutionException;
  */
 public final class UriGlideRenderer implements SelectableRenderer {
 
-    private static final String TAG = Log.tag(UriGlideRenderer.class);
+    private static final String TAG = "UriGlideRenderer";
 
     private static final int PREVIEW_DIMENSION_LIMIT = 2048;
     private static final int MAX_BLUR_DIMENSION = 300;
@@ -211,7 +211,7 @@ public final class UriGlideRenderer implements SelectableRenderer {
             return requestBuilder.load(imageFile);
         } else {
             // For content:// URIs or other URI schemes, load the URI directly
-            Log.w(TAG, "URI path is null or empty, loading URI directly: " + imageUri);
+            L.w(() -> TAG + " URI path is null or empty, loading URI directly: " + imageUri);
             return requestBuilder.load(imageUri);
         }
     }
@@ -291,7 +291,7 @@ public final class UriGlideRenderer implements SelectableRenderer {
         Point blurSize = scaleKeepingAspectRatio(new Point(previewSize.x / 2, previewSize.y / 2), MAX_BLUR_DIMENSION);
         Bitmap small = BitmapUtil.createScaledBitmap(bitmap, blurSize.x, blurSize.y);
 
-        Log.d(TAG, "Bitmap: " + bitmap.getWidth() + "x" + bitmap.getHeight() + ", Blur: " + blurSize.x + "x" + blurSize.y);
+        L.d(() -> TAG + " Bitmap: " + bitmap.getWidth() + "x" + bitmap.getHeight() + ", Blur: " + blurSize.x + "x" + blurSize.y);
 
         RenderScript rs = RenderScript.create(context);
         Allocation input = Allocation.createFromBitmap(rs, small);

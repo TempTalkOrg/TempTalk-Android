@@ -42,6 +42,7 @@ class MessageForegroundService : Service() {
 
         L.i { "[MessageForegroundService] onStartCommand()" }
 
+        postForegroundNotification()
         webSocketManager.start()
 
         return START_STICKY

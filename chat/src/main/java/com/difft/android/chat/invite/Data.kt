@@ -16,10 +16,23 @@ data class QueryInviteCodeRequest(
     val inviteCode: String
 )
 
+data class QueryCustomUidRequest(
+    val ver: Int,
+    val condition: String
+)
+
 data class QueryInviteCodeResponse(
     val uid: String?,
     val name: String?,
     val avatarContent: String?,
     val avatar: String?,
     val joinedAt: String?
+)
+
+data class QueryCustomUidResponse(
+    val uid: String?,
+    val name: String?,
+    val avatar: String?,
+    val joinedAt: String?,
+    val customUid: String?
 )

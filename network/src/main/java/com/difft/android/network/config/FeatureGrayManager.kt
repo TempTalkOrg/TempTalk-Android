@@ -1,6 +1,5 @@
 package com.difft.android.network.config
 
-import android.annotation.SuppressLint
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.SecureSharedPrefsUtil
@@ -20,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 object FeatureGrayManager {
 
-    private const val GRAY_PREFS_KEY= "gray_map_json"
+    private const val GRAY_PREFS_KEY = "gray_map_json"
     const val FEATURE_GRAY_CALL_QUICK = "quic"
     private const val GRAY_CONFIG_UPDATE_INTERVAL: Long = 1000 * 60 * 5
 
@@ -64,12 +63,13 @@ object FeatureGrayManager {
      * sources = null → 获取全部灰度配置
      * sources = [...] → 获取指定灰度配置
      */
-    @SuppressLint("CheckResult")
     suspend fun refreshFromServer(sources: List<String>?) {
         try {
+            val token = SecureSharedPrefsUtil.getToken()
+            if (token.isEmpty()) return
             val resp = chatHttpClient.httpService.grayCheck(SecureSharedPrefsUtil.getToken(), GrayCheckRequestBody(sources))
-            .subscribeOn(Schedulers.io())
-            .await()
+                .subscribeOn(Schedulers.io())
+                .await()
 
             if (resp.status != 0) {
                 L.e { "[FeatureGrayManager] server returned status=${resp.status}" }
@@ -114,7 +114,7 @@ object FeatureGrayManager {
     }
 
     suspend fun checkUpdateConfigFromServer(lastUseTime: Long) {
-        if(System.currentTimeMillis() - lastUseTime > GRAY_CONFIG_UPDATE_INTERVAL) {
+        if (System.currentTimeMillis() - lastUseTime > GRAY_CONFIG_UPDATE_INTERVAL) {
             refreshFromServer(null)
         }
     }

@@ -3,23 +3,17 @@ package com.difft.android.setting.language
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.fragment.app.commit
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.LanguageData
-import com.difft.android.base.utils.LanguageUtils
-import com.difft.android.base.utils.ResUtils
-import com.difft.android.databinding.ActivityLanguageBinding
-import com.hi.dhl.binding.viewbind
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
-import kotlin.system.exitProcess
 
-
+/**
+ * Activity container for LanguageFragment
+ * The actual UI logic is in LanguageFragment for dual-pane support
+ */
 @AndroidEntryPoint
 class LanguageActivity : BaseActivity() {
-
 
     companion object {
         fun startActivity(activity: Activity) {
@@ -28,59 +22,14 @@ class LanguageActivity : BaseActivity() {
         }
     }
 
-    private val mBinding: ActivityLanguageBinding by viewbind()
-
-    private val mAdapter: LanguageAdapter by lazy {
-        object : LanguageAdapter() {
-            override fun onItemClicked(languageData: LanguageData, position: Int) {
-                if (languageData.locale == LanguageUtils.getLanguage(this@LanguageActivity)) return
-
-                val title = ResUtils.getLocaleStringResource(this@LanguageActivity, languageData.locale, R.string.language_restart_required)
-                val content = ResUtils.getLocaleStringResource(this@LanguageActivity, languageData.locale, R.string.language_restart_tips)
-                val ok = ResUtils.getLocaleStringResource(this@LanguageActivity, languageData.locale, R.string.language_restart)
-                val cancel = ResUtils.getLocaleStringResource(this@LanguageActivity, languageData.locale, R.string.language_restart_later)
-
-                ComposeDialogManager.showMessageDialog(
-                    context = this@LanguageActivity,
-                    title = title,
-                    message = content,
-                    confirmText = ok,
-                    cancelText = cancel,
-                    onConfirm = {
-                        LanguageUtils.saveLanguage(this@LanguageActivity, languageData.locale)
-
-                        this@LanguageActivity.packageManager.getLaunchIntentForPackage(this@LanguageActivity.packageName)?.apply {
-                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                            this@LanguageActivity.startActivity(this)
-                        }
-                        android.os.Process.killProcess(android.os.Process.myPid())
-                        exitProcess(0)
-                    },
-                    onCancel = {
-                        LanguageUtils.locale = LanguageUtils.getLanguage(this@LanguageActivity)
-                        LanguageUtils.saveLanguage(this@LanguageActivity, languageData.locale)
-                        mAdapter.submitList(LanguageUtils.getLanguageList(this@LanguageActivity))
-                    }
-                )
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_fragment_container)
 
-        initView()
-    }
-
-    private fun initView() {
-        mBinding.ibBack.setOnClickListener { finish() }
-
-        mBinding.rvLanguage.apply {
-            layoutManager = LinearLayoutManager(context)
-            adapter = mAdapter
-            itemAnimator = null
+        if (savedInstanceState == null) {
+            supportFragmentManager.commit {
+                replace(R.id.fragment_container, LanguageFragment.newInstance())
+            }
         }
-
-        mAdapter.submitList(LanguageUtils.getLanguageList(this))
     }
 }

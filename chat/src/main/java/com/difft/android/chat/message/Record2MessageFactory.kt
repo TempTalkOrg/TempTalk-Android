@@ -7,6 +7,7 @@ import org.difft.app.database.attachment
 import org.difft.app.database.card
 import org.difft.app.database.forwardContext
 import org.difft.app.database.getContactorFromAllTable
+import org.difft.app.database.screenShot
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
@@ -17,14 +18,13 @@ import org.difft.app.database.sharedContacts
 import org.difft.app.database.speechToTextData
 import org.difft.app.database.translateData
 import org.difft.app.database.wcdb
-import com.difft.android.chat.R
+import com.difft.android.base.R
 import com.difft.android.chat.common.SendType
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.NotifyMessage
-import difft.android.messageserialization.model.ReadInfoOfDb
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
@@ -46,18 +46,6 @@ import org.whispersystems.signalservice.internal.push.attachmentPointer
 import org.whispersystems.signalservice.internal.push.card
 
 
-val READ_INFO_TYPE = object : TypeToken<Map<String, ReadInfoOfDb>>() {}.type
-
-fun parseReadInfo(readInfo: String?): Map<String, ReadInfoOfDb>? {
-    if (readInfo.isNullOrEmpty()) return null
-    return try {
-        globalServices.gson.fromJson<Map<String, ReadInfoOfDb>>(readInfo, READ_INFO_TYPE)
-    } catch (e: Exception) {
-        L.e { "Failed to parse readInfo: ${e.stackTraceToString()}" }
-        null
-    }
-}
-
 val RECEIVER_ID_TYPE = object : TypeToken<List<String>>() {}.type
 
 fun parseReceiverIds(receiverIds: String?): List<String>? {
@@ -67,6 +55,52 @@ fun parseReceiverIds(receiverIds: String?): List<String>? {
     } catch (e: Exception) {
         L.e { "Failed to parse ReceiverIds: ${e.stackTraceToString()}" }
         null
+    }
+}
+
+data class ReadStatusResult(val readStatus: Int, val readContactNumber: Int)
+
+fun calculateReadStatus(
+    forWhat: For,
+    record: MessageModel,
+    readInfoList: List<ReadInfoModel>?,
+    isLargeGroup: Boolean,
+    systemShowTimestamp: Long
+): ReadStatusResult {
+    if (record.fromWho != globalServices.myId) return ReadStatusResult(0, 0)
+
+    if (forWhat is For.Account) {
+        return if (forWhat.id == globalServices.myId) {
+            ReadStatusResult(1, 0)
+        } else {
+            val readInfo = readInfoList?.firstOrNull()
+            ReadStatusResult(if ((readInfo?.readPosition ?: 0) >= systemShowTimestamp) 1 else 0, 0)
+        }
+    }
+
+    // Group
+    if (isLargeGroup) {
+        val receiverIds = parseReceiverIds(record.receiverIds)
+        return ReadStatusResult(1, receiverIds?.size ?: 0)
+    }
+
+    val readInfos = readInfoList?.filter { it.readPosition >= systemShowTimestamp }
+    val receiverIds = parseReceiverIds(record.receiverIds)
+
+    return when {
+        readInfos == null -> ReadStatusResult(0, 0)
+        receiverIds == null -> {
+            L.w { "Group message receiverIds is null, messageId: ${record.id}, systemShowTimestamp: $systemShowTimestamp" }
+            val readContactIds = readInfos.map { it.uid }.filter { it != globalServices.myId }.toSet()
+            ReadStatusResult(0, readContactIds.size)
+        }
+        else -> {
+            val readContactIds = readInfos.map { it.uid }.toSet()
+            ReadStatusResult(
+                if (readContactIds.containsAll(receiverIds)) 1 else 0,
+                receiverIds.count { it in readContactIds }
+            )
+        }
     }
 }
 
@@ -83,7 +117,7 @@ fun generateMessageTwo(
         contactor.firstOrNull { it.id == record.fromWho } ?: ContactorModel().also {
             it.id = record.fromWho
         }
-    return if (record.type == 0 || record.type == 1) {
+    return if (record.type == MessageModel.TYPE_TEXT || record.type == MessageModel.TYPE_ATTACHMENT || record.type == MessageModel.TYPE_UNSUPPORTED) {
         TextChatMessage().apply {
             this.id = record.id
             this.authorId = authorId
@@ -94,7 +128,14 @@ fun generateMessageTwo(
             this.notifySequenceId = record.notifySequenceId
             this.readMaxSId = record.sequenceId
             this.mode = record.mode
-            this.message = if (record.forwardContext() != null) "" else record.messageText
+            // For unsupported messages, show a placeholder text
+            this.message = if (record.type == MessageModel.TYPE_UNSUPPORTED) {
+                ResUtils.getString(R.string.chat_message_unsupported)
+            } else if (record.forwardContext() != null) {
+                ""
+            } else {
+                record.messageText
+            }
             this.attachment = record.attachment()
             this.quote = record.quote()
             this.forwardContext = record.forwardContext()
@@ -102,59 +143,28 @@ fun generateMessageTwo(
             this.mentions = record.mentions()
             this.reactions = record.reactions()
             this.sharedContacts = record.sharedContacts()
-            if (record.fromWho == globalServices.myId) {
-                if (forWhat is For.Account) {
-                    if (forWhat.id == globalServices.myId) {
-                        this.readStatus = 1
-                    } else {
-                        val readInfo = readInfoList?.firstOrNull()
-                        this.readStatus = if ((readInfo?.readPosition ?: 0) >= systemShowTimestamp) 1 else 0
-                    }
-                } else {
-                    // 群聊消息的已读状态处理
-                    if (record.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                        // 机密消息的已读处理
-                        val readInfos = parseReadInfo(record.readInfo)
-                        this.readContactNumber = readInfos?.size ?: 0
-                    } else {
-                        // 使用传入的 isLargeGroup 参数判断
-                        if (isLargeGroup) {
-                            // 大群：直接标记为已读
-                            val receiverIds = parseReceiverIds(record.receiverIds)
-                            this.readContactNumber = receiverIds?.size ?: 0
-                            this.readStatus = 1
-                        } else {
-                            // 普通群：计算实际已读状态
-                            val readInfos = readInfoList?.filter { it.readPosition >= systemShowTimestamp }
-                            val receiverIds = parseReceiverIds(record.receiverIds)
-
-                            if (readInfos == null) {
-                                this.readContactNumber = 0
-                                this.readStatus = 0
-                            } else if (receiverIds == null) {
-                                // receiverIds 缺失时，直接使用 readInfos 的人数作为已读数（排除自己）
-                                L.w { "Group message receiverIds is null, messageId: ${record.id}, systemShowTimestamp: $systemShowTimestamp" }
-                                val readContactIds = readInfos.map { it.uid }.filter { it != globalServices.myId }.toSet()
-                                this.readContactNumber = readContactIds.size
-                                // 无法判断是否全部已读，保守设为 0
-                                this.readStatus = 0
-                            } else {
-                                val readContactIds = readInfos.map { it.uid }.toSet()
-                                // 计算已读人数：统计有多少接收者已经读了消息
-                                this.readContactNumber = receiverIds.count { receiverId -> readContactIds.contains(receiverId) }
-                                // 设置已读状态：所有接收者都已读则为1，否则为0
-                                this.readStatus = if (readContactIds.containsAll(receiverIds)) 1 else 0
-                            }
-                        }
-                    }
-                }
-            }
+            val readResult = calculateReadStatus(forWhat, record, readInfoList, isLargeGroup, systemShowTimestamp)
+            this.readStatus = readResult.readStatus
+            this.readContactNumber = readResult.readContactNumber
             this.playStatus = record.playStatus
             this.translateData = record.translateData()
             this.speechToTextData = record.speechToTextData()
             this.criticalAlertType = record.criticalAlertType
+            this.isScreenShotMessage = record.screenShot() != null
         }
-    } else if (record.type == 2) {
+    } else if (record.type == MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER) {
+        ConfidentialPlaceholderChatMessage().apply {
+            this.id = record.id
+            this.authorId = authorId
+            this.isMine = isFromMySelf
+            this.sendStatus = record.sendType
+            this.timeStamp = record.timeStamp
+            this.systemShowTimestamp = record.systemShowTimestamp
+            this.notifySequenceId = record.notifySequenceId
+            this.readMaxSId = record.sequenceId
+            this.mode = record.mode
+        }
+    } else if (record.type == MessageModel.TYPE_NOTIFY) {
         NotifyChatMessage().apply {
             this.id = record.id
             this.authorId = author.id
@@ -257,6 +267,12 @@ fun createForward(forward: Forward): SignalServiceProtos.DataMessage.Forward {
 
 fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSenderName: String?): String {
     val senderName = if (isGroup && !TextUtils.isEmpty(messageSenderName)) "$messageSenderName: " else ""
+
+    // Check for unsupported message first
+    if (record is TextMessage && record.isUnsupported) {
+        return senderName + ResUtils.getString(R.string.chat_message_unsupported)
+    }
+
     return if (record?.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
         senderName + ResUtils.getString(R.string.chat_message_confidential_message)
     } else {

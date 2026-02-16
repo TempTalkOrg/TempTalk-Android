@@ -1,5 +1,6 @@
 package com.difft.android.base.utils
 
+import com.difft.android.base.log.lumberjack.L
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,7 +48,7 @@ object TextSizeUtil {
                 _textSizeState.value = textSize
             } catch (e: Exception) {
                 // On error, emit default value
-                e.printStackTrace()
+                L.w { "[TextSizeUtil] error: ${e.stackTraceToString()}" }
                 _textSizeState.value = TEXT_SIZE_DEFAULT
             }
         }

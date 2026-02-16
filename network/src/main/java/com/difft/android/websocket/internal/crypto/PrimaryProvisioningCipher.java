@@ -1,15 +1,9 @@
-/**
- * Copyright (C) 2014-2016 Open Whisper Systems
- *
- * Licensed according to the LICENSE file in this repository.
- */
 
 package com.difft.android.websocket.internal.crypto;
 
 import com.google.protobuf.ByteString;
 
 import org.signal.libsignal.protocol.InvalidKeyException;
-import org.signal.libsignal.protocol.ecc.Curve;
 import org.signal.libsignal.protocol.ecc.ECKeyPair;
 import org.signal.libsignal.protocol.ecc.ECPublicKey;
 import org.signal.libsignal.protocol.kdf.HKDF;
@@ -38,8 +32,8 @@ public class PrimaryProvisioningCipher {
   }
 
   public byte[] encrypt(ProvisionMessage message) throws InvalidKeyException {
-    ECKeyPair ourKeyPair    = Curve.generateKeyPair();
-    byte[]    sharedSecret  = Curve.calculateAgreement(theirPublicKey, ourKeyPair.getPrivateKey());
+    ECKeyPair ourKeyPair    = ECKeyPair.generate();
+    byte[]    sharedSecret  = ourKeyPair.getPrivateKey().calculateAgreement(theirPublicKey);
     byte[]    derivedSecret = HKDF.deriveSecrets(sharedSecret, PROVISIONING_MESSAGE.getBytes(), 64);
     byte[][]  parts         = Util.split(derivedSecret, 32, 32);
 

@@ -10,15 +10,15 @@ import androidx.annotation.VisibleForTesting;
 
 import com.difft.android.base.log.lumberjack.L;
 import com.google.common.io.CountingOutputStream;
-
-import util.logging.Log;
 import org.thoughtcrime.securesms.video.exceptions.VideoSizeException;
 import org.thoughtcrime.securesms.video.exceptions.VideoSourceException;
 import org.thoughtcrime.securesms.video.interfaces.TranscoderCancelationSignal;
 import org.thoughtcrime.securesms.video.videoconverter.MediaConverter;
 import org.thoughtcrime.securesms.video.videoconverter.exceptions.EncodingException;
+import org.thoughtcrime.securesms.video.interfaces.MediaInput;
 import org.thoughtcrime.securesms.video.videoconverter.mediadatasource.MediaDataSourceMediaInput;
 
+import java.io.File;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -29,9 +29,9 @@ import java.util.concurrent.TimeUnit;
 @RequiresApi(26)
 public final class StreamingTranscoder {
 
-    private static final String TAG = Log.tag(StreamingTranscoder.class);
+    private static final String TAG = "StreamingTranscoder";
 
-    private final MediaDataSource dataSource;
+    private final MediaInput mediaInput;
     private final long upperSizeLimit;
     private final long inSize;
     private final long duration;
@@ -43,15 +43,60 @@ public final class StreamingTranscoder {
     private final boolean allowAudioRemux;
 
     /**
+     * Create a transcoder using a file path directly.
+     * This is more efficient than using MediaDataSource as it uses native file handling.
+     *
+     * @param file The video file to transcode
      * @param upperSizeLimit A upper size to transcode to. The actual output size can be up to 10% smaller.
      */
+    public StreamingTranscoder(@NonNull File file,
+                               @Nullable TranscoderOptions options,
+                               @NonNull TranscodingPreset preset,
+                               long upperSizeLimit,
+                               boolean allowAudioRemux)
+            throws IOException, VideoSourceException {
+        this.mediaInput = new FileMediaInput(file);
+        this.options = options;
+        this.allowAudioRemux = allowAudioRemux;
+
+        final MediaMetadataRetriever mediaMetadataRetriever = new MediaMetadataRetriever();
+        try {
+            mediaMetadataRetriever.setDataSource(file.getAbsolutePath());
+        } catch (RuntimeException e) {
+            L.w(e, () -> TAG + " Unable to read file");
+            throw new VideoSourceException("Unable to read file", e);
+        }
+
+        if (options != null && options.endTimeUs != 0) {
+            this.duration = TimeUnit.MICROSECONDS.toMillis(options.endTimeUs - options.startTimeUs);
+        } else {
+            this.duration = getDuration(mediaMetadataRetriever);
+        }
+
+        this.inSize = file.length();
+        this.inputBitRate = TranscodingQuality.bitRate(inSize, duration);
+        this.targetQuality = TranscodingQuality.createFromPreset(preset, duration);
+        this.upperSizeLimit = upperSizeLimit;
+
+        this.transcodeRequired = inputBitRate >= targetQuality.getTargetTotalBitRate() * 1.2 || inSize > upperSizeLimit || options != null;
+        if (!transcodeRequired) {
+            L.i(() -> TAG + "Video is within 20% of target bitrate, below the size limit, or no custom options.");
+        }
+
+        this.fileSizeEstimate = targetQuality.getByteCountEstimate();
+    }
+
+    /**
+     * @deprecated Use the File constructor instead for better performance.
+     */
+    @Deprecated
     public StreamingTranscoder(@NonNull MediaDataSource dataSource,
                                @Nullable TranscoderOptions options,
                                @NonNull TranscodingPreset preset,
                                long upperSizeLimit,
                                boolean allowAudioRemux)
             throws IOException, VideoSourceException {
-        this.dataSource = dataSource;
+        this.mediaInput = new MediaDataSourceMediaInput(dataSource);
         this.options = options;
         this.allowAudioRemux = allowAudioRemux;
 
@@ -59,7 +104,7 @@ public final class StreamingTranscoder {
         try {
             mediaMetadataRetriever.setDataSource(dataSource);
         } catch (RuntimeException e) {
-            Log.w(TAG, "Unable to read datasource", e);
+            L.w(e, () -> TAG + " Unable to read datasource");
             throw new VideoSourceException("Unable to read datasource", e);
         }
 
@@ -74,9 +119,9 @@ public final class StreamingTranscoder {
         this.targetQuality = TranscodingQuality.createFromPreset(preset, duration);
         this.upperSizeLimit = upperSizeLimit;
 
-        this.transcodeRequired = inputBitRate >= targetQuality.getTargetTotalBitRate() * 1.2 || inSize > upperSizeLimit || containsLocation(mediaMetadataRetriever) || options != null;
+        this.transcodeRequired = inputBitRate >= targetQuality.getTargetTotalBitRate() * 1.2 || inSize > upperSizeLimit || options != null;
         if (!transcodeRequired) {
-            L.i(() -> TAG + "Video is within 20% of target bitrate, below the size limit, contained no location metadata or custom options.");
+            L.i(() -> TAG + "Video is within 20% of target bitrate, below the size limit, or no custom options.");
         }
 
         this.fileSizeEstimate = targetQuality.getByteCountEstimate();
@@ -89,7 +134,7 @@ public final class StreamingTranscoder {
                                 int shortEdge,
                                 boolean allowAudioRemux)
             throws IOException, VideoSourceException {
-        this.dataSource = dataSource;
+        this.mediaInput = new MediaDataSourceMediaInput(dataSource);
         this.options = options;
         this.allowAudioRemux = allowAudioRemux;
 
@@ -97,7 +142,7 @@ public final class StreamingTranscoder {
         try {
             mediaMetadataRetriever.setDataSource(dataSource);
         } catch (RuntimeException e) {
-            Log.w(TAG, "Unable to read datasource", e);
+            L.w(e, () -> TAG + " Unable to read datasource");
             throw new VideoSourceException("Unable to read datasource", e);
         }
 
@@ -160,7 +205,7 @@ public final class StreamingTranscoder {
 
         final MediaConverter converter = new MediaConverter();
 
-        converter.setInput(new MediaDataSourceMediaInput(dataSource));
+        converter.setInput(mediaInput);
         final CountingOutputStream outStream;
         if (sizeLimitEnabled) {
             outStream = new CountingOutputStream(new LimitedSizeOutputStream(stream, upperSizeLimit));
@@ -233,11 +278,6 @@ public final class StreamingTranscoder {
         }
     }
 
-    private static boolean containsLocation(MediaMetadataRetriever mediaMetadataRetriever) {
-        String locationString = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION);
-        return locationString != null;
-    }
-
     public interface Progress {
         void onProgress(int percent);
     }
@@ -267,7 +307,7 @@ public final class StreamingTranscoder {
         private void incWritten(int len) throws IOException {
             long newWritten = written + len;
             if (newWritten > sizeLimit) {
-                Log.w(TAG, String.format(Locale.US, "File size limit hit. Wrote %d, tried to write %d more. Limit is %d", written, len, sizeLimit));
+                L.w(() -> TAG + String.format(Locale.US, "File size limit hit. Wrote %d, tried to write %d more. Limit is %d", written, len, sizeLimit));
                 throw new VideoSizeException("File size limit hit");
             }
             written = newWritten;

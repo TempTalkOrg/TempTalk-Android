@@ -38,7 +38,6 @@ class DraftRepository @Inject constructor(
                     try {
                         entity.roomId to gson.fromJson(entity.draftJson, Draft::class.java)
                     } catch (e: Exception) {
-                        e.printStackTrace()
                         L.e { "[DraftRepository] Error parsing draft: ${e.message}" }
                         null
                     }
@@ -59,7 +58,7 @@ class DraftRepository @Inject constructor(
         return try {
             gson.fromJson(json, Draft::class.java)
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[DraftRepository] error: ${e.stackTraceToString()}" }
             null
         }
     }

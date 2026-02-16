@@ -15,6 +15,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.application
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.messages.MessageForegroundService
+import util.AppForegroundObserver
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
@@ -44,7 +45,7 @@ object ForegroundServiceUtil {
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: IllegalStateException) {
                 if (e is ForegroundServiceStartNotAllowedException) {
-                    L.e { "[ForegroundServiceUtil] Unable to start foreground service:" + e.stackTraceToString() }
+                    L.e(e) { "[ForegroundServiceUtil] Unable to start foreground service:" }
                     throw UnableToStartException(e)
                 } else {
                     throw e
@@ -67,7 +68,7 @@ object ForegroundServiceUtil {
         try {
             start(context, intent)
         } catch (e: UnableToStartException) {
-            L.e { "[ForegroundServiceUtil] Failed to start normally. Blocking and then trying again." + e.stackTraceToString() }
+            L.e(e) { "[ForegroundServiceUtil] Failed to start normally. Blocking and then trying again." }
             blockUntilCapable(context, timeout)
             start(context, intent)
         }
@@ -138,7 +139,7 @@ object ForegroundServiceUtil {
             val intent = Intent(application, serviceClass)
             application.stopService(intent)
         } catch (e: Exception) {
-            L.e { "[ForegroundServiceUtil] Unable to stop service:" + e.stackTraceToString() }
+            L.e(e) { "[ForegroundServiceUtil] Unable to stop service:" }
         }
     }
 

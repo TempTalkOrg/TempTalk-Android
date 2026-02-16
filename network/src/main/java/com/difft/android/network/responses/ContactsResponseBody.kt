@@ -18,7 +18,8 @@ data class ContactResponse(
     val remark: String? = null,
     val joinedAt: String? = null,
     val sourceDescribe: String? = null,
-    val findyouDescribe: String? = null
+    val findyouDescribe: String? = null,
+    val customUid: String? = null
 )
 
 data class AvatarResponse(

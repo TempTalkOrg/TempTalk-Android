@@ -10,7 +10,7 @@
         android:layout_width="30dp"
         android:layout_height="30dp"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="28dp"
+        android:layout_marginTop="16dp"
         android:src="@drawable/chat_ic_window_zoom_out"
         android:tint="@color/icon"
         app:layout_constraintStart_toStartOf="parent"

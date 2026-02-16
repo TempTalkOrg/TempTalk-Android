@@ -34,9 +34,10 @@
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/play_button"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:background="@android:color/transparent"
+        android:padding="8dp"
         android:scaleType="centerInside"
         app:layout_constraintBottom_toBottomOf="@+id/audioWaveProgressBar"
         app:layout_constraintStart_toStartOf="parent"

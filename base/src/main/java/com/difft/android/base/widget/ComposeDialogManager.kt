@@ -39,14 +39,14 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
@@ -638,8 +638,7 @@ fun BottomDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
-    val bgColor = Color(ContextCompat.getColor(context, R.color.bg_popup))
+    val bgColor = colorResource(R.color.bg_popup)
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
@@ -706,8 +705,7 @@ fun FullScreenBottomDialog(
     backgroundDrawable: android.graphics.drawable.Drawable? = null,
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
-    val bgColor = Color(ContextCompat.getColor(context, R.color.bg_popup))
+    val bgColor = colorResource(R.color.bg_popup)
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
@@ -826,10 +824,9 @@ fun WaitDialog(
     onDismiss: () -> Unit = {}
 ) {
     if (isVisible) {
-        val context = LocalContext.current
-        val bgColor = Color(ContextCompat.getColor(context, R.color.bg_popup))
-        val textColor = Color(ContextCompat.getColor(context, R.color.t_primary))
-        val progressColor = Color(ContextCompat.getColor(context, R.color.t_info))
+        val bgColor = colorResource(R.color.bg_popup)
+        val textColor = colorResource(R.color.t_primary)
+        val progressColor = colorResource(R.color.t_info)
 
         Dialog(
             onDismissRequest = if (cancelable) onDismiss else {
@@ -902,20 +899,19 @@ fun MessageDialog(
     content: (@Composable () -> Unit)? = null
 ) {
     if (isVisible) {
-        val context = LocalContext.current
-        val bgColor = Color(ContextCompat.getColor(context, R.color.bg_popup))
-        val titleColor = Color(ContextCompat.getColor(context, R.color.t_primary))
-        val contentColor = Color(ContextCompat.getColor(context, R.color.t_secondary))
-        val cancelColor = Color(ContextCompat.getColor(context, R.color.t_primary))
-        val confirmColor = Color(ContextCompat.getColor(context, R.color.t_info))
+        val bgColor = colorResource(R.color.bg_popup)
+        val titleColor = colorResource(R.color.t_primary)
+        val contentColor = colorResource(R.color.t_secondary)
+        val cancelColor = colorResource(R.color.t_primary)
+        val confirmColor = colorResource(R.color.t_info)
 
         // 使用系统文字资源
         val defaultConfirmText = confirmText.ifEmpty {
-            context.getString(android.R.string.ok)
+            stringResource(android.R.string.ok)
         }
 
         val defaultCancelText = cancelText.ifEmpty {
-            context.getString(android.R.string.cancel)
+            stringResource(android.R.string.cancel)
         }
 
         val actualConfirmColor = confirmButtonColor ?: confirmColor
@@ -993,14 +989,14 @@ fun FullScreenBottomDialogComponentPreview() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "全屏底部Dialog组件",
+                text = stringResource(R.string.preview_fullscreen_dialog_title),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
             Text(
-                text = "这是ComposeDialogManager中的全屏底部Dialog组件",
+                text = stringResource(R.string.preview_fullscreen_dialog_content),
                 fontSize = 16.sp,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -1022,14 +1018,14 @@ fun BottomDialogComponentPreview() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "普通底部Dialog组件",
+                text = stringResource(R.string.preview_bottom_dialog_title),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
             Text(
-                text = "这是ComposeDialogManager中的普通底部Dialog组件",
+                text = stringResource(R.string.preview_bottom_dialog_content),
                 fontSize = 16.sp,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -1042,7 +1038,7 @@ fun BottomDialogComponentPreview() {
 fun WaitDialogComponentPreview() {
     WaitDialog(
         isVisible = true,
-        message = "正在处理中..."
+        message = stringResource(R.string.preview_wait_dialog_message)
     )
 }
 
@@ -1051,10 +1047,10 @@ fun WaitDialogComponentPreview() {
 fun MessageDialogComponentPreview() {
     MessageDialog(
         isVisible = true,
-        title = "确认操作",
-        message = "您确定要执行此操作吗？",
-        confirmText = "确定",
-        cancelText = "取消",
+        title = stringResource(R.string.preview_message_dialog_title),
+        message = stringResource(R.string.preview_message_dialog_content),
+        confirmText = stringResource(R.string.preview_dialog_confirm),
+        cancelText = stringResource(R.string.preview_dialog_cancel),
         showCancel = true,
         onConfirm = { },
         onCancel = { },

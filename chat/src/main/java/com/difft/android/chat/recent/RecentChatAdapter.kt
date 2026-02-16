@@ -32,10 +32,6 @@ import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import difft.android.messageserialization.model.MENTIONS_TYPE_ALL
 import difft.android.messageserialization.model.MENTIONS_TYPE_ME
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
-import java.util.concurrent.TimeUnit
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager.EntryPoint
 import com.difft.android.call.state.OnGoingCallStateManager
@@ -123,23 +119,20 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
     }
 
     private var recyclerView: RecyclerView? = null
-    private var updateDisposable: Disposable? = null
-
-    fun startUpdateCallBar() {
-        updateDisposable = Observable.interval(1, 1, TimeUnit.SECONDS)
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe {
-                updateVisibleViewHolders()
-            }
-    }
-
-    fun stopUpdateCallBar() {
-        updateDisposable?.dispose()
+    fun updateCallBarTick() {
+        updateVisibleViewHolders()
     }
 
     private fun updateVisibleViewHolders() {
-        for (i in 0 until itemCount) {
-            (recyclerView?.findViewHolderForAdapterPosition(i) as? RecentChatViewHolder)?.let { holder ->
+        val rv = recyclerView ?: return
+        val layoutManager = rv.layoutManager ?: return
+        val first = (layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.findFirstVisibleItemPosition() ?: 0
+        val last = (layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.findLastVisibleItemPosition() ?: (itemCount - 1)
+
+        for (i in first..last) {
+            (rv.findViewHolderForAdapterPosition(i) as? RecentChatViewHolder)?.let { holder ->
                 getItem(i)?.also { data ->
                     val recentChatViewData = (data as? ListItem.ChatItem)?.data ?: return@also
                     holder.updateCallBarDuration(recentChatViewData)
@@ -210,12 +203,12 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                     binding.imageviewAvatar.showFavorites()
                     if (searchKey.isNotEmpty()) {
                         binding.textviewLabel.setHighLightText(
-                            binding.root.context.getString(R.string.chat_favorites),
+                            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites),
                             searchKey
                         )
                     } else {
                         binding.textviewLabel.text =
-                            binding.root.context.getString(R.string.chat_favorites)
+                            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites)
                     }
                 } else {
                     val contactAvatar = data.roomAvatarJson?.getContactAvatarData()
@@ -361,10 +354,10 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                     binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
                 }
                 binding.callBarDuration.isVisible = true
-                val showTime = LCallManager.callingTime.value?.takeIf { it.first == roomId }?.second
+                val callStateManager = getCallStateManager()
+                val showTime = callStateManager.getCallingTime(roomId)
                 setupCallingJoinButton(binding.callBarDuration, showTime)
                 binding.callBarDuration.setOnClickListener {
-                    val callStateManager = getCallStateManager()
                     if (!callStateManager.isInCalling()) {
                         L.i { "[call] CallBar Joining call for roomId:${roomId}." }
                         LCallManager.joinCall(activity, callData) { status ->
@@ -376,7 +369,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                     } else {
                         if (callStateManager.getCurrentRoomId() == roomId) {
                             L.i { "[call] CallBar Bringing back current call for roomId:${roomId}." }
-                            LCallManager.bringInCallScreenBack(ApplicationHelper.instance.applicationContext)
+                            LCallManager.bringCallScreenToFront(ApplicationHelper.instance.applicationContext)
                         } else {
                             ToastUtil.show(com.difft.android.call.R.string.call_newcall_tip)
                         }

@@ -25,7 +25,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:visibility="gone"
-        android:src="@drawable/ps_ic_video_play" />
+        android:src="@mipmap/chat_video_message_play_button" />
 
 
 </FrameLayout>

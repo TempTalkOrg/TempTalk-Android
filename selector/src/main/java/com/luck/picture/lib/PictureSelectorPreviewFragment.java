@@ -1,5 +1,7 @@
 package com.luck.picture.lib;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -14,7 +16,6 @@ import android.os.Bundle;
 import android.os.Vibrator;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
@@ -796,7 +797,7 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
 
                 requireActivity().startActivity(Intent.createChooser(intent, currentMedia.getFileName()));
             } catch (Exception e) {
-                Log.w("Share", "share File error: " + Log.getStackTraceString(e));
+                L.w(e, () -> "Share: share File error");
             }
         });
     }
@@ -935,7 +936,7 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
                         }
                         mGalleryAdapter.notifyItemMoved(fromPosition, toPosition);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        L.w(e, () -> "[PictureSelectorPreviewFragment] onMove gallery item error:");
                     }
                     return true;
                 }
@@ -1155,7 +1156,26 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
         tvSelected.setVisibility(View.GONE);
         bottomNarBar.setVisibility(View.GONE);
         completeSelectView.setVisibility(View.GONE);
-        ivShare.setVisibility(View.VISIBLE);
+        ivShare.setVisibility(selectorConfig.isHidePreviewShare ? View.GONE : View.VISIBLE);
+
+        // Default to fullscreen mode with titlebar hidden
+        if (selectorConfig.isPreviewFullScreenMode) {
+            initHiddenTitleBar();
+        }
+    }
+
+    /**
+     * Initialize titlebar as hidden for fullscreen preview mode
+     */
+    private void initHiddenTitleBar() {
+        titleBar.post(() -> {
+            // Set initial state: titlebar hidden (translated up by its height)
+            titleBar.setTranslationY(-titleBar.getHeight());
+            for (View view : mAnimViews) {
+                view.setAlpha(0.0F);
+            }
+            showFullScreenStatusBar();
+        });
     }
 
     protected PicturePreviewAdapter createAdapter() {

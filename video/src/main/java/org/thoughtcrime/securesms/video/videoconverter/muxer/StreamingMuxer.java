@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 
 import org.mp4parser.boxes.iso14496.part1.objectdescriptors.DecoderSpecificInfo;
 import org.mp4parser.streaming.StreamingTrack;
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.video.interfaces.Muxer;
 import org.thoughtcrime.securesms.video.videoconverter.utils.MediaCodecCompat;
 
@@ -20,7 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class StreamingMuxer implements Muxer {
-  private static final String TAG = Log.tag(StreamingMuxer.class);
+  private static final String TAG = "StreamingMuxer";
   private final OutputStream          outputStream;
   private final List<MediaCodecTrack> tracks = new ArrayList<>();
   private       Mp4Writer             mp4Writer;
@@ -155,7 +155,7 @@ public final class StreamingMuxer implements Muxer {
           decoderSpecificInfo.parseDetail(csd);
           parseSuccess = true;
         } catch (IOException e) {
-          Log.w(TAG, "Could not parse AAC codec-specific data!", e);
+          L.w(e, () -> TAG + " Could not parse AAC codec-specific data!");
         }
         if (parseSuccess) {
           filledDecoderSpecificInfo = decoderSpecificInfo;

@@ -172,7 +172,6 @@ class AudioWaveProgressBar @JvmOverloads constructor(
             val maxAmplitude = reducedAmplitudes.maxOrNull() ?: 1f
             return reducedAmplitudes.map { it / maxAmplitude }
         } catch (e: Exception) {
-            e.printStackTrace()
             L.e { "[AudioWaveProgressBar] reduceAmplitudes error:${e.stackTraceToString()}" }
             return getDefaultAmplitudes(targetSize)
         }

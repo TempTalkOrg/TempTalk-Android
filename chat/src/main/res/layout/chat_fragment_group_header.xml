@@ -43,6 +43,7 @@
             app:layout_constraintHorizontal_chainStyle="packed"
             app:layout_constraintStart_toEndOf="@id/ib_back"
             app:layout_constraintTop_toTopOf="parent"
+            app:layout_goneMarginStart="@dimen/chat_header_title_margin_start_no_back"
             tools:text="GroupName GroupName GroupName GroupName" />
 
         <androidx.appcompat.widget.AppCompatTextView
@@ -71,7 +72,7 @@
             android:textSize="20sp"
             android:visibility="invisible"
             app:layout_constraintBottom_toBottomOf="@+id/title"
-            app:layout_constraintEnd_toStartOf="@+id/imageview_add_member"
+            app:layout_constraintEnd_toStartOf="@+id/button_call"
             app:layout_constraintHorizontal_bias="0"
             app:layout_constraintStart_toEndOf="@+id/textview_group_member_count"
             app:layout_constraintTop_toTopOf="@+id/title"
@@ -80,28 +81,28 @@
 
 
         <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/button_call"
+            android:layout_width="44dp"
+            android:layout_height="match_parent"
+            android:layout_centerVertical="true"
+            android:padding="10dp"
+            android:src="@drawable/chat_fragment_header_call"
+            app:layout_constraintEnd_toStartOf="@+id/imageview_add_member"
+            />
+
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/imageview_add_member"
             android:layout_width="44dp"
             android:layout_height="match_parent"
+            android:layout_marginEnd="6dp"
             android:clickable="true"
             android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/chat_icon_create_group"
             android:visibility="gone"
-            app:layout_constraintEnd_toStartOf="@+id/button_call"
+            app:layout_constraintEnd_toEndOf="parent"
             app:tint="@color/icon"
             tools:visibility="visible" />
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/button_call"
-            android:layout_width="44dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="6dp"
-            android:layout_centerVertical="true"
-            android:padding="10dp"
-            android:src="@drawable/chat_fragment_header_call"
-            app:layout_constraintEnd_toEndOf="parent"
-            />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -115,18 +116,4 @@
         app:layout_constraintTop_toBottomOf="@id/title_container_inner"
         tools:visibility="visible" />
 
-
-    <FrameLayout
-        android:id="@+id/reactions_shade"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:background="@color/reactions_screen_light_shade_color"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="@color/reactions_screen_dark_shade_color"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

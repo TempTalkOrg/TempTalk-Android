@@ -1,6 +1,7 @@
 <resources>
     <!--    <string name="search_default_hint">Search for messages or users</string>-->
     <string name="search_default_hint">Search</string>
+    <string name="attendee_external_label">EXT</string>
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">Learn more</string>
     <string name="SpanUtil__read_more">Read more</string>
@@ -15,14 +16,21 @@
     <string name="you">You</string>
 
     <!-- Contact -->
+    <string name="chat_contact_detail_title">Contact Details</string>
     <string name="contact_all">All</string>
     <string name="chat_contacts">Contacts</string>
     <string name="chat_me">Me</string>
     <string name="contact_groups">Groups</string>
     <string name="contact_id">ID:</string>
     <string name="contact_uid">UID:</string>
+    <string name="contact_name_profile">ID:</string>
     <string name="contact_join_at">Joined:</string>
     <string name="contact_how_you_met">How you met:</string>
+    <string name="contact_common_groups">Groups:</string>
+    <string name="contact_info_title">Contact Info</string>
+    <string name="contact_action_message">Message</string>
+    <string name="contact_action_call">Call</string>
+    <string name="contact_action_share">Share</string>
     <string name="contact_met_not_recorded">Not recorded.</string>
     <string name="contact_email">Email:</string>
     <string name="contact_local_time">Local Time:</string>
@@ -44,7 +52,9 @@
     <string name="contact_block_and_report">Block &amp; Report </string>
     <string name="contact_blocked">Blocked</string>
     <string name="contact_unblocked">Unblocked</string>
-    <string name="contact_add_contacts">Add contacts</string>
+    <string name="contact_add_contacts">Add Contact</string>
+    <string name="contact_add_contacts_contact_name_not_correct">The contact ID is not correct, please try again.</string>
+    <string name="contact_add_contacts_code_not_correct">The code is not correct, please try again.</string>
     <string name="contact_unblock_users">Unblock</string>
     <string name="contact_unblock_operation_denied">Operation denied.You need to unblock this contact.</string>
     <string name="contact_send_a_request">Send a request</string>
@@ -62,6 +72,7 @@
 
     <!-- Chat -->
     <string name="chat_chats">Chats</string>
+    <string name="chat_select_conversation">Select a conversation</string>
     <string name="chat_message_input_hint">Message</string>
     <string name="chat_message_input_hint_confidential">Confidential Message</string>
     <string name="chat_message_confidential_tips">Swipe left to read, swipe right to turn pages.</string>
@@ -78,11 +89,14 @@
     <string name="chat_message_action_quote">Quote</string>
     <string name="chat_message_action_reply">Reply</string>
     <string name="chat_message_action_recall">Recall</string>
+    <string name="chat_message_action_save_to_photos">Save to Photos</string>
     <string name="chat_message_action_download">Download</string>
-    <string name="chat_message_action_save_to_note">Save</string>
+    <string name="chat_message_action_save_to_note">Add to Saved</string>
+    <string name="chat_message_action_more">More</string>
     <string name="chat_message_action_more_info">More Info</string>
     <string name="chat_message_action_translate">Translate</string>
     <string name="chat_message_action_translate_off">Off</string>
+    <string name="chat_message_action_select_all">Select All</string>
     <string name="chat_message_attachment">[Attachment]</string>
     <string name="chat_message_image">[Image]</string>
     <string name="chat_message_video">[Video]</string>
@@ -107,7 +121,6 @@
     <string name="chat_group_name_too_long">Group name must less than or equal 64 chars.</string>
     <string name="chat_exceed_bytes_limit">Exceed 4096 bytes limit</string>
     <string name="chat_took_a_screen_shot">%s took a screenshot!</string>
-    <string name="chat_favorites">Saved</string>
     <string name="chat_contact_info">Contact Info</string>
     <string name="chat_stick">Stick</string>
     <string name="chat_unstick">UnStick</string>
@@ -120,8 +133,8 @@
     <string name="chat_at_all">All</string>
     <string name="chat_list_at_you">[@You]</string>
     <string name="chat_list_at_all">[@All]</string>
-    <string name="chat_list_critical_alert">[🚨Critical Alert]</string>
-    <string name="chat_message_critical_alert">🚨Sent a Critical Alert.</string>
+    <string name="chat_list_critical_alert">[🚨 Critical Alert]</string>
+    <string name="chat_message_critical_alert">🚨 Critical Alert.</string>
     <string name="chat_status_sending">Sending</string>
     <string name="chat_status_sent">Sent</string>
     <string name="chat_status_fail">Fail</string>
@@ -141,9 +154,17 @@
     <string name="chat_speech_to_text_isblank">No text recognized</string>
     <string name="chat_translated_by">Translated by %s</string>
     <string name="chat_translate_fail">Translation failed</string>
+    <string name="chat_translate_to_language">Translate to %s</string>
+    <string name="language_chinese">Chinese</string>
+    <string name="language_english">English</string>
     <string name="chat_attachment_load_fail">Load failed, Please try again.</string>
     <string name="chat_emergency_case" translatable="false">You have an emergency case, please contact %s</string>
     <string name="chat_confidential_can_not_select">Confidential message cannot be selected</string>
+    <string name="chat_confidential_tip_title">Confidential Messages</string>
+    <string name="chat_confidential_tip_content">Read once, then gone.</string>
+    <string name="chat_confidential_message_viewed">Confidential message has been viewed</string>
+    <string name="chat_do_not_trust_warning">⚠️ DO NOT trust unknown users.</string>
+    <string name="chat_privacy_banner">🔒 Privacy first. Fully anonymous and end-to-end encrypted. DO NOT trust unknown users.</string>
 
     <string name="chat_action_photo">Photos</string>
     <string name="chat_action_contact">Contact</string>
@@ -166,7 +187,7 @@
     <!--Chat Option -->
     <string name="chat_option_create_group">Create Group</string>
     <string name="chat_option_scan">Scan</string>
-    <string name="chat_option_add_contact">Add Contacts</string>
+    <string name="chat_option_add_contact">Add Contact</string>
     <string name="chat_option_instant_call">Instant Meeting</string>
     <string name="chat_option_mark_all_as_read">Mark all as read</string>
 
@@ -302,7 +323,21 @@
     <string name="me_theme_system">System</string>
     <string name="me_chat">Chat</string>
     <string name="me_save_to_photos">Save to Photos</string>
-    <string name="me_automatically_save_photos">Automatically save received photos and videos to Photos; items won’t be saved in Confidential Mode.</string>
+    <string name="me_automatically_save_photos">Automatically save received photos and videos to Photos; items won\'t be saved in Confidential Mode.</string>
+
+    <!-- Conversation-level save to photos settings -->
+    <string name="save_to_photos_default">Default (%s)</string>
+    <string name="save_to_photos_always">Always</string>
+    <string name="save_to_photos_never">Never</string>
+    <string name="save_to_photos_on">On</string>
+    <string name="save_to_photos_off">Off</string>
+
+    <!-- Voice playback speed settings -->
+    <string name="me_voice_playback_speed">Voice Playback Speed</string>
+    <string name="me_voice_playback_speed_desc">Set the default playback speed for voice messages.</string>
+    <string name="voice_speed_1x">1×</string>
+    <string name="voice_speed_1_5x">1.5×</string>
+    <string name="voice_speed_2x">2×</string>
 
     <!-- Contact profile setting-->
     <string name="contact_profile_info">Profile</string>
@@ -383,9 +418,14 @@
     <string name="invite_regenerate">Regenerate</string>
     <string name="invite_share">Share</string>
     <string name="invite_enter_code">Enter Code</string>
+    <string name="invite_add_contact">Add Contact</string>
     <string name="invite_my_code">My Code</string>
     <string name="invite_add_new_friend">Add a new friend</string>
     <string name="invite_enter_code_to_add">Enter a code to add a new friend</string>
+    <string name="invite_enter_hint">Enter a 4-digit code or contact ID</string>
+    <string name="invite_button_add_friend">Add</string>
+    <string name="invite_tv_search_by_uid">Add by friend\'s ID</string>
+    <string name="invite_tv_search_by_code">Add by friend\'s code</string>
     <string name="invite_copy_link">Copy Link</string>
     <string name="invite_cancel">Cancel</string>
     <string name="invite_tips">Chat with me on Yelling %s</string>
@@ -467,10 +507,6 @@
     <string name="app_sign_error_tips">The application you have currently installed is an unofficial signed application, please confirm.</string>
     <string name="emulator_risk_tips">Your current device is emulator, which may cause the application functions not to work properly or cause security risks, please confirm.</string>
     <string name="root_risk_tips">Your current device has been rooted, and there is a risk that application data may be stolen by third-party application, please confirm.</string>
-    <string name="url_risk_tips">Not sure if this link is safe. Are you sure to open it?\n</string>
-    <string name="url_click_open">Open</string>
-    <string name="url_click_cancel">Cancel</string>
-    <string name="url_risk_error_title">Safety Tip</string>
 
 
     <string name="app_close_application">Close application</string>
@@ -480,27 +516,11 @@
     <string name="meetings_action_add">Add</string>
     <string name="meetings_action_start">Start</string>
     <string name="meetings_action_invite">Invite</string>
-    <string name="meetings_title">Meetings</string>
     <string name="event_button_join">Join</string>
-    <string name="event_label_start">Start</string>
-    <string name="event_label_duration">Duration</string>
-    <string name="event_label_repeat">Repeat</string>
-    <string name="event_label_host">Host</string>
-    <string name="event_label_permit">Permit</string>
-    <string name="event_label_desc">Desc.</string>
-    <string name="event_item_everyone_can_invite_others" translatable="false">Everyone can invite others</string>
     <string name="event_item_attendee_can_invite_others" translatable="false">Attendee can invite others</string>
-    <string name="event_item_everyone_can_modify_meeting" translatable="false">Everyone can modify meeting</string>
     <string name="event_item_attendee_can_modify_meeting" translatable="false">Attendee can modify live</string>
-    <string name="event_item_sent_invitation_to_the_chat_room">Send invitation to the chat room</string>
     <string name="event_button_advanced_settings">Advanced Settings</string>
-    <string name="event_start_time_action_10_mins_later">10 mins later</string>
-    <string name="event_start_time_action_30_mins_later">30 mins later</string>
-    <string name="event_start_time_action_1hr_later">1hr later</string>
-    <string name="event_label_attendee">Attendee</string>
-    <string name="event_desc_hint_write_some_notes">Write some notes</string>
     <string name="meetings_action_save">Save</string>
-    <string name="meetings_action_schedule">Schedule</string>
     <string name="meetings_action_cancel">Cancel</string>
     <string name="meetings_action_cancel_meeting">Cancel meeting</string>
     <string name="meetings_action_cancel_event">Cancel event</string>
@@ -516,13 +536,9 @@
     <string name="duration_selection_12_hrs">12 hours</string>
     <string name="duration_selection_24_hrs">1 day</string>
     <string name="duration_selection_48_hrs">2 days</string>
-    <string name="event_label_file">File</string>
-    <string name="event_content_add_file">+ Add</string>
     <string name="event_attachment_label_name">Name</string>
     <string name="event_attachment_label_url">HTTP URL</string>
     <string name="toggle_background_blur">Toggle Blur</string>
-    <string name="event_label_going">Attend?</string>
-    <string name="event_item_receive_notification">MeetingBot notification</string>
     <string name="event_label_title">Title</string>
     <string name="event_label_link">Link</string>
     <string name="event_attachment_hint_paste_url_here">Paste URL here</string>
@@ -530,21 +546,13 @@
     <string name="meetings_action_update">Update</string>
     <string name="meetings_action_delete">Delete</string>
     <string name="meetings_action_copy">Copy</string>
-    <string name="meetings_action_copy_meeting_info" translatable="false">Copy Meeting info</string>
-    <string name="meetings_action_copy_live_stream_info" translatable="false">Copy Schedule info</string>
     <string name="meetings_action_share_live_stream_info" translatable="false">Share Live stream to</string>
     <string name="event_label_time">Time</string>
     <string name="title_for_attendee_list">Attendees</string>
     <string name="event_attendee_add">+ Add</string>
     <string name="eventl_add_attendees">Add Attendees</string>
-    <string name="event_option_going_yes">Yes</string>
-    <string name="event_option_going_no">No</string>
-    <string name="event_desc_everyone_can_invite_others" translatable="false">When unchecked, only creator (host) can invite others.</string>
     <string name="event_desc_everyone_can_invite_others_in_group" translatable="false">When unchecked, only creator (host) and group moderators can invite others.</string>
-    <string name="event_desc_everyone_can_modify_meeting" translatable="false">Only creator (host) can modify by default.</string>
     <string name="event_desc_everyone_can_modify_meeting_in_group" translatable="false">Only creator (host) can modify by default.</string>
-    <string name="event_desc_in_group">The meeting is scheduled from a group. Attendees include group members and invited contact memebers. When someone joins the group, the meeting will automatically add the new one; when someone leaves the group, the meeting will automatically remove this person.</string>
-    <string name="event_info_receive_notification" translatable="false">You can receive 3 notifications from MeetingBot\n1. Reminder 10 mins before the meeting\n2. Meeting bar at the top of chat list 5 mins before the meeting\n3. Pop-up when the meeting starts</string>
     <string name="live_info_receive_notification" translatable="false">You can receive 3 notifications from MeetingBot\n1.Reminder 10 mins before the live stream\n2. Meeting bar at the top of chat list 5 mins before the live stream\n3. Pop-up when the live stream starts</string>
     <string name="evnet_dialog_title_rsvp_to_recurring_meetings">RSVP to recurring meetings</string>
     <string name="evnet_dialog_title_rsvp_to_recurring_events">RSVP to recurring events</string>
@@ -557,17 +565,13 @@
     <string name="event_dialog_title_confirm_delete_recurring_meetings_for_host">Cancel the recurring meetings for all attendees</string>
     <string name="event_dialog_title_confirm_delete_recurring_events_for_host">Cancel the recurring events for all attendees</string>
     <string name="event_link_google_calendar">Google Calendar</string>
-    <string name="no_meetings_in_the_next_14_days">No meetings in the next 14 days</string>
-    <string name="schedule_your_meetings_now">Schedule your meetings now!</string>
     <!-- 20230927@w: for event scheduler ____________________________________-->
 
     <string name="operation_successful">Operation successful</string>
     <string name="operation_failed">Operation failed</string>
 
-    <string name="meeting_detail">Meeting\'s detail</string>
     <string name="in_meeting_number">In meeting(%d)</string>
     <string name="meeting_joined">%s joined</string>
-    <string name="meeting_detail_refresh">Refresh</string>
     <string name="non_participants_number">Non-participants(%d)</string>
     <string name="attendee_banner_text">Attendees will auto change as group members change</string>
     <string name="attendee_banner_info_text">When someone joins the group, the meeting will add the new one and when someone leaves, the meeting will also remove this person.</string>
@@ -624,6 +628,7 @@
     <string name="download_success">Download successful</string>
     <string name="download_failed">Download failed, please try again!</string>
     <string name="file_expired">File has expired.</string>
+    <string name="uploading">UPLOADING</string>
     <string name="download_downloading">Downloading, please wait…</string>
     <string name="caption_on_reminder" translatable="false">Caption is on</string>
     <string name="the_original_message_doesn_t_exist">The original message doesn\'t exist</string>
@@ -702,8 +707,6 @@
     <string name="leave_the_meeting_in_few_seconds" translatable="false">Are you there？ LEAVE THE MEETING due to no one speaks for a long time.</string>
     <string name="option_leave" translatable="false">Leave</string>
     <string name="option_continue" translatable="false">Continue</string>
-    <string name="title_speak_request" translatable="false">✋ Speak Request</string>
-    <string name="add_to_calendar" translatable="false">Add to calendar</string>
 
     <string name="call_invite">invites you to join the voice call</string>
     <string name="call_invite_of_group">invites you to a meeting</string>
@@ -724,7 +727,7 @@
 
     <string name="background_connection">Background connection</string>
     <string name="background_connection_enabled">Background connection enabled</string>
-    <string name="background_connection_tips">Keep a low-impact background connection to Yelling for reliable notifications. Before enabling, please ensure the above settings are in normal status.</string>
+    <string name="background_connection_tips">When Google services are restricted on your device, keep the background connection enabled to receive messages and call notifications normally. Before enabling, please ensure the above settings are in normal status.</string>
 
     <!-- Background Connection Checks -->
     <string name="background_restriction_check">Background Restriction</string>
@@ -756,7 +759,7 @@
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>
     <string name="disappearing_messages_tips">Messages will expire after being read, they will GONE and then can NOT be viewed in any way.</string>
-    <string name="official_bot_name" translatable="false">TTSupport</string>
+    <string name="official_bot_name" translatable="false">Support Team</string>
     <string name="official_bot_id" translatable="false">+10000</string>
     <string name="disappearing_messages_not_archive">Do not expire</string>
     <string name="group_disband_tips">The data of this group will be deleted and all of the members in this group will be removed at the same time.</string>
@@ -764,7 +767,7 @@
     <string name="contact_blocked_tips">Operation denied.You are not friend yet.</string>
 
     <string name="critical_alerts">Critical Alerts</string>
-    <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission).</string>
+    <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission). When enabled, Critical Alerts break through Silent Mode and Do Not Disturb.</string>
     <string name="critical_alerts_off">Off</string>
     <string name="critical_alerts_on">On</string>
 

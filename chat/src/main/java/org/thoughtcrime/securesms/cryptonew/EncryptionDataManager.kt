@@ -4,9 +4,9 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
-import org.signal.libsignal.protocol.ecc.Curve
+import org.signal.libsignal.protocol.ecc.ECPrivateKey
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
-import org.thoughtcrime.securesms.util.Base64
+import com.difft.android.base.utils.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,7 +30,7 @@ class EncryptionDataManager @Inject constructor(
             val privateKeyBytes = Base64.decode(userData.aciIdentityPrivateKey!!)
 
             val publicKey = IdentityKey(publicKeyBytes, 0)
-            val privateKey = Curve.decodePrivatePoint(privateKeyBytes)
+            val privateKey = ECPrivateKey(privateKeyBytes)
 
             return IdentityKeyPair(publicKey, privateKey)
         } catch (e: Exception) {
@@ -83,7 +83,7 @@ class EncryptionDataManager @Inject constructor(
             val privateKeyBytes = Base64.decode(oldPrivateKey)
 
             val publicKey = IdentityKey(publicKeyBytes, 0)
-            val privateKey = Curve.decodePrivatePoint(privateKeyBytes)
+            val privateKey = ECPrivateKey(privateKeyBytes)
 
             return IdentityKeyPair(publicKey, privateKey)
         } catch (e: Exception) {

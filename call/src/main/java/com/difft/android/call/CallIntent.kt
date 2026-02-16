@@ -51,6 +51,7 @@ class CallIntent(private val intent: Intent) {
         CALL_START_PARAMS("CALL_START_PARAMS"),
         CALL_APP_TOKEN("CALL_APP_TOKEN"),
         CALL_NEED_APP_LOCK("CALL_NEED_APP_LOCK"),
+        CALL_WAIT_DIALOG_SHOWN("CALL_WAIT_DIALOG_SHOWN"),
     }
 
     /**
@@ -127,6 +128,12 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
+        /** 由 joinCall/startCall 在已展示 CallWaitDialog 时设置，LCallActivity 据此不再重复 show */
+        fun withCallWaitDialogShown(shown: Boolean): Builder {
+            intent.putExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), shown)
+            return this
+        }
+
         fun build(): Intent {
             return intent
         }
@@ -152,12 +159,13 @@ class CallIntent(private val intent: Intent) {
 
     val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
 
+    val callWaitDialogShown: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), false) }
+
     override fun toString(): String {
         return """
       CallIntent
       Action - $action
       CALL_ROOM_ID? $roomId
-      CALL_ROOM_NAME? $roomName
       CALL_TYPE? $callType
       CALL_ROLE? $callRole
       CALL_CALLER_ID? $callerId

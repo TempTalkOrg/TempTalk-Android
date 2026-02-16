@@ -57,70 +57,83 @@ class ContactsUpdater @Inject constructor(
     }
 
     private suspend fun processBatch(batch: List<PendingContactMessage>) {
-        // Sort messages by directory version
+        L.i { "[ContactsUpdater] Processing batch size:${batch.size}, versions:${batch.map { it.directoryVersion }}" }
         val sortedMessages = batch.sortedBy { it.directoryVersion }
         var currentVersion = getCurrentDirectoryVersion()
 
         for (pendingMessage in sortedMessages) {
+            val memberIds = pendingMessage.message.data?.members?.map { it.number } ?: emptyList()
             if (pendingMessage.directoryVersion == currentVersion + 1) {
-                L.i { "[ContactsUpdater] Version has grown by 1. Current: $currentVersion, Message: ${pendingMessage.directoryVersion}" }
-                // Process message normally
+                L.i { "[ContactsUpdater] Version +1 current:$currentVersion, msg:${pendingMessage.directoryVersion}, members:$memberIds" }
                 processContactNotifyMessage(pendingMessage.message)
                 currentVersion = pendingMessage.directoryVersion
                 setCurrentDirectoryVersion(currentVersion)
             } else if (pendingMessage.directoryVersion > currentVersion + 1) {
-                L.i { "[ContactsUpdater] Version gap detected. Current: $currentVersion, Message: ${pendingMessage.directoryVersion}" }
-                // Force update contacts
+                L.i { "[ContactsUpdater] Version gap current:$currentVersion, msg:${pendingMessage.directoryVersion}, members:$memberIds, triggering full sync" }
                 ContactorUtil.fetchAndSaveContactors()
-                // Still process the notification message
                 processContactNotifyMessage(pendingMessage.message)
-                // Update version after force update
                 currentVersion = pendingMessage.directoryVersion
                 setCurrentDirectoryVersion(currentVersion)
                 break
             } else {
-                L.i { "[ContactsUpdater] Skipping older version message. Current: $currentVersion, Message: ${pendingMessage.directoryVersion}" }
+                L.i { "[ContactsUpdater] Skipping old version current:$currentVersion, msg:${pendingMessage.directoryVersion}, members:$memberIds" }
             }
         }
     }
 
     private suspend fun processContactNotifyMessage(message: TTNotifyMessage) {
-        // Process member actions
-        message.data?.members?.let { members ->
-            members.forEach { member ->
-                when (member.action) {
-                    0 -> {
-                        L.i { "[ContactsUpdater] Add new contact into contactors ${member.number}" }
-                        wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number))
-                        wcdb.contactor.insertObject(member.toContactor())
-                        ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
-                        ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
-                    }
+        val members = message.data?.members
+        if (members.isNullOrEmpty()) {
+            L.w { "[ContactsUpdater] processContactNotifyMessage members is null or empty" }
+            return
+        }
+        
+        members.forEach { member ->
+            val memberId = member.number
+            val action = member.action
+            when (action) {
+                0 -> {
+                    val newContact = member.toContactor()
+                    L.i { "[ContactsUpdater] action=0(Add) id:$memberId, hasName:${member.name != null}, hasAvatar:${member.avatar != null}" }
+                    wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number))
+                    wcdb.contactor.insertObject(newContact)
+                    ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
+                    ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
+                }
 
-                    1 -> {
-                        L.i { "[ContactsUpdater] Update contact into contactors ${member.number}" }
-                        val contact = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(member.number.toString()))
-                        if (contact != null) {
-                            contact.updateFrom(member)
-                            wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
-                            wcdb.contactor.insertObject(contact)
-                            ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
-                        }
-                        if (member.number == globalServices.myId) {
-                            member.privateConfigs?.saveToPhotos?.let {
-                                L.i { "[ContactsUpdater] Update saveToPhotos for my contact: $it" }
-                                userManager.update { saveToPhotos = it }
-                            }
-                        }
-                    }
-
-                    2, 3 -> {
-                        L.i { "[ContactsUpdater] Delete contact from contactors ${member.number}" }
-                        wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
-                        dbMessageStore.removeRoomAndMessages(member.number.toString())
-                        ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
+                1 -> {
+                    val contact = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(member.number.toString()))
+                    if (contact != null) {
+                        val localHasAvatar = contact.avatar != null
+                        val localName = contact.name
+                        contact.updateFrom(member)
+                        L.i { "[ContactsUpdater] action=1(Update) id:$memberId, localName:$localName, serverName:${member.name}, localHasAvatar:$localHasAvatar, serverHasAvatar:${member.avatar != null}, resultHasAvatar:${contact.avatar != null}" }
+                        wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
+                        wcdb.contactor.insertObject(contact)
                         ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
+                    } else {
+                        L.w { "[ContactsUpdater] action=1(Update) id:$memberId not in contactor table, skipped. serverHasAvatar:${member.avatar != null}" }
                     }
+                }
+
+                2 -> {
+                    L.i { "[ContactsUpdater] action=2(DeleteByMe) id:$memberId" }
+                    wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
+                    dbMessageStore.removeRoomAndMessages(member.number.toString())
+                    ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
+                    ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
+                }
+                
+                3 -> {
+                    L.i { "[ContactsUpdater] action=3(DeleteByOther) id:$memberId" }
+                    wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
+                    dbMessageStore.removeRoomAndMessages(member.number.toString())
+                    ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
+                    ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
+                }
+                
+                else -> {
+                    L.w { "[ContactsUpdater] Unknown action=$action id:$memberId, hasName:${member.name != null}, hasAvatar:${member.avatar != null}" }
                 }
             }
         }
@@ -128,6 +141,9 @@ class ContactsUpdater @Inject constructor(
 
     suspend fun updateBySignalNotifyMessage(message: TTNotifyMessage) {
         val directoryVersion = message.data?.directoryVersion ?: 0
+        val memberIds = message.data?.members?.map { it.number } ?: emptyList()
+        val actions = message.data?.members?.map { it.action } ?: emptyList()
+        L.i { "[ContactsUpdater] Received notify - version:$directoryVersion, members:$memberIds, actions:$actions" }
         notifyMessageChannel.send(PendingContactMessage(message, directoryVersion))
     }
 
@@ -148,6 +164,7 @@ class ContactsUpdater @Inject constructor(
             it.avatar = this.avatar
             it.meetingVersion = this.publicConfigs?.meetingVersion ?: 0
             it.publicName = this.publicConfigs?.publicName
+            it.customUid = this.customUid
         }
     }
 
@@ -160,6 +177,7 @@ class ContactsUpdater @Inject constructor(
             meetingVersion = it.meetingVersion
             publicName = it.publicName
         }
+        member.customUid?.let { customUid = it }
     }
 }
 

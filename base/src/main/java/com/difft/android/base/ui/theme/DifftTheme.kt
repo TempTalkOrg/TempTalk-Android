@@ -1,26 +1,18 @@
 package com.difft.android.base.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.core.graphics.drawable.toDrawable
-import com.difft.android.base.R
 
 /**
  * Main theme composable for Difft design system
@@ -81,16 +73,9 @@ fun DifftTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = typography,
-            shapes = shapes
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(backgroundColor)
-            ) {
-                content()
-            }
-        }
+            shapes = shapes,
+            content = content
+        )
     }
 }
 
@@ -346,6 +331,18 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.backgroundTertiary
 
+    val backgroundQuaternary: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundQuaternary
+
+    val backgroundActionPopup: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundActionPopup
+
+    val backgroundBottomSheet: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundBottomSheet
+
     val backgroundDisabled: Color
         @Composable @ReadOnlyComposable
         get() = extended.backgroundDisabled
@@ -366,6 +363,10 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.backgroundBlue
 
+    val backgroundElevate: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundElevate
+
     val backgroundSettingItem: Color
         @Composable @ReadOnlyComposable
         get() = extended.backgroundSettingItem
@@ -373,6 +374,10 @@ object DifftColorAccessor {
     val divider: Color
         @Composable @ReadOnlyComposable
         get() = extended.divider
+
+    val line: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.line
 
     val border: Color
         @Composable @ReadOnlyComposable
@@ -560,7 +565,3 @@ object DifftTypographyAccessor {
         @Composable @ReadOnlyComposable
         get() = bodyMedium
 }
-
-val SfProFont = FontFamily(
-    Font(R.font.sf_pro, FontWeight.Normal),
-)

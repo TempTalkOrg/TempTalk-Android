@@ -5,13 +5,17 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
+import android.graphics.Typeface
 import android.text.Spannable
+import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +26,7 @@ import androidx.core.text.getSpans
 import androidx.core.view.isVisible
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -34,21 +39,26 @@ import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePe
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.fragment.DisposableManageFragment
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.CopiedFileResult
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
+import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.utf8Substring
+import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.base.common.ScreenshotDetector
 import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.CombineForwardBar
-import com.difft.android.chat.contacts.contactsall.PinyinComparator
+import com.difft.android.chat.compose.ConfidentialTipDialogContent
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isBotId
 import com.difft.android.chat.databinding.ChatFragmentInputBinding
@@ -74,7 +84,6 @@ import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
 import com.luck.picture.lib.config.SelectModeConfig
 import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnResultCallbackListener
 import com.luck.picture.lib.language.LanguageConfig
 import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
@@ -94,6 +103,7 @@ import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.ReadPosition
 import difft.android.messageserialization.model.RealSource
 import difft.android.messageserialization.model.Recall
+import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
@@ -106,17 +116,20 @@ import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
-import net.yslibrary.android.keyboardvisibilityevent.Unregistrar
 import org.difft.app.database.convertToContactorModels
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.forwardContext
 import org.difft.app.database.getContactorsFromAllTable
+import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.members
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
@@ -144,11 +157,20 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class ChatMessageInputFragment : DisposableManageFragment() {
 
-    private val chatViewModel by activityViewModels<ChatMessageViewModel>()
+    // Use parent fragment as ViewModel owner when nested (in ChatFragment/GroupChatFragment),
+    // otherwise use activity (when directly in Activity).
+    // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
+    private val chatViewModel: ChatMessageViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
 
-    private val chatSettingViewModel by activityViewModels<ChatSettingViewModel>()
+    private val chatSettingViewModel: ChatSettingViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
 
-    private val draftViewModel by activityViewModels<DraftViewModel>()
+    private val draftViewModel: DraftViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
 
     private lateinit var binding: ChatFragmentInputBinding
 
@@ -187,7 +209,19 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     @Inject
     lateinit var localMessageCreator: LocalMessageCreator
 
-    private var keyboardVisibilityEventListener: Unregistrar? = null
+    // Keyboard visibility listener is managed by KeyboardVisibilityEvent with viewLifecycleOwner
+    private var isKeyboardListenerRegistered = false
+
+    private var screenshotDetector: ScreenshotDetector? = null
+
+    private var inputLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+    private var inputLayoutViewTreeObserver: ViewTreeObserver? = null
+    private var inputLayoutAttachListener: View.OnAttachStateChangeListener? = null
+    private var updateConfidentialJob: Job? = null
+    private var lastInputContentLength = 0
+
+    /** Cached flag: whether to hide confidential toggle (group member limit or bot chat) */
+    private var shouldHideConfidential = false
 
     private val onPicturePermissionForMessage = registerPermission {
         onPicturePermissionForMessageResult(it)
@@ -226,79 +260,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
         initView()
 
-        fileActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
-
-            val uri = result.data?.data
-            if (uri == null) {
-                ToastUtil.showLong(R.string.unsupported_file_type)
-                return@registerForActivityResult
-            }
-
-            viewLifecycleOwner.lifecycleScope.launch {
-                // 优先判断文件大小是否超过200MB
-                val fileSize = withContext(Dispatchers.IO) { FileUtil.getFileSize(uri) }
-                if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
-                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
-                    return@launch
-                }
-
-                val file = withContext(Dispatchers.IO) {
-                    runCatching { FileUtil.copyUriToFile(uri) }
-                        .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
-                        .getOrNull()
-                }
-
-                if (file == null) {
-                    ToastUtil.showLong(R.string.unsupported_file_type)
-                    return@launch
-                }
-
-                val path = file.absolutePath
-                val mimeType = FileUtil.getMimeTypeType(uri)
-
-                if (MediaUtil.isImageType(mimeType) || MediaUtil.isVideoType(mimeType)) {
-                    val localMedia = LocalMedia().apply {
-                        this.realPath = path
-                        this.mimeType = mimeType
-                        this.fileName = FileUtils.getFileName(path)
-                    }
-                    val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
-                        putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, arrayListOf(localMedia))
-                    }
-                    mediaSelectActivityLauncher.launch(intent)
-                } else {
-                    prepareSendAttachmentPush(path.toUri(), mimeType ?: "")
-                }
-            }
-        }
-
-        mediaSelectActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            if (it.resultCode == Activity.RESULT_OK) {
-                it.data?.let { intent ->
-                    val result = MediaSendActivityResult.fromData(intent)
-                    val list = result.media
-                    val body = result.body
-                    Observable.interval(0, 300, TimeUnit.MILLISECONDS)
-                        .compose(RxUtil.getSchedulerComposer())
-                        .takeUntil { number -> number >= list.size - 1 }
-                        .doOnNext { index ->
-                            val media = list[index.toInt()]
-                            prepareSendAttachmentPush(media.realPath.toUri(), media.mimeType)
-                        }
-                        .ignoreElements()
-                        .delay(500, TimeUnit.MILLISECONDS)
-                        .andThen(Completable.fromAction {
-                            if (body.isNotEmpty()) {
-                                sendTextPush(body)
-                            }
-                        })
-                        .autoDispose(this@ChatMessageInputFragment, Lifecycle.Event.ON_DESTROY)
-                        .subscribe({}, { error -> error.printStackTrace() })
-                }
-            }
-        }
-
         chatViewModel.chatUIData.filterNotNull().onEach { data ->
             chatUIData = data
             data.group?.let {
@@ -307,6 +268,8 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 } else {
                     binding.root.visibility = View.GONE
                 }
+                // Refresh confidential toggle when group info changes (member count may have changed)
+                updateConfidential()
             }
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -325,7 +288,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 if (it.contains(chatViewModel.forWhat.id)) {
                     updateViewByFriendCheck()
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] observe friendRemoved error: ${it.stackTraceToString()}" } })
 
         chatViewModel.messageQuoted
             .compose(RxUtil.getSchedulerComposer())
@@ -427,8 +390,8 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                                 forwardContext = null
                             }
                         }
-                    }) { error: Throwable -> error.printStackTrace() }
-            }, { it.printStackTrace() })
+                    }) { error: Throwable -> L.w { "[ChatMessageInputFragment] forward message error: ${error.stackTraceToString()}" } }
+            }, { L.w { "[ChatMessageInputFragment] observe messageQuoted error: ${it.stackTraceToString()}" } })
 
         chatViewModel.messageRecall
             .compose(RxUtil.getSchedulerComposer())
@@ -437,6 +400,12 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 showRecallDialog(it)
             }, {})
 
+        // Subscribe to batch recall messages using coroutines
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.batchRecallMessages.collect { messageIds ->
+                showBatchRecallDialog(messageIds)
+            }
+        }
 
         chatViewModel.messageEmojiReaction
             .compose(RxUtil.getSchedulerComposer())
@@ -454,13 +423,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             .subscribe({ message ->
                 resendMessage(message.id)
             }, {})
-
-        chatViewModel.showReactionShade
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it) binding.reactionsShade.visibility = View.VISIBLE else binding.reactionsShade.visibility = View.GONE
-            }, { it.printStackTrace() })
 
         // Collect text size changes at Fragment level using StateFlow
         viewLifecycleOwner.lifecycleScope.launch {
@@ -488,15 +450,15 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                                 .to(RxUtil.autoDispose(this))
                                 .subscribe({
                                     updateMentions(false)
-                                }, { e -> e.printStackTrace() })
+                                }, { e -> L.w { "[ChatMessageInputFragment] updateMentions delay error: ${e.stackTraceToString()}" } })
                         }
                     } else {
                         sendTextPush(it.text)
                     }
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] observe messageSend error: ${it.stackTraceToString()}" } })
 
-        chatViewModel.confidentialRecipient
+        chatViewModel.confidentialViewReceipt
             .compose(RxUtil.getSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
@@ -510,7 +472,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 ApplicationDependencies.getJobManager().add(
                     pushReadReceiptSendJobFactory.create(it.authorId, chatViewModel.forWhat, listOf(it.timeStamp), readPosition, 1)
                 )
-            }, { e -> e.printStackTrace() })
+            }, { e -> L.w { "[ChatMessageInputFragment] observe confidentialViewReceipt error: ${e.stackTraceToString()}" } })
 
         chatViewModel.selectMessagesState.onEach {
             binding.combineForward.isVisible = it.editModel
@@ -528,6 +490,9 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         },
                         onSaveClick = {
                             chatViewModel.onSaveSelectedMessages()
+                        },
+                        onRecallClick = {
+                            chatViewModel.onBatchRecallClick()
                         })
                 }
             }
@@ -545,21 +510,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
-        keyboardVisibilityEventListener = KeyboardVisibilityEvent.registerEventListener(activity) {
-            if (it) { //键盘弹出
-                binding.llChatActions.visibility = View.GONE
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
-            }
-//            else {
-//                binding.edittextInput.apply {
-//                    isFocusable = false
-//                    isFocusableInTouchMode = false
-//                }
-//            }
-
-            updateSubmitButtonView()
-        }
+        registerKeyboardVisibilityListener()
 
         chatViewModel.listClick
             .compose(RxUtil.getSchedulerComposer())
@@ -571,7 +522,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 binding.buttonMoreActionsClose.visibility = View.GONE
 
                 updateSubmitButtonView()
-            }, { e -> e.printStackTrace() })
+            }, { e -> L.w { "[ChatMessageInputFragment] observe recordState error: ${e.stackTraceToString()}" } })
 
         chatViewModel.voiceMessageSend
             .compose(RxUtil.getSchedulerComposer())
@@ -579,7 +530,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             .subscribe({ path ->
                 val mimeType = MediaUtil.getMimeType(requireContext(), path.toUri()) ?: ""
                 prepareSendAttachmentPush(path.toUri(), mimeType, isAudioMessage = true)
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } })
 
         chatViewModel.showOrHideFullInput
             .compose(RxUtil.getSchedulerComposer())
@@ -593,7 +544,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         ViewUtil.focusAndShowKeyboard(this)
                     }
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } })
 
         loadDraftOneTime(chatViewModel.forWhat.id)
 
@@ -605,7 +556,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 insertTextToEdittext("@${contact.getDisplayNameWithoutRemarkForUI()} ")
                 updateMentions(false)
                 ViewUtil.focusAndShowKeyboard(binding.edittextInput)
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] observe selectedMention error: ${it.stackTraceToString()}" } })
     }
 
     private fun updateInputViewSize(isLarger: Boolean? = null) {
@@ -749,7 +700,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         isFocusableInTouchMode = true
                     }
                     ViewUtil.focusAndShowKeyboard(binding.edittextInput)
-                }, { e -> e.printStackTrace() })
+                }, { e -> L.w { "[ChatMessageInputFragment] enableFocusWithDelay error: ${e.stackTraceToString()}" } })
         }
 
         binding.buttonMedia.setOnClickListener {
@@ -774,12 +725,13 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             selectChatsUtils.showContactSelectDialog(requireActivity()) { contact ->
                 // 用户取消选择，直接返回
                 if (contact == null) return@showContactSelectDialog
+                if (!isAdded || view == null) return@showContactSelectDialog
 
                 viewLifecycleOwner.lifecycleScope.launch {
                     // 从数据库重新查询联系人信息，避免泄漏备注名
                     val displayName = withContext(Dispatchers.IO) {
                         try {
-                            val response = ContactorUtil.getContactWithID(requireContext(), contact.id).blockingGet()
+                            val response = ContactorUtil.getContactWithID(requireContext(), contact.id).await()
                             if (response.isPresent) {
                                 response.get().getDisplayNameWithoutRemarkForUI()
                             } else {
@@ -885,7 +837,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
                     isVoiceMode = false
                     updateSubmitButtonView()
-                }, { e -> e.printStackTrace() })
+                }, { e -> L.w { "[ChatMessageInputFragment] exitVoiceMode delay error: ${e.stackTraceToString()}" } })
         }
 
         binding.buttonMoreActionsClose.setOnClickListener {
@@ -914,7 +866,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
                     binding.buttonMoreActions.visibility = View.VISIBLE
                     binding.buttonMoreActionsClose.visibility = View.GONE
-                }, { e -> e.printStackTrace() })
+                }, { e -> L.w { "[ChatMessageInputFragment] showSticker delay error: ${e.stackTraceToString()}" } })
         }
 
         binding.buttonKeyboard.setOnClickListener {
@@ -929,26 +881,47 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         listOf(binding.ivConfidential, binding.ivConfidentialRight).forEach { view ->
             view.setOnClickListener {
                 val confidentialMode = if (view.tag == 0) 1 else 0
-                chatSettingViewModel.setConversationConfigs(
-                    requireActivity(),
-                    chatViewModel.forWhat.id,
-                    null,
-                    null,
-                    null,
-                    confidentialMode
-                )
+                // Show first-use tip when enabling confidential mode
+                if (confidentialMode == 1 && globalServices.userManager.getUserData()?.hasShownConfidentialTip != true) {
+                    showConfidentialTipDialog {
+                        chatSettingViewModel.setConversationConfigs(
+                            requireActivity(),
+                            chatViewModel.forWhat.id,
+                            null,
+                            null,
+                            null,
+                            confidentialMode
+                        )
+                    }
+                } else {
+                    chatSettingViewModel.setConversationConfigs(
+                        requireActivity(),
+                        chatViewModel.forWhat.id,
+                        null,
+                        null,
+                        null,
+                        confidentialMode
+                    )
+                }
             }
         }
 
-        var lastContentLength = 0
-        binding.edittextInput.viewTreeObserver.addOnGlobalLayoutListener {
+        inputLayoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+            if (!isAdded || view == null) return@OnGlobalLayoutListener
             val currentLength = binding.edittextInput.text?.length ?: 0
-            if (currentLength != lastContentLength) {
+            if (currentLength != lastInputContentLength) {
                 chatViewModel.emitInputHeightChanged()
-                lastContentLength = currentLength
+                lastInputContentLength = currentLength
                 //防止edittextInput行数变化抖动
-                binding.edittextInput.postDelayed({
-                    if (binding.edittextInput.lineCount > 3) {
+                updateConfidentialJob?.cancel()
+                updateConfidentialJob = viewLifecycleOwner.lifecycleScope.launch {
+                    delay(200)
+                    // If confidential is hidden (group limit or bot), keep both icons hidden
+                    if (shouldHideConfidential) {
+                        binding.ivConfidential.visibility = View.GONE
+                        binding.ivConfidentialRight.visibility = View.GONE
+                        binding.ivFullInputOpen.visibility = if (binding.edittextInput.lineCount > 3) View.VISIBLE else View.GONE
+                    } else if (binding.edittextInput.lineCount > 3) {
                         binding.ivConfidential.visibility = View.GONE
                         binding.ivConfidentialRight.visibility = View.VISIBLE
                         binding.ivFullInputOpen.visibility = View.VISIBLE
@@ -957,9 +930,26 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         binding.ivConfidentialRight.visibility = View.GONE
                         binding.ivFullInputOpen.visibility = View.GONE
                     }
-                }, 200)
+                }
             }
         }
+        inputLayoutViewTreeObserver = binding.edittextInput.viewTreeObserver
+        inputLayoutViewTreeObserver?.addOnGlobalLayoutListener(inputLayoutListener)
+
+        // Use OnAttachStateChangeListener to ensure listener is removed when view is detached
+        // This prevents memory leaks when ViewTreeObserver.isAlive() returns false in onDestroyView
+        // (e.g., during screen rotation or dual-pane/single-pane mode switch)
+        inputLayoutAttachListener = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+            override fun onViewDetachedFromWindow(v: View) {
+                inputLayoutListener?.let { listener ->
+                    v.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+                }
+                inputLayoutListener = null
+                inputLayoutViewTreeObserver = null
+            }
+        }
+        binding.edittextInput.addOnAttachStateChangeListener(inputLayoutAttachListener)
 
         binding.ivFullInputOpen.setOnClickListener {
             chatViewModel.showOrHideFullInput(true, binding.edittextInput.text.toString().trim())
@@ -1082,6 +1072,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 withContext(Dispatchers.IO) {
                     mentionsSelectedContacts.addAll(wcdb.getContactorsFromAllTable(draft.mentions.mapNotNull { it.uid }))
                 }
+                if (!isAdded || view == null) return@launch
                 // Fill UI
                 draft.content?.let { content ->
                     if (binding.edittextInput.text.toString() != content) {
@@ -1118,6 +1109,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                 isFriend = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(chatViewModel.forWhat.id)) != null
                 withContext(Dispatchers.Main) {
+                    if (!isAdded || view == null) return@withContext
                     updateSubmitButtonView()
                     updateBottomView()
                     if (!isFriend) {
@@ -1128,8 +1120,118 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         }
     }
 
-    private lateinit var mediaSelectActivityLauncher: ActivityResultLauncher<Intent>
-    private lateinit var fileActivityLauncher: ActivityResultLauncher<Intent>
+    /**
+     * ActivityResultLauncher must be registered before Fragment enters CREATED state.
+     * Registering in onViewCreated causes "unregistered ActivityResultLauncher" crash
+     * when Fragment is recreated (e.g., configuration change, process death).
+     *
+     * IMPORTANT: PictureSelector must use forResult(ActivityResultLauncher) instead of
+     * forResult(OnResultCallbackListener) to avoid the same crash. The callback approach
+     * captures the Fragment instance at creation time, and when Fragment is recreated,
+     * the callback still references the old Fragment whose launcher is already unregistered.
+     */
+    private val pictureSelectorLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (!isAdded || view == null) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            val selectedMedia = PictureSelector.obtainSelectorList(result.data)
+            val list = selectedMedia.filter { it.size < FileUtil.MAX_SUPPORT_FILE_SIZE }
+            if (list.isNotEmpty()) {
+                val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
+                    putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, ArrayList(list))
+                }
+                mediaSelectActivityLauncher.launch(intent)
+            }
+            if (list.size < selectedMedia.size) {
+                ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+            }
+        }
+    }
+
+    private val mediaSelectActivityLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (!isAdded || view == null) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.let { intent ->
+                val sendResult = MediaSendActivityResult.fromData(intent)
+                val list = sendResult.media
+                val body = sendResult.body
+                Observable.interval(0, 300, TimeUnit.MILLISECONDS)
+                    .compose(RxUtil.getSchedulerComposer())
+                    .takeUntil { number -> number >= list.size - 1 }
+                    .doOnNext { index ->
+                        val media = list[index.toInt()]
+                        // Use original filename, fallback to extracting from original path (not realPath which may be UUID)
+                        val fileName = media.fileName.takeIf { !it.isNullOrEmpty() }
+                            ?: FileUtils.getFileName(media.path)
+                        prepareSendAttachmentPush(media.realPath.toUri(), media.mimeType, fileName)
+                    }
+                    .ignoreElements()
+                    .delay(500, TimeUnit.MILLISECONDS)
+                    .andThen(Completable.fromAction {
+                        if (body.isNotEmpty()) {
+                            sendTextPush(body)
+                        }
+                    })
+                    .autoDispose(this@ChatMessageInputFragment, Lifecycle.Event.ON_DESTROY)
+                    .subscribe({}, { error -> L.w { "[ChatMessageInputFragment] sendEditedMessage error: ${error.stackTraceToString()}" } })
+            }
+        }
+    }
+
+    private val fileActivityLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (!isAdded || view == null) return@registerForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+
+        val uri = result.data?.data
+        if (uri == null) {
+            ToastUtil.showLong(R.string.unsupported_file_type)
+            return@registerForActivityResult
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            // 优先判断文件大小是否超过200MB
+            val fileSize = withContext(Dispatchers.IO) { FileUtil.getFileSize(uri) }
+            if (!isAdded || view == null) return@launch
+            if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                return@launch
+            }
+
+            val copyResult = withContext(Dispatchers.IO) {
+                runCatching { FileUtil.copyUriToFile(uri) }
+                    .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
+                    .getOrNull()
+            }
+
+            if (copyResult == null) {
+                ToastUtil.showLong(R.string.unsupported_file_type)
+                return@launch
+            }
+
+            val path = copyResult.tempFile.absolutePath
+            val originalFileName = copyResult.originalFileName
+            val mimeType = FileUtil.getMimeTypeType(uri)
+
+            if (MediaUtil.isImageType(mimeType) || MediaUtil.isVideoType(mimeType)) {
+                val localMedia = LocalMedia().apply {
+                    this.realPath = path
+                    this.mimeType = mimeType
+                    this.fileName = originalFileName
+                }
+                val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
+                    putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, arrayListOf(localMedia))
+                }
+                mediaSelectActivityLauncher.launch(intent)
+            } else {
+                prepareSendAttachmentPush(path.toUri(), mimeType ?: "", originalFileName)
+            }
+        }
+    }
 
 
     private fun createQuoteContent(message: TextChatMessage): String {
@@ -1206,6 +1308,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     }
 
                     withContext(Dispatchers.Main) {
+                        if (!isAdded || view == null) return@withContext
                         mentions.clear()
                         mentions.addAll(mentionsMap.values.toList())
 
@@ -1227,17 +1330,12 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     }
                 }
             }.onFailure { e ->
-                e.printStackTrace()
                 L.e { "update mentions span error: ${e.stackTraceToString()}" }
             }
         }
 
         currentDraft = currentDraft.copy(mentions = mentions.toList())
         draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
-    }
-
-    private val pinyinComparator: PinyinComparator by lazy {
-        PinyinComparator()
     }
 
     private fun updateAtView(key: String? = null) {
@@ -1262,7 +1360,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
                 val contactsOfGroup = chatUIData?.group?.members?.convertToContactorModels()?.mapNotNull { member ->
                     if (key == null || member.getDisplayNameForUI().contains(key, true)) member else null
-                }?.sortedWith(pinyinComparator) ?: emptyList()
+                }?.sortedByPinyin() ?: emptyList()
 
                 if (contactsOfGroup.isNotEmpty()) {
                     contacts.add(ContactsAtAdapter.Item.Title(getString(R.string.chat_at_group_members), getString(R.string.chat_at_tips)))
@@ -1276,6 +1374,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 //            }
 
                 withContext(Dispatchers.Main) {
+                    if (!isAdded || view == null) return@withContext
                     if (contacts.isEmpty()) {
                         binding.llAt.visibility = View.GONE
                         contactsAtAdapter.submitList(emptyList())
@@ -1285,7 +1384,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     }
                 }
             }
-//                }, { it.printStackTrace() })
+//                }, { L.w { it.stackTraceToString() } })
         } else {
             binding.llAt.visibility = View.GONE
             contactsAtAdapter.submitList(emptyList())
@@ -1331,7 +1430,8 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 binding.clFriends.visibility = View.GONE
 
                 binding.clLeftActions.visibility = View.VISIBLE
-                binding.ivConfidential.visibility = View.VISIBLE
+                // Bot conversations should not show confidential button
+                binding.ivConfidential.visibility = if (chatViewModel.forWhat.id.isBotId()) View.GONE else View.VISIBLE
             } else {
                 val isReceivedFriendRequest = ContactorUtil.hasContactRequest(chatViewModel.forWhat.id)
 
@@ -1339,7 +1439,17 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     binding.clSendMessage.visibility = View.GONE
                     binding.clFriends.visibility = View.VISIBLE
 //                    binding.llFriends.visibility = View.VISIBLE
-                    setFoundYouText(chatSettingViewModel.currentConversationSet?.findyouDescribe)
+                    binding.tvFoundYou.visibility = View.VISIBLE
+                    val warning = getString(R.string.chat_do_not_trust_warning)
+                    val spannable = SpannableString(warning)
+                    val boldKeywords = arrayOf("DO NOT", "请勿")
+                    for (keyword in boldKeywords) {
+                        val start = warning.indexOf(keyword)
+                        if (start >= 0) {
+                            spannable.setSpan(StyleSpan(Typeface.BOLD), start, start + keyword.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
+                    }
+                    binding.tvFoundYou.text = spannable
                 } else {
                     binding.clSendMessage.visibility = View.VISIBLE
                     binding.clFriends.visibility = View.GONE
@@ -1386,35 +1496,63 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         }
                     }
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] checkIsFriendExist error: ${it.stackTraceToString()}" } })
 
     }
 
-    private fun setFoundYouText(text: String?) {
-        if (!TextUtils.isEmpty(text)) {
-            binding.tvFoundYou.visibility = View.VISIBLE
-            binding.tvFoundYou.text = text
+
+    private fun updateConfidential() {
+        // For group chats, check member count limit first
+        if (isGroup) {
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                val memberCount = wcdb.getGroupMemberCount(chatViewModel.forWhat.id)
+                val memberLimit = globalConfigsManager.getGroupConfidentialMemberLimit()
+                val hideConfidential = memberCount >= memberLimit
+
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    updateConfidentialUI(hideConfidential)
+                }
+            }
+        } else if (chatViewModel.forWhat.id.isBotId()) {
+            updateConfidentialUI(true)
         } else {
-            binding.tvFoundYou.visibility = View.GONE
+            updateConfidentialUI(false)
         }
     }
 
-    private fun updateConfidential() {
-        listOf(binding.ivConfidential, binding.ivConfidentialRight).forEach { view ->
-            if (chatSettingViewModel.currentConversationSet?.confidentialMode == 1) {
-                val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-                view.setImageDrawable(drawable)
-                view.tag = 1
-                binding.edittextInput.hint = getString(R.string.chat_message_input_hint_confidential)
-                binding.vConfidentialLine.visibility = View.VISIBLE
-            } else {
-                val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
-                    this.setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon))
+    private fun updateConfidentialUI(hideConfidential: Boolean) {
+        // Cache the state for use in input layout listener
+        shouldHideConfidential = hideConfidential
+
+        if (hideConfidential) {
+            // Hide confidential toggle (group member limit exceeded or bot chat)
+            binding.ivConfidential.visibility = View.GONE
+            binding.ivConfidentialRight.visibility = View.GONE
+            binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
+            binding.vConfidentialLine.visibility = View.GONE
+        } else {
+            // Show appropriate icon based on input line count
+            val showRightIcon = binding.edittextInput.lineCount > 3
+            binding.ivConfidential.visibility = if (showRightIcon) View.GONE else View.VISIBLE
+            binding.ivConfidentialRight.visibility = if (showRightIcon) View.VISIBLE else View.GONE
+
+            listOf(binding.ivConfidential, binding.ivConfidentialRight).forEach { view ->
+                if (chatSettingViewModel.currentConversationSet?.confidentialMode == 1) {
+                    val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
+                    view.setImageDrawable(drawable)
+                    view.tag = 1
+                    binding.edittextInput.hint = getString(R.string.chat_message_input_hint_confidential)
+                    binding.vConfidentialLine.visibility = View.VISIBLE
+                } else {
+                    val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
+                        this.setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon))
+                    }
+                    view.setImageDrawable(drawable)
+                    view.tag = 0
+                    binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
+                    binding.vConfidentialLine.visibility = View.GONE
                 }
-                view.setImageDrawable(drawable)
-                view.tag = 0
-                binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
-                binding.vConfidentialLine.visibility = View.GONE
             }
         }
     }
@@ -1430,6 +1568,144 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 recallMessage(message.id)
             }
         )
+    }
+
+    /**
+     * Show batch recall confirmation dialog
+     */
+    private fun showBatchRecallDialog(messageIds: Set<String>) {
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = requireActivity().getString(R.string.chat_message_action_recall),
+            message = requireActivity().getString(R.string.chat_recall_tips),
+            confirmText = requireActivity().getString(R.string.chat_recall_dialog_yes),
+            cancelText = requireActivity().getString(R.string.chat_recall_dialog_cancel),
+            onConfirm = {
+                batchRecallMessages(messageIds)
+            }
+        )
+    }
+
+    /**
+     * Perform batch recall operation with wait dialog
+     * Waits for all recall jobs to complete (success or failure) before dismissing loading
+     */
+    private fun batchRecallMessages(messageIds: Set<String>) {
+        ComposeDialogManager.showWait(requireActivity(), cancelable = false)
+        
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Track pending message IDs
+                val pendingIds = messageIds.toMutableSet()
+                var hasFailure = false
+                
+                // Start listening for recall results before submitting jobs
+                val resultJob = launch {
+                    RecallResultTracker.recallResults.collect { result ->
+                        if (pendingIds.contains(result.messageId)) {
+                            pendingIds.remove(result.messageId)
+                            if (!result.success) {
+                                hasFailure = true
+                            }
+                            L.i { "Batch recall progress: ${messageIds.size - pendingIds.size}/${messageIds.size}, success: ${result.success}" }
+                        }
+                    }
+                }
+                
+                // Submit all recall jobs
+                messageIds.forEach { messageId ->
+                    submitRecallJob(messageId)
+                }
+                
+                // Wait for all results with timeout (30 seconds max)
+                val timeoutMs = 30_000L
+                val startTime = System.currentTimeMillis()
+                while (pendingIds.isNotEmpty() && (System.currentTimeMillis() - startTime) < timeoutMs) {
+                    delay(100)
+                }
+                
+                // Cancel the collector job
+                resultJob.cancel()
+                
+                // Show failure toast if any recall failed or timed out
+                if (hasFailure || pendingIds.isNotEmpty()) {
+                    ToastUtil.show(R.string.operation_failed)
+                }
+                
+                // Close selection mode after batch recall
+                chatViewModel.selectModel(false)
+            } catch (e: Exception) {
+                L.e { "Batch recall failed: ${e.stackTraceToString()}" }
+                ToastUtil.show(R.string.operation_failed)
+            } finally {
+                ComposeDialogManager.dismissWait()
+            }
+        }
+    }
+
+    /**
+     * Submit a recall job for a single message
+     */
+    private suspend fun submitRecallJob(messageID: String) = withContext(Dispatchers.IO) {
+        val originMessage = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))
+        if (originMessage == null) {
+            L.w { "Recall message failed, original message not found: $messageID" }
+            // Emit failure result for tracking
+            RecallResultTracker.emitResult(messageID, false)
+            return@withContext
+        }
+        if (originMessage.fromWho != globalServices.myId) {
+            L.w { "Recall message failed, the sender does not match, realSource:${originMessage.fromWho}" }
+            RecallResultTracker.emitResult(messageID, false)
+            return@withContext
+        }
+        val textMessage = TextMessage(
+            id = messageID,
+            fromWho = For.Account(globalServices.myId),
+            forWhat = chatViewModel.forWhat,
+            systemShowTimestamp = System.currentTimeMillis(),
+            timeStamp = System.currentTimeMillis(),
+            receivedTimeStamp = System.currentTimeMillis(),
+            sendType = SendType.Sending.rawValue,
+            expiresInSeconds = originMessage.expiresInSeconds,
+            notifySequenceId = 0,
+            sequenceId = 0,
+            mode = 0,
+            text = null
+        )
+        val sourceDeviceId = originMessage.id.lastOrNull().toString().toInt()
+        val recallObj = Recall(
+            RealSource(
+                globalServices.myId,
+                sourceDeviceId,
+                originMessage.timeStamp,
+                originMessage.systemShowTimestamp
+            )
+        )
+        textMessage.recall = recallObj
+        ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+    }
+
+    /**
+     * Show confidential message first-use tip dialog
+     */
+    private fun showConfidentialTipDialog(onConfirm: () -> Unit) {
+        // Mark as shown when dialog closes (regardless of how it's closed)
+        globalServices.userManager.update { hasShownConfidentialTip = true }
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = requireActivity(),
+            onDismiss = { }
+        ) {
+            ConfidentialTipDialogContent(
+                title = getString(R.string.chat_confidential_tip_title),
+                content = getString(R.string.chat_confidential_tip_content),
+                onConfirm = {
+                    dialog?.dismiss()
+                    onConfirm()
+                }
+            )
+        }
     }
 
     /**
@@ -1469,28 +1745,10 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         content: String? = null,
         timeStamp: Long = System.currentTimeMillis(),
         messageId: String = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}",
-        attachmentInfo: AttachmentInfo? = null
+        attachmentInfo: AttachmentInfo? = null,
+        screenShot: ScreenShot? = null
     ) {
         val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
-
-        //暂时不支持这个功能
-//        var screenShot: ScreenShot? = null
-//        if (isScreenShot) {
-//            screenShot = ScreenShot(RealSource(globalServices.myId, 1, timeStamp, timeStamp))
-//            viewLifecycleOwner.lifecycleScope.launch {
-//                localMessageCreator.createScreenShotMessage(
-//                    forWhat = forWhat,
-//                    messageId = messageId,
-//                    userId = globalServices.myId,
-//                    notifySequenceId = 0,
-//                    sequenceId = 0,
-//                    timestamp = timeStamp,
-//                    systemShowTimestamp = timeStamp,
-//                    expiresInSeconds = chatSettingViewModel.getMessageExpirySeconds(),
-//                    saveToLocal = true
-//                )
-//            }
-//        }
 
         var atPersonsString: String? = null
         if (mentions.isNotEmpty()) {
@@ -1529,6 +1787,8 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
 
             // Build and send TextMessage
+            // Force mode to 0 when confidential is hidden (group limit or bot)
+            val messageMode = if (shouldHideConfidential) 0 else (chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0)
             val textMessage = TextMessage(
                 messageId,
                 For.Account(globalServices.myId),
@@ -1540,7 +1800,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 chatSettingViewModel.getMessageExpirySeconds(),
                 0,
                 0,
-                chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0,
+                messageMode,
                 content ?: "",
                 if (attachment != null) mutableListOf(attachment) else null,
                 quote,
@@ -1550,7 +1810,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 mentions.toMutableList(),
                 atPersonsString,
                 reactions.toMutableList(),
-                null,
+                screenShot,
                 sharedContacts.toMutableList(),
                 playStatus = if (attachmentInfo?.isAudioMessage == true) AudioMessageManager.PLAY_STATUS_NOT_PLAY else 0
             )
@@ -1637,7 +1897,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
         val timeStamp = System.currentTimeMillis()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
-        val fileName = originalFileName ?: FileUtils.getFileName(attachmentUri.path).replace(" ", "")
+        val fileName = originalFileName ?: FileUtils.getFileName(attachmentUri.path)
         val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
 
         Single.fromCallable { FileUtils.copy(attachmentUri.path, filePath) }
@@ -1656,7 +1916,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         isAudioMessage = isAudioMessage
                     )
                 )
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatMessageInputFragment] prepareSendAttachmentPush error: ${it.stackTraceToString()}" } })
     }
 
     private fun sendEmojiReaction(emojiReactionEvent: EmojiReactionEvent) {
@@ -1671,51 +1931,136 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             originTimestamp = timeStamp,
             realSource = RealSource(emojiReactionEvent.message.authorId, sourceDeviceId, emojiReactionEvent.message.timeStamp, emojiReactionEvent.message.systemShowTimestamp)
         )
-        reactions.add(reaction)
 
-        sendTextPush(null, timeStamp = timeStamp)
+        sendReactionPush(reaction, timeStamp)
+
+        val forWhat = chatViewModel.forWhat
+        lifecycleScope.launch(Dispatchers.IO) {
+            ApplicationDependencies.getMessageStore().updateMessageReaction(forWhat.id, reaction, null, null)
+        }
+    }
+
+    /**
+     * Sends a reaction-only message without clearing the composing input.
+     * This is separate from sendTextPush() to avoid clearing the user's draft message
+     * when they react to a message while composing.
+     */
+    private fun sendReactionPush(reaction: Reaction, timeStamp: Long) {
+        val forWhat = chatViewModel.forWhat
+        val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+
+        val textMessage = TextMessage(
+            messageId,
+            For.Account(globalServices.myId),
+            forWhat,
+            timeStamp,
+            timeStamp,
+            System.currentTimeMillis(),
+            SendType.Sending.rawValue,
+            chatSettingViewModel.getMessageExpirySeconds(),
+            0,
+            0,
+            0,
+            "",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            mutableListOf(reaction),
+            null,
+            null,
+        )
+        ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
     }
 
     private fun recallMessage(messageID: String) {
+        ComposeDialogManager.showWait(requireActivity(), cancelable = false)
+        
         viewLifecycleOwner.lifecycleScope.launch {
-            val originMessage = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))
-            if (originMessage == null) {
-                L.w { "Recall message failed, original message not found: $messageID" }
-                resetData()
-                return@launch
-            }
-            if (originMessage.fromWho != globalServices.myId) {
-                L.w { "Recall message failed, the sender does not match, realSource:${originMessage.fromWho}" }
-                resetData()
-                return@launch
-            }
-            val textMessage = TextMessage(
-                id = messageID,
-                fromWho = For.Account(globalServices.myId),
-                forWhat = chatViewModel.forWhat,
-                systemShowTimestamp = System.currentTimeMillis(),
-                timeStamp = System.currentTimeMillis(),
-                receivedTimeStamp = System.currentTimeMillis(),
-                sendType = SendType.Sending.rawValue,
-                expiresInSeconds = originMessage.expiresInSeconds,
-                notifySequenceId = 0,
-                sequenceId = 0,
-                mode = 0,
-                text = null
-            )
-            val sourceDeviceId = originMessage.id.lastOrNull().toString().toInt()
-            recall = Recall(
-                RealSource(
-                    globalServices.myId,
-                    sourceDeviceId,
-                    originMessage.timeStamp,
-                    originMessage.systemShowTimestamp
+            try {
+                // Start listening for recall result before submitting job
+                var resultReceived = false
+                val resultJob = launch {
+                    RecallResultTracker.recallResults.collect { result ->
+                        if (result.messageId == messageID && !resultReceived) {
+                            resultReceived = true
+                            if (!result.success) {
+                                ToastUtil.show(R.string.operation_failed)
+                            }
+                            ComposeDialogManager.dismissWait()
+                        }
+                    }
+                }
+                
+                val originMessage = withContext(Dispatchers.IO) {
+                    wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))
+                }
+                if (originMessage == null) {
+                    L.w { "Recall message failed, original message not found: $messageID" }
+                    resultJob.cancel()
+                    ComposeDialogManager.dismissWait()
+                    ToastUtil.show(R.string.operation_failed)
+                    resetData()
+                    return@launch
+                }
+                if (originMessage.fromWho != globalServices.myId) {
+                    L.w { "Recall message failed, the sender does not match, realSource:${originMessage.fromWho}" }
+                    resultJob.cancel()
+                    ComposeDialogManager.dismissWait()
+                    ToastUtil.show(R.string.operation_failed)
+                    resetData()
+                    return@launch
+                }
+                val textMessage = TextMessage(
+                    id = messageID,
+                    fromWho = For.Account(globalServices.myId),
+                    forWhat = chatViewModel.forWhat,
+                    systemShowTimestamp = System.currentTimeMillis(),
+                    timeStamp = System.currentTimeMillis(),
+                    receivedTimeStamp = System.currentTimeMillis(),
+                    sendType = SendType.Sending.rawValue,
+                    expiresInSeconds = originMessage.expiresInSeconds,
+                    notifySequenceId = 0,
+                    sequenceId = 0,
+                    mode = 0,
+                    text = null
                 )
-            )
-            textMessage.recall = recall
-            ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+                val sourceDeviceId = originMessage.id.lastOrNull().toString().toInt()
+                recall = Recall(
+                    RealSource(
+                        globalServices.myId,
+                        sourceDeviceId,
+                        originMessage.timeStamp,
+                        originMessage.systemShowTimestamp
+                    )
+                )
+                textMessage.recall = recall
+                ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
 
-            resetData()
+                // Wait for result with timeout (30 seconds max)
+                val timeoutMs = 30_000L
+                val startTime = System.currentTimeMillis()
+                while (!resultReceived && (System.currentTimeMillis() - startTime) < timeoutMs) {
+                    delay(100)
+                }
+                
+                resultJob.cancel()
+                
+                // If timeout without receiving result, dismiss loading
+                if (!resultReceived) {
+                    ComposeDialogManager.dismissWait()
+                }
+                
+                resetData()
+            } catch (e: Exception) {
+                L.e { "Recall message failed: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show(R.string.operation_failed)
+                resetData()
+            }
         }
     }
 
@@ -1729,7 +2074,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 messages?.firstOrNull()?.let {
                     ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, it))
                 }
-            }) { error: Throwable -> error.printStackTrace() }
+            }) { error: Throwable -> L.w { "[ChatMessageInputFragment] sendTextPush error: ${error.stackTraceToString()}" } }
     }
 
     private fun createPictureSelector() {
@@ -1747,23 +2092,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             .isOriginalSkipCompress(true)
             .setSelectionMode(SelectModeConfig.MULTIPLE)
 //                .setCompressEngine(ImageFileCompressEngine())
-            .forResult(object : OnResultCallbackListener<LocalMedia> {
-                override fun onResult(result: ArrayList<LocalMedia>) {
-                    val list = result.filter { it.size < FileUtil.MAX_SUPPORT_FILE_SIZE }
-                    if (list.isNotEmpty()) {
-                        val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
-                            putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, ArrayList(list))
-                        }
-                        mediaSelectActivityLauncher.launch(intent)
-                    }
-                    if (list.size < result.size) {
-                        ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
-                    }
-                }
-
-                override fun onCancel() {
-                }
-            })
+            .forResult(pictureSelectorLauncher)
     }
 
     private fun onPicturePermissionForMessageResult(permissionState: PermissionUtil.PermissionState) {
@@ -1822,33 +2151,146 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 return@launch
             }
 
-            val file = withContext(Dispatchers.IO) {
+            val copyResult = withContext(Dispatchers.IO) {
                 runCatching { FileUtil.copyUriToFile(uri) }
                     .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
                     .getOrNull()
             }
 
-            if (file == null) {
+            if (copyResult == null) {
                 ToastUtil.showLong(R.string.unsupported_file_type)
                 return@launch
             }
 
-            val path = file.absolutePath
+            if (!isAdded || view == null) return@launch
+
+            val path = copyResult.tempFile.absolutePath
+            val originalFileName = copyResult.originalFileName
 
             if (MediaUtil.isImageType(mimeType) || MediaUtil.isVideoType(mimeType)) {
                 val localMedia = LocalMedia().apply {
                     this.realPath = path
                     this.mimeType = mimeType
-                    this.fileName = FileUtils.getFileName(path)
+                    this.fileName = originalFileName
                 }
                 val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
                     putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, arrayListOf(localMedia))
                 }
                 mediaSelectActivityLauncher.launch(intent)
             } else {
-                prepareSendAttachmentPush(path.toUri(), mimeType)
+                prepareSendAttachmentPush(path.toUri(), mimeType, originalFileName)
             }
         }
+    }
+
+    /**
+     * Send a screenshot notification message.
+     * Called when a screenshot is detected.
+     */
+    private fun sendScreenshotNotification() {
+        val timeStamp = System.currentTimeMillis()
+        val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+        val screenShot = ScreenShot(RealSource(globalServices.myId, 1, timeStamp, timeStamp))
+        // Set messageText for display in chat list preview and message bubble
+        val screenshotText = getString(R.string.chat_took_a_screen_shot, getString(R.string.you))
+        sendTextPush(
+            content = screenshotText,
+            timeStamp = timeStamp,
+            messageId = messageId,
+            screenShot = screenShot
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Initialize screenshot detector if not already done
+        if (screenshotDetector == null) {
+            screenshotDetector = ScreenshotDetector(
+                activity = requireActivity(),
+                coroutineScope = viewLifecycleOwner.lifecycleScope,
+                onScreenshotDetected = {
+                    L.i { "[ChatMessageInputFragment][Screenshot] Screenshot detected, sending notification" }
+                    sendScreenshotNotification()
+                }
+            )
+        }
+        screenshotDetector?.startListening()
+        // 如果键盘监听器因 SOFT_INPUT_ADJUST_NOTHING 注册失败，在 resume 时重新注册
+        if (!isKeyboardListenerRegistered) {
+            registerKeyboardVisibilityListener()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        screenshotDetector?.stopListening()
+    }
+
+    override fun onDestroyView() {
+        // Remove OnGlobalLayoutListener to prevent memory leak
+        // The OnAttachStateChangeListener should have already removed it when view detached,
+        // but we also try to remove here as a safety measure
+        inputLayoutListener?.let { listener ->
+            inputLayoutViewTreeObserver?.let { observer ->
+                if (observer.isAlive) {
+                    observer.removeOnGlobalLayoutListener(listener)
+                }
+            }
+        }
+        // Also remove the OnAttachStateChangeListener to prevent it from holding Fragment reference
+        inputLayoutAttachListener?.let {
+            binding.edittextInput.removeOnAttachStateChangeListener(it)
+        }
+        inputLayoutListener = null
+        inputLayoutViewTreeObserver = null
+        inputLayoutAttachListener = null
+        updateConfidentialJob?.cancel()
+        updateConfidentialJob = null
+        super.onDestroyView()
+        screenshotDetector?.release()
+        screenshotDetector = null
+        // KeyboardVisibilityEvent with viewLifecycleOwner will auto-unregister
+        isKeyboardListenerRegistered = false
+    }
+
+    /**
+     * 注册键盘可见性监听器
+     * 使用 setEventListener 绑定 viewLifecycleOwner，自动管理生命周期，避免内存泄漏
+     * 如果 Activity 的 softInputMode 为 SOFT_INPUT_ADJUST_NOTHING 会注册失败，
+     * 这种情况下会在 onResume 时重新尝试注册
+     */
+    private fun registerKeyboardVisibilityListener() {
+        if (activity == null || !isAdded || view == null) return
+        try {
+            // Use setEventListener with viewLifecycleOwner to auto-manage lifecycle
+            // This prevents memory leaks when Fragment is destroyed but Activity is still alive (dual-pane mode)
+            KeyboardVisibilityEvent.setEventListener(requireActivity(), viewLifecycleOwner) {
+                if (it) { // 键盘弹出
+                    binding.llChatActions.visibility = View.GONE
+                    binding.buttonMoreActions.visibility = View.VISIBLE
+                    binding.buttonMoreActionsClose.visibility = View.GONE
+                }
+                updateSubmitButtonView()
+            }
+            isKeyboardListenerRegistered = true
+        } catch (e: IllegalArgumentException) {
+            // Activity 的 softInputMode 为 SOFT_INPUT_ADJUST_NOTHING 时会抛异常
+            // 这种情况会在 onResume 时重新尝试注册
+            L.w { "[ChatMessageInputFragment] keyboard listener register failed: ${e.stackTraceToString()}" }
+        }
+    }
+
+    /**
+     * Focus the input field and show keyboard.
+     * Used when returning from contact detail popup to automatically show keyboard.
+     */
+    fun focusInputAndShowKeyboard() {
+        if (!isAdded || view == null) return
+        binding.edittextInput.apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+        }
+        ViewUtil.focusAndShowKeyboard(binding.edittextInput)
     }
 
 }

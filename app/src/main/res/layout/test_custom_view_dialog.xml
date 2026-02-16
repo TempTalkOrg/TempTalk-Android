@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp"
-    tools:ignore="HardcodedText">
+    android:padding="16dp">
 
     <TextView
         android:id="@+id/tv_title"
@@ -13,11 +11,10 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
         android:gravity="center"
-        android:text="自定义View对话框"
+        android:text="@string/test_dialog_title"
         android:textColor="@color/t.primary"
         android:textSize="20sp"
-        android:textStyle="bold"
-        tools:ignore="HardcodedText" />
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tv_content"
@@ -25,7 +22,7 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
         android:lineSpacingExtra="4dp"
-        android:text="这是一个使用传统XML布局的自定义View对话框示例。\n\n通过AndroidView可以在Compose中嵌入传统的View组件，这样可以保持现有布局不变，同时享受Compose的现代化特性。"
+        android:text="@string/test_dialog_content"
         android:textColor="@color/t.primary"
         android:textSize="14sp" />
 
@@ -33,7 +30,7 @@
         android:id="@+id/btn_close"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="关闭"
+        android:text="@string/test_dialog_close"
         android:textSize="16sp" />
 
 </LinearLayout>

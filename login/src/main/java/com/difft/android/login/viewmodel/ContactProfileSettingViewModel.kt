@@ -2,13 +2,12 @@ package com.difft.android.login.viewmodel
 
 import android.app.Activity
 import android.util.Base64
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.wcdb
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -22,7 +21,10 @@ import com.difft.android.network.responses.AvatarResponse
 import com.difft.android.network.viewmodel.Resource
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.reactivex.rxjava3.core.Single
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.withContext
 import okhttp3.RequestBody
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
@@ -48,23 +50,8 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
     @Inject
     lateinit var urlManager: UrlManager
 
-//    private val mContactorResultData = MutableLiveData<Resource<Contactor>>()
-//    internal val contactorResultData: LiveData<Resource<Contactor>> = mContactorResultData
-
     private val mSetProfileResultData = MutableLiveData<Resource<Any>>()
     internal val setProfileResultData: LiveData<Resource<Any>> = mSetProfileResultData
-
-//    fun getContactorInfo(context: Context, contactorID: String) {
-//        mContactorResultData.value = Resource.loading()
-//        ContactorUtil.fetchContactors(listOf(contactorID), context)
-//            .compose(RxUtil.getSingleSchedulerComposer())
-//            .to(RxUtil.autoDispose(context as LifecycleOwner))
-//            .subscribe({
-//                mContactorResultData.value = Resource.success(it.first())
-//            }) {
-//                mContactorResultData.value = Resource.error(NetworkException(message = it.message ?: ""))
-//            }
-//    }
 
     fun setProfile(
         context: Activity,
@@ -74,76 +61,80 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
     ) {
         val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
         mSetProfileResultData.value = Resource.loading()
-        if (null == filePath) {
-            httpClient.httpService.fetchSetProfile(
-                basicAuth,
-                ProfileRequestBody(avatar = null, name = name)
-            )
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(context as LifecycleOwner))
-                .subscribe({
-                    if (it.status == 0) {
+
+        viewModelScope.launch {
+            try {
+                if (filePath == null) {
+                    // 仅更新名称
+                    val result = httpClient.httpService.fetchSetProfile(
+                        basicAuth,
+                        ProfileRequestBody(avatar = null, name = name)
+                    ).await()
+
+                    if (result.status == 0) {
                         contactor?.let {
                             contactor.name = name
-                            wcdb.contactor.updateObject(contactor, arrayOf(DBContactorModel.name), DBContactorModel.id.eq(contactor.id))
+                            withContext(Dispatchers.IO) {
+                                wcdb.contactor.updateObject(contactor, arrayOf(DBContactorModel.name), DBContactorModel.id.eq(contactor.id))
+                            }
                             ContactorUtil.emitContactsUpdate(listOf(contactor.id))
                         }
-                        mSetProfileResultData.value = Resource.success(it)
+                        mSetProfileResultData.value = Resource.success(result)
                     } else {
-                        mSetProfileResultData.value = Resource.error(NetworkException(it.status, it.reason ?: ""))
+                        mSetProfileResultData.value = Resource.error(NetworkException(result.status, result.reason ?: ""))
                     }
-                }) {
-                    it.printStackTrace()
-                    mSetProfileResultData.value = Resource.error(NetworkException(message = it.message ?: ""))
-                }
-        } else {
-            val keyStr = Util.getSecret(32)
-            httpClient.httpService.fetchAvatarAttachmentInfo(basicAuth)
-                .concatMap { response ->
-                    if (response.status == 0) {
-                        val encrypt = FileUtil.readFile(File(filePath))?.let {
-                            encrypt(it, keyStr)
-                        }
-                        if (encrypt != null) {
-                            noHeaderClient.httpService.fetchUploadAvatar(
-                                response.location ?: "",
-                                RequestBody.create(null, encrypt)
-                            ).map { it to response.id }
-                        } else {
-                            Single.error(NetworkException(message = "encrypt avatar file error"))
-                        }
-                    } else {
-                        Single.error(NetworkException(response.status, response.reason ?: ""))
+                } else {
+                    // 更新头像和名称
+                    val keyStr = Util.getSecret(32)
+
+                    // Step 1: 获取头像上传信息
+                    val attachmentResponse = httpClient.httpService.fetchAvatarAttachmentInfo(basicAuth).await()
+                    if (attachmentResponse.status != 0) {
+                        mSetProfileResultData.value = Resource.error(NetworkException(attachmentResponse.status, attachmentResponse.reason ?: ""))
+                        return@launch
                     }
-                }
-                .concatMap { response ->
-                    val avatar = Gson().toJson(AvatarRequestBody("AESGCM256", keyStr, response.second.toString()))
-                    httpClient.httpService.fetchSetProfile(basicAuth, ProfileRequestBody(avatar, name))
-                        .map { it to response.second }
-                }
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(context as LifecycleOwner))
-                .subscribe({ response ->
-                    if (response.first.status == 0) {
+
+                    // Step 2: 加密并上传头像
+                    val encrypt = withContext(Dispatchers.IO) {
+                        FileUtil.readFile(File(filePath))?.let { encrypt(it, keyStr) }
+                    }
+                    if (encrypt == null) {
+                        mSetProfileResultData.value = Resource.error(NetworkException(message = "encrypt avatar file error"))
+                        return@launch
+                    }
+
+                    noHeaderClient.httpService.fetchUploadAvatar(
+                        attachmentResponse.location ?: "",
+                        RequestBody.create(null, encrypt)
+                    ).await()
+
+                    // Step 3: 设置 profile
+                    val avatar = Gson().toJson(AvatarRequestBody("AESGCM256", keyStr, attachmentResponse.id.toString()))
+                    val profileResult = httpClient.httpService.fetchSetProfile(basicAuth, ProfileRequestBody(avatar, name)).await()
+
+                    if (profileResult.status == 0) {
                         contactor?.let {
                             contactor.name = name
-                            contactor.avatar = Gson().toJson(AvatarResponse(attachmentId = response.second.toString(), encAlgo = "AESGCM256", encKey = keyStr))
-                            wcdb.contactor.updateObject(
-                                contactor, arrayOf(
-                                    DBContactorModel.name,
-                                    DBContactorModel.avatar,
-                                ), DBContactorModel.id.eq(contactor.id)
-                            )
+                            contactor.avatar = Gson().toJson(AvatarResponse(attachmentId = attachmentResponse.id.toString(), encAlgo = "AESGCM256", encKey = keyStr))
+                            withContext(Dispatchers.IO) {
+                                wcdb.contactor.updateObject(
+                                    contactor, arrayOf(
+                                        DBContactorModel.name,
+                                        DBContactorModel.avatar,
+                                    ), DBContactorModel.id.eq(contactor.id)
+                                )
+                            }
                             ContactorUtil.emitContactsUpdate(listOf(contactor.id))
                         }
-                        mSetProfileResultData.value = Resource.success(response.second)
+                        mSetProfileResultData.value = Resource.success(attachmentResponse.id)
                     } else {
-                        mSetProfileResultData.value = Resource.error(NetworkException(response.first.status, response.first.reason ?: ""))
+                        mSetProfileResultData.value = Resource.error(NetworkException(profileResult.status, profileResult.reason ?: ""))
                     }
-                }) {
-                    it.printStackTrace()
-                    mSetProfileResultData.value = Resource.error(NetworkException(message = it.message ?: ""))
                 }
+            } catch (e: Exception) {
+                L.w(e) { "[ContactProfileSettingViewModel] error:" }
+                mSetProfileResultData.value = Resource.error(NetworkException(message = e.message ?: ""))
+            }
         }
     }
 
@@ -164,8 +155,7 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
             return message
             //return Base64.getEncoder().encodeToString(message);
         } catch (e: Exception) {
-            L.w { "avatar encrypt error:" + e.stackTraceToString() }
-            e.printStackTrace()
+            L.w(e) { "avatar encrypt error:" }
         }
         return null
     }

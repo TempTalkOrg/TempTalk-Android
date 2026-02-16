@@ -1,6 +1,7 @@
 package com.difft.android.chat.group
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
@@ -67,7 +68,7 @@ class GroupModeratorsManagementActivity : BaseActivity() {
                     groupInfo = it.get()
                     initView(it.get())
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupModeratorsManagementActivity] getSingleGroupInfo error: ${it.stackTraceToString()}" } })
 
         GroupUtil.singleGroupsUpdate
             .compose(RxUtil.getSchedulerComposer())
@@ -77,7 +78,7 @@ class GroupModeratorsManagementActivity : BaseActivity() {
                     groupInfo = it
                     initView(it)
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupModeratorsManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } })
     }
 
     private var selectedIds: Set<String> = emptySet()
@@ -143,7 +144,7 @@ class GroupModeratorsManagementActivity : BaseActivity() {
                     it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
-                it.printStackTrace()
+                L.w { "[GroupModeratorsManagementActivity] changeMemberRole error: ${it.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 it.message?.let { message -> ToastUtil.show(message) }
             })
@@ -180,7 +181,7 @@ class GroupModeratorsManagementActivity : BaseActivity() {
                     it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
-                it.printStackTrace()
+                L.w { "[GroupModeratorsManagementActivity] transferOwner error: ${it.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 it.message?.let { message -> ToastUtil.show(message) }
             })

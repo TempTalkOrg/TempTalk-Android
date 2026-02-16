@@ -3,6 +3,7 @@ package com.difft.android.call.util
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Build
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.SpeedResponseStatus
 import com.difft.android.call.data.UrlSpeedResponse
@@ -60,10 +61,13 @@ object NetUtil {
             val connectivityManager =
                 context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-            val network = connectivityManager.activeNetwork ?: return false
-            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-            return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val network = connectivityManager.activeNetwork ?: return false
+                val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+                // 仅依赖 INTERNET 能力，避免在部分机型/系统上因未验证导致误判
+                return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+            return connectivityManager.activeNetworkInfo?.isConnected == true
         } catch (e: Exception) {
             false
         }

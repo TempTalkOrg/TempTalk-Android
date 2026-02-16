@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="reactions_screen_dark_shade_color">@color/transparent_black_70</color>
-    <color name="reactions_screen_light_shade_color">#df5e5e5e</color>
-    <color name="reactions_status_bar_shade">#191919</color>
     <color name="reactions_item_bg_color">@color/transparent_white_20</color>
     <color name="reactions_item_selected_bg_color">@color/transparent_white_20</color>
     <color name="audio_progress_bg">#1AFFFFFF</color>
+    
+    <!-- Text selection highlight color (30% opacity of t.info.night) -->
+    <color name="selection_highlight">#4D82C1FC</color>
 </resources>

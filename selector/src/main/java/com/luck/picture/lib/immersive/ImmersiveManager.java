@@ -1,5 +1,7 @@
 package com.luck.picture.lib.immersive;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.app.Activity;
 import android.graphics.Color;
 import android.os.Build;
@@ -100,7 +102,7 @@ public class ImmersiveManager {
 
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[ImmersiveManager] setStatusBarColor error:");
         }
     }
 

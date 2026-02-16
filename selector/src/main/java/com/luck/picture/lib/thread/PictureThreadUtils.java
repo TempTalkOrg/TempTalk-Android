@@ -1,8 +1,9 @@
 package com.luck.picture.lib.thread;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.IntRange;
@@ -902,7 +903,7 @@ public final class PictureThreadUtils {
                 }
             }
         } else {
-            Log.e("ThreadUtils", "The executorService is not ThreadUtils's pool.");
+            L.e(() -> "ThreadUtils" + "The executorService is not ThreadUtils's pool.");
         }
     }
 
@@ -938,7 +939,7 @@ public final class PictureThreadUtils {
                                     long delay, final long period, final TimeUnit unit) {
         synchronized (TASK_POOL_MAP) {
             if (TASK_POOL_MAP.get(task) != null) {
-                Log.e("ThreadUtils", "Task can only be executed once.");
+                L.e(() -> "ThreadUtils" + "Task can only be executed once.");
                 return;
             }
             TASK_POOL_MAP.put(task, pool);
@@ -1062,7 +1063,7 @@ public final class PictureThreadUtils {
             try {
                 super.execute(command);
             } catch (RejectedExecutionException ignore) {
-                Log.e("ThreadUtils", "This will not happen!");
+                L.e(() -> "ThreadUtils" + "This will not happen!");
                 mWorkQueue.offer(command);
             } catch (Throwable t) {
                 mSubmittedCount.decrementAndGet();
@@ -1131,7 +1132,7 @@ public final class PictureThreadUtils {
                     try {
                         super.run();
                     } catch (Throwable t) {
-                        Log.e("ThreadUtils", "Request threw uncaught throwable", t);
+                        L.e(t, () -> "ThreadUtils Request threw uncaught throwable");
                     }
                 }
             };
@@ -1151,12 +1152,12 @@ public final class PictureThreadUtils {
 
         @Override
         public void onCancel() {
-            Log.e("ThreadUtils", "onCancel: " + Thread.currentThread());
+            L.e(() -> "ThreadUtils" + "onCancel: " + Thread.currentThread());
         }
 
         @Override
         public void onFail(Throwable t) {
-            Log.e("ThreadUtils", "onFail: ", t);
+            L.e(t, () -> "ThreadUtils onFail");
         }
 
     }
@@ -1197,7 +1198,7 @@ public final class PictureThreadUtils {
                     if (!state.compareAndSet(NEW, RUNNING)) return;
                     runner = Thread.currentThread();
                     if (mTimeoutListener != null) {
-                        Log.w("ThreadUtils", "Scheduled task doesn't support timeout.");
+                        L.w(() -> "ThreadUtils" + "Scheduled task doesn't support timeout.");
                     }
                 } else {
                     if (state.get() != RUNNING) return;
@@ -1354,7 +1355,7 @@ public final class PictureThreadUtils {
                 try {
                     mLatch.await();
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[PictureThreadUtils] SyncValue getValue error:");
                 }
             }
             return mValue;
@@ -1365,7 +1366,7 @@ public final class PictureThreadUtils {
                 try {
                     mLatch.await(timeout, unit);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[PictureThreadUtils] SyncValue getValue timeout error:");
                     return defaultValue;
                 }
             }

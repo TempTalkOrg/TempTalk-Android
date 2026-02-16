@@ -1,6 +1,7 @@
 package com.difft.android.setting
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.content.ContextCompat
@@ -86,7 +87,7 @@ class DeleteAccountActivity : BaseActivity() {
                         }, {
                             mBinding.btnDone.isLoading = false
                             it.message?.let { message -> ToastUtil.showLong(message) }
-                            it.printStackTrace()
+                            L.w { "[DeleteAccountActivity] deleteAccount error: ${it.stackTraceToString()}" }
                         })
                 },
                 confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(this, com.difft.android.base.R.color.t_error))

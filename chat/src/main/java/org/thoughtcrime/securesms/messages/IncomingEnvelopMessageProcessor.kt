@@ -23,7 +23,7 @@ import javax.inject.Singleton
 
 @Singleton
 class IncomingEnvelopMessageProcessor @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val dbMessageStore: DBMessageStore,
     private val webSocket: AppWebSocketHelper,

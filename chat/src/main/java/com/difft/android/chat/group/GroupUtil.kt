@@ -30,7 +30,7 @@ import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
-import org.thoughtcrime.securesms.util.Base64
+import com.difft.android.base.utils.Base64
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 
@@ -90,8 +90,7 @@ object GroupUtil {
             }
         } catch (e: Exception) {
             emitGetGroupsStatusUpdate(false, emptyList())
-            e.printStackTrace()
-            L.e { "[GroupUtil] syncAllGroupAndAllGroupMembers fail:" + e.stackTraceToString() }
+            L.e(e) { "[GroupUtil] syncAllGroupAndAllGroupMembers fail:" }
         }
     }
 
@@ -166,7 +165,7 @@ object GroupUtil {
                 Observable.just(Optional.ofNullable(group))
             }
             .onErrorResumeNext { throwable ->
-                L.e { "[GroupUtil] fetchAndSaveSingleGroup fail:" + throwable.stackTraceToString() }
+                L.e(throwable) { "[GroupUtil] fetchAndSaveSingleGroup fail:" }
                 groupUpdateStatus[groupID] = false
                 Observable.just(Optional.empty())
             }
@@ -227,7 +226,7 @@ fun String.getAvatarData(): GroupAvatarData? {
             Gson().fromJson(avatarData, GroupAvatarData::class.java)
         }
     } catch (e: Exception) {
-        L.e { "[group] parse avatar data fail: $this === ${e.stackTraceToString()}" }
+        L.e(e) { "[group] parse avatar data fail: $this ===" }
         null
     }
 }

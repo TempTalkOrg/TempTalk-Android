@@ -1,5 +1,7 @@
 package com.difft.android.security;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 
 import java.security.cert.X509Certificate;
@@ -14,14 +16,13 @@ public class SecurityLib {
     }
 
     /**
-     * @param context Application context
+     * @param sign Application signature
      * @return true校验通过 false为校验失败
      */
     public native static boolean checkSign(String sign);
 
     /**
      * 模拟器检测
-     * @param context Application context
      * @return true校验通过 false为校验失败
      */
     public native static boolean checkEmulator();
@@ -44,7 +45,7 @@ public class SecurityLib {
                 return true;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[SecurityLib] verifySignature error");
         }
         return false;
     }

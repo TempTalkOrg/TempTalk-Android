@@ -3,7 +3,6 @@ package com.difft.android.call.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,9 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import coil3.compose.rememberAsyncImagePainter
-import com.difft.android.call.LCallManager
-import com.difft.android.call.LocalImageLoaderProvider
 import com.difft.android.call.R
+import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -71,7 +69,6 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
     ConstraintLayout(
         modifier = modifier
             .height(24.dp)
-            .wrapContentWidth()
             .clip(shape = RoundedCornerShape(4.dp))
             .background(
                 colorResource(id = com.difft.android.base.R.color.bg1_night).copy(alpha = 0.8f)
@@ -86,7 +83,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
                 contentDescription = "",
                 modifier = Modifier
                     .constrainAs(shareStatusView) {
-                        start.linkTo(parent.start, 6.dp)
+                        start.linkTo(parent.start, 4.dp)
                         centerVerticallyTo(parent)
                     }
                     .size(16.dp),
@@ -122,16 +119,16 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
             tint = tintColor
         )
 
-        val username = "${userName ?: LCallManager.convertToBase58UserName(activeSpeaker.identity?.value)}"
+        val username = "${userName ?: IdUtil.convertToBase58UserName(activeSpeaker.identity?.value)}"
 
         Text(
             modifier = Modifier
                 .constrainAs(userNameView){
                     start.linkTo(speakStatusView.end)
-                    end.linkTo(parent.end, 6.dp)
+                    end.linkTo(parent.end, 4.dp)
                     centerVerticallyTo(parent)
                 },
-            text = StringUtil.getShowUserName(username, 14),
+            text = StringUtil.truncateWithEllipsis(username, 9),
             fontSize = 12.sp,
             color = Color.White,
             maxLines = 1,

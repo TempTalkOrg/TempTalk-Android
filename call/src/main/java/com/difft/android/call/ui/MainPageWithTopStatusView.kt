@@ -2,8 +2,9 @@ package com.difft.android.call.ui
 
 import android.content.res.Configuration
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -19,6 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -30,7 +34,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,22 +45,23 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import com.difft.android.base.call.CallType
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
+import com.difft.android.base.utils.ApplicationHelper
+import dagger.hilt.android.EntryPointAccessors
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.util.StringUtil
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun MainPageWithTopStatusView(
@@ -72,7 +76,9 @@ fun MainPageWithTopStatusView(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    val coroutineScope = rememberCoroutineScope()
+    val windowZoomOutPainter = painterResource(id = R.drawable.chat_ic_window_zoom_out)
+    val loadingPainter = painterResource(id = R.drawable.ant_design_loading_outlined)
+    val reconnectFailedPainter = painterResource(id = R.drawable.gg_spinner_alt)
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val callDuration by viewModel.timerManager.callDurationText.collectAsState("00:00")
     val callStatus by viewModel.callStatus.collectAsState()
@@ -80,43 +86,53 @@ fun MainPageWithTopStatusView(
     val callType by viewModel.callType.collectAsState()
     val screenSharingUser by viewModel.screenSharingUser.collectAsState()
 
+    // 获取 ContactorCacheManager 实例
+    val contactorCacheManager = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
+
     var screenShareUserName: String? by remember { mutableStateOf(null) }
-    var rotationAngle by remember { mutableFloatStateOf(0f) }
 
     val dividerColor = Color(0xFF474D57)
 
-    LaunchedEffect(callStatus) {
-        val animationDurationMillis = 2000
-        animate(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = animationDurationMillis,
-                    easing = LinearEasing
-                ),
-            )
-        ) { value, /* velocity */ _ ->
-            rotationAngle = value
-        }
-    }
-
     LaunchedEffect(screenSharingUser) {
-        coroutineScope.launch {
-            screenSharingUser?.let {
-                it.identity?.value?.let { identityId ->
-                    screenShareUserName = "${LCallManager.getDisplayNameById(identityId)}"
+        screenSharingUser?.let {
+            it.identity?.value?.let { identityId ->
+                screenShareUserName = withContext(Dispatchers.IO) {
+                    "${contactorCacheManager.getDisplayNameById(identityId)}"
                 }
             }
         }
     }
 
+    val shouldShowLoading = shouldShowLoadingStatus(callStatus, callIntent, callType)
+    val rotationAngle by if (shouldShowLoading) {
+        val infiniteTransition = rememberInfiniteTransition(label = "loadingRotation")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 2000,
+                    easing = LinearEasing
+                ),
+            ),
+            label = "loadingRotationValue"
+        )
+    } else {
+        remember { mutableFloatStateOf(0f) }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                top = if (!isLandscape) 44.dp else 0.dp,
-                bottom = if (!isLandscape) 4.dp else 4.dp
+            .then(
+                if (!isLandscape || !isUserSharingScreen) {
+                    Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 8.dp, bottom = 4.dp)
+                } else {
+                    Modifier.padding(bottom = 4.dp)
+                }
             ),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -141,11 +157,13 @@ fun MainPageWithTopStatusView(
                     )
             ){
                 val controlSize = 26.dp
-                val controlPadding = 4.dp
+                val controlPadding = if (!isLandscape) 16.dp else 4.dp
+                val rowStartPadding = if (!isLandscape) 0.dp else 14.dp
+                val rowTopPadding = if (!isLandscape) 8.dp else 8.dp
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 14.dp, end = 14.dp, top = 8.dp),
+                        .padding(start = rowStartPadding, end = 14.dp, top = rowTopPadding),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 )
@@ -159,7 +177,7 @@ fun MainPageWithTopStatusView(
                             Box(
                                 modifier = Modifier
                                     .constrainAs(windowZoomOut) {
-                                        start.linkTo(parent.start)
+                                        start.linkTo(parent.start, margin = controlPadding)
                                     }
                                     .size(44.dp, 44.dp)
                                     .clickable(
@@ -174,9 +192,8 @@ fun MainPageWithTopStatusView(
                                         .size(controlSize),
                                     color = Color.Transparent
                                 ) {
-                                    val resource = R.drawable.chat_ic_window_zoom_out
                                     Icon(
-                                        painterResource(id = resource),
+                                        windowZoomOutPainter,
                                         contentDescription = "WINDOW_ZOOM_OUT",
                                         tint = Color.White,
                                     )
@@ -198,20 +215,22 @@ fun MainPageWithTopStatusView(
                                         participant.identity?.value?.let { identityId ->
                                             screenShareUserName?.let{ it->
                                                 Text(
-                                                    text = "${StringUtil.getShowUserName(it, 14)}${context.getString(R.string.call_screen_sharing_title)} $callDuration",
+                                                    text = "${StringUtil.truncateWithEllipsis(it, 14)}${ResUtils.getString(R.string.call_screen_sharing_title)} $callDuration",
                                                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                                     color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                                    maxLines = 1
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
                                     }
                                 }else if(!isOneVOneCall) {
                                     Text(
-                                        text = viewModel.getCallRoomName(),
+                                        text = StringUtil.truncateWithEllipsis(viewModel.getCallRoomName(), 25),
                                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                         color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                        maxLines = 1
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 if(!isUserSharingScreen){
@@ -227,7 +246,8 @@ fun MainPageWithTopStatusView(
                                                 text = callDuration,
                                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                                                 color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                                maxLines = 1
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
 
                                             if(countDownEnabled) {
@@ -252,22 +272,22 @@ fun MainPageWithTopStatusView(
                                 if (callType == CallType.ONE_ON_ONE.type && callStatus == CallStatus.CALLING) {
                                     Text(
                                         text = ResUtils.getString(R.string.call_status_calling),
-                                        style = TextStyle(
+                                        style = MaterialTheme.typography.bodyMedium.copy(
                                             fontSize = 14.sp,
-                                            lineHeight = 20.sp,
-                                            fontFamily = SfProFont,
-                                            fontWeight = FontWeight(400),
                                             color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
-                                        )
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 } else {
-                                    if(shouldShowLoadingStatus(callStatus, callIntent, callType)) {
-                                        val painter = when {
-                                            callStatus == CallStatus.RECONNECT_FAILED -> painterResource(id = R.drawable.gg_spinner_alt)
-                                            else -> painterResource(id = R.drawable.ant_design_loading_outlined)
+                                    if(shouldShowLoading) {
+                                        val painter = if (callStatus == CallStatus.RECONNECT_FAILED) {
+                                            reconnectFailedPainter
+                                        } else {
+                                            loadingPainter
                                         }
 
-                                        val status = if(callStatus == CallStatus.RECONNECT_FAILED) context.getString(R.string.call_disconnected_title) else context.getString(R.string.call_connecting_title)
+                                        val status = if(callStatus == CallStatus.RECONNECT_FAILED) ResUtils.getString(R.string.call_disconnected_title) else ResUtils.getString(R.string.call_connecting_title)
 
                                         Row(
                                             modifier = Modifier
@@ -289,7 +309,8 @@ fun MainPageWithTopStatusView(
                                                 text = status,
                                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                                 color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                                maxLines = 1
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
@@ -303,9 +324,7 @@ fun MainPageWithTopStatusView(
             if(viewModel.is1v1ShowCriticalAlertEnable(callStatus)) {
                 CallCriticalAlertView(
                     clicked = {
-                        callIntent.conversationId?.let {
-                            viewModel.handleCriticalAlert(it)
-                        }
+                        viewModel.handleCriticalAlertNew()
                     }
                 )
             }

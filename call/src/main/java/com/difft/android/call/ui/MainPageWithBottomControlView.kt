@@ -18,15 +18,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,21 +37,21 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
-import com.difft.android.call.openAppSettings
-import com.difft.android.call.rememberPermissionChecker
+import com.difft.android.call.data.CallEndType
+import com.difft.android.call.util.openAppSettings
+import com.difft.android.call.util.rememberPermissionChecker
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.audio.AudioSwitchHandler
@@ -64,7 +65,7 @@ fun MainPageWithBottomControlView(
     showBottomToolBarViewEnabled: Boolean = true,
     isUserSharingScreen: Boolean = false,
     audioSwitchHandler: AudioSwitchHandler? = null,
-    endCallAction: (callType: String, callEndType: LCallManager.CallEndType) -> Unit
+    endCallAction: (callType: String, callEndType: CallEndType) -> Unit
 ){
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val micEnabled by viewModel.micEnabled.collectAsState(false)
@@ -77,13 +78,28 @@ fun MainPageWithBottomControlView(
 
     val context = LocalContext.current
 
+    // 预加载并缓存 painter，避免首次展示时触发资源解析卡顿
+    val micOpenPainter = painterResource(id = R.drawable.call_btn_microphone_open)
+    val micClosePainter = painterResource(id = R.drawable.call_btn_microphone_close)
+    val cameraOpenPainter = painterResource(id = R.drawable.call_btn_camera_open)
+    val cameraClosePainter = painterResource(id = R.drawable.call_btn_camera_close)
+    val volumePhonePainter = painterResource(id = R.drawable.call_btn_volume_phone)
+    val volumeSpeakerPainter = painterResource(id = R.drawable.call_btn_volume_speaker)
+    val volumeHeadphonesPainter = painterResource(id = R.drawable.call_btn_volume_headphones)
+    val volumeAirpodPainter = painterResource(id = R.drawable.call_btn_volume_airpod)
+    val usersPainter = painterResource(id = R.drawable.users)
+    val dotsPainter = painterResource(id = R.drawable.call_btn_tabler_dots)
+    val hangupPainter = painterResource(id = R.drawable.call_btn_hangup)
+    val chevronRightPainter = painterResource(id = R.drawable.call_btn_tabler_chevron_right)
+    val exitLinePainter = painterResource(id = R.drawable.call_btn_mingcute_exit_line)
+
     val requestMicPermission = rememberPermissionChecker(
         viewModel = viewModel,
         permission = Manifest.permission.RECORD_AUDIO,
         onGranted = {
             // Update foreground service type when microphone permission is granted
             // This must be done before enabling microphone to ensure service type is correct
-            if (context is com.difft.android.call.LCallActivity) {
+            if (context is LCallActivity) {
                 context.updateForegroundServiceType()
             }
             // Enable microphone after updating service type
@@ -111,7 +127,7 @@ fun MainPageWithBottomControlView(
         onGranted = {
             // Update foreground service type when camera permission is granted
             // This must be done before enabling camera to ensure service type is correct
-            if (context is com.difft.android.call.LCallActivity) {
+            if (context is LCallActivity) {
                 context.updateForegroundServiceType()
             }
             // Enable camera after updating service type
@@ -135,8 +151,12 @@ fun MainPageWithBottomControlView(
 
     Column(
         modifier = Modifier
-            .padding(
-                bottom = if (!isLandscape) 34.dp else 15.dp,
+            .then(
+                if (!isLandscape) {
+                    Modifier.padding(bottom = 32.dp)
+                } else {
+                    Modifier.padding(bottom = 16.dp)
+                }
             )
             .fillMaxWidth(),
         verticalArrangement = Arrangement.Bottom,
@@ -178,10 +198,9 @@ fun MainPageWithBottomControlView(
                                     modifier = Modifier.size(controlSize),
                                     color = Color.Transparent
                                 ) {
-                                    val resource =
-                                        if (micEnabled) R.drawable.call_btn_microphone_open else R.drawable.call_btn_microphone_close
+                                    val painter = if (micEnabled) micOpenPainter else micClosePainter
                                     Image(
-                                        painter = painterResource(id = resource),
+                                        painter = painter,
                                         contentDescription = "Mic",
                                         contentScale = ContentScale.Fit, // 根据需要调整
                                         modifier = Modifier
@@ -204,10 +223,9 @@ fun MainPageWithBottomControlView(
                                     modifier = Modifier.size(controlSize),
                                     color = Color.Transparent
                                 ) {
-                                    val resource =
-                                        if (videoEnabled) R.drawable.call_btn_camera_open else R.drawable.call_btn_camera_close
+                                    val painter = if (videoEnabled) cameraOpenPainter else cameraClosePainter
                                     Image(
-                                        painter = painterResource(id = resource),
+                                        painter = painter,
                                         contentDescription = "Camera",
                                         contentScale = ContentScale.Fit, // 根据需要调整
                                         modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
@@ -228,16 +246,15 @@ fun MainPageWithBottomControlView(
                                     modifier = Modifier.size(controlSize),
                                     color = Color.Transparent
                                 ) {
-                                    val resource =
-                                        when (currentAudioDevice) {
-                                            is AudioDevice.Earpiece -> R.drawable.call_btn_volume_phone
-                                            is AudioDevice.Speakerphone -> R.drawable.call_btn_volume_speaker
-                                            is AudioDevice.WiredHeadset -> R.drawable.call_btn_volume_headphones
-                                            is AudioDevice.BluetoothHeadset -> R.drawable.call_btn_volume_airpod
-                                            else -> R.drawable.call_btn_volume_speaker
-                                        }
+                                    val painter = when (currentAudioDevice) {
+                                        is AudioDevice.Earpiece -> volumePhonePainter
+                                        is AudioDevice.Speakerphone -> volumeSpeakerPainter
+                                        is AudioDevice.WiredHeadset -> volumeHeadphonesPainter
+                                        is AudioDevice.BluetoothHeadset -> volumeAirpodPainter
+                                        else -> volumeSpeakerPainter
+                                    }
                                     Image(
-                                        painter = painterResource(id = resource),
+                                        painter = painter,
                                         contentDescription = "Horn",
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier
@@ -277,9 +294,8 @@ fun MainPageWithBottomControlView(
                                         color = Color.Transparent
                                     ){
                                         Box {
-                                            val resource = R.drawable.users
                                             Image(
-                                                painter = painterResource(id = resource),
+                                                painter = usersPainter,
                                                 contentDescription = "Users",
                                                 contentScale = ContentScale.Fit, // 根据需要调整
                                                 modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
@@ -305,7 +321,7 @@ fun MainPageWithBottomControlView(
                                                         color = Color.White,
                                                         fontSize = 10.sp,
                                                         lineHeight = 16.sp,
-                                                        fontFamily = SfProFont,
+                                                        fontFamily = FontFamily.Default,
                                                         fontWeight = FontWeight(590),
                                                         textAlign = TextAlign.Center,
                                                         modifier = Modifier
@@ -345,7 +361,7 @@ fun MainPageWithBottomControlView(
                                             .padding(1.dp)
                                             .width(24.dp)
                                             .height(24.dp),
-                                        painter = painterResource(id = R.drawable.call_btn_tabler_dots),
+                                        painter = dotsPainter,
                                         contentDescription = "more options menu",
                                         contentScale = ContentScale.None
                                     )
@@ -363,7 +379,7 @@ fun MainPageWithBottomControlView(
                                                 indication = null
                                             ) {
                                                 L.i { "[call] LCallActivity onClick Hangup" }
-                                                endCallAction(currentCallType, LCallManager.CallEndType.END)
+                                                endCallAction(currentCallType, CallEndType.END)
                                             },
                                         horizontalArrangement = Arrangement.spacedBy(1.dp, Alignment.Start),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -397,7 +413,7 @@ fun MainPageWithBottomControlView(
                                                         .padding(1.0125.dp)
                                                         .width(31.2.dp)
                                                         .height(24.dp),
-                                                    painter = painterResource(id = R.drawable.call_btn_hangup),
+                                                    painter = hangupPainter,
                                                     contentDescription = "hangup",
                                                     contentScale = ContentScale.None
                                                 )
@@ -446,7 +462,7 @@ fun MainPageWithBottomControlView(
                                                         .padding(end = 10.dp)
                                                         .width(14.dp)
                                                         .height(14.dp),
-                                                    painter = painterResource(id = R.drawable.call_btn_tabler_chevron_right),
+                                                    painter = chevronRightPainter,
                                                     contentDescription = "end call choices menu",
                                                     contentScale = ContentScale.None
                                                 )
@@ -469,7 +485,7 @@ fun MainPageWithBottomControlView(
                                                         indication = null
                                                     ) {
                                                         L.i { "[call] LCallActivity onClick Leave" }
-                                                        endCallAction(currentCallType, LCallManager.CallEndType.LEAVE)
+                                                        endCallAction(currentCallType, CallEndType.LEAVE)
                                                     },
                                                 horizontalArrangement = Arrangement.spacedBy(
                                                     10.dp,
@@ -482,7 +498,7 @@ fun MainPageWithBottomControlView(
                                                         .padding(1.0125.dp)
                                                         .width(24.dp)
                                                         .height(24.dp),
-                                                    painter = painterResource(id = R.drawable.call_btn_mingcute_exit_line),
+                                                    painter = exitLinePainter,
                                                     contentDescription = "leave",
                                                     contentScale = ContentScale.None
                                                 )
@@ -537,7 +553,7 @@ fun MainPageWithBottomControlView(
                                                     .padding(end = 10.dp)
                                                     .width(14.dp)
                                                     .height(14.dp),
-                                                painter = painterResource(id = R.drawable.call_btn_tabler_chevron_right),
+                                                painter = chevronRightPainter,
                                                 contentDescription = "end call choices menu",
                                                 contentScale = ContentScale.None
                                             )
@@ -560,7 +576,7 @@ fun MainPageWithBottomControlView(
                                                     indication = null
                                                 ) {
                                                     L.i { "[call] LCallActivity onClick Leave" }
-                                                    endCallAction(currentCallType, LCallManager.CallEndType.LEAVE)
+                                                    endCallAction(currentCallType, CallEndType.LEAVE)
                                                 },
                                             horizontalArrangement = Arrangement.spacedBy(
                                                 10.dp,
@@ -573,7 +589,7 @@ fun MainPageWithBottomControlView(
                                                     .padding(1.0125.dp)
                                                     .width(24.dp)
                                                     .height(24.dp),
-                                                painter = painterResource(id = R.drawable.call_btn_mingcute_exit_line),
+                                                painter = exitLinePainter,
                                                 contentDescription = "leave",
                                                 contentScale = ContentScale.None
                                             )

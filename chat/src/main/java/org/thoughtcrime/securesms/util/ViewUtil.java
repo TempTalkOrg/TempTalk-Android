@@ -1,5 +1,4 @@
 /**
- * Copyright (C) 2015 Open Whisper Systems
  * <<<<<<< HEAD
  * <p>
  * =======

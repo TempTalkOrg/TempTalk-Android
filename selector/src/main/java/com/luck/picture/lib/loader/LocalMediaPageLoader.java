@@ -6,7 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.TextUtils;
-import android.util.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import com.luck.picture.lib.R;
 import com.luck.picture.lib.config.FileSizeUnit;
@@ -165,7 +165,7 @@ public final class LocalMediaPageLoader extends IBridgeMediaLoader {
                 return null;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[LocalMediaPageLoader] getAlbumFirstCover error:");
         } finally {
             if (data != null && !data.isClosed()) {
                 data.close();
@@ -213,8 +213,8 @@ public final class LocalMediaPageLoader extends IBridgeMediaLoader {
                         return new MediaData(data.getCount() > 0, result);
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    Log.i(TAG, "loadMedia Page Data Error: " + e.getMessage());
+                    L.w(e, () -> "[LocalMediaPageLoader] loadPageMediaData error:");
+                    L.i(() -> "[LocalMediaPageLoader] loadMedia Page Data Error" + e);
                     return new MediaData();
                 } finally {
                     if (data != null && !data.isClosed()) {
@@ -390,8 +390,8 @@ public final class LocalMediaPageLoader extends IBridgeMediaLoader {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    Log.i(TAG, "loadAllMedia Data Error: " + e.getMessage());
+                    L.w(e, () -> "[LocalMediaPageLoader] loadAllAlbum error:");
+                    L.i(() -> "[LocalMediaPageLoader] loadAllMedia Data Error" + e);
                 } finally {
                     if (data != null && !data.isClosed()) {
                         data.close();

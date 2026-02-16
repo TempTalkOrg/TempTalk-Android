@@ -29,7 +29,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.chat.common.GroupAvatarUtil
 import com.difft.android.chat.common.LetterItem
-import com.difft.android.chat.contacts.contactsall.PinyinComparator
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
@@ -68,7 +68,6 @@ import org.difft.app.database.models.ContactorModel
 import util.ScreenLockUtil
 import org.thoughtcrime.securesms.util.MediaUtil
 import java.io.File
-import java.util.Collections
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
@@ -78,10 +77,6 @@ class CreateGroupActivity : BaseActivity() {
 
     private val memberModels: ArrayList<GroupMemberModel> = arrayListOf()
     private val selectedMap: HashMap<String?, String?> = hashMapOf()
-
-    private val pinyinComparator: PinyinComparator by lazy {
-        PinyinComparator()
-    }
 
     private val selectedIds: ArrayList<String> by lazy {
         intent.getStringArrayListExtra("ids") ?: arrayListOf()
@@ -167,7 +162,6 @@ class CreateGroupActivity : BaseActivity() {
                     val request = CreateGroupReq(groupName, list, response)
                     createGroup(request)
                 }) {
-                    it.printStackTrace()
                     L.e { "[${TAG}]create group avatar error:${it.stackTraceToString()}" }
                     ToastUtil.show(R.string.chat_net_error)
                 }
@@ -197,7 +191,6 @@ class CreateGroupActivity : BaseActivity() {
                 }
             }, { error ->
                 ComposeDialogManager.dismissWait()
-                error.printStackTrace()
                 L.e { "[${TAG}]createGeneralGroup - error=${error.stackTraceToString()}" }
                 ToastUtil.show(R.string.chat_net_error)
             })
@@ -251,7 +244,7 @@ class CreateGroupActivity : BaseActivity() {
                 }
 
                 searchContacts("")
-            }, { error -> error.printStackTrace() })
+            }, { error -> L.w { "[CreateGroupActivity] loadContacts error: ${error.stackTraceToString()}" } })
 
         binding.edittextSearchInput.addTextChangedListener {
             val etContent = binding.edittextSearchInput.text.toString().trim()
@@ -315,10 +308,10 @@ class CreateGroupActivity : BaseActivity() {
 
     @SuppressLint("NotifyDataSetChanged")
     private fun refreshContactsList(list: List<ContactorModel>) {
-        val contacts = list.filterNot { it.id == globalServices.myId || (it.id.isBotId()) }
-        Collections.sort(contacts, pinyinComparator)
+        val sortedContacts = list.filterNot { it.id == globalServices.myId || (it.id.isBotId()) }
+            .sortedByPinyin()
         memberModels.clear()
-        contacts.forEach {
+        sortedContacts.forEach {
             val selected = selectedMap.contains(it.id)
             val defaultSelected = selectedIds.find { id -> id == it.id } != null
             val avatarData = it.avatar?.getContactAvatarData()
@@ -332,7 +325,8 @@ class CreateGroupActivity : BaseActivity() {
                     0,
                     isSelected = selected,
                     checkBoxEnable = !defaultSelected,
-                    showCheckBox = true
+                    showCheckBox = true,
+                    letterName = it.getDisplayNameWithoutRemarkForUI()
                 )
             )
         }
@@ -349,7 +343,7 @@ class CreateGroupActivity : BaseActivity() {
             .to(RxUtil.autoDispose(this))
             .subscribe({
                 refreshContactsList(it)
-            }, { it.printStackTrace() })
+            }, { L.w { "[CreateGroupActivity] searchContacts error: ${it.stackTraceToString()}" } })
     }
 
 
@@ -441,7 +435,6 @@ class CreateGroupActivity : BaseActivity() {
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 L.e { "[${TAG}]generateAvatar failed: ${e.stackTraceToString()}" }
             }
         }

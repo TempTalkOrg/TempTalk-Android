@@ -21,6 +21,7 @@ import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.databinding.ActivityGroupManagementBinding
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
@@ -69,7 +70,7 @@ class GroupManagementActivity : BaseActivity() {
                     groupInfo = it.get()
                     initView(it.get())
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupManagementActivity] getSingleGroupInfo error: ${it.stackTraceToString()}" } })
 
         GroupUtil.singleGroupsUpdate
             .compose(RxUtil.getSchedulerComposer())
@@ -79,7 +80,7 @@ class GroupManagementActivity : BaseActivity() {
                     groupInfo = it
                     initView(it)
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } })
     }
 
     private val mGroupsAdapter: GroupInfoMemberAdapter by lazy {
@@ -142,12 +143,12 @@ class GroupManagementActivity : BaseActivity() {
             val owner = members.find { it.groupMemberContactor?.groupRole == GROUP_ROLE_OWNER }
             owner?.let {
                 val contactAvatar = it.avatar?.getContactAvatarData()
-                moderators.add(GroupMemberModel(it.getDisplayNameForUI(), it.id, contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, it.getDisplayNameForUI().getSortLetter(), GROUP_ROLE_OWNER))
+                moderators.add(GroupMemberModel(it.getDisplayNameForUI(), it.id, contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, it.getDisplayNameForUI().getSortLetter(), GROUP_ROLE_OWNER, letterName = it.getDisplayNameWithoutRemarkForUI()))
             }
             val otherModerators = members.filter { it.groupMemberContactor?.groupRole == GROUP_ROLE_ADMIN }
             otherModerators.forEach {
                 val contactAvatar = it.avatar?.getContactAvatarData()
-                moderators.add(GroupMemberModel(it.getDisplayNameForUI(), it.id, contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, it.getDisplayNameForUI().getSortLetter(), GROUP_ROLE_ADMIN))
+                moderators.add(GroupMemberModel(it.getDisplayNameForUI(), it.id, contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, it.getDisplayNameForUI().getSortLetter(), GROUP_ROLE_ADMIN, letterName = it.getDisplayNameWithoutRemarkForUI()))
             }
             if (moderators.size < members.size) { //所有成员都是管理员，则不显示
                 moderators.add(GroupMemberModel("", "+", "", "", ""))
@@ -204,9 +205,8 @@ class GroupManagementActivity : BaseActivity() {
                     showErrorAndRestoreSwitch(it.reason, switch)
                 }
             }, {
-                it.printStackTrace()
+                L.w { "[GroupManagementActivity] changeGroupSetting error: ${it.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
-                L.w { "[GroupManagement] changeGroupSetting error:" + it.stackTraceToString() }
                 showErrorAndRestoreSwitch(getString(R.string.operation_failed), switch)
             })
     }

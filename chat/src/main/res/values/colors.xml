@@ -1,51 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
     <color name="core_white">#ffffff</color>
     <color name="accent_primary">#2c6bed</color>
     <color name="icon_tint_primary">#1B1B1D</color>
 
-    <color name="conversation_item_selected_system_ui">@color/transparent_black_20</color>
-    <color name="reactions_screen_dark_shade_color">@color/transparent_black_20</color>
-    <color name="reactions_screen_light_shade_color">@color/transparent_white_87</color>
-    <color name="reactions_status_bar_shade">#C1C1C1</color>
     <color name="reactions_item_bg_color">@color/transparent_white_70</color>
     <color name="reactions_item_selected_bg_color">@color/transparent_black_10</color>
 
-    <color name="transparent_black_05">#0D000000</color>
-    <color name="transparent_black_08">#14000000</color>
     <color name="transparent_black_10">#18000000</color>
-    <color name="transparent_black_15">#26000000</color>
-    <color name="transparent_black_20">#33000000</color>
     <color name="transparent_black_25">#40000000</color>
     <color name="transparent_black_40">#66000000</color>
+    <color name="transparent_black_32">#52000000</color>
     <color name="transparent_black_50">#80000000</color>
     <color name="transparent_black_60">#99000000</color>
-    <color name="transparent_black_70">#b3000000</color>
-    <color name="transparent_black_80">#CC000000</color>
-    <color name="transparent_black_90">#e6000000</color>
 
-    <color name="transparent_white_05">#0Dffffff</color>
-    <color name="transparent_white_08">#14ffffff</color>
     <color name="transparent_white_10">#18ffffff</color>
-    <color name="transparent_white_15">#26ffffff</color>
     <color name="transparent_white_20">#33ffffff</color>
-    <color name="transparent_white_25">#40ffffff</color>
-    <color name="transparent_white_30">#4Dffffff</color>
-    <color name="transparent_white_40">#66ffffff</color>
-    <color name="transparent_white_60">#99ffffff</color>
     <color name="transparent_white_70">#b2ffffff</color>
-    <color name="transparent_white_80">#ccffffff</color>
-    <color name="transparent_white_87">#dfffffff</color>
-    <color name="transparent_white_90">#e6ffffff</color>
-    <color name="transparent_white_95">#f3ffffff</color>
+
     <color name="red_500">#F44336</color>
-    <color name="core_grey_60">#5e5e5e</color>
     <color name="audio_progress_bg">#1A1E2329</color>
+    
+    <!-- Text selection highlight color (30% opacity of t.info) -->
+    <color name="selection_highlight">#4D056FFA</color>
+
+    <!-- Special colors for chat UI -->
+    <color name="transparent_white_0">#00FFFFFF</color>
+    <color name="scan_corner_color">#f57257</color>
+    <color name="scan_mask_color">#33FFFFFF</color>
+    <color name="progress_bg_white_25">#40FFFFFF</color>
+    <color name="live_tag_border">#CC5E6673</color>
+    <color name="live_tag_gradient_end">#FFFE7566</color>
+    <color name="progress_tint_blue">#056FFA</color>
+    <color name="scribble_toast_bg">#1b1b1b</color>
+    <color name="floating_bar_bg">#CC181A20</color>
+    <color name="message_time_bg">#66181A20</color>
+    <color name="caution_40">#66FF8800</color>
 </resources>

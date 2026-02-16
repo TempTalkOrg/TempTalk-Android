@@ -41,15 +41,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallFeedbackRequestBody
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.LCallManager
 import com.difft.android.call.R
 import com.difft.android.call.data.FeedbackCallInfo
 
@@ -200,7 +199,7 @@ fun CallQuestionView(callInfo: FeedbackCallInfo, rating: Int, onDismiss: () -> U
                     style = TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
                         color = colorResource(id = com.difft.android.base.R.color.t_primary),
                         textAlign = TextAlign.Center,
@@ -233,7 +232,7 @@ fun CallQuestionView(callInfo: FeedbackCallInfo, rating: Int, onDismiss: () -> U
                             style = TextStyle(
                                 fontSize = 16.sp,
                                 lineHeight = 24.sp,
-                                fontFamily = SfProFont,
+                                fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
                                 color = if (selectedTabIndex == index)
                                     colorResource(id = com.difft.android.base.R.color.t_primary)
@@ -308,7 +307,7 @@ fun CallQuestionView(callInfo: FeedbackCallInfo, rating: Int, onDismiss: () -> U
                     style = TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         color = colorResource(id = com.difft.android.base.R.color.t_primary),
                         textAlign = TextAlign.Center,
@@ -351,7 +350,7 @@ fun CallQuestionView(callInfo: FeedbackCallInfo, rating: Int, onDismiss: () -> U
                     style = TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         color = if(selectedReasons.isEmpty()) colorResource(id = com.difft.android.base.R.color.t_disable) else colorResource(id = com.difft.android.base.R.color.t_white),
                         textAlign = TextAlign.Center,
@@ -401,7 +400,7 @@ fun CallRatingView(callInfo: FeedbackCallInfo, onRatingChanged: (Int) -> Unit, o
                     style = TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
                         color = colorResource(id = com.difft.android.base.R.color.t_primary),
                         textAlign = TextAlign.Center,
@@ -413,7 +412,7 @@ fun CallRatingView(callInfo: FeedbackCallInfo, onRatingChanged: (Int) -> Unit, o
                     style = TextStyle(
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         color = colorResource(id = com.difft.android.base.R.color.t_secondary),
                         textAlign = TextAlign.Center,
@@ -464,7 +463,7 @@ fun CallRatingView(callInfo: FeedbackCallInfo, onRatingChanged: (Int) -> Unit, o
                         style = TextStyle(
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
-                            fontFamily = SfProFont,
+                            fontFamily = FontFamily.Default,
                             fontWeight = FontWeight(400),
                             color = colorResource(id = com.difft.android.base.R.color.t_third),
                             textAlign = TextAlign.Center,
@@ -498,7 +497,7 @@ fun CallRatingView(callInfo: FeedbackCallInfo, onRatingChanged: (Int) -> Unit, o
                     style = TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         color = colorResource(id = com.difft.android.base.R.color.t_primary),
                         textAlign = TextAlign.Center,
@@ -535,7 +534,7 @@ fun CallRatingView(callInfo: FeedbackCallInfo, onRatingChanged: (Int) -> Unit, o
                     style = TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 24.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         color = if(rating == 0) colorResource(id = com.difft.android.base.R.color.t_disable) else colorResource(id = com.difft.android.base.R.color.t_white),
                         textAlign = TextAlign.Center,

@@ -8,7 +8,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
 import com.difft.android.base.utils.globalServices
-import com.difft.android.chat.R
+import com.difft.android.base.R
 import com.difft.android.chat.databinding.SearchItemMessageBinding
 import com.difft.android.chat.group.getAvatarData
 import org.difft.app.database.models.ContactorModel

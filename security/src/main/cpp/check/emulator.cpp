@@ -1,6 +1,3 @@
-//
-// Created by neo on 2024/1/18.
-//
 
 #include "emulator.h"
 #include <jni.h>

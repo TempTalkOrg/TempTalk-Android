@@ -26,6 +26,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import com.difft.android.base.log.lumberjack.L
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -455,6 +456,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
             this?.destroy()
         } catch (e: Throwable) {
             // swallow
+            L.w { "[dtproto] Disposable.destroy failed: ${e.stackTraceToString()}" }
         }
     }
 
@@ -552,7 +554,6 @@ abstract class FFIObject(
 
     override fun destroy() {
         // Only allow a single call to this method.
-        // TODO: maybe we should log a warning if called more than once?
         if (this.wasDestroyed.compareAndSet(false, true)) {
             // This decrement always matches the initial count of 1 given at creation time.
             if (this.callCounter.decrementAndGet() == 0L) {
@@ -1075,7 +1076,6 @@ public object FfiConverterSequenceUByte: FfiConverterRustBuffer<List<UByte>> {
 
 public object FfiConverterMapStringListUByte: FfiConverterRustBuffer<Map<String, List<UByte>>> {
     override fun read(buf: ByteBuffer): Map<String, List<UByte>> {
-        // TODO: Once Kotlin's `buildMap` API is stabilized we should use it here.
         val items : MutableMap<String, List<UByte>> = mutableMapOf()
         val len = buf.getInt()
         repeat(len) {

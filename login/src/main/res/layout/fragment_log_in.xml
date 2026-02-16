@@ -50,7 +50,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="16dp"
-                android:background="@drawable/login_account_border"
+                android:background="@drawable/invite_uid_border"
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="14dp">
 

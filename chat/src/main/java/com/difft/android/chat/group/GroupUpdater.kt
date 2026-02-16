@@ -8,6 +8,7 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
@@ -23,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.rx3.awaitFirst
+import kotlinx.coroutines.rx3.awaitFirstOrNull
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
@@ -55,13 +57,14 @@ import javax.inject.Singleton
 
 @Singleton
 class GroupUpdater @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val messageArchiveManager: MessageArchiveManager,
+    private val conversationSettingsManager: ConversationSettingsManager,
     private val gson: Gson,
     private val dbMessageStore: DBMessageStore,
     private val wcdb: WCDB,
-    @ChativeHttpClientModule.Chat
+    @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
 ) {
     private data class PendingGroupMessage(
@@ -413,7 +416,7 @@ class GroupUpdater @Inject constructor(
         if (wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID)) != null) {
             return
         } else {
-            val result = GroupUtil.fetchAndSaveSingleGroupInfo(context, groupID, true).blockingFirst()
+            val result = GroupUtil.fetchAndSaveSingleGroupInfo(context, groupID, true).awaitFirstOrNull()
             L.i { "[GroupUpdater] $result" }
         }
     }
@@ -452,6 +455,12 @@ class GroupUpdater @Inject constructor(
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.messageExpiry, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
             messageArchiveManager.updateLocalArchiveTime(For.Group(groupID), messageExpireValue.toLong(), messageClearAnchor)
+            // 通知 ViewModel 更新
+            conversationSettingsManager.emitConversationSettingUpdate(
+                conversationId = groupID,
+                messageExpiry = messageExpireValue.toLong(),
+                messageClearAnchor = messageClearAnchor
+            )
             GroupUtil.emitSingleGroupUpdate(group)
         } else {
             createNewGroupIfNotExist(groupID)

@@ -51,12 +51,29 @@ data class DisappearanceTimeInterval(
     val conversation: ConversationX? = null,
     val default: Long = 0,
     val message: Message? = null,
-    val messageArchivingTimeOptionValues: List<Long>? = null
+    val messageArchivingTimeOptionValues: List<Long>? = null,
+    val activeConversation: ActiveConversation? = null
+)
+
+/**
+ * 活跃会话过期配置（秒）
+ * 用于控制空会话的清理时间
+ * - group: 群聊会话
+ * - other: 单聊会话
+ * - me: 自己的会话（Saved）
+ * - default: 默认值
+ */
+data class ActiveConversation(
+    val default: Long = 604800,
+    val me: Long = 0,
+    val other: Long = 604800,
+    val group: Long = 604800
 )
 
 data class Group(
     val chatTunnelSecurityThreshold: Double = 0.0,
     val chatWithoutReceiptThreshold: Double = 0.0,
+    val confidentialModeThreshold: Int = 20,
     val groupRemind: GroupRemind? = null,
     val largeGroupThreshold: Double = 0.0,
     val meetingWithoutRingThreshold: Double = 0.0,
@@ -112,7 +129,21 @@ data class CallConfig(
     val countdownTimerEnabled: Boolean = false,
     val countdownTimer: CountdownTimer? = null,
     val denoise: DeNoiseConfig? = null,
-    val callServers: CallServers? = null
+    val callServers: CallServers? = null,
+    val bubbleMessage: BubbleMessage? = null,
+    val chatMessage: ChatMessage? = null
+)
+
+data class ChatMessage(
+    val maxLength: Int = 30,
+)
+
+data class BubbleMessage(
+    val emojiPresets: List<String>,
+    val textPresets: List<String>,
+    val columns: List<Int>,
+    val baseSpeed: Long,
+    val deltaSpeed: Long
 )
 
 data class CallServers(

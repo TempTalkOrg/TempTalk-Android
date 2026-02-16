@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.difft.android.base.log.lumberjack.L
 
 class WCDBSecureSharedPrefsUtil(context: Context) {
 
@@ -30,7 +31,7 @@ class WCDBSecureSharedPrefsUtil(context: Context) {
                 putString(key, value)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecureSharedPrefsUtil] error: ${e.stackTraceToString()}" }
         }
     }
 
@@ -43,7 +44,7 @@ class WCDBSecureSharedPrefsUtil(context: Context) {
                 defaultValue
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecureSharedPrefsUtil] error: ${e.stackTraceToString()}" }
             return defaultValue
         }
     }

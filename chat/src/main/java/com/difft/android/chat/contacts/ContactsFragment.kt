@@ -12,6 +12,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsall.ContactsAllFragment
 import com.difft.android.chat.contacts.contactsgroup.GroupsFragment
 import com.difft.android.chat.databinding.ChatFragmentContactsBinding
+import com.difft.android.chat.invite.InviteCodeActivity
 
 class ContactsFragment : DisposableManageFragment() {
     private lateinit var binding: ChatFragmentContactsBinding
@@ -29,6 +30,11 @@ class ContactsFragment : DisposableManageFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        // 设置添加好友按钮的点击监听
+        binding.ibAddContact.setOnClickListener {
+            InviteCodeActivity.startActivity(requireActivity())
+        }
     }
 
     override fun onResume() {

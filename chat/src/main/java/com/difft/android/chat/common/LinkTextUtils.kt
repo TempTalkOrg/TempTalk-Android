@@ -2,29 +2,26 @@ package com.difft.android.chat.common
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.ContextWrapper
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextPaint
-import android.text.TextUtils
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
-import android.view.HapticFeedbackConstants
-import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.AppScheme
-import com.difft.android.base.utils.DeeplinkUtils
-import com.difft.android.base.utils.LinkDataEntity
-import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
+import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDialogFragment
 import com.difft.android.chat.ui.ChatMessageContainerView
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
-import java.util.Date
 import java.util.regex.Pattern
 
 @SuppressLint("ClickableViewAccessibility")
@@ -55,7 +52,7 @@ object LinkTextUtils {
                     if (isValidUrl(fullLink)) {
                         val clickableSpan = object : ClickableSpan() {
                             override fun onClick(view: View) {
-                                handleUrlClick(context, fullLink)
+                                handleUrlClick(view.context, fullLink)
                             }
 
                             override fun updateDrawState(ds: TextPaint) {
@@ -104,8 +101,9 @@ object LinkTextUtils {
         mentions?.forEach { mention ->
             val clickableSpan: ClickableSpan = object : ClickableSpan() {
                 override fun onClick(widget: View) {
-                    if (!TextUtils.isEmpty(mention.uid) && mention.uid != MENTIONS_ALL_ID) {
-                        ContactDetailActivity.startActivity(context, mention.uid)
+                    val uid = mention.uid
+                    if (!uid.isNullOrEmpty() && uid != MENTIONS_ALL_ID) {
+                        showContactDetailPopup(context, uid)
                     }
                 }
 
@@ -156,33 +154,6 @@ object LinkTextUtils {
 
         textView?.text = spannableString
         textView?.movementMethod = LinkMovementMethod.getInstance()
-
-        var time: Long = 0
-        var longClicked = false
-        textView?.setOnTouchListener { v, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                time = Date().time
-                false
-            } else {
-                val current = Date().time - time
-                if (current < 300) {
-                    false
-                } else { //大于300视为长按
-                    if (!longClicked) {
-                        val itemView = findParentChatMessageItemView(textView)
-                        if (itemView != null) {
-                            itemView.performLongClick()
-                            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        }
-                        longClicked = true
-                    }
-                    if ((event.action == MotionEvent.ACTION_CANCEL || event.action == MotionEvent.ACTION_UP)) {
-                        longClicked = false
-                    }
-                    true
-                }
-            }
-        }
     }
 
     /**
@@ -276,27 +247,55 @@ object LinkTextUtils {
     }
 
     /**
-     * 处理URL点击事件
+     * Handle URL click event.
      */
     private fun handleUrlClick(context: Context, url: String) {
-        // 对于http链接，显示风险提示对话框
-        if (url.startsWith("http")) {
-            ComposeDialogManager.showMessageDialog(
-                context = context,
-                title = context.getString(com.difft.android.chat.R.string.url_risk_error_title),
-                message = context.getString(com.difft.android.chat.R.string.url_risk_tips) + url,
-                confirmText = context.getString(com.difft.android.chat.R.string.url_click_open),
-                cancelText = context.getString(com.difft.android.chat.R.string.url_click_cancel),
-                onConfirm = {
-                    val linkCategory = LinkDataEntity(LinkDataEntity.CATEGORY_SCHEME, null, null, url.toUri())
-                    DeeplinkUtils.emitDeeplink(linkCategory)
-                }
-            )
-        } else {
-            // 非http链接直接处理
-            val linkCategory = LinkDataEntity(LinkDataEntity.CATEGORY_SCHEME, null, null, url.toUri())
-            DeeplinkUtils.emitDeeplink(linkCategory)
+        val uri = url.toUri()
+        val scheme = uri.scheme
+        
+        when {
+            // Internal scheme (chative://) - route to MainActivity
+            scheme != null && AppScheme.allSchemes.contains(scheme) -> {
+                val activityProvider = com.difft.android.base.utils.globalServices.activityProvider
+                val intent = android.content.Intent(context, activityProvider.getActivityClass(com.difft.android.base.activity.ActivityType.MAIN))
+                intent.data = uri
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            }
+            // External http/https links
+            scheme == "http" || scheme == "https" -> {
+                context.openExternalBrowser(url)
+            }
         }
+    }
+
+    /**
+     * Show contact detail in popup mode.
+     * Try to get FragmentActivity from context and show BottomSheet dialog.
+     * Falls back to starting ContactDetailActivity if FragmentActivity is not available.
+     */
+    private fun showContactDetailPopup(context: Context, contactId: String) {
+        val fragmentActivity = getFragmentActivity(context)
+        if (fragmentActivity != null) {
+            ContactDetailBottomSheetDialogFragment.show(fragmentActivity, contactId)
+        } else {
+            // Fallback to Activity mode if FragmentActivity is not available
+            ContactDetailActivity.startActivity(context, contactId)
+        }
+    }
+
+    /**
+     * Try to get FragmentActivity from Context.
+     */
+    private fun getFragmentActivity(context: Context): FragmentActivity? {
+        var ctx = context
+        while (ctx is ContextWrapper) {
+            if (ctx is FragmentActivity) {
+                return ctx
+            }
+            ctx = ctx.baseContext
+        }
+        return null
     }
 
     fun findParentChatMessageItemView(view: View?): ChatMessageContainerView? {

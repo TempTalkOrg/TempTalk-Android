@@ -16,6 +16,13 @@ class ChatMessageContainerView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
+    /**
+     * Container width passed from ViewHolder for precise width calculation.
+     * Set this before the view is measured (e.g., during bind).
+     * 0 means use displayMetrics as fallback.
+     */
+    var containerWidth: Int = 0
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // First, always reset all paddings to ensure clean state for RecyclerView reuse
         // This prevents padding from previous item from affecting current item
@@ -178,6 +185,12 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Calculate the maximum possible width for content.
+     * This is NOT the same as measuredWidth - we need to know "how wide CAN this be"
+     * not "how wide IS it currently". Short messages have small measuredWidth but
+     * could still fit the time view on the same line.
+     */
     private fun calculateEffectiveMaxWidth(): Int {
         // Try to get the parent ChatMessageItemView for more accurate calculations
         val parentView = parent as? ViewGroup
@@ -202,8 +215,9 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 }
             }
 
-            // Use screen width as the available width
-            val availableWidth = resources.displayMetrics.widthPixels
+            // Use containerWidth if set, otherwise fallback to displayMetrics
+            val displayWidth = resources.displayMetrics.widthPixels
+            val availableWidth = if (containerWidth > 0) containerWidth else displayWidth
 
             // Get our own margins
             val ourParams = layoutParams as? MarginLayoutParams
@@ -220,8 +234,8 @@ class ChatMessageContainerView @JvmOverloads constructor(
             }
         }
 
-        // Fallback to screen-based calculation if parent info is not available
-        val screenWidth = resources.displayMetrics.widthPixels
+        // Fallback calculation if parent info is not available
+        val screenWidth = if (containerWidth > 0) containerWidth else resources.displayMetrics.widthPixels
         // Account for typical margins: 40dp on one side + 8-12dp on the other
         val marginsDp = 60
         val marginsPixels = (marginsDp * resources.displayMetrics.density).toInt()

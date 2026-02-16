@@ -15,6 +15,8 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import com.luck.picture.lib.immersive.RomUtils;
 
 /**
@@ -115,7 +117,7 @@ public class DensityUtil {
      * Return whether the navigation bar visible.
      * <p>Call it in onWindowFocusChanged will get right result.</p>
      *
-     * @param window The window.
+     * @param context The context.
      * @return {@code true}: yes<br>{@code false}: no
      */
     public static boolean isNavBarVisible(Context context) {
@@ -148,6 +150,7 @@ public class DensityUtil {
                 try {
                     return Settings.Global.getInt(activity.getContentResolver(), "navigationbar_hide_bar_enabled") == 0;
                 } catch (Exception ignore) {
+                    L.w(ignore, () -> "[DensityUtil] isNavigationBarVisible check failed");
                 }
             }
 

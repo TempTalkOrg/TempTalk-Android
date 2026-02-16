@@ -139,8 +139,7 @@ object AudioAmplitudesHelper {
 
                 L.i { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile success: ${message.id} ${integerAmplitudes}  ${duration / 1000} ${attachmentId}" }
             } catch (e: Exception) {
-                e.printStackTrace()
-                L.e { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile error:" + e.stackTraceToString() }
+                L.e(e) { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile error:" }
             } finally {
                 processingMessages.remove(attachmentId)
             }

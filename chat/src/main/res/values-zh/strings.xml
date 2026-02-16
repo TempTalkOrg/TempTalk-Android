@@ -1,6 +1,7 @@
 <resources>
     <!--    <string name="search_default_hint">Search for messages or users</string>-->
     <string name="search_default_hint">搜索</string>
+    <string name="attendee_external_label">外部</string>
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">了解更多</string>
     <string name="SpanUtil__read_more">查看更多</string>
@@ -18,8 +19,14 @@
     <string name="contact_groups">群组</string>
     <string name="contact_id">ID：</string>
     <string name="contact_uid">UID：</string>
-    <string name="contact_join_at">注册时间：</string>
-    <string name="contact_how_you_met">如何相遇：</string>
+    <string name="contact_name_profile">ID:</string>
+    <string name="contact_join_at">注册时间:</string>
+    <string name="contact_how_you_met">如何相遇:</string>
+    <string name="contact_common_groups">共同群:</string>
+    <string name="contact_info_title">联系人信息</string>
+    <string name="contact_action_message">发消息</string>
+    <string name="contact_action_call">语音通话</string>
+    <string name="contact_action_share">分享名片</string>
     <string name="contact_met_not_recorded">未记录。</string>
     <string name="contact_email">电子邮件：</string>
     <string name="contact_local_time">当地时间：</string>
@@ -42,6 +49,8 @@
     <string name="contact_blocked">已屏蔽</string>
     <string name="contact_unblocked">已取消屏蔽</string>
     <string name="contact_add_contacts">添加联系人</string>
+    <string name="contact_add_contacts_contact_name_not_correct">联系人 ID 不正确，请重试。</string>
+    <string name="contact_add_contacts_code_not_correct">邀请码不正确，请重试。</string>
     <string name="contact_unblock_users">取消屏蔽</string>
     <string name="contact_unblock_operation_denied">操作被拒绝。您需要先解除屏蔽此联系人。</string>
     <string name="contact_send_a_request">发送请求</string>
@@ -77,11 +86,14 @@
     <string name="chat_message_action_quote">引用</string>
     <string name="chat_message_action_reply">回复</string>
     <string name="chat_message_action_recall">撤回</string>
+    <string name="chat_message_action_save_to_photos">保存到相册</string>
     <string name="chat_message_action_download">下载</string>
-    <string name="chat_message_action_save_to_note">保存</string>
+    <string name="chat_message_action_save_to_note">收藏</string>
+    <string name="chat_message_action_more">更多</string>
     <string name="chat_message_action_more_info">更多信息</string>
     <string name="chat_message_action_translate">翻译</string>
     <string name="chat_message_action_translate_off">关闭</string>
+    <string name="chat_message_action_select_all">全选</string>
     <string name="chat_message_attachment">[附件]</string>
     <string name="chat_message_image">[图片]</string>
     <string name="chat_message_video">[视频]</string>
@@ -104,8 +116,7 @@
     <string name="chat_re_login_cancel">取消</string>
     <string name="chat_group_name_too_long">群组名必须小于或等于64个字符。</string>
     <string name="chat_exceed_bytes_limit">超过4096字节限制</string>
-    <string name="chat_took_a_screen_shot">%s截了屏！</string>
-    <string name="chat_favorites">收藏</string>
+    <string name="chat_took_a_screen_shot">%s拍摄了一张屏幕截图！</string>
     <string name="chat_contact_info">联系人信息</string>
     <string name="chat_stick">置顶</string>
     <string name="chat_unstick">取消置顶</string>
@@ -118,8 +129,8 @@
     <string name="chat_at_all">所有人</string>
     <string name="chat_list_at_you">[@您]</string>
     <string name="chat_list_at_all">[@所有人]</string>
-    <string name="chat_list_critical_alert">[🚨重要提醒]</string>
-    <string name="chat_message_critical_alert">🚨Sent a Critical Alert.</string>
+    <string name="chat_list_critical_alert">[🚨 紧急联络]</string>
+    <string name="chat_message_critical_alert">🚨 紧急联络</string>
     <string name="chat_status_sending">发送中</string>
     <string name="chat_status_sent">已发送</string>
     <string name="chat_status_fail">发送失败</string>
@@ -139,8 +150,16 @@
     <string name="chat_speech_to_text_isblank">未识别到文字</string>
     <string name="chat_translated_by">翻译自%s</string>
     <string name="chat_translate_fail">翻译失败</string>
+    <string name="chat_translate_to_language">翻译成%s</string>
+    <string name="language_chinese">中文</string>
+    <string name="language_english">英文</string>
     <string name="chat_attachment_load_fail">加载失败，请重试。</string>
     <string name="chat_confidential_can_not_select">机密消息不能被选中</string>
+    <string name="chat_confidential_tip_title">机密消息</string>
+    <string name="chat_confidential_tip_content">查看后，消息将消失。</string>
+    <string name="chat_confidential_message_viewed">机密消息已被查看</string>
+    <string name="chat_do_not_trust_warning">⚠️ 请勿轻信陌生人。</string>
+    <string name="chat_privacy_banner">🔒 隐私优先 · 全程匿名 · 端到端消息加密。请勿轻信陌生人。</string>
 
     <string name="chat_action_photo">照片</string>
     <string name="chat_action_contact">联系人</string>
@@ -251,7 +270,7 @@
     <string name="group_transfer_owner_tips">确定选择%1$s为新群主，你将自动放弃群主身份</string>
     <string name="group_only_moderators_can_add">仅协调人可添加成员</string>
     <string name="group_only_moderators_can_speak1">仅群主和协调人可发言</string>
-    <string name="group_critical_alert">重要提醒</string>
+    <string name="group_critical_alert">紧急联络</string>
     <string name="group_enable_group_link">启用群邀请链接</string>
     <string name="group_add_moderators">添加协调人</string>
     <string name="group_remove_moderators">删除协调人</string>
@@ -299,7 +318,21 @@
     <string name="me_theme_system">系统</string>
     <string name="me_chat">聊天</string>
     <string name="me_save_to_photos">保存至相册</string>
-    <string name="me_automatically_save_photos">自动将收到的照片和视频保存到“照片”中；机密模式下不保存。</string>
+    <string name="me_automatically_save_photos">自动将收到的照片和视频保存到"照片"中；机密模式下不保存。</string>
+
+    <!-- Conversation-level save to photos settings -->
+    <string name="save_to_photos_default">默认 (%s)</string>
+    <string name="save_to_photos_always">始终</string>
+    <string name="save_to_photos_never">从不</string>
+    <string name="save_to_photos_on">开启</string>
+    <string name="save_to_photos_off">关闭</string>
+
+    <!-- Voice playback speed settings -->
+    <string name="me_voice_playback_speed">语音播放速度</string>
+    <string name="me_voice_playback_speed_desc">设置语音消息的默认播放速度。</string>
+    <string name="voice_speed_1x">1×</string>
+    <string name="voice_speed_1_5x">1.5×</string>
+    <string name="voice_speed_2x">2×</string>
 
     <!-- Contact profile setting-->
     <string name="contact_profile_info">资料</string>
@@ -377,9 +410,14 @@
     <string name="invite_regenerate">重新生成</string>
     <string name="invite_share">分享</string>
     <string name="invite_enter_code">输入邀请码</string>
+    <string name="invite_add_contact">添加联系人</string>
     <string name="invite_my_code">我的邀请码</string>
     <string name="invite_add_new_friend">添加新朋友</string>
     <string name="invite_enter_code_to_add">输入邀请码添加朋友</string>
+    <string name="invite_enter_hint">输入 4 位邀请码或联系人 ID</string>
+    <string name="invite_button_add_friend">添加</string>
+    <string name="invite_tv_search_by_uid">通过好友 ID 添加</string>
+    <string name="invite_tv_search_by_code">通过好友 邀请码 添加</string>
     <string name="invite_copy_link">复制链接</string>
     <string name="invite_cancel">取消</string>
     <string name="invite_tips">在Yelling上跟我聊天%s</string>
@@ -452,10 +490,6 @@
     <string name="app_sign_error_tips">您当前安装的应用为非官方正版签名应用，请确认。</string>
     <string name="emulator_risk_tips">您当前的设备是模拟器，可能会导致应用程序功能无法正常使用或产生安全风险，请确认。</string>
     <string name="root_risk_tips">您当前设备已root，存在应用数据被第三方应用窃取的风险，请确认。</string>
-    <string name="url_risk_tips">不确定此链接是否安全，确认要打开么?\n</string>
-    <string name="url_click_open">打开</string>
-    <string name="url_click_cancel">取消</string>
-    <string name="url_risk_error_title">安全提示</string>
 
     <string name="app_close_application">关闭应用</string>
     <string name="app_ignore">忽略</string>
@@ -463,10 +497,8 @@
     <string name="operation_successful">操作成功</string>
     <string name="operation_failed">操作失败</string>
 
-    <string name="meeting_detail">会议详情</string>
     <string name="in_meeting_number">参会人数(%d)</string>
     <string name="meeting_joined">%s加入了会议</string>
-    <string name="meeting_detail_refresh">刷新</string>
     <string name="non_participants_number">未参会人数(%d)</string>
 
     <string name="tip">提示</string>
@@ -516,6 +548,7 @@
     <string name="download_success">附件下载完成</string>
     <string name="download_failed">下载失败，请重试</string>
     <string name="file_expired">文件已过期</string>
+    <string name="uploading">上传中</string>
     <string name="download_downloading">下载中，请稍候…</string>
 
 
@@ -630,21 +663,21 @@
 
     <string name="background_connection_check_failed">请先确保以下设置项为正常状态，再开启后台连接</string>
 
-    <string name="critical_alert_notification_permission_check_failed">请先开启通知权限，以确保重要提醒正常接收。</string>
-    <string name="critical_alert_background_connection_permission_check_failed">请先开启后台连接，以确保重要提醒正常接收。</string>
-    <string name="critical_alert_all_permission_check_failed">请先开启通知、全屏提醒和后台连接权限，以确保重要提醒能够及时送达。</string>
-    <string name="critical_alert_fullscreen_permission_check_failed">请先开启全屏通知权限，以确保重要提醒正常接收。</string>
+    <string name="critical_alert_notification_permission_check_failed">请先开启通知权限，以确保紧急联络正常接收。</string>
+    <string name="critical_alert_background_connection_permission_check_failed">请先开启后台连接，以确保紧急联络正常接收。</string>
+    <string name="critical_alert_all_permission_check_failed">请先开启通知、全屏提醒和后台连接权限，以确保紧急联络能够及时送达。</string>
+    <string name="critical_alert_fullscreen_permission_check_failed">请先开启全屏通知权限，以确保紧急联络正常接收。</string>
 
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_notify_content">以下消息将在阅读后的 %1$s 内被删除。</string>
     <string name="disappearing_messages_tips">消息在被阅读后会自动过期，它们将会被删除，无法以任何方式查看。</string>
     <string name="disappearing_messages_not_archive">不自动过期</string>
     <string name="group_disband_tips">此群组的数据将被删除，群组中的所有成员也将同时被移除。</string>
-    <string name="chat_group_in_common">共同群组</string>
+    <string name="chat_group_in_common">共同群</string>
     <string name="contact_blocked_tips">操作被拒绝。你们还不是朋友。</string>
 
-    <string name="critical_alerts">重要提醒</string>
-    <string name="critical_alerts_content">允许 %s 访问并启用“免打扰”权限（某些设备上称为“模式访问”权限）。</string>
+    <string name="critical_alerts">紧急联络</string>
+    <string name="critical_alerts_content">允许 %s 访问并启用“免打扰”权限（某些设备上称为“模式访问”权限）。开启后，紧急联络可突破静音和勿扰模式。</string>
     <string name="critical_alerts_off">关</string>
     <string name="critical_alerts_on">开</string>
 

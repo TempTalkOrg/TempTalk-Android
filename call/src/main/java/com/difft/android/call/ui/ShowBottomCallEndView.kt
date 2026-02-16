@@ -21,17 +21,21 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.BottomButtonTextStyle
 import com.difft.android.call.data.BottomCallEndAction
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,12 +44,27 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
     )
+    val coroutineScope = rememberCoroutineScope()
     val isShareScreening by viewModel.callUiController.isShareScreening.collectAsState(false)
 
-    if(showBottomCallEndViewEnable){
+    val dismissSheet: () -> Unit = {
+        coroutineScope.launch {
+            sheetState.hide()
+            onDismiss()
+        }
+    }
 
-        viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
+    LaunchedEffect(showBottomCallEndViewEnable) {
+        if (showBottomCallEndViewEnable) {
+            viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
+            sheetState.show()
+        } else {
+            sheetState.hide()
+        }
+    }
 
+
+    if (showBottomCallEndViewEnable || sheetState.isVisible) {
         ModalBottomSheet (
             scrimColor = Color.Transparent,
             containerColor = Color.Transparent,
@@ -53,25 +72,30 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
             shape = RoundedCornerShape(size = 12.dp),
             modifier = Modifier
                 .background(color = Color.Transparent)
-                .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
                 .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
                 .wrapContentHeight(),
             sheetState = sheetState,
             onDismissRequest = {
-                onDismiss()
+                dismissSheet()
             },
         ){
-            if(isShareScreening) {
-                HorizontalScreenButtonView(onClickItem = onClickItem)
-            }else {
-                VerticalScreenButtonView(onClickItem = onClickItem)
+            Column(
+                modifier = Modifier
+                    .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
+                    .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
+            ) {
+                if (isShareScreening) {
+                    HorizontalScreenButtonView(onClickItem = onClickItem, onCancelClick = dismissSheet)
+                } else {
+                    VerticalScreenButtonView(onClickItem = onClickItem, onCancelClick = dismissSheet)
+                }
             }
         }
     }
 }
 
 @Composable
-fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
+fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCancelClick: () -> Unit = { onClickItem(BottomCallEndAction.CANCEL) }) {
     val context = LocalContext.current
     Row(
         modifier = Modifier
@@ -96,7 +120,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
             Text(
                 modifier = Modifier
                     .height(24.dp),
-                text = context.getString(R.string.call_button_group_alert_end_text),
+                text = ResUtils.getString(R.string.call_button_group_alert_end_text),
                 style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.red_500))
             )
         }
@@ -117,7 +141,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
             Text(
                 modifier = Modifier
                     .height(24.dp),
-                text = context.getString(R.string.call_button_group_leave_meeting),
+                text = ResUtils.getString(R.string.call_button_group_leave_meeting),
                 style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
             )
         }
@@ -132,7 +156,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
                 .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
-                    onClickItem(BottomCallEndAction.CANCEL)
+                    onCancelClick()
                 },
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
@@ -140,7 +164,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
             Text(
                 modifier = Modifier
                     .height(24.dp),
-                text = context.getString(R.string.call_button_group_alert_cancel_text),
+                text = ResUtils.getString(R.string.call_button_group_alert_cancel_text),
                 style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
             )
         }
@@ -150,7 +174,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
 }
 
 @Composable
-fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
+fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCancelClick: () -> Unit = { onClickItem(BottomCallEndAction.CANCEL) }) {
     val context = LocalContext.current
 
     Column(
@@ -185,7 +209,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
                     modifier = Modifier
                         .width(327.dp)
                         .height(24.dp),
-                    text = context.getString(R.string.call_button_group_alert_end_text),
+                    text = ResUtils.getString(R.string.call_button_group_alert_end_text),
                     style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.red_500))
                 )
             }
@@ -207,7 +231,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
                     modifier = Modifier
                         .width(327.dp)
                         .height(24.dp),
-                    text = context.getString(R.string.call_button_group_leave_meeting),
+                    text = ResUtils.getString(R.string.call_button_group_leave_meeting),
                     style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
                 )
             }
@@ -221,7 +245,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
                 .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
-                    onClickItem(BottomCallEndAction.CANCEL)
+                    onCancelClick()
                 },
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
@@ -230,7 +254,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit) {
                 modifier = Modifier
                     .width(327.dp)
                     .height(24.dp),
-                text = context.getString(R.string.call_button_group_alert_cancel_text),
+                text = ResUtils.getString(R.string.call_button_group_alert_cancel_text),
                 style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
             )
         }

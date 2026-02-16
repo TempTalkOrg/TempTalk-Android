@@ -1,521 +1,394 @@
 package com.difft.android.chat.ui
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.MotionEvent
 import android.view.View
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.viewModels
-import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.commit
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.coroutines.launch
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
-import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.utils.globalServices
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ToastUtil
+import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
-import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.databinding.ChatActivityForwardMessageBinding
-import com.difft.android.chat.message.ChatMessage
-import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.generateMessageFromForward
-import com.difft.android.chat.message.getAttachmentProgress
-import com.difft.android.chat.message.isAttachmentMessage
-import com.difft.android.messageserialization.db.store.ConversationUtils
-import com.google.gson.Gson
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.hi.dhl.binding.viewbind
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import difft.android.messageserialization.model.Attachment
-import difft.android.messageserialization.model.AttachmentStatus
+import com.difft.android.chat.MessageContactsCacheUtil
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import dagger.hilt.android.AndroidEntryPoint
+import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
-import difft.android.messageserialization.model.Quote
-import difft.android.messageserialization.model.isAudioMessage
-import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.isVideo
-import io.reactivex.rxjava3.core.Observable
-import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBAttachmentModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.components.reaction.ConversationItemSelection
-import org.thoughtcrime.securesms.components.reaction.ConversationReactionDelegate
-import org.thoughtcrime.securesms.components.reaction.ConversationReactionOverlay
-import org.thoughtcrime.securesms.components.reaction.InteractiveConversationElement
-import org.thoughtcrime.securesms.components.reaction.MotionEventRelay
-import org.thoughtcrime.securesms.components.reaction.SelectedConversationModel
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.SaveAttachmentTask
-import org.thoughtcrime.securesms.util.StorageUtil
-import org.thoughtcrime.securesms.util.Stub
-import org.thoughtcrime.securesms.util.ViewUtil
-import org.thoughtcrime.securesms.util.WindowUtil
-import util.TimeFormatter
-import util.concurrent.TTExecutors
-import java.io.File
-import java.util.concurrent.TimeUnit
 
+@AndroidEntryPoint
 class ChatForwardMessageActivity : BaseActivity() {
 
+    /**
+     * Contact cache for author name lookup in title
+     */
+    private val contactorCache = MessageContactsCacheUtil()
+
     companion object {
-        fun startActivity(activity: Activity, title: String, forwards: ForwardContext, confidentialMessageId: String? = null) {
-            ConversationUtils.intentForwardData = Gson().toJson(forwards)
+        private const val EXTRA_MESSAGE_ID = "messageId"
+        private const val EXTRA_CONFIDENTIAL_MESSAGE_ID = "confidentialMessageId"
+        private const val EXTRA_SHOULD_SAVE_TO_PHOTOS = "shouldSaveToPhotos"
+
+        /**
+         * Start activity by message ID - will query ForwardContext asynchronously
+         * @param shouldSaveToPhotos Whether to auto-save images/videos to photos (from conversation setting)
+         */
+        fun startActivity(
+            activity: Activity,
+            messageId: String,
+            confidentialMessageId: String? = null,
+            shouldSaveToPhotos: Boolean = false
+        ) {
             val intent = Intent(activity, ChatForwardMessageActivity::class.java)
-            intent.putExtra("title", title)
-//            intent.putExtra("forwards", Gson().toJson(forwards)) //TransactionTooLargeException
-            intent.putExtra("confidentialMessageId", confidentialMessageId)
+            intent.putExtra(EXTRA_MESSAGE_ID, messageId)
+            intent.putExtra(EXTRA_CONFIDENTIAL_MESSAGE_ID, confidentialMessageId)
+            intent.putExtra(EXTRA_SHOULD_SAVE_TO_PHOTOS, shouldSaveToPhotos)
             activity.startActivity(intent)
         }
     }
 
+    // Store ForwardContext objects for Fragment access (avoids serialization)
+    private val forwardContextStack = mutableListOf<ForwardContext>()
+
     private val mBinding: ChatActivityForwardMessageBinding by viewbind()
 
-    /**
-     * 页面级联系人缓存
-     * Activity生命周期结束时自动释放
-     *
-     * 合并转发可能包含大量消息和联系人（发送者、reactions用户等），
-     * 页面级缓存会将所有需要的联系人加载到内存，无需容量限制
-     */
-    private val contactorCache = MessageContactsCacheUtil()
+    private lateinit var bottomSheetBehavior: BottomSheetBehavior<View>
+    private lateinit var bottomSheetCallback: BottomSheetBehavior.BottomSheetCallback
+    private lateinit var backPressedCallback: OnBackPressedCallback
 
-    private val confidentialMessageId: String? by lazy {
-        intent.getStringExtra("confidentialMessageId")
-    }
+    // Store confidential message ID for deletion in onDestroy
+    private var confidentialMessageId: String? = null
+
+    // Disable BaseActivity auto padding - this Activity handles insets itself
+    override fun shouldApplySystemBarsPadding(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        initView()
-    }
+        setupBottomSheet()
+        setupBackPressedCallback()
+        setupBackStackListener()
 
-    private lateinit var reactionDelegate: ConversationReactionDelegate
-    private val motionEventRelay: MotionEventRelay by viewModels()
-    private lateinit var backPressedCallback: BackPressedDelegate
+        // Set initial title (will be updated after loading)
+        mBinding.tvTitle.text = getString(R.string.chat_history)
 
-    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
-        return motionEventRelay.offer(ev) || super.dispatchTouchEvent(ev)
-    }
+        // Back button click - same as system back
+        mBinding.ibBack.setOnClickListener {
+            onBackPressedDispatcher.onBackPressed()
+        }
 
-    private inner class BackPressedDelegate : OnBackPressedCallback(true) {
-        override fun handleOnBackPressed() {
-            if (reactionDelegate.isShowing) {
-                reactionDelegate.hide()
-            } else {
-                finish()
-            }
+        if (savedInstanceState == null) {
+            loadInitialFragment()
         }
     }
 
-    private fun doAfterFirstRender() {
-        backPressedCallback = BackPressedDelegate()
-        onBackPressedDispatcher.addCallback(
-            this,
-            backPressedCallback
-        )
+    private fun setupBottomSheet() {
+        val bottomSheet = mBinding.bottomSheet
+        val scrim = mBinding.scrim
 
-        val conversationReactionStub = Stub<ConversationReactionOverlay>(mBinding.conversationReactionScrubberStub)
-        reactionDelegate = ConversationReactionDelegate(conversationReactionStub)
-        motionEventRelay.setDrain(MotionEventRelayDrain(this))
-    }
-
-    private fun handleReaction(
-        rootView: View,
-        conversationMessage: TextChatMessage,
-        onActionSelectedListener: ConversationReactionOverlay.OnActionSelectedListener,
-        selectedConversationModel: SelectedConversationModel,
-        onHideListener: ConversationReactionOverlay.OnHideListener
-    ) {
-        reactionDelegate.setOnActionSelectedListener(onActionSelectedListener)
-        reactionDelegate.setOnHideListener(onHideListener)
-        reactionDelegate.show(
-            this,
-            rootView,
-            conversationMessage,
-            false,
-            selectedConversationModel
-        )
-    }
-
-    private inner class MotionEventRelayDrain(lifecycleOwner: LifecycleOwner) :
-        MotionEventRelay.Drain {
-        private val lifecycle = lifecycleOwner.lifecycle
-
-        override fun accept(motionEvent: MotionEvent): Boolean {
-            return if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                reactionDelegate.applyTouchEvent(motionEvent)
-            } else {
-                false
-            }
+        // Get status bar height for expanded offset
+        ViewCompat.setOnApplyWindowInsetsListener(mBinding.root) { _, insets ->
+            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            configureBottomSheetBehavior(bottomSheet, scrim, statusBarHeight)
+            // Remove listener after first apply
+            ViewCompat.setOnApplyWindowInsetsListener(mBinding.root, null)
+            insets
         }
+        // Request insets
+        mBinding.root.requestApplyInsets()
     }
 
-    private inner class ReactionsToolbarListener(
-        private val data: TextChatMessage
-    ) : ConversationReactionOverlay.OnActionSelectedListener {
-        override fun onActionSelected(action: ConversationReactionOverlay.Action, rootView: View) {
-            when (action) {
-                ConversationReactionOverlay.Action.SAVE -> {
-                    if (StorageUtil.canWriteToMediaStore()) {
-                        saveAttachment(data)
-                    } else {
-                        pendingSaveAttachmentMessage = data
-                        mediaPermission.launchMultiplePermission(PermissionUtil.picturePermissions)
-                    }
+    private fun configureBottomSheetBehavior(bottomSheet: View, scrim: View, statusBarHeight: Int) {
+        val screenHeight = WindowSizeClassUtil.getWindowHeightPx(this)
+
+        // peekHeight: 75% of screen height (collapsed state)
+        val peekHeight = (screenHeight * 0.75).toInt()
+
+        // Start scrim transparent, will fade in with bottom sheet slide
+        scrim.alpha = 0f
+
+        // Add bottom padding to compensate for expandedOffset
+        // When expanded, bottom sheet top is at expandedOffset, but height is match_parent
+        // This causes content to be pushed below screen. Bottom padding fixes this.
+        bottomSheet.setPadding(0, 0, 0, statusBarHeight)
+
+        // Setup BottomSheetBehavior
+        bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
+        bottomSheetBehavior.apply {
+            this.peekHeight = peekHeight
+            this.expandedOffset = statusBarHeight // Full screen stops below status bar
+            isFitToContents = false // Required for half-expanded support
+            isHideable = true
+            skipCollapsed = false // Allow collapsed (3/4) state
+            state = BottomSheetBehavior.STATE_HIDDEN // Start hidden for animation
+        }
+
+        // Show bottom sheet after layout is complete
+        bottomSheet.post {
+            bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED // Start at 3/4 height
+        }
+
+        // Scrim click: collapse if expanded, hide if collapsed
+        scrim.setOnClickListener {
+            when (bottomSheetBehavior.state) {
+                BottomSheetBehavior.STATE_EXPANDED -> {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
                 }
-
-                else -> {}
-            }
-        }
-    }
-
-    private fun hasAttachment(data: TextChatMessage): Boolean {
-        if (data.isAttachmentMessage()) return true
-
-        val forwards = data.forwardContext?.forwards
-        if (forwards?.size == 1) {
-            val forward = forwards.firstOrNull()
-            return forward?.attachments?.isNotEmpty() == true
-        }
-
-        return false
-    }
-
-    private var pendingSaveAttachmentMessage: TextChatMessage? = null
-
-    private val mediaPermission = registerPermission {
-        onMediaPermissionResult(it)
-    }
-
-    private fun onMediaPermissionResult(permissionState: PermissionUtil.PermissionState) {
-        when (permissionState) {
-            PermissionUtil.PermissionState.Denied -> {
-                L.d { "onMediaPermissionForMessageResult: Denied" }
-                ToastUtil.show(getString(R.string.not_granted_necessary_permissions))
-            }
-
-            PermissionUtil.PermissionState.Granted -> {
-                L.d { "onMediaPermissionForMessageResult: Granted" }
-                pendingSaveAttachmentMessage?.let {
-                    saveAttachment(it)
+                else -> {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
                 }
             }
+        }
 
-            PermissionUtil.PermissionState.PermanentlyDenied -> {
-                L.d { "onMediaPermissionForMessageResult: PermanentlyDenied" }
-                ComposeDialogManager.showMessageDialog(
-                    context = this,
-                    title = getString(R.string.tip),
-                    message = getString(R.string.no_permission_picture_tip),
-                    confirmText = getString(R.string.notification_go_to_settings),
-                    cancelText = getString(R.string.notification_ignore),
-                    onConfirm = {
-                        PermissionUtil.launchSettings(this)
-                    },
-                    onCancel = {
-                        ToastUtil.show(getString(R.string.not_granted_necessary_permissions))
+        // Bottom sheet callback
+        bottomSheetCallback = object : BottomSheetBehavior.BottomSheetCallback() {
+            private var hasOpened = false  // Track if bottom sheet has finished opening
+            private var isDraggingDown = false
+            private var dragStartOffset = 0f
+            private var isClosing = false
+
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                when (newState) {
+                    BottomSheetBehavior.STATE_HALF_EXPANDED -> {
+                        // Skip half-expanded state, go directly to collapsed
+                        bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
                     }
-                )
+                    BottomSheetBehavior.STATE_COLLAPSED, BottomSheetBehavior.STATE_EXPANDED -> {
+                        // Fade in scrim after bottom sheet is fully visible (first time only)
+                        if (!hasOpened) {
+                            hasOpened = true
+                            scrim.animate()
+                                .alpha(0.5f)
+                                .setDuration(150)
+                                .start()
+                        }
+                        isDraggingDown = false
+                        isClosing = false
+                    }
+                    BottomSheetBehavior.STATE_DRAGGING -> {
+                        isDraggingDown = false
+                        isClosing = false
+                        val parentHeight = (bottomSheet.parent as? View)?.height?.takeIf { it > 0 } ?: 1
+                        dragStartOffset = bottomSheet.top.toFloat() / parentHeight
+                    }
+                    BottomSheetBehavior.STATE_SETTLING -> {
+                        // If user was dragging down, close the sheet directly
+                        if (hasOpened && isDraggingDown) {
+                            isClosing = true
+                            bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                        }
+                    }
+                    BottomSheetBehavior.STATE_HIDDEN -> {
+                        finish()
+                        @Suppress("DEPRECATION")
+                        overridePendingTransition(0, 0)
+                    }
+                    else -> {
+                        isDraggingDown = false
+                    }
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {
+                // Ignore slide events until bottom sheet has opened
+                if (!hasOpened) return
+
+                // slideOffset: -1 (hidden) to 1 (expanded), 0 is collapsed (peekHeight)
+                // dragStartOffset: small value (~0.02) when expanded, larger (~0.25) when collapsed
+
+                // Detect downward drag from any state:
+                // - From expanded (dragStartOffset < 0.1): if drops below 0.85, consider dragging down
+                // - From collapsed (dragStartOffset >= 0.1): if drops below -0.1, consider dragging down
+                val threshold = if (dragStartOffset < 0.1f) 0.85f else -0.1f
+                if (slideOffset < threshold) {
+                    isDraggingDown = true
+                }
+
+                // Fade scrim when closing (dragging down to hide)
+                if (isClosing || isDraggingDown) {
+                    val alpha = (slideOffset + 1f) / 2f // -1 -> 0, 0 -> 0.5, 1 -> 1
+                    scrim.alpha = alpha.coerceIn(0f, 0.5f)
+                }
             }
         }
-        pendingSaveAttachmentMessage = null
+        bottomSheetBehavior.addBottomSheetCallback(bottomSheetCallback)
     }
 
-    private fun saveAttachment(data: TextChatMessage) {
-        val attachment = when {
-            data.isAttachmentMessage() -> data.attachment
-            data.forwardContext?.forwards?.size == 1 -> data.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
-            else -> null
+    override fun onDestroy() {
+        if (::bottomSheetBehavior.isInitialized && ::bottomSheetCallback.isInitialized) {
+            bottomSheetBehavior.removeBottomSheetCallback(bottomSheetCallback)
         }
+        // Delete confidential message when Activity is destroyed (not when Fragment is replaced)
+        confidentialMessageId?.let {
+            L.i { "[Confidential] Delete forward message, messageId: $it" }
+            ApplicationDependencies.getMessageStore().deleteMessage(listOf(it))
+        }
+        super.onDestroy()
+    }
 
-        attachment?.let {
-            val attachmentPath = FileUtil.getMessageAttachmentFilePath(data.id) + it.fileName
-            val progress = data.getAttachmentProgress()
+    private fun setupBackPressedCallback() {
+        backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val fragmentCount = supportFragmentManager.backStackEntryCount
+                if (fragmentCount > 0) {
+                    supportFragmentManager.popBackStack()
+                } else if (::bottomSheetBehavior.isInitialized) {
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                } else {
+                    finish()
+                }
+            }
+        }
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
+    }
 
-            if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
-                val saveAttachment = SaveAttachmentTask.Attachment(
-                    File(attachmentPath).toUri(),
-                    it.contentType,
-                    System.currentTimeMillis(),
-                    it.fileName,
-                    false,
-                    true
+    private fun setupBackStackListener() {
+        supportFragmentManager.addOnBackStackChangedListener {
+            // Pop ForwardContext from stack when going back
+            if (forwardContextStack.size > supportFragmentManager.backStackEntryCount + 1) {
+                forwardContextStack.removeLastOrNull()
+            }
+            // Update title from current ForwardContext
+            getCurrentForwardContext()?.let { forwardContext ->
+                mBinding.tvTitle.text = getForwardTitle(forwardContext)
+            }
+        }
+    }
+
+    private fun loadInitialFragment() {
+        val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return
+
+        // Store confidential message ID for deletion when Activity is destroyed
+        confidentialMessageId = intent.getStringExtra(EXTRA_CONFIDENTIAL_MESSAGE_ID)
+
+        // Query message asynchronously
+        lifecycleScope.launch(Dispatchers.IO) {
+            val message = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageId))
+            val forwardContext = message?.convertToTextMessage()?.forwardContext ?: return@launch
+
+            // Load contactors for author name lookup in title (recursively collect all author IDs)
+            val authorIds = collectAllAuthorIds(forwardContext)
+            contactorCache.loadContactors(authorIds)
+
+            withContext(Dispatchers.Main) {
+                // Store ForwardContext and update title
+                forwardContextStack.add(forwardContext)
+                mBinding.tvTitle.text = getForwardTitle(forwardContext)
+
+                // Load fragment
+                val fragment = ChatForwardMessageFragment.newInstance(
+                    title = getForwardTitle(forwardContext),
+                    stackIndex = 0
                 )
-
-                SaveAttachmentTask(this).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
-            } else {
-                L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
-                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+                supportFragmentManager.commit {
+                    replace(R.id.fragment_container, fragment)
+                }
             }
         }
     }
 
     /**
-     * Check if attachment needs manual download (failed or large file not downloaded)
-     * @return true if needs to download, false otherwise
+     * Get ForwardContext at specified stack index (for Fragment to access)
      */
-    private fun shouldTriggerManualDownload(
-        attachment: Attachment,
-        progress: Int?,
-        messageId: String
-    ): Boolean {
-        // Check if download failed or expired
-        val isFailedOrExpired = if (progress != null) {
-            progress == -1 || progress == -2
+    fun getForwardContext(stackIndex: Int): ForwardContext? {
+        return forwardContextStack.getOrNull(stackIndex)
+    }
+
+    /**
+     * Get current (top) ForwardContext
+     */
+    fun getCurrentForwardContext(): ForwardContext? {
+        return forwardContextStack.lastOrNull()
+    }
+
+    /**
+     * Check if this is a confidential (self-destructing) message
+     * Used by Fragment to determine whether to save attachments to media store
+     */
+    fun isConfidentialMessage(): Boolean {
+        return confidentialMessageId != null
+    }
+
+    /**
+     * Get shouldSaveToPhotos setting from original conversation
+     * Used by Fragment for auto-save logic when downloading attachments
+     */
+    fun getShouldSaveToPhotos(): Boolean {
+        return intent.getBooleanExtra(EXTRA_SHOULD_SAVE_TO_PHOTOS, false)
+    }
+
+    /**
+     * Recursively collect all author IDs from ForwardContext and its nested forwards
+     */
+    private fun collectAllAuthorIds(forwardContext: ForwardContext): Set<String> {
+        val authorIds = mutableSetOf<String>()
+        collectAuthorIdsFromForwards(forwardContext.forwards, authorIds)
+        return authorIds
+    }
+
+    private fun collectAuthorIdsFromForwards(forwards: List<Forward>?, authorIds: MutableSet<String>) {
+        forwards?.forEach { forward ->
+            authorIds.add(forward.author)
+            // Recursively collect from nested forwards
+            collectAuthorIdsFromForwards(forward.forwards, authorIds)
+        }
+    }
+
+    /**
+     * Generate title from ForwardContext
+     */
+    private fun getForwardTitle(forwardContext: ForwardContext): String {
+        val forwards = forwardContext.forwards
+        return if (forwards?.firstOrNull()?.isFromGroup == true) {
+            getString(R.string.group_chat_history)
         } else {
-            attachment.status == AttachmentStatus.FAILED.code || attachment.status == AttachmentStatus.EXPIRED.code
+            val authorId = forwards?.firstOrNull()?.author ?: ""
+            val author = contactorCache.getContactor(authorId)
+            if (author != null) {
+                getString(R.string.chat_history_for, author.getDisplayNameWithoutRemarkForUI())
+            } else {
+                getString(R.string.chat_history_for, authorId.formatBase58Id())
+            }
         }
-        if (isFailedOrExpired) return true
-
-        // Check if large file needs manual download (>10M)
-        val fileSize = attachment.size
-        val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
-        val fileName = attachment.fileName ?: ""
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        val isFileValid = FileUtil.isFileValid(attachmentPath)
-
-        return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
     }
 
-    private fun downloadAttachment(messageId: String, attachment: Attachment) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
-        ApplicationDependencies.getJobManager().add(
-            DownloadAttachmentJob(
-                messageId,
-                attachment.id,
-                filePath,
-                attachment.authorityId,
-                attachment.key ?: byteArrayOf(),
-                !attachment.isAudioMessage(),
-                confidentialMessageId == null && (attachment.isImage() || attachment.isVideo())
-            )
+    /**
+     * Navigate to nested forward content (called from Fragment)
+     * This creates a navigation stack within the same bottom sheet
+     */
+    fun navigateToNestedForward(title: String, forwardContext: ForwardContext) {
+        // Add to stack and update title
+        forwardContextStack.add(forwardContext)
+        mBinding.tvTitle.text = title
+
+        val fragment = ChatForwardMessageFragment.newInstance(
+            title = title,
+            stackIndex = forwardContextStack.size - 1
         )
-    }
 
-    private val chatMessageAdapter = object : ChatMessageAdapter(forWhat = null, contactorCache = contactorCache) {
-
-        override fun onItemClick(rootView: View, data: ChatMessage) {
-            if (data is TextChatMessage) {
-                if (data.isAttachmentMessage()) {
-                    val attachment = data.attachment ?: return
-                    val progress = data.getAttachmentProgress()
-
-                    if (shouldTriggerManualDownload(attachment, progress, data.id)) {
-                        downloadAttachment(data.id, attachment)
-                        return
-                    }
-
-                    if (data.attachment?.isImage() == true || data.attachment?.isVideo() == true) {
-                        openPreview(data)
-                    }
-                } else if (data.forwardContext != null && !data.forwardContext?.forwards.isNullOrEmpty()) {
-                    val forwardContext = data.forwardContext ?: return
-                    if (forwardContext.forwards?.size == 1) {
-                        val forward = forwardContext.forwards?.getOrNull(0) ?: return
-                        val attachment = forward.attachments?.getOrNull(0) ?: return
-                        val progress = data.getAttachmentProgress()
-
-                        if (shouldTriggerManualDownload(attachment, progress, data.id)) {
-                            downloadAttachment(data.id, attachment)
-                            return
-                        }
-
-                        if (attachment.isImage() || attachment.isVideo()) {
-                            openPreview(generateMessageFromForward(forward) as TextChatMessage)
-                        }
-                    } else {
-                        startActivity(this@ChatForwardMessageActivity, getString(R.string.chat_history), forwardContext)
-                    }
-                }
-            }
+        supportFragmentManager.commit {
+            setCustomAnimations(
+                R.anim.slide_in_right,
+                R.anim.slide_out_left,
+                R.anim.slide_in_left,
+                R.anim.slide_out_right
+            )
+            replace(R.id.fragment_container, fragment)
+            addToBackStack(null)
         }
-
-        override fun onItemLongClick(rootView: View, data: ChatMessage) {
-            if (data !is TextChatMessage) return
-            if (!hasAttachment(data)) return
-
-            Observable.just(Unit)
-                .delay(100, TimeUnit.MILLISECONDS)
-                .compose(RxUtil.getSchedulerComposer())
-                .to(RxUtil.autoDispose(this@ChatForwardMessageActivity))
-                .subscribe({
-                    mBinding.reactionsShade.visibility = View.VISIBLE
-                    mBinding.recyclerViewMessage.suppressLayout(true)
-
-                    val target: InteractiveConversationElement? = rootView as? InteractiveConversationElement
-
-                    if (target != null) {
-                        val snapshot = ConversationItemSelection.snapshotView(
-                            target,
-                            mBinding.recyclerViewMessage,
-                            data,
-                            null
-                        )
-                        val bodyBubble = target.bubbleView
-                        val selectedConversationModel = SelectedConversationModel(
-                            bitmap = snapshot,
-                            itemX = rootView.x,
-                            itemY = rootView.y + mBinding.recyclerViewMessage.translationY,
-                            bubbleY = bodyBubble.y,
-                            bubbleWidth = bodyBubble.width,
-                            audioUri = null,
-                            isOutgoing = data.isMine,
-                            focusedView = null,
-                            snapshotMetrics = target.getSnapshotStrategy()?.snapshotMetrics
-                                ?: InteractiveConversationElement.SnapshotMetrics(
-                                    snapshotOffset = bodyBubble.x,
-                                    contextMenuPadding = bodyBubble.x
-                                ),
-//                                emojis = globalConfigsManager.getEmojis(),
-                            mostUseEmojis = null,
-                            chatUIData = null,
-                            isForForward = true,
-                            isSaved = false
-                        )
-                        handleReaction(
-                            rootView,
-                            data,
-                            ReactionsToolbarListener(data),
-                            selectedConversationModel,
-                            object : ConversationReactionOverlay.OnHideListener {
-                                override fun startHide(focusedView: View?) {
-                                }
-
-                                override fun onHide() {
-                                    ViewUtil.fadeOut(mBinding.reactionsShade, 50, View.GONE)
-
-                                    mBinding.recyclerViewMessage.suppressLayout(false)
-
-                                    WindowUtil.setLightStatusBarFromTheme(this@ChatForwardMessageActivity)
-                                    WindowUtil.setLightNavigationBarFromTheme(this@ChatForwardMessageActivity)
-                                }
-                            }
-                        )
-                    }
-                }, { it.printStackTrace() })
-        }
-
-        override fun onAvatarClicked(contactor: ContactorModel?) {
-        }
-
-        override fun onAvatarLongClicked(contactor: ContactorModel?) {
-        }
-
-        override fun onQuoteClicked(quote: Quote) {
-        }
-
-        override fun onReactionClick(
-            message: ChatMessage,
-            emoji: String,
-            remove: Boolean,
-            originTimeStamp: Long
-        ) {
-        }
-
-        override fun onReactionLongClick(
-            message: ChatMessage,
-            emoji: String,
-        ) {
-        }
-
-        override fun onSendStatusClicked(rootView: View, message: TextChatMessage) {
-
-        }
-    }
-
-    private fun initView() {
-        mBinding.ibBack.setOnClickListener { finish() }
-        mBinding.tvTitle.text = intent.getStringExtra("title")
-
-        mBinding.recyclerViewMessage.apply {
-            layoutManager = LinearLayoutManager(this.context)
-            itemAnimator = null
-            adapter = chatMessageAdapter
-        }
-
-        ConversationUtils.intentForwardData?.let {
-            globalServices.gson.fromJson(it, ForwardContext::class.java)?.let { forwardContext ->
-                lifecycleScope.launch {
-                    val list = mutableListOf<ChatMessage>()
-                    forwardContext.forwards?.forEach { forward ->
-                        list.add(generateMessageFromForward(forward))
-                    }
-
-                    // 批量加载联系人到当前页面的缓存
-                    val contactIds = MessageContactsCacheUtil.collectContactIds(list)
-                    contactorCache.loadContactors(contactIds)
-
-                    val newList = list.sortedBy { message -> message.systemShowTimestamp }
-                        .mapIndexed { index, message ->
-                            val previousMessage = if (index > 0) list[index - 1] else null
-                            val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
-
-                            val nextMessage = if (index < list.size - 1) list[index + 1] else null
-                            val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
-
-                            message.showName = !isSameDayWithPreviousMessage || message.authorId != previousMessage?.authorId
-                            message.showDayTime = !isSameDayWithPreviousMessage
-                            message.showTime = !isSameDayWithNextMessage || message.authorId != nextMessage?.authorId
-                            message
-                        }
-
-                    chatMessageAdapter.submitList(newList) {
-                        doAfterFirstRender()
-                    }
-                }
-            }
-            ConversationUtils.intentForwardData = null
-        }
-    }
-
-
-    private fun openPreview(message: TextChatMessage) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
-        if (!FileUtil.isFileValid(filePath)) {
-            ToastUtil.showLong(R.string.file_load_error)
-            return
-        }
-        val list = arrayListOf<LocalMedia>().apply {
-            this.add(LocalMedia.generateLocalMedia(this@ChatForwardMessageActivity, filePath))
-        }
-        PictureSelector.create(this@ChatForwardMessageActivity)
-            .openPreview()
-            .isHidePreviewDownload(false)
-            .isAutoVideoPlay(true)
-            .isVideoPauseResumePlay(true)
-            .setDefaultLanguage(LanguageConfig.ENGLISH)
-            .setLanguage(PictureSelectorUtils.getLanguage(this))
-            .setSelectorUIStyle(PictureSelectorUtils.getSelectorStyle(this@ChatForwardMessageActivity))
-            .setImageEngine(GlideEngine.createGlideEngine())
-            .setExternalPreviewEventListener(object : OnExternalPreviewEventListener {
-                override fun onPreviewDelete(position: Int) {
-                }
-
-                override fun onLongPressDownload(context: Context?, media: LocalMedia?): Boolean {
-                    return false
-                }
-            }).startActivityPreview(0, false, list)
-    }
-
-    override fun onDestroy() {
-        confidentialMessageId?.let {
-            ApplicationDependencies.getMessageStore().deleteMessage(listOf(it))
-        }
-        super.onDestroy()
     }
 }

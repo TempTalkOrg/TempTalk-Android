@@ -25,12 +25,12 @@ open class TextMessage(
     var reactions: List<Reaction>? = null,
     var screenShot: ScreenShot? = null,
     var sharedContact: List<SharedContact>? = null,
-    var readInfo: String? = null,
     var translateData: TranslateData? = null,
     var speechToTextData: SpeechToTextData? = null,
     var playStatus: Int = 0,
     var receiverIds: String? = null,
     var criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE,
+    var isUnsupported: Boolean = false, // true if message requires newer client version
 ) : Message(
     id,
     fromWho,

@@ -37,7 +37,8 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
         newOutgoingPushMessage: NewOutgoingPushMessage,
         recipientId: String?,
     ): Single<ServiceResponse<NewSendMessageResponse>> {
-        val basePath = "/v3/messages/%s"
+        // v4 API for 1v1 messages with syncContent support
+        val basePath = "/v4/messages/%s"
         return innerSend(newOutgoingPushMessage, String.format(basePath, recipientId), false)
     }
 
@@ -45,9 +46,10 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
         newOutgoingPushMessage: NewOutgoingPushMessage,
         groupId: String,
     ): Single<ServiceResponse<NewSendMessageResponse>> {
+        // v4 API for group messages, server handles sync
         return innerSend(
             newOutgoingPushMessage,
-            String.format("/v3/messages/group/%s", groupId),
+            String.format("/v4/messages/group/%s", groupId),
             true
         )
     }
@@ -129,7 +131,7 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
             .build()
         return appWebSocketHelper.sendChatMessage(requestMessage )
             .map { response: WebsocketResponse? ->
-                L.d { "[Message] send message with response json: ${response?.body}" }
+                L.d { "[Message] send message response received, status=${response?.status}" }
                 responseMapper.map(
                     response
                 )

@@ -3,8 +3,6 @@ package org.thoughtcrime.securesms.jobmanager.impl;
 import androidx.annotation.NonNull;
 
 import com.difft.android.base.log.lumberjack.L;
-
-import util.logging.Log;
 import org.thoughtcrime.securesms.jobmanager.Data;
 import org.thoughtcrime.securesms.util.JsonUtils;
 
@@ -19,7 +17,7 @@ public class JsonDataSerializer implements Data.Serializer {
         try {
             return JsonUtils.toJson(data);
         } catch (IOException e) {
-            L.e(() -> "Failed to serialize to JSON." + e);
+            L.e(e, () -> "Failed to serialize to JSON.");
             throw new AssertionError(e);
         }
     }
@@ -29,7 +27,7 @@ public class JsonDataSerializer implements Data.Serializer {
         try {
             return JsonUtils.fromJson(serialized, Data.class);
         } catch (IOException e) {
-            L.e(() -> "Failed to deserialize JSON." + e);
+            L.e(e, () -> "Failed to deserialize JSON.");
             throw new AssertionError(e);
         }
     }

@@ -17,6 +17,7 @@ import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 
 import com.luck.picture.lib.app.PictureAppMaster;
+import com.difft.android.base.log.lumberjack.L;
 import com.luck.picture.lib.basic.PictureContentResolver;
 import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.entity.MediaExtraInfo;
@@ -175,7 +176,7 @@ public class MediaUtils {
             mediaExtraInfo.setWidth(options.outWidth);
             mediaExtraInfo.setHeight(options.outHeight);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getImageSize error:");
         } finally {
             PictureFileUtils.close(inputStream);
         }
@@ -206,7 +207,7 @@ public class MediaUtils {
             mediaExtraInfo.setWidth(options.outWidth);
             mediaExtraInfo.setHeight(options.outHeight);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getImageSize error:");
         } finally {
             PictureFileUtils.close(inputStream);
         }
@@ -297,12 +298,12 @@ public class MediaUtils {
             mediaExtraInfo.setOrientation(orientation);
             mediaExtraInfo.setDuration(ValueOf.toLong(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getVideoSize error:");
         } finally {
             try {
                 retriever.release();
             } catch (Exception e) {
-                e.printStackTrace();
+                L.w(e, () -> "[MediaUtils] getVideoSize release retriever error:");
             }
         }
         return mediaExtraInfo;
@@ -329,12 +330,12 @@ public class MediaUtils {
             }
             mediaExtraInfo.setDuration(ValueOf.toLong(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getAudioSize error:");
         } finally {
             try {
                 retriever.release();
             } catch (Exception e) {
-                e.printStackTrace();
+                L.w(e, () -> "[MediaUtils] getAudioSize release retriever error:");
             }
         }
         return mediaExtraInfo;
@@ -352,7 +353,7 @@ public class MediaUtils {
             String selection = MediaStore.Images.Media._ID + "=?";
             cr.delete(uri, selection, new String[]{Long.toString(id)});
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] removeMedia error:");
         }
     }
 
@@ -386,7 +387,7 @@ public class MediaUtils {
                 return -1;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getDCIMLastImageId error:");
             return -1;
         } finally {
             if (data != null) {
@@ -420,7 +421,7 @@ public class MediaUtils {
                 mediaBucketId[1] = data.getLong(data.getColumnIndex("bucket_id"));
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getPathMediaBucketId error:");
         } finally {
             if (data != null) {
                 data.close();
@@ -524,7 +525,7 @@ public class MediaUtils {
                 extraInfo.setHeight(bitmap.getHeight());
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] getVideoThumbnail error:");
         } finally {
             PictureFileUtils.close(stream);
             PictureFileUtils.close(fos);
@@ -547,7 +548,7 @@ public class MediaUtils {
                 context.getContentResolver().delete(Uri.parse(path), null, null);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaUtils] deleteUri error:");
         }
     }
 }

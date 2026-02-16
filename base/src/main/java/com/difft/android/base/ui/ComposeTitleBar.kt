@@ -2,8 +2,10 @@ package com.difft.android.base.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -26,6 +28,7 @@ import com.difft.android.base.ui.theme.DifftTheme
  * @param titleText the title text
  * @param titleEndText title additional text that always shows no matter has enough space or not
  * @param modifier optional modifier for the title bar
+ * @param showBackButton whether to show the back button (false in dual-pane mode)
  * @param onBackClick the back button click listener
  */
 @Composable
@@ -33,6 +36,7 @@ fun TitleBar(
     titleText: String,
     titleEndText: String = "",
     modifier: Modifier = Modifier,
+    showBackButton: Boolean = true,
     onBackClick: () -> Unit = {}
 ) {
     Row(
@@ -42,14 +46,19 @@ fun TitleBar(
             .fillMaxWidth()
             .height(52.dp)
     ) {
-        IconButton(
-            onClick = { onBackClick() },
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.chative_ic_back),
-                contentDescription = "Back",
-                tint = DifftTheme.colors.textPrimary
-            )
+        if (showBackButton) {
+            IconButton(
+                onClick = { onBackClick() },
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.chative_ic_back),
+                    contentDescription = "Back",
+                    tint = DifftTheme.colors.textPrimary
+                )
+            }
+        } else {
+            // Add padding when back button is hidden
+            Spacer(modifier = Modifier.width(16.dp))
         }
 
         Text(

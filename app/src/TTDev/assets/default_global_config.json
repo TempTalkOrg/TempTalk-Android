@@ -1,0 +1,293 @@
+{
+  "code": 0,
+  "sign": "GLOBALCONFIG_MEUCIQDQ6cbpsb2ndLcqYG7Un6d9a2j9KZAqlYewR02iVjhyDQIgQZ1SFObTVIX3ZzEXunA1/JwvbCIo72lM4ICOQ+BDQIc=",
+  "data": {
+    "hosts": [
+      {
+        "name": "srv.test.chative.im",
+        "certType": "authority",
+        "servTo": "fuse"
+      },
+      {
+        "name": "chat.test.chative.im",
+        "certType": "self",
+        "servTo": "chat"
+      }
+    ],
+    "srvs": {
+      "chat": "/chat",
+      "call": "/call",
+      "fileSharing": "/fileshare",
+      "speech2text": "/speech2text"
+    },
+    "domains": [
+      {
+        "domain": "chat.test.chative.im",
+        "certType": "self",
+        "label": "chat1"
+      },
+      {
+        "domain": "dtsgla5wj1qp2.cloudfront.net",
+        "certType": "authority",
+        "label": "avatar"
+      },
+      {
+        "domain": "tlivekit9tcew3gy.test.chative.im",
+        "certType": "authority",
+        "label": "livekit-uae1"
+      },
+      {
+        "domain": "tlivekit9tcew3gy.test.chative.im",
+        "certType": "authority",
+        "label": "livekit-uae2"
+      }
+    ],
+    "services": [
+      {
+        "name": "chat",
+        "path": "/chat",
+        "domains": [
+          "chat1"
+        ]
+      },
+      {
+        "name": "call",
+        "path": "/call",
+        "domains": [
+          "chat1"
+        ]
+      },
+      {
+        "name": "fileSharing",
+        "path": "/fileshare",
+        "domains": [
+          "chat1"
+        ]
+      },
+      {
+        "name": "speech2text",
+        "path": "/speech2text",
+        "domains": [
+          "chat1"
+        ]
+      },
+      {
+        "name": "avatar",
+        "path": "",
+        "domains": [
+          "avatar"
+        ]
+      },
+      {
+        "name": "grayCheck",
+        "path": "/grayCheck",
+        "domains": [
+          "chat1"
+        ]
+      },
+      {
+        "name": "livekit",
+        "path": "",
+        "domains": [
+          "livekit-uae1",
+          "livekit-uae2"
+        ]
+      }
+    ],
+    "avatarFile": "https://dtsgla5wj1qp2.cloudfront.net",
+    "avatarStorage": [
+      "https://dtsgla5wj1qp2.cloudfront.net"
+    ],
+    "unsafeiOSVersion": [
+      "15.1"
+    ],
+    "disappearanceTimeInterval": {
+      "default": 172800,
+      "message": {
+        "default": 172800,
+        "me": 0
+      },
+      "messageArchivingTimeOptionValues": [
+        3600,
+        172800,
+        604800,
+        2592000,
+        31536000
+      ],
+      "conversation": {
+        "default": 2592000,
+        "me": 0,
+        "other": 2592000,
+        "group": 2592000
+      },
+      "activeConversation": {
+        "default": 604800,
+        "me": 0,
+        "other": 604800,
+        "group": 604800
+      }
+    },
+    "recall": {
+      "timeoutInterval": 8640000,
+      "editableInterval": 86400
+    },
+    "maxStickCount": 15,
+    "meeting": {
+      "messageDisappearTime": 6,
+      "maxAudioPushStreamCount": 24,
+      "maxVideoPushStreamCount": 12,
+      "openMuteOther": true,
+      "meetingPreset": [
+        "Go faster 🚄🚄🚄",
+        "Slow down 🐌🐌🐌",
+        "Can't see 💔❓🙈",
+        "Agree ✅ ✅ ✅",
+        "Disagree ❌ ❌ ❌",
+        "I'd like to speak ✋✋✋",
+        "Bad signal, Can't hear 💔❓🙉",
+        "Your voice is too low 💔❓🙉",
+        "Your voice is too loud 📣📣📣",
+        "Needs  magnifiers 🔎🔎🔎",
+        "Gotta go, have to drop off 👋",
+        "Going in an Elevator, bad reception spot 📶",
+        "Let's take this offline in a separate group 👥"
+      ],
+      "meetingInviteForbid": [
+        "609066",
+        "718882"
+      ]
+    },
+    "webMeetingH5Url": "https://webmeeting.test.chative.im",
+    "webMeetingAppId": "302d30317d1388f54ebf97",
+    "group": {
+      "confidentialModeThreshold": 20,
+      "largeGroupThreshold": 50,
+      "chatTunnelSecurityThreshold": 2,
+      "meetingWithoutRingThreshold": 50,
+      "chatWithoutReceiptThreshold": 50,
+      "membersMaxSize": 200,
+      "messageArchivingTimeOptionValues": [
+        15,
+        30,
+        60,
+        120,
+        180
+      ],
+      "groupRemind": {
+        "remindCycle": [
+          "weekly",
+          "monthly"
+        ],
+        "remindMonthDay": -1,
+        "remindWeekDay": 7,
+        "remindTime": 9,
+        "remindDescription": "Don't forget to update!"
+      }
+    },
+    "chatFolder": {
+      "maxFolderCount": 10
+    },
+    "audit": [
+      ""
+    ],
+    "message": {
+      "tunnelSecurityForced": true,
+      "tunnelSecurityEnds": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    },
+    "conversation": {
+      "blockRegex": "^\\+2[1-8]\\d{3}|\\+10002$"
+    },
+    "emojiReaction": [
+      "👍",
+      "😄",
+      "😢",
+      "👌",
+      "🎉",
+      "😂",
+      "❤️",
+      "🤝",
+      "👏",
+      "✅",
+      "🔥",
+      "🙏"
+    ],
+    "call": {
+      "countdownTimerEnabled": true,
+      "countdownTimer": {
+        "warningThreshold": 10000,
+        "shakingThreshold": 5000
+      },
+      "createCallMsg": true,
+      "muteOtherEnabled": true,
+      "autoLeave": {
+        "promptReminder": {
+          "silenceTimeout": 300000,
+          "soloMemberTimeout": 300000
+        },
+        "runAfterReminderTimeout": 180000
+      },
+      "callServers": {
+        "clusters": [
+          {
+            "id": "UAE",
+            "global_url": "https://tlivekit9tcew3gy.test.chative.im",
+            "mainland_url": "https://tlivekit9tcew3gy.test.chative.im"
+          }
+        ]
+      },
+      "chatPresets": [
+        "Good 👍",
+        "Bad 😝",
+        "Agree ✅",
+        "Disagree ❌",
+        "Gotta go, bye",
+        "Please go faster",
+        "Please make screen bigger",
+        "Can't hear you. Bad Signal",
+        "Can't hear you. Your voice is too low"
+      ],
+      "chat": {
+        "autoHideTimeout": 9000
+      },
+      "denoise": {
+        "bluetooth": {
+          "excludedNameRegex": "AirPods"
+        }
+      },
+      "bubbleMessage": {
+        "emojiPresets": [
+          "👍",
+          "👏",
+          "🎉",
+          "🚀",
+          "❤️",
+          "😂"
+        ],
+        "textPresets": [
+          "Agree ✅",
+          "Disagree ⛔️",
+          "Bye 👋",
+          "Can't hear 🙉"
+        ],
+        "columns": [
+          10,
+          40,
+          70
+        ],
+        "baseSpeed": 4600,
+        "deltaSpeed": 400
+      }
+    }
+  }
+}

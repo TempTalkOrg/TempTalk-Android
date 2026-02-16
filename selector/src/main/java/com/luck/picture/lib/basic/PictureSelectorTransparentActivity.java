@@ -7,8 +7,9 @@ import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+
+import com.difft.android.base.BaseActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
@@ -31,7 +32,7 @@ import java.util.ArrayList;
  * @date：2022/2/10 6:07 下午
  * @describe：PictureSelectorTransparentActivity
  */
-public class PictureSelectorTransparentActivity extends AppCompatActivity {
+public class PictureSelectorTransparentActivity extends BaseActivity {
     private SelectorConfig selectorConfig;
 
     @Override
@@ -40,9 +41,7 @@ public class PictureSelectorTransparentActivity extends AppCompatActivity {
         initSelectorConfig();
         immersive();
         setContentView(R.layout.ps_empty);
-        if (isExternalPreview()) {
-            // TODO ignore
-        } else {
+        if (!isExternalPreview()) {
             setActivitySize();
         }
         setupFragment();
@@ -105,7 +104,8 @@ public class PictureSelectorTransparentActivity extends AppCompatActivity {
         if (fragment != null) {
             supportFragmentManager.beginTransaction().remove(fragment).commitAllowingStateLoss();
         }
-        FragmentInjectManager.injectSystemRoomFragment(supportFragmentManager, fragmentTag, targetFragment);
+        // Use fragment_container instead of android.R.id.content to properly receive insets
+        FragmentInjectManager.injectFragment(this, fragmentTag, targetFragment);
     }
 
     @SuppressLint("RtlHardcoded")

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
 import com.difft.android.call.LCallEngine
+import com.difft.android.call.R
 import com.difft.android.call.data.ServerNode
 import com.difft.android.call.data.SpeedResponseStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,7 +72,7 @@ class LCallServerNodeModel(application: Application, callConfig: CallConfig): An
                 val serverNodes = mutableListOf<ServerNode>()
                 speedInfos.sortedBy { it.lastResponseTime }.forEachIndexed {
                     index, speedInfo ->
-                    val name = serverNodeConfig.firstOrNull { speedInfo.url == it.first }?.second ?: "未知节点"
+                    val name = serverNodeConfig.firstOrNull { speedInfo.url == it.first }?.second ?: getApplication<Application>().getString(R.string.call_server_node_unknown)
                     val flag = when(name) {
                         "UAE_global","UAE_mainland" -> "🇦🇪"
                         "SG_global","SG_mainland" -> "🇸🇬"

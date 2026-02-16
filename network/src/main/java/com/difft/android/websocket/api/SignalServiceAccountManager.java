@@ -1,8 +1,3 @@
-/**
- * Copyright (C) 2014-2016 Open Whisper Systems
- * <p>
- * Licensed according to the LICENSE file in this repository.
- */
 
 package com.difft.android.websocket.api;
 
@@ -12,7 +7,7 @@ import com.google.protobuf.ByteString;
 import org.signal.libsignal.protocol.IdentityKeyPair;
 import org.signal.libsignal.protocol.InvalidKeyException;
 import org.signal.libsignal.protocol.ecc.ECPublicKey;
-import com.difft.android.websocket.internal.configuration.SignalServiceConfiguration;
+import com.difft.android.websocket.internal.configuration.ServiceConfig;
 import com.difft.android.websocket.internal.crypto.PrimaryProvisioningCipher;
 import org.whispersystems.signalservice.internal.push.ProvisioningProtos;
 import com.difft.android.websocket.internal.push.PushServiceSocket;
@@ -32,9 +27,8 @@ public class SignalServiceAccountManager {
     private final PushServiceSocket pushServiceSocket;
 
 
-    public SignalServiceAccountManager(SignalServiceConfiguration configuration,
-                                       boolean automaticNetworkRetry) {
-        this.pushServiceSocket = new PushServiceSocket(configuration, automaticNetworkRetry);
+    public SignalServiceAccountManager(ServiceConfig config, boolean automaticNetworkRetry) {
+        this.pushServiceSocket = new PushServiceSocket(config, automaticNetworkRetry);
     }
 
     public String getNewDeviceVerificationCode() throws IOException {

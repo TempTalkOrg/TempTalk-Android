@@ -51,8 +51,8 @@ sealed class FcmInitResult {
  */
 @Singleton
 class PushUtil @Inject constructor(
-    @ApplicationContext private val context: Context,
-    @ChativeHttpClientModule.Chat private val chatHttpClient: ChativeHttpClient
+    @param:ApplicationContext private val context: Context,
+    @param:ChativeHttpClientModule.Chat private val chatHttpClient: ChativeHttpClient
 ) {
     // FCM 初始化状态 StateFlow (发布所有状态，供其他模块监听)
     private val _fcmInitResult = MutableStateFlow<FcmInitResult>(FcmInitResult.Idle)
@@ -174,7 +174,6 @@ class PushUtil @Inject constructor(
                 }
             } catch (e: Exception) {
                 L.e { "[Push] 绑定token失败: ${e.message}" }
-                e.printStackTrace()
             }
         }
     }

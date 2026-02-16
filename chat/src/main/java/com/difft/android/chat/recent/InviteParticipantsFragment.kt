@@ -22,8 +22,9 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
 import org.difft.app.database.getContactorsFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
-import com.difft.android.call.LChatToCallController
+import com.difft.android.call.LCallToChatController
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
@@ -136,11 +137,11 @@ class InviteParticipantsFragment : Fragment() {
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
     interface EntryPoint {
-        var chatToCallController: LChatToCallController
-        var wcdb: WCDB
+        val chatToCallController: LCallToChatController
+        val wcdb: WCDB
     }
 
-    private val chatToCallController: LChatToCallController by lazy {
+    private val chatToCallController: LCallToChatController by lazy {
         EntryPointAccessors.fromApplication<EntryPoint>(
             ApplicationHelper.instance
         ).chatToCallController
@@ -263,7 +264,8 @@ class InviteParticipantsFragment : Fragment() {
                                         role = contactor.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER,
                                         isSelected = false,
                                         checkBoxEnable = true,
-                                        showCheckBox = false
+                                        showCheckBox = false,
+                                        letterName = contactor.getDisplayNameWithoutRemarkForUI()
                                     )
                                 }
 
@@ -379,32 +381,32 @@ class InviteParticipantsFragment : Fragment() {
         viewModel.setMeetingName(originalMeetingName)
         binding.instantMeetingTitleInput.setText(originalMeetingName)
 
-        val senderName = viewModel.getMyDisplayName(requireContext(), globalServices.myId)
-
         binding.attendeePageActionInvite.setOnClickListener {
             activity?.onBackPressed()
 
             val idsWithPlusPrefix =
                 viewModel.getAttendees()?.map { it.uid ?: "" } ?: listOf()
 
-            L.i { "BH_Lin: attendeePageActionInvite meetingName=$originalMeetingName, channelName=$channelName, idsWithPlusPrefix=$idsWithPlusPrefix" }
+            L.i { "attendeePageActionInvite meetingName=$originalMeetingName, channelName=$channelName, idsWithPlusPrefix=$idsWithPlusPrefix" }
 
 
             val inputMeetingName = viewModel.getMeetingName()
             if (inputMeetingName.isEmpty()) {
-                val defaultMeetingName = "${
-                    viewModel.getMyDisplayName(
-                        requireContext(), globalServices.myId
-                    )
-                } Meeting"
-                binding.instantMeetingTitleInput.setText(defaultMeetingName)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val defaultMeetingName = "${viewModel.getMyDisplayName(requireContext(), globalServices.myId)} Meeting"
+                    withContext(Dispatchers.Main) {
+                        if (isAdded) {
+                            binding.instantMeetingTitleInput.setText(defaultMeetingName)
+                        }
+                    }
+                }
             }
 
             if (actionType == InviteParticipantsActivity.NEW_REQUEST_ACTION_TYPE_INVITE) {
                 L.i { "[Call]: InviteParticipant NEW_REQUEST_ACTION_TYPE_INVITE idsWithPlusPrefix:$idsWithPlusPrefix" }
 //                L.i { "[Call]: InviteParticipant NEW_REQUEST_ACTION_TYPE_INVITE inputMeetingName:$inputMeetingName" }
 //                L.i { "[Call]: InviteParticipant NEW_REQUEST_ACTION_TYPE_INVITE meetingName:${viewModel.getMeetingName()}" }
-                chatToCallController.inviteCall(requireContext(), roomId, callName, callType, mKey, ArrayList(idsWithPlusPrefix), conversationId)
+                chatToCallController.inviteCall(roomId, callName, callType, mKey, ArrayList(idsWithPlusPrefix), conversationId)
             }
         }
 

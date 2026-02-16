@@ -6,8 +6,8 @@ import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 
+import com.difft.android.base.BaseActivity;
 import com.luck.picture.lib.PictureSelectorFragment;
 import com.luck.picture.lib.R;
 import com.luck.picture.lib.config.SelectorConfig;
@@ -21,7 +21,7 @@ import com.luck.picture.lib.style.PictureWindowAnimationStyle;
  * @date：2021/11/17 9:59 上午
  * @describe：PictureSelectorSupporterActivity
  */
-public class PictureSelectorSupporterActivity extends AppCompatActivity {
+public class PictureSelectorSupporterActivity extends BaseActivity {
     private SelectorConfig selectorConfig;
 
     @Override

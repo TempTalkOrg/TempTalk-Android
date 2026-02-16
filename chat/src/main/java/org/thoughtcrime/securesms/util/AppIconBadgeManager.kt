@@ -13,7 +13,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AppIconBadgeManager @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
    val context: Context
 ) {
     fun updateAppIconBadgeNum(

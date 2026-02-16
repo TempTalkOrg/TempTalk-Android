@@ -3,11 +3,11 @@ package com.difft.android.login.viewmodel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AuthCredentials
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.login.PowUtil
 import com.difft.android.login.R
@@ -21,16 +21,16 @@ import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.viewmodel.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.disposables.CompositeDisposable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
 import org.signal.libsignal.protocol.util.KeyHelper
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
 import org.thoughtcrime.securesms.util.Util
 import javax.inject.Inject
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import com.difft.android.websocket.internal.push.PreKeyState
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 
 
 @HiltViewModel
@@ -72,68 +72,77 @@ class LoginViewModel @Inject constructor() : ViewModel() {
      */
     fun signUpByNonceCode() {
         mSignInLiveData.value = Resource.loading()
-        loginRepo.getNonceInfo()
-            .concatMap { info ->
-                if (info.status == 0) {
-                    var uuid: String? = null
-                    var solution: String? = null
-                    info.data?.let {
-                        uuid = it.uuid
-                        solution = PowUtil.generateSolution(uuid ?: "", it.timestamp, it.version, it.difficulty)
-                    }
-                    loginRepo.generateNonceCode(NonceInfoRequestBody(uuid, solution))
-                } else {
-                    Single.error(NetworkException(info.status, info.reason ?: ""))
+        viewModelScope.launch {
+            try {
+                // Step 1: 获取 nonce info
+                val nonceInfoResult = loginRepo.getNonceInfo().await()
+                if (nonceInfoResult.status != 0) {
+                    L.e { "[login] signUpByNonceCode -> getNonceInfo failed, status=${nonceInfoResult.status}, reason=${nonceInfoResult.reason}" }
+                    mSignInLiveData.value = Resource.error(NetworkException(nonceInfoResult.status, nonceInfoResult.reason ?: ""))
+                    return@launch
                 }
-            }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.code?.let { code ->
-                        verifyInvitationCode(code)
-                    }
-                } else {
-                    mSignInLiveData.value = Resource.error(NetworkException(it.status, it.reason ?: ""))
+                val nonceData = nonceInfoResult.data
+                if (nonceData == null) {
+                    L.e { "[login] signUpByNonceCode -> getNonceInfo returned null data" }
+                    mSignInLiveData.value = Resource.error(NetworkException(message = ResUtils.getString(com.difft.android.network.R.string.chat_net_error)))
+                    return@launch
                 }
-            }, {
-                it.printStackTrace()
-                mSignInLiveData.value = Resource.error(NetworkException(message = it.message ?: ""))
-            }).also {
-                compositeDisposable.add(it)
+
+                // Step 2: 生成 nonce code
+                val uuid = nonceData.uuid
+                val solution = PowUtil.generateSolution(uuid ?: "", nonceData.timestamp, nonceData.version, nonceData.difficulty)
+                val nonceCodeResult = loginRepo.generateNonceCode(NonceInfoRequestBody(uuid, solution)).await()
+                if (nonceCodeResult.status != 0) {
+                    L.e { "[login] signUpByNonceCode -> generateNonceCode failed, status=${nonceCodeResult.status}, reason=${nonceCodeResult.reason}" }
+                    mSignInLiveData.value = Resource.error(NetworkException(nonceCodeResult.status, nonceCodeResult.reason ?: ""))
+                    return@launch
+                }
+                val code = nonceCodeResult.data?.code
+                if (code.isNullOrBlank()) {
+                    L.e { "[login] signUpByNonceCode -> generateNonceCode returned null code" }
+                    mSignInLiveData.value = Resource.error(NetworkException(message = ResUtils.getString(com.difft.android.network.R.string.chat_net_error)))
+                    return@launch
+                }
+
+                // Step 3: 验证邀请码
+                verifyInvitationCode(code)
+            } catch (e: Exception) {
+                L.e { "[login] signUpByNonceCode -> error: ${e.message}" }
+                mSignInLiveData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 
     /**
      * 验证邀请码是否有效
      * @param invitationCode 邀请码
      */
-    private fun verifyInvitationCode(invitationCode: String) {
+    private suspend fun verifyInvitationCode(invitationCode: String) {
         mInviteCodeLiveData.value = Resource.loading()
-        loginRepo.verifyInvitationCode(invitationCode)
-            .observeOn(AndroidSchedulers.mainThread()).subscribe({
-                if (it.status == 0) {
-                    mInviteCodeLiveData.value = Resource.success()
-                    signIn(
-                        it.data?.vcode ?: "",
-                        it.data?.account ?: "",
-                        Util.getSecret(16),
-                        true,
-                        null,
-                        null
-                    )
+        try {
+            val result = loginRepo.verifyInvitationCode(invitationCode).await()
+            if (result.status == 0) {
+                mInviteCodeLiveData.value = Resource.success()
+                val vcode = result.data?.vcode
+                val account = result.data?.account
+                if (!vcode.isNullOrBlank() && !account.isNullOrBlank()) {
+                    signIn(vcode, account, Util.getSecret(16), true, null, null)
                 } else {
-                    mInviteCodeLiveData.value = Resource.error(
-                        NetworkException(
-                            it.status, it.reason ?: ""
-                        )
-                    )
+                    L.e { "[login] verifyInvitationCode -> returned null vcode or account, vcodeIsEmpty=${vcode.isNullOrBlank()}, accountIsEmpty=${account.isNullOrBlank()}" }
+                    mSignInLiveData.value = Resource.error(NetworkException(message = ResUtils.getString(com.difft.android.network.R.string.chat_net_error)))
                 }
-            }, {
-                mInviteCodeLiveData.value =
-                    Resource.error(NetworkException(message = it.message ?: ""))
-            }).also {
-                compositeDisposable.add(it)
+            } else {
+                L.e { "[login] verifyInvitationCode -> failed with status=${result.status}, reason=${result.reason}" }
+                val error = NetworkException(result.status, result.reason ?: "")
+                mInviteCodeLiveData.value = Resource.error(error)
+                mSignInLiveData.value = Resource.error(error)
             }
+        } catch (e: Exception) {
+            L.e { "[login] verifyInvitationCode -> error: ${e.message}" }
+            val error = NetworkException(message = e.message ?: "")
+            mInviteCodeLiveData.value = Resource.error(error)
+            mSignInLiveData.value = Resource.error(error)
+        }
     }
 
     companion object {
@@ -160,69 +169,62 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         phone: String?
     ) {
         if (checkIsDifferentAccountLogin(account)) {
+            L.w { "[login] signIn -> different account detected" }
             mSignInLiveData.value = Resource.error(NetworkException(errorCode = DIFFERENT_ACCOUNT_LOGIN_ERROR_CODE))
             return
         }
         mSignInLiveData.value = Resource.loading()
-        val basicAuth = AuthCredentials(account, password).asBasic()
-        val name = ""
-        val signalingKey = Util.getSecret(52)
-        val registrationId = getNewRegistrationId()
-        loginRepo.signIn(verificationCode, basicAuth, signalingKey, name, registrationId)
-            .concatMap {
-                if (it.status == 0) {
-                    registerPreKeys(basicAuth)
-                } else {
-                    Single.error(NetworkException(it.status, it.reason ?: ""))
+
+        viewModelScope.launch {
+            try {
+                // 准备登录参数
+                val basicAuth = AuthCredentials(account, password).asBasic()
+                val name = ""
+                val signalingKey = Util.getSecret(52)
+                val registrationId = getNewRegistrationId()
+
+                // Step 1: Sign in
+                val signInResult = loginRepo.signIn(verificationCode, basicAuth, signalingKey, name, registrationId).await()
+                if (signInResult.status != 0) {
+                    L.e { "[login] signIn -> signIn API failed, status=${signInResult.status}, reason=${signInResult.reason}" }
+                    throw NetworkException(signInResult.status, signInResult.reason ?: "")
                 }
-            }
-            .concatMap {
-                if (it.status == 0) {
-                    httpClient.httpService.fetchAuthToken(basicAuth)
-                } else {
-                    Single.error(NetworkException(it.status, it.reason ?: ""))
+
+                // Step 2: Register pre keys
+                val preKeyResult = registerPreKeys(basicAuth).await()
+                if (preKeyResult.status != 0) {
+                    L.e { "[login] signIn -> registerPreKeys failed, status=${preKeyResult.status}, reason=${preKeyResult.reason}" }
+                    throw NetworkException(preKeyResult.status, preKeyResult.reason ?: "")
                 }
-            }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({
-                if (it.status == 0) {
+
+                // Step 3: Fetch auth token
+                val tokenResult = httpClient.httpService.fetchAuthToken(basicAuth)
+                if (tokenResult.status == 0) {
                     userManager.update {
                         this.baseAuth = basicAuth
                         this.account = account
                         this.signalingKey = signalingKey
-                        this.microToken = it.data?.token
+                        this.microToken = tokenResult.data?.token
                         this.email = email
                         this.phoneNumber = phone
                     }
-                    mSignInLiveData.value = Resource.success(AccountData(newUser))
+                    mSignInLiveData.postValue(Resource.success(AccountData(newUser)))
                 } else {
-                    mSignInLiveData.value = Resource.error(NetworkException(message = it.reason ?: ""))
+                    L.e { "[login] signIn -> fetchAuthToken failed, status=${tokenResult.status}, reason=${tokenResult.reason}" }
+                    mSignInLiveData.postValue(Resource.error(NetworkException(message = tokenResult.reason ?: "")))
                 }
-            }, {
-                it.printStackTrace()
-                L.i { "[login] signIn -> error: ${it.stackTraceToString()}" }
-                val code = (it as? NetworkException)?.errorCode
+            } catch (e: Exception) {
+                L.e { "[login] signIn -> error: ${e.message}" }
+                val code = (e as? NetworkException)?.errorCode
                 val message = when (code) {
-                    403 -> {
-                        ResUtils.getString(R.string.login_error_not_exist)
-                    }
-
-                    400 -> {
-                        ResUtils.getString(R.string.login_error_verification_failed)
-                    }
-
-                    413 -> {
-                        ResUtils.getString(R.string.login_error_too_many_attempts)
-                    }
-
-                    else -> {
-                        ResUtils.getString(com.difft.android.network.R.string.chat_net_error)
-                    }
+                    403 -> ResUtils.getString(R.string.login_error_not_exist)
+                    400 -> ResUtils.getString(R.string.login_error_verification_failed)
+                    413 -> ResUtils.getString(R.string.login_error_too_many_attempts)
+                    else -> ResUtils.getString(com.difft.android.network.R.string.chat_net_error)
                 }
-                mSignInLiveData.value = Resource.error(NetworkException(message = message))
-            }).also {
-                compositeDisposable.add(it)
+                mSignInLiveData.postValue(Resource.error(NetworkException(message = message)))
             }
+        }
     }
 
     private fun getNewRegistrationId(): Int {
@@ -250,19 +252,18 @@ class LoginViewModel @Inject constructor() : ViewModel() {
      */
     fun verifyPhone(phone: String) {
         mVerifyPhoneLiveData.value = Resource.loading()
-        loginRepo.verifyPhone(phone)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({
-                if (it.status == 0) {
+        viewModelScope.launch {
+            try {
+                val result = loginRepo.verifyPhone(phone).await()
+                if (result.status == 0) {
                     mVerifyPhoneLiveData.value = Resource.success(phone)
                 } else {
-                    mVerifyPhoneLiveData.value = Resource.error(NetworkException(message = it.reason ?: ""))
+                    mVerifyPhoneLiveData.value = Resource.error(NetworkException(message = result.reason ?: ""))
                 }
-            }, {
-                mVerifyPhoneLiveData.value = Resource.error(NetworkException(message = it.message ?: ""))
-            }).also {
-                compositeDisposable.add(it)
+            } catch (e: Exception) {
+                mVerifyPhoneLiveData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 
     /**
@@ -270,17 +271,17 @@ class LoginViewModel @Inject constructor() : ViewModel() {
      */
     fun verifyPhoneCodeWithLogin(phone: String, code: String) {
         mLoginPhoneCodeLiveData.value = Resource.loading()
-        loginRepo.verifyPhoneCode(phone, code)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({
-                if (it.status == 0) {
-                    mLoginPhoneCodeLiveData.value = Resource.success(it.data)
-                    if (it.data?.nextStep == 0) {
-                        verifyInvitationCode(it.data?.invitationCode ?: "")
+        viewModelScope.launch {
+            try {
+                val result = loginRepo.verifyPhoneCode(phone, code).await()
+                if (result.status == 0) {
+                    mLoginPhoneCodeLiveData.value = Resource.success(result.data)
+                    if (result.data?.nextStep == 0) {
+                        verifyInvitationCode(result.data?.invitationCode ?: "")
                     } else {
                         signIn(
-                            it.data?.verificationCode ?: "",
-                            it.data?.account ?: "",
+                            result.data?.verificationCode ?: "",
+                            result.data?.account ?: "",
                             Util.getSecret(16),
                             false,
                             null,
@@ -288,13 +289,12 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                         )
                     }
                 } else {
-                    mLoginPhoneCodeLiveData.value = Resource.error(NetworkException(message = it.reason ?: ""))
+                    mLoginPhoneCodeLiveData.value = Resource.error(NetworkException(message = result.reason ?: ""))
                 }
-            }, {
-                mLoginPhoneCodeLiveData.value = Resource.error(NetworkException(message = it.message ?: ""))
-            }).also {
-                compositeDisposable.add(it)
+            } catch (e: Exception) {
+                mLoginPhoneCodeLiveData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 
     /**
@@ -302,19 +302,18 @@ class LoginViewModel @Inject constructor() : ViewModel() {
      */
     fun verifyEmail(email: String) {
         mVerifyEmailLiveData.value = Resource.loading()
-        loginRepo.verifyEmail(email)
-            .observeOn(AndroidSchedulers.mainThread()).subscribe({
-                if (it.status == 0) {
+        viewModelScope.launch {
+            try {
+                val result = loginRepo.verifyEmail(email).await()
+                if (result.status == 0) {
                     mVerifyEmailLiveData.value = Resource.success(email)
                 } else {
-                    mVerifyEmailLiveData.value = Resource.error(NetworkException(message = it.reason ?: ""))
+                    mVerifyEmailLiveData.value = Resource.error(NetworkException(message = result.reason ?: ""))
                 }
-            }, {
-                mVerifyEmailLiveData.value =
-                    Resource.error(NetworkException(message = it.message ?: ""))
-            }).also {
-                compositeDisposable.add(it)
+            } catch (e: Exception) {
+                mVerifyEmailLiveData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 
     /**
@@ -322,16 +321,17 @@ class LoginViewModel @Inject constructor() : ViewModel() {
      */
     fun verifyEmailCodeWithLogin(email: String, emailCode: String) {
         mLoginEmailCodeLiveData.value = Resource.loading()
-        loginRepo.verifyEmailCode(email, emailCode)
-            .observeOn(AndroidSchedulers.mainThread()).subscribe({
-                if (it.status == 0) {
-                    mLoginEmailCodeLiveData.value = Resource.success(it.data)
-                    if (it.data?.nextStep == 0) {
-                        verifyInvitationCode(it.data?.invitationCode ?: "")
+        viewModelScope.launch {
+            try {
+                val result = loginRepo.verifyEmailCode(email, emailCode).await()
+                if (result.status == 0) {
+                    mLoginEmailCodeLiveData.value = Resource.success(result.data)
+                    if (result.data?.nextStep == 0) {
+                        verifyInvitationCode(result.data?.invitationCode ?: "")
                     } else {
                         signIn(
-                            it.data?.verificationCode ?: "",
-                            it.data?.account ?: "",
+                            result.data?.verificationCode ?: "",
+                            result.data?.account ?: "",
                             Util.getSecret(16),
                             false,
                             email,
@@ -339,13 +339,12 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                         )
                     }
                 } else {
-                    mLoginEmailCodeLiveData.value = Resource.error(NetworkException(message = it.reason ?: ""))
+                    mLoginEmailCodeLiveData.value = Resource.error(NetworkException(message = result.reason ?: ""))
                 }
-            }, {
-                mLoginEmailCodeLiveData.value = Resource.error(NetworkException(message = it.message ?: ""))
-            }).also {
-                compositeDisposable.add(it)
+            } catch (e: Exception) {
+                mLoginEmailCodeLiveData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 
     fun verifyAccount(account: String, countryCode: String) {
@@ -354,13 +353,9 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         } else if (ValidatorUtil.isEmail(account)) {
             verifyEmail(account)
         } else {
-            verifyInvitationCode(account)
+            viewModelScope.launch {
+                verifyInvitationCode(account)
+            }
         }
-    }
-
-    private val compositeDisposable: CompositeDisposable by lazy { CompositeDisposable() }
-    override fun onCleared() {
-        super.onCleared()
-        compositeDisposable.dispose()
     }
 }

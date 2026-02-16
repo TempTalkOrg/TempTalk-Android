@@ -1,6 +1,9 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
     id("kotlin-parcelize")
@@ -25,10 +28,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     kapt {
         correctErrorTypes = true
     }
@@ -40,11 +39,15 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
-    }
     buildFeatures {
         buildConfig = true
+    }
+
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
 }
 
@@ -56,6 +59,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlin.metadata.jvm)
 
     // Compose Debug
     debugImplementation(libs.bundles.compose.debug)
@@ -63,7 +67,6 @@ dependencies {
 
     // Call specific dependencies
     implementation(libs.accompanist.systemuicontroller)
-    implementation(libs.coil.network.okhttp)
     implementation(libs.accompanist.permissions)
     implementation(libs.livekit.android)
     implementation(libs.livekit.android.camerax)
@@ -75,7 +78,5 @@ dependencies {
     implementation(libs.compose.foundation.version)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.protobuf.javalite)
-    implementation(libs.protobuf.kotlin.lite)
 
 }

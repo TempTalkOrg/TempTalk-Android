@@ -2,7 +2,7 @@ package com.difft.android.call.node
 
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.appcompat.app.AppCompatActivity
+import com.difft.android.base.BaseActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,16 +34,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.call.R
 import com.difft.android.base.user.AutoLeave
 import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
@@ -59,7 +61,7 @@ import kotlin.getValue
 
 
 @AndroidEntryPoint
-class LCallServerNodeActivity: AppCompatActivity() {
+class LCallServerNodeActivity : BaseActivity() {
 
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
@@ -94,12 +96,13 @@ class LCallServerNodeActivity: AppCompatActivity() {
         val serverNodeConnected by viewModel.serverNodeConnected.collectAsState()
         val serverNodeSelected by viewModel.serverNodeSelected.collectAsState()
         val connectionType by viewModel.connectionType.collectAsState()
+        val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF5F5F5))
-                .padding(16.dp),
+                .padding(top = topInset),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if(serverNodeConnected != null) {
@@ -111,7 +114,7 @@ class LCallServerNodeActivity: AppCompatActivity() {
             }
             // 线路选择卡片
             ServerSelectionCard(servers.toList(), onServerSelected = { server ->
-                ToastUtil.show("选择线路：${server.name}")
+                ToastUtil.show(getString(R.string.call_server_node_select_route, server.name))
                 LCallEngine.setSelectedServerNode(server)
             })
         }
@@ -120,9 +123,6 @@ class LCallServerNodeActivity: AppCompatActivity() {
     // 顶部状态
     @Composable
     fun ConnectionStatusCard(server: ServerNode?, connectionType: CONNECTION_TYPE, connected: Boolean) {
-
-        var isHttp3 by remember { mutableStateOf(connectionType == CONNECTION_TYPE.HTTP3_QUIC) }
-
         Card(
             modifier = Modifier.Companion.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -152,7 +152,7 @@ class LCallServerNodeActivity: AppCompatActivity() {
                         )
                         Spacer(Modifier.Companion.width(6.dp))
                         Text(
-                            if (connected) "已连接" else "未连接",
+                            stringResource(if (connected) R.string.call_server_node_connected else R.string.call_server_node_disconnected),
                             fontSize = 14.sp,
                             color = Color.Companion.Gray
                         )
@@ -172,11 +172,10 @@ class LCallServerNodeActivity: AppCompatActivity() {
                     )
                     Spacer(Modifier.width(6.dp))
                     Switch(
-                        checked = isHttp3,
+                        checked = connectionType == CONNECTION_TYPE.HTTP3_QUIC,
                         onCheckedChange = { checked ->
-                            isHttp3 = checked
                             val protocol = if (checked) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET
-                            LCallEngine.setSelectedConnectMode(protocol)
+                            LCallEngine.setSelectedConnectMode(protocol, fromUserSelection = true)
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF2196F3),
@@ -200,7 +199,7 @@ class LCallServerNodeActivity: AppCompatActivity() {
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text("选择服务器", fontWeight = FontWeight.Companion.Bold, fontSize = 16.sp)
+                Text(stringResource(R.string.call_server_node_select_server), fontWeight = FontWeight.Companion.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.Companion.height(12.dp))
 
                 servers.forEach { server ->
@@ -233,7 +232,7 @@ class LCallServerNodeActivity: AppCompatActivity() {
                                         .background(Color(0xFF2196F3))
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
-                                    Text("推荐", color = Color.Companion.White, fontSize = 12.sp)
+                                    Text(stringResource(R.string.call_server_node_recommended), color = Color.Companion.White, fontSize = 12.sp)
                                 }
                             }
                         }

@@ -31,6 +31,7 @@ import com.difft.android.chat.databinding.ChatActivitySettingBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
+import com.difft.android.chat.setting.SaveToPhotosSettingsActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
@@ -49,6 +50,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
@@ -69,6 +71,9 @@ class SingleChatSettingActivity : BaseActivity() {
 
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
+
+    @Inject
+    lateinit var userManager: com.difft.android.base.user.UserManager
 
     private val chatSettingViewModel: ChatSettingViewModel by viewModels(extrasProducer = {
         defaultViewModelCreationExtras.withCreationCallback<ChatSettingViewModelFactory> {
@@ -116,9 +121,13 @@ class SingleChatSettingActivity : BaseActivity() {
                             ToastUtil.showLong(getString(R.string.contact_not_in_list))
                         }
                     }, { error ->
-                        error.printStackTrace()
+                        L.w { "[SingleChatSettingActivity] createGroup error: ${error.stackTraceToString()}" }
                     })
             }
+        }
+
+        mBinding.saveToPhotosContainer.setOnClickListener {
+            SaveToPhotosSettingsActivity.start(this, For.Account(contactId))
         }
 
         mBinding.disappearingTimeContainer.setOnClickListener {
@@ -155,14 +164,14 @@ class SingleChatSettingActivity : BaseActivity() {
                     }
                 }
             }, { error ->
-                error.printStackTrace()
+                L.w { "[SingleChatSettingActivity] getContactWithID error: ${error.stackTraceToString()}" }
             })
 
-        // 统一订阅 conversationSet，处理所有配置相关的 UI 更新
+        // Subscribe to conversationSet for all config-related UI updates
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach { conversationSet ->
-                // 更新 block 状态
+                // Update block status
                 if (conversationSet.blockStatus == 1) {
                     mBinding.tvUnblock.visibility = View.VISIBLE
                     mBinding.tvBlock.visibility = View.GONE
@@ -170,9 +179,11 @@ class SingleChatSettingActivity : BaseActivity() {
                     mBinding.tvUnblock.visibility = View.GONE
                     mBinding.tvBlock.visibility = View.VISIBLE
                 }
-                // 更新 mute 状态
+                // Update mute status
                 mBinding.switch2mute1on1.isChecked = conversationSet.isMuted
-                // 更新 disappearing time
+                // Update save to photos
+                mBinding.saveToPhotosText.text = getSaveToPhotosDisplayText(conversationSet.saveToPhotos)
+                // Update disappearing time
                 mBinding.disappearingTimeText.text = conversationSet.messageExpiry.toArchiveTimeDisplayText()
             }
             .launchIn(lifecycleScope)
@@ -212,13 +223,16 @@ class SingleChatSettingActivity : BaseActivity() {
             )
         }
 
-        mBinding.switchStick.isChecked = isPined()
-        mBinding.switchStick.setOnClickListener {
-            if (isPined()) {
-                pinChattingRoom(false)
-            } else {
-                pinChattingRoom(true)
+        // 异步加载置顶状态
+        lifecycleScope.launch(Dispatchers.IO) {
+            val isPinned = isPined()
+            withContext(Dispatchers.Main) {
+                mBinding.switchStick.isChecked = isPinned
             }
+        }
+        mBinding.switchStick.setOnClickListener {
+            val newPinned = mBinding.switchStick.isChecked
+            pinChattingRoom(newPinned)
         }
     }
 
@@ -256,7 +270,6 @@ class SingleChatSettingActivity : BaseActivity() {
                     }
                 } catch (e: Exception) {
                     L.e { "[SingleChatSettingActivity] Error querying common groups: ${e.stackTraceToString()}" }
-                    e.printStackTrace()
                     // Fallback: hide the section on error
                     mBinding.relGroupInCommon.visibility = View.GONE
                 }
@@ -292,7 +305,7 @@ class SingleChatSettingActivity : BaseActivity() {
                         }
                     }) {
                         it.message?.let { message -> ToastUtil.show(message) }
-                        it.printStackTrace()
+                        L.w { "[SingleChatSettingActivity] removeFriend error: ${it.stackTraceToString()}" }
                     }
             }
         )
@@ -337,10 +350,31 @@ class SingleChatSettingActivity : BaseActivity() {
         )
             .compose(RxUtil.getCompletableTransformer())
             .autoDispose(this, Lifecycle.Event.ON_DESTROY)
-            .subscribe({}, { it.printStackTrace() })
+            .subscribe({}, { L.w { "[SingleChatSettingActivity] pinChattingRoom error: ${it.stackTraceToString()}" } })
     }
 
-    private fun isPined(): Boolean {
-        return dbRoomStore.getPinnedTime(For.Account(contactId)).blockingGet().isPresent
+    private suspend fun isPined(): Boolean {
+        return dbRoomStore.getPinnedTime(For.Account(contactId)).await().isPresent
+    }
+
+    /**
+     * Get the display text for save to photos setting
+     * @param saveToPhotos null: follow global, 0: never, 1: always
+     */
+    private fun getSaveToPhotosDisplayText(saveToPhotos: Int?): String {
+        return when (saveToPhotos) {
+            1 -> getString(R.string.save_to_photos_always)
+            0 -> getString(R.string.save_to_photos_never)
+            else -> {
+                // Default - show dynamic status based on global setting
+                val globalEnabled = userManager.getUserData()?.saveToPhotos == true
+                val statusText = if (globalEnabled) {
+                    getString(R.string.save_to_photos_on)
+                } else {
+                    getString(R.string.save_to_photos_off)
+                }
+                getString(R.string.save_to_photos_default, statusText)
+            }
+        }
     }
 }

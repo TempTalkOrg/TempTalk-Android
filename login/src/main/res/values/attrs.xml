@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VerificationCodeEditText custom attributes -->
+    <!-- Keeps same attribute names as MNPasswordEditText for easy migration -->
+    <declare-styleable name="VerificationCodeEditText">
+        <!-- Box background color -->
+        <attr name="psw_background_color" format="color" />
+        <!-- Border color -->
+        <attr name="psw_border_color" format="color" />
+        <!-- Border color when selected -->
+        <attr name="psw_border_selected_color" format="color" />
+        <!-- Text color -->
+        <attr name="psw_text_color" format="color" />
+        <!-- Border corner radius -->
+        <attr name="psw_border_radius" format="dimension" />
+        <!-- Border stroke width -->
+        <attr name="psw_border_width" format="dimension" />
+        <!-- Margin between boxes -->
+        <attr name="psw_item_margin" format="dimension" />
+        <!-- Whether to show cursor -->
+        <attr name="psw_show_cursor" format="boolean" />
+        <!-- Cursor color -->
+        <attr name="psw_cursor_color" format="color" />
+        <!-- Cursor width -->
+        <attr name="psw_cursor_width" format="dimension" />
+        <!-- Cursor height -->
+        <attr name="psw_cursor_height" format="dimension" />
+        <!-- Number of input boxes (replaces reflection-based maxLength) -->
+        <attr name="psw_box_count" format="integer" />
+    </declare-styleable>
+</resources>

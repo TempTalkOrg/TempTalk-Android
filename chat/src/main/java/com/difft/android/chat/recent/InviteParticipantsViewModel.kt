@@ -9,6 +9,7 @@ import com.difft.android.chat.group.GroupMemberModel
 import com.difft.android.network.group.Member
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.reactivex.rxjava3.disposables.CompositeDisposable
+import kotlinx.coroutines.rx3.await
 import javax.inject.Inject
 
 @HiltViewModel
@@ -54,16 +55,13 @@ class InviteParticipantsViewModel @Inject constructor(
 
     private var myDisplayName: String = ""
 
-    fun getMyDisplayName(context: Context, myUid: String): String {
-
+    suspend fun getMyDisplayName(context: Context, myUid: String): String {
         if (myDisplayName.isEmpty()) {
-            val contact =
-                ContactorUtil.getContactWithID(context, myUid).blockingGet()
+            val contact = ContactorUtil.getContactWithID(context, myUid).await()
             if (contact.isPresent) {
                 myDisplayName = contact.get().getDisplayNameForUI()
             }
         }
-
         return myDisplayName
     }
 

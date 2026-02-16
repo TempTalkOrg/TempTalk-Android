@@ -1,5 +1,7 @@
 package com.luck.picture.lib.basic;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.net.Uri;
 
@@ -24,7 +26,7 @@ public final class PictureContentResolver {
         try {
             return context.getContentResolver().openInputStream(uri);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureContentResolver] openInputStream error:");
         }
         return null;
     }
@@ -40,7 +42,7 @@ public final class PictureContentResolver {
         try {
             return context.getContentResolver().openOutputStream(uri);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureContentResolver] openOutputStream error:");
         }
         return null;
     }

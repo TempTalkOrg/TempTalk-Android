@@ -1,7 +1,9 @@
 package com.difft.android.messageserialization.db.store
 
+import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.IMessageNotificationUtil
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import org.difft.app.database.convertToContactorModel
@@ -17,6 +19,7 @@ import difft.android.messageserialization.model.MENTIONS_TYPE_ME
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
 import com.tencent.wcdb.base.Value
+import com.tencent.wcdb.winq.Column
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Maybe
 import io.reactivex.rxjava3.core.Single
@@ -70,10 +73,12 @@ class DBRoomStore @Inject constructor(
                 if (forWhat.id == globalServices.myId) {
                     this.lastActiveTime = System.currentTimeMillis()
                     this.pinnedTime = System.currentTimeMillis()
+                    this.roomName = ResUtils.getString(R.string.chat_favorites)
                 }
                 try {
                     wcdb.room.insertObject(this)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    L.w { "[DBRoomStore] insertObject failed: ${e.stackTraceToString()}" }
                 }
             })
         val endTime = System.currentTimeMillis()
@@ -173,6 +178,99 @@ class DBRoomStore @Inject constructor(
 
         // ✅ 通知UI刷新
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
+    }
+
+    /**
+     * Batch update conversation settings
+     * Only updates non-null fields passed in, flexibly adapting to different scenarios:
+     * - WebSocket Notify type 4: muteStatus, blockStatus, confidentialMode
+     * - WebSocket Notify type 5: messageExpiry, messageClearAnchor (use updateMessageExpiry)
+     * - API response: all fields
+     *
+     * @param roomId Conversation ID
+     * @param muteStatus Mute status
+     * @param blockStatus Block status (only valid for single chat)
+     * @param confidentialMode Confidential mode
+     * @param messageExpiry Message expiry time
+     * @param messageClearAnchor Message clear anchor
+     */
+    fun updateConversationSettings(
+        roomId: String,
+        muteStatus: Int? = null,
+        blockStatus: Int? = null,
+        confidentialMode: Int? = null,
+        messageExpiry: Long? = null,
+        messageClearAnchor: Long? = null
+    ) {
+        val values = mutableListOf<Value>()
+        val fields = mutableListOf<Column>()
+        val fieldNames = mutableListOf<String>()
+
+        muteStatus?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.muteStatus)
+            fieldNames.add("muteStatus")
+        }
+        blockStatus?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.blockStatus)
+            fieldNames.add("blockStatus")
+        }
+        confidentialMode?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.confidentialMode)
+            fieldNames.add("confidentialMode")
+        }
+        messageExpiry?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.messageExpiry)
+            fieldNames.add("messageExpiry")
+        }
+        messageClearAnchor?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.messageClearAnchor)
+            fieldNames.add("messageClearAnchor")
+        }
+
+        if (values.isEmpty()) return
+
+        L.i { "[DBRoomStore] updateConversationSettings id:$roomId fields:$fieldNames" }
+        wcdb.room.updateRow(
+            values.toTypedArray(),
+            fields.toTypedArray(),
+            DBRoomModel.roomId.eq(roomId)
+        )
+
+        // Notify UI refresh
+        RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
+    }
+
+    /**
+     * Update save to photos setting for a conversation
+     * @param roomId Conversation ID
+     * @param saveToPhotos Save to photos setting (null: follow global, 0: disabled, 1: enabled)
+     */
+    fun updateSaveToPhotos(roomId: String, saveToPhotos: Int?) {
+        L.i { "[DBRoomStore] updateSaveToPhotos id:$roomId saveToPhotos: $saveToPhotos" }
+        // Use Value() for null to properly set database field to null
+        val value = if (saveToPhotos != null) Value(saveToPhotos) else Value()
+        wcdb.room.updateValue(
+            value,
+            DBRoomModel.saveToPhotos,
+            DBRoomModel.roomId.eq(roomId)
+        )
+
+        // Notify UI refresh
+        RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
+    }
+
+    /**
+     * Get save to photos setting for a conversation
+     * @param roomId Conversation ID
+     * @return Save to photos setting (null: follow global, 0: disabled, 1: enabled)
+     */
+    fun getSaveToPhotos(roomId: String): Int? {
+        return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.saveToPhotos
     }
 
     /**

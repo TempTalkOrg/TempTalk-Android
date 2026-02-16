@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -41,14 +42,12 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -107,14 +106,13 @@ class ChatArchiveSettingsActivity : BaseActivity() {
     private fun MainContent() {
         val target = chatSettingViewModel.conversation // 直接使用构造方法传递的conversation
 
-        val selectedOption = MessageArchiveUtil
-            .archiveTimeUpdate
-            .filter { it.first == target.id }
-            .map { it.second }
+        // 从 ViewModel 的 conversationSet 中获取 messageExpiry
+        val selectedOption = chatSettingViewModel.conversationSet
+            .map { it?.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime() }
             .collectAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
 
         Column(
-            Modifier.fillMaxSize()
+            Modifier.fillMaxSize().systemBarsPadding()
         ) {
             TitleBar(
                 titleText = getString(R.string.disappearing_messages),

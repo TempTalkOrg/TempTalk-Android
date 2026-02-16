@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Application
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.websocket.api.SignalServiceAccountManager
-import com.difft.android.websocket.internal.configuration.SignalServiceConfiguration
+import com.difft.android.websocket.internal.configuration.ServiceConfig
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -79,7 +79,7 @@ object ApplicationDependencies {
         synchronized(signalServiceAccountManagerLock) {
             return signalServiceAccountManagerInstance ?: run {
                 val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
-                provider.provideSignalServiceAccountManager(entryPoint.chatConfig).also {
+                provider.provideSignalServiceAccountManager(entryPoint.serviceConfig).also {
                     signalServiceAccountManagerInstance = it
                 }
             }
@@ -121,7 +121,7 @@ object ApplicationDependencies {
     interface Provider {
         fun provideJobManager(): JobManager
 
-        fun provideSignalServiceAccountManager(signalServiceConfiguration: SignalServiceConfiguration): SignalServiceAccountManager
+        fun provideSignalServiceAccountManager(serviceConfig: ServiceConfig): SignalServiceAccountManager
 
         fun provideExoPlayerPool(): SimpleExoPlayerPool
     }
@@ -129,7 +129,7 @@ object ApplicationDependencies {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface DependenciesEntryPoint {
-        val chatConfig: SignalServiceConfiguration
+        val serviceConfig: ServiceConfig
         val messageStore: MessageStore
         val environmentHelper: EnvironmentHelper
     }

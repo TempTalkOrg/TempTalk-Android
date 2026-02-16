@@ -8,8 +8,6 @@ import androidx.annotation.NonNull;
 import com.annimon.stream.Stream;
 import com.difft.android.base.log.lumberjack.L;
 
-import util.logging.Log;
-
 import java.util.List;
 
 /**

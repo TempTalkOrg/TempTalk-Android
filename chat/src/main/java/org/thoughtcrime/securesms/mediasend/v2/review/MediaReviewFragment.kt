@@ -30,8 +30,10 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
 import com.luck.picture.lib.entity.LocalMedia
 import util.FileUtils
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
+import org.thoughtcrime.securesms.mediasend.VideoTrimTransform
+import org.thoughtcrime.securesms.video.VideoUtil
 import org.thoughtcrime.securesms.mediasend.v2.HudCommand
 import org.thoughtcrime.securesms.mediasend.v2.MediaAnimations
 import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionState
@@ -48,6 +50,7 @@ import org.thoughtcrime.securesms.util.views.TouchInterceptingFrameLayout
 import org.thoughtcrime.securesms.util.visible
 import org.thoughtcrime.securesms.video.TranscodingQuality
 import org.thoughtcrime.securesms.video.videoconverter.VideoThumbnailsRangeSelectorView
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.annotation.meta.Exhaustive
@@ -241,7 +244,7 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
                     getString(R.string.MediaReviewFragment__photo_set_to_standard_quality)
                 }
             } else {
-                Log.i(TAG, "Could not display quality toggle toast for attachment of type: ${media.mimeType}")
+                L.i { "$TAG Could not display quality toggle toast for attachment of type: ${media.mimeType}" }
                 return
             }
         } else {
@@ -375,11 +378,45 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
         videoSizeHint.text = if (state.isVideoTrimmingVisible) {
             val seconds = trimData.getDuration().inWholeSeconds
-            val bytes = TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+            val bytes = calculateExpectedFileSize(focusedMedia, trimData, state)
             String.format(Locale.getDefault(), "%d:%02d • %s", seconds / 60, seconds % 60, MemoryUnitFormat.formatBytes(bytes, MemoryUnitFormat.MEGA_BYTES, true))
         } else {
             null
         }
+    }
+
+    /**
+     * Calculate expected file size based on whether compression will be needed.
+     * Returns original file size if no compression needed, otherwise returns estimated compressed size.
+     */
+    private fun calculateExpectedFileSize(media: LocalMedia, trimData: org.thoughtcrime.securesms.mediasend.v2.videos.VideoTrimData, state: MediaSelectionState): Long {
+        val fileSize = File(media.realPath).length()
+
+        // Trimming always requires transcode -> show estimated size
+        if (trimData.isDurationEdited) {
+            return TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+        }
+
+        // Check if compression is needed
+        val constraints = MediaConstraints.getPushMediaConstraints(state.quality)
+        val maxFileSize = constraints.getCompressedVideoMaxSize(requireContext())
+        val (inputBitRate, targetBitRate) = getBitrateInfo(media.realPath, constraints)
+
+        val compressionNeeded = VideoTrimTransform.needsCompression(inputBitRate, targetBitRate, fileSize, maxFileSize)
+
+        return if (compressionNeeded) {
+            TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+        } else {
+            fileSize // No compression, fast remux keeps original size
+        }
+    }
+
+    /**
+     * Get input bitrate and target bitrate for compression decision.
+     */
+    private fun getBitrateInfo(inputPath: String, constraints: MediaConstraints): Pair<Int, Int> {
+        val preset = constraints.videoTranscodingSettings
+        return VideoUtil.getBitrateInfo(inputPath, preset.videoBitRate, preset.audioBitRate)
     }
 
     private fun computeViewStateAndAnimate(state: MediaSelectionState) {
@@ -533,7 +570,7 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
 
     companion object {
-        private val TAG = Log.tag(MediaReviewFragment::class.java)
+        private val TAG = L.tag(MediaReviewFragment::class.java)
     }
 
     interface Callback {

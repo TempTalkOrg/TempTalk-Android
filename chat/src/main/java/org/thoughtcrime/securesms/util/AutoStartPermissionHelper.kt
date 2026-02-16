@@ -7,7 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 
 /**
  * 自启动权限辅助工具类
@@ -21,7 +21,7 @@ import util.logging.Log
  */
 object AutoStartPermissionHelper {
 
-    private val TAG = Log.tag(AutoStartPermissionHelper::class.java)
+    private val TAG = L.tag(AutoStartPermissionHelper::class.java)
 
     /**
      * 常见的有自启动管理功能的手机品牌列表
@@ -143,7 +143,7 @@ object AutoStartPermissionHelper {
                 }
                 intents.add(intent)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to create intent for ${component.className}", e)
+                L.w(e) { "$TAG Failed to create intent for ${component.className}" }
             }
         }
         return intents
@@ -173,10 +173,13 @@ object AutoStartPermissionHelper {
                     return true
                 } catch (e: SecurityException) {
                     // 权限不足，继续尝试其他方法
+                    L.w { "[AutoStartPermissionHelper] SecurityException on verified intent: ${e.stackTraceToString()}" }
                 } catch (e: ActivityNotFoundException) {
                     // Activity 不存在，继续尝试其他方法
+                    L.w { "[AutoStartPermissionHelper] ActivityNotFoundException on verified intent: ${e.stackTraceToString()}" }
                 } catch (e: Exception) {
                     // 其他错误，继续尝试其他方法
+                    L.w { "[AutoStartPermissionHelper] Exception on verified intent: ${e.stackTraceToString()}" }
                 }
             }
 
@@ -189,10 +192,13 @@ object AutoStartPermissionHelper {
                         return true
                     } catch (e: SecurityException) {
                         // 权限不足，跳过
+                        L.w { "[AutoStartPermissionHelper] SecurityException trying intent: ${e.stackTraceToString()}" }
                     } catch (e: ActivityNotFoundException) {
                         // Activity 不存在，跳过
+                        L.w { "[AutoStartPermissionHelper] ActivityNotFoundException trying intent: ${e.stackTraceToString()}" }
                     } catch (e: Exception) {
                         // 其他错误，跳过
+                        L.w { "[AutoStartPermissionHelper] Exception trying intent: ${e.stackTraceToString()}" }
                     }
                 }
             }
@@ -200,7 +206,7 @@ object AutoStartPermissionHelper {
             // 策略 3: 降级方案 - 打开应用详情页面
             return openAppDetailsAsFallback(context)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open auto-start settings", e)
+            L.e(e) { "$TAG Failed to open auto-start settings" }
             false
         }
     }
@@ -294,6 +300,7 @@ object AutoStartPermissionHelper {
                 intents.add(intent)
             } catch (e: Exception) {
                 // Intent创建失败，跳过
+                L.w { "[AutoStartPermissionHelper] failed to create intent: ${e.stackTraceToString()}" }
             }
         }
 
@@ -387,7 +394,7 @@ object AutoStartPermissionHelper {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open app details page", e)
+            L.e(e) { "$TAG Failed to open app details page" }
             false
         }
     }

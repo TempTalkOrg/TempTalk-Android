@@ -26,7 +26,7 @@ interface GroupService {
     fun deleteGroup(@Path("gid") gid: String): Single<BaseResponse<Any>>
 
     @POST("v1/groups/{gid}")
-    fun changeGroupSettings(@Path("gid") gid: String, @Body req: ChangeGroupSettingsReq): Single<BaseResponse<Any>>
+    fun changeGroupSettings(@Path("gid") gid: String, @Body req: ChangeGroupSettingsReq): Single<BaseResponse<GetGroupInfoResp>>
 
 //    @POST("/v1/groups/{gid}")
 //    fun changeGroupSettings(@Path("gid") gid: String, @Body req: ChangeGroupNameReq): Single<BaseResponse<Any>>
@@ -89,8 +89,8 @@ interface GroupService {
 class GroupRepo
 @Inject
 constructor(
-    @ApplicationContext context: Context,
-    @ChativeHttpClientModule.Chat
+    @param:ApplicationContext context: Context,
+    @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient
 ) {
 
@@ -170,7 +170,7 @@ constructor(
         return groupService.changeSelfSettingsInGroup(gid, uid, req)
     }
 
-    fun changeGroupSettings(gid: String, changeGroupSettingsReq: ChangeGroupSettingsReq): Single<BaseResponse<Any>> {
+    fun changeGroupSettings(gid: String, changeGroupSettingsReq: ChangeGroupSettingsReq): Single<BaseResponse<GetGroupInfoResp>> {
         return groupService.changeGroupSettings(gid, changeGroupSettingsReq)
     }
 

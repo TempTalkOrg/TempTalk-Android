@@ -26,7 +26,7 @@ import javax.inject.Singleton
 
 @Singleton
 class TranslateManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
     // 缓存 Translator，避免重复创建
     private val translatorCache = ConcurrentHashMap<String, Translator>()

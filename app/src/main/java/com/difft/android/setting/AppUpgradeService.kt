@@ -94,7 +94,7 @@ class AppUpgradeService : Service() {
                     throw error // 重新抛出，让协程取消语义正确传播
                 }
                 
-                error.printStackTrace()
+                L.w { "[AppUpgradeService] download error: ${error.stackTraceToString()}" }
                 if (newFile.exists()) {
                     newFile.delete()
                 }

@@ -8,7 +8,9 @@
     <string name="chat_message_audio">[Audio]</string>
     <string name="chat_message_contact_card">[Contact Card]</string>
     <string name="chat_message_chat_history">[Chat History]</string>
+    <string name="chat_message_unsupported">[Unsupported message, please upgrade to the latest version.]</string>
     <string name="chat_history">Chat History</string>
+    <string name="chat_favorites">Saved</string>
 
     <!-- DateUtils -->
     <string name="DateUtils_just_now">Now</string>
@@ -43,4 +45,15 @@
     <string name="DateUtils_millis_short">ss</string>
 
     <string name="widget_chat_heder_loading">Loading…</string>
+
+    <!-- Dialog Preview (not translatable) -->
+    <string name="preview_fullscreen_dialog_title" translatable="false">全屏底部Dialog组件</string>
+    <string name="preview_fullscreen_dialog_content" translatable="false">这是ComposeDialogManager中的全屏底部Dialog组件</string>
+    <string name="preview_bottom_dialog_title" translatable="false">普通底部Dialog组件</string>
+    <string name="preview_bottom_dialog_content" translatable="false">这是ComposeDialogManager中的普通底部Dialog组件</string>
+    <string name="preview_wait_dialog_message" translatable="false">正在处理中…</string>
+    <string name="preview_message_dialog_title" translatable="false">确认操作</string>
+    <string name="preview_message_dialog_content" translatable="false">您确定要执行此操作吗？</string>
+    <string name="preview_dialog_confirm" translatable="false">确定</string>
+    <string name="preview_dialog_cancel" translatable="false">取消</string>
 </resources>

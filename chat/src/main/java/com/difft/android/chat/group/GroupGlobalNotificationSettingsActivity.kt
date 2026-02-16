@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -54,6 +55,7 @@ import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
@@ -96,7 +98,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
         }
 
         Column(
-            Modifier.fillMaxSize()
+            Modifier.fillMaxSize().systemBarsPadding()
         ) {
             TitleBar(
                 titleText = getString(com.difft.android.chat.R.string.notification),
@@ -116,7 +118,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             httpClient.httpService.fetchSetProfile(
                                 baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
                                 profileRequestBody = profileRequestBody
-                            ).blockingGet()
+                            ).await()
                         }
 
                         ComposeDialogManager.dismissWait()

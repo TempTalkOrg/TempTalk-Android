@@ -41,7 +41,7 @@ import io.reactivex.rxjava3.core.Observable
 class UpdateManager @Inject constructor(
     private val settingRepo: SettingRepo,
     private val environmentHelper: EnvironmentHelper,
-    @ChativeHttpClientModule.NoHeader
+    @param:ChativeHttpClientModule.NoHeader
     private val globalConfigHttpClient: ChativeHttpClient,
     private val urlManager: UrlManager,
     private val userManager: UserManager
@@ -73,7 +73,6 @@ class UpdateManager @Inject constructor(
                     }
                 }, {
                     L.e { "[UpdateManager] get App Version Configs error:" + it.stackTraceToString() }
-                    it.printStackTrace()
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()
                     }
@@ -103,7 +102,7 @@ class UpdateManager @Inject constructor(
 
                     }
                 }) {
-                    it.printStackTrace()
+                    L.w { "[UpdateManager] checkUpdate error: ${it.stackTraceToString()}" }
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()
                         it.message?.let { message -> ToastUtil.show(message) }
@@ -121,7 +120,7 @@ class UpdateManager @Inject constructor(
             .to(RxUtil.autoDispose(context))
             .subscribe({
                 ToastUtil.showLong(ResUtils.getString(R.string.settings_version_is_latest))
-            }, { it.printStackTrace() })
+            }, { L.w { "[UpdateManager] showLatestDialog error: ${it.stackTraceToString()}" } })
     }
 
     private fun showUpdateDialog(context: Context, response: CheckUpdateResponse) {
@@ -240,7 +239,7 @@ class UpdateManager @Inject constructor(
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[UpdateManager] openGooglePlay error: ${e.stackTraceToString()}" }
             val currentPackageUri: Uri = Uri.parse("https://play.google.com/store/apps/details?id=" + context.packageName)
             val intent = Intent(Intent.ACTION_VIEW, currentPackageUri)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -303,7 +302,6 @@ class UpdateManager @Inject constructor(
                     }
                     
                     L.e { "UpdateManager upgradeApk verify error: ${error.message}" }
-                    error.printStackTrace()
                     // If verification fails, download the APK
                     withContext(Dispatchers.Main) {
                         startDownloadService(context, url, apkHash, filePath, isForce)
@@ -361,7 +359,7 @@ class UpdateManager @Inject constructor(
                     return true
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[UpdateManager] verifyApk error: ${e.stackTraceToString()}" }
             }
             return false
         }
@@ -404,7 +402,6 @@ class UpdateManager @Inject constructor(
                 context.startActivity(intent)
             } catch (e: Exception) {
                 L.i { "UpdateManager installAPK error:${e.message}" }
-                e.printStackTrace()
                 ToastUtil.showLong(getString(R.string.status_upgrade_install_failed) + ":" + e.message)
             }
         }

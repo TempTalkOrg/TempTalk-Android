@@ -18,7 +18,14 @@ data class ConversationSetResponseBody(
     val remark: String? = null,
     val blockStatus: Int = 0,
     val sourceDescribe: String? = null,
-    val findyouDescribe: String? = null
+    val findyouDescribe: String? = null,
+    /**
+     * Conversation-level save to photos setting (local only, not synced to server)
+     * null: Follow global setting (default)
+     * 0: Disabled (never save)
+     * 1: Enabled (always save)
+     */
+    val saveToPhotos: Int? = null
 ) {
     val isMuted: Boolean
         get() = muteStatus == MuteStatus.MUTED.value

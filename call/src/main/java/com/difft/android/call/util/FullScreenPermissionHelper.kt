@@ -58,6 +58,7 @@ object FullScreenPermissionHelper {
             val get = clz.getMethod("get", String::class.java)
             get.invoke(null, prop) as? String ?: ""
         } catch (e: Exception) {
+            L.w { "[FullScreenPermissionHelper] getSystemProperty failed: ${e.stackTraceToString()}" }
             ""
         }
     }

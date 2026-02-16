@@ -1,18 +1,18 @@
 package com.difft.android.call
 
 import android.content.Context
-import android.util.Log
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.EnvironmentHelper
-import com.difft.android.call.BuildConfig.*
+import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.call.BuildConfig.DEBUG
 import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.ServerNode
 import com.difft.android.call.data.ServerUrlSpeedInfo
 import com.difft.android.call.data.SpeedResponseStatus
 import com.difft.android.call.data.UrlSpeedResponse
+import com.difft.android.call.receiver.NetworkConnectionListener
 import com.difft.android.call.util.NetUtil
 import io.livekit.android.LiveKit
-import io.livekit.android.util.LKLog
 import io.livekit.android.util.LoggingLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 
 
 object LCallEngine {
-    private const val SPEED_TEST_INTERVAL = 5 * 60 * 1000L
+    private const val SPEED_TEST_INTERVAL = 30 * 60 * 1000L
     private const val ERROR_RESET_THRESHOLD = 15 * 60 * 1000L
     private const val MAX_ERROR_COUNT = 3
 
@@ -43,6 +43,8 @@ object LCallEngine {
 
     private var _connectionType = MutableStateFlow<CONNECTION_TYPE>(CONNECTION_TYPE.WEB_SOCKET)
     val connectionType: StateFlow<CONNECTION_TYPE> get() = _connectionType
+    @Volatile
+    private var hasManualConnectionTypeOverride: Boolean = false
 
     private var _isNetworkAvailable = MutableStateFlow<Boolean>(false)
 
@@ -57,36 +59,13 @@ object LCallEngine {
 
     fun init(context: Context, scope: CoroutineScope, environmentHelper: EnvironmentHelper) {
         this.environmentHelper = environmentHelper
-        LiveKit.loggingLevel = if (DEBUG) LoggingLevel.VERBOSE else if(environmentHelper.isInsiderChannel()) LoggingLevel.VERBOSE else LoggingLevel.DEBUG
-
+        LiveKit.loggingLevel =
+            if (DEBUG) LoggingLevel.VERBOSE else if (environmentHelper.isInsiderChannel()) LoggingLevel.VERBOSE else LoggingLevel.DEBUG
+        LiveKit.loggingExternalPrefix = "[livekit] "
         LiveKit.enableWebRTCLogging = false
+        // LiveKit.loggingLevelWebRTC = LoggingLevel.VERBOSE
 
         registerNetworkConnectionListener(context, scope)
-
-        LKLog.registerLogCallback(object : LKLog.LogCallback {
-            override fun onLog(level: LoggingLevel, message: String?, throwable: Throwable?) {
-                val lLevel = when (level ) {
-                    LoggingLevel.VERBOSE -> { if (environmentHelper.isInsiderChannel()) Log.INFO else Log.VERBOSE }
-
-                    // current log more information, treat debug as info
-                    LoggingLevel.DEBUG -> Log.INFO
-
-                    LoggingLevel.INFO -> Log.INFO
-                    LoggingLevel.WARN -> Log.WARN
-                    LoggingLevel.ERROR -> Log.ERROR
-                    else -> 0
-                }
-//                val lLevel = level.toAndroidLogPriority()
-
-                if (throwable != null && message != null) {
-                    L.log(lLevel, throwable) { "[livekit] $message" }
-                } else if (throwable != null) {
-                    L.log(lLevel, throwable)
-                } else if (message != null) {
-                    L.log(lLevel) { "[livekit] $message" }
-                }
-            }
-        })
 
         LiveKit.init(context)
 
@@ -99,7 +78,7 @@ object LCallEngine {
         speedTestJob?.cancel()
         speedTestJob = scope.launch(Dispatchers.IO) {
             while (true) {
-                if(NetUtil.checkNet(context)) {
+                if (NetUtil.checkNet(context) && SecureSharedPrefsUtil.getToken().isNotEmpty()) {
                     try {
                         val urlList = LCallManager.fetchCallServiceUrlAndCache()
                         L.d { "[Call] getCallServiceUrl:${urlList}" }
@@ -112,9 +91,12 @@ object LCallEngine {
                             updateServerUrlSpeedInfo(url, urlSpeedResponse, testTime)
                         }
                         // 过滤异常集群（连续3次错误）
-                        val filterInfos = _serverUrlsSpeedInfo.value.filter { it.errorCount < MAX_ERROR_COUNT && it.status == SpeedResponseStatus.SUCCESS }
+                        val filterInfos =
+                            _serverUrlsSpeedInfo.value.filter { it.errorCount < MAX_ERROR_COUNT && it.status == SpeedResponseStatus.SUCCESS }
                         // 按响应时间排序
-                        availableServerUrls = if (filterInfos.isNotEmpty()) filterInfos.sortedBy { it.lastResponseTime }.map { it.url } else emptyList()
+                        availableServerUrls =
+                            if (filterInfos.isNotEmpty()) filterInfos.sortedBy { it.lastResponseTime }
+                                .map { it.url } else emptyList()
                         L.i { "[call] LCallEngine - Measuring available server URLs: $availableServerUrls" }
                     } catch (e: Exception) {
                         L.e { "[call] LCallEngine Error measuring server URLs speed: ${e.message}" }
@@ -126,7 +108,11 @@ object LCallEngine {
         }
     }
 
-    private fun updateServerUrlSpeedInfo(url: String, urlSpeedResponse: UrlSpeedResponse, testTime: Long) {
+    private fun updateServerUrlSpeedInfo(
+        url: String,
+        urlSpeedResponse: UrlSpeedResponse,
+        testTime: Long
+    ) {
         _serverUrlsSpeedInfo.value = _serverUrlsSpeedInfo.value.toMutableList().apply {
             val index = indexOfFirst { it.url == url }
             if (index == -1) {
@@ -145,15 +131,17 @@ object LCallEngine {
                 val info = _serverUrlsSpeedInfo.value[index]
                 val lastResponseTime = urlSpeedResponse.speed
                 val lastTestTime = testTime
-                val errorCount = if (urlSpeedResponse.status == SpeedResponseStatus.SUCCESS && info.errorCount != 0 && (testTime - info.errorTime > ERROR_RESET_THRESHOLD)) {
-                    0 // 如果15分钟内未发生错误，重置错误计数器
-                } else if (urlSpeedResponse.status == SpeedResponseStatus.ERROR) {
-                    info.errorCount + 1
-                } else {
-                    info.errorCount
-                }
+                val errorCount =
+                    if (urlSpeedResponse.status == SpeedResponseStatus.SUCCESS && info.errorCount != 0 && (testTime - info.errorTime > ERROR_RESET_THRESHOLD)) {
+                        0 // 如果15分钟内未发生错误，重置错误计数器
+                    } else if (urlSpeedResponse.status == SpeedResponseStatus.ERROR) {
+                        info.errorCount + 1
+                    } else {
+                        info.errorCount
+                    }
                 val status = urlSpeedResponse.status
-                val errorTime = if (urlSpeedResponse.status != SpeedResponseStatus.ERROR) 0 else testTime
+                val errorTime =
+                    if (urlSpeedResponse.status != SpeedResponseStatus.ERROR) 0 else testTime
                 val serverUrlSpeedInfo = ServerUrlSpeedInfo(
                     url = url,
                     lastResponseTime = lastResponseTime,
@@ -198,8 +186,15 @@ object LCallEngine {
         _serverUrlConnected.value = url
     }
 
-    fun setSelectedConnectMode(type: CONNECTION_TYPE) {
+    fun setSelectedConnectMode(type: CONNECTION_TYPE, fromUserSelection: Boolean = false) {
         _connectionType.value = type
+        if (fromUserSelection) {
+            hasManualConnectionTypeOverride = true
+        }
+    }
+
+    fun hasManualConnectionTypeOverride(): Boolean {
+        return hasManualConnectionTypeOverride
     }
 
     fun isUseQuicSignal(): Boolean {

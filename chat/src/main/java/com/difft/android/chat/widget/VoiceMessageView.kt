@@ -16,7 +16,6 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.databinding.VoiceMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.canAutoSaveAttachment
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import difft.android.messageserialization.model.AttachmentStatus
@@ -43,6 +42,10 @@ class VoiceMessageView @JvmOverloads constructor(
     private var message: TextChatMessage? = null
     private var attachmentPath: String = ""
     private var currentAttachmentId: String? = null
+
+    // Callback for when playback starts on a confidential message (for view receipt)
+    var onConfidentialPlayStarted: ((TextChatMessage) -> Unit)? = null
+    private var hasTriggeredConfidentialPlayStart = false
 
     // Jobs for lifecycle-aware subscriptions
     private var downloadProgressJob: Job? = null
@@ -272,7 +275,7 @@ class VoiceMessageView @JvmOverloads constructor(
                     audioMessage.attachment?.authorityId ?: 0,
                     key,
                     audioMessage.shouldDecrypt(),
-                    audioMessage.canAutoSaveAttachment()
+                    false // Audio files should never auto-save to photos
                 )
             )
         }
@@ -281,8 +284,13 @@ class VoiceMessageView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     private fun setupPlayButtonClickListener() {
         binding.playButton.setOnClickListener {
-            message?.let {
-                AudioMessageManager.playOrPauseAudio(it, attachmentPath)
+            message?.let { msg ->
+                // Trigger confidential play callback only once when first playing
+                if (!hasTriggeredConfidentialPlayStart) {
+                    hasTriggeredConfidentialPlayStart = true
+                    onConfidentialPlayStarted?.invoke(msg)
+                }
+                AudioMessageManager.playOrPauseAudio(msg, attachmentPath)
             }
         }
 

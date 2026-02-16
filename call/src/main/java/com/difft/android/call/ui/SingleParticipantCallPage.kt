@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,21 +41,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
+import android.view.ViewGroup
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.R
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.LocalImageLoaderProvider
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
+import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
+import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import com.difft.android.call.util.ViewUtil
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
@@ -63,6 +67,7 @@ import io.livekit.android.util.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.asFlow
 import kotlin.collections.contains
+import kotlin.collections.listOf
 
 
 @Composable
@@ -77,6 +82,9 @@ fun SingleParticipantCallPage(
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val callStatus by viewModel.callStatus.collectAsState()
+    val isConnected = callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED
+    val remoteParticipant = participants.filterIsInstance<RemoteParticipant>().firstOrNull()
+    val participantUid = remoteParticipant?.identity?.value ?: conversationId
 
     val videoTrackMap by room.localParticipant::videoTrackPublications.flow.collectAsState(initial = emptyList())
     val videoPubs = videoTrackMap.filter { (pub) -> pub.subscribed }
@@ -96,45 +104,25 @@ fun SingleParticipantCallPage(
         }
     }
 
-    when (callStatus) {
-
-        CallStatus.CONNECTED, CallStatus.RECONNECTED -> {
-            val remoteParticipant = participants.filterIsInstance<RemoteParticipant>().firstOrNull()
-            val peerId = remoteParticipant?.identity?.value
-            if(remoteParticipant!=null && peerId!=null) {
-                when {
-                    isUserSharingScreen -> {
-                        // 显示屏幕分享画面
-                        ScreenSharingView(room = room, participant = remoteParticipant)
-                        // 显示屏幕分享时speaker悬浮窗
-                        ScreenShareSpeakerView(viewModel = viewModel, shareScreenUser = remoteParticipant, callConfig = callConfig)
-                    }
-                    else -> {
-                        // 显示对方参会人画面
-                        SingleParticipantItem(
-                            room = room,
-                            participant = remoteParticipant,
-                            uid = peerId,
-                        )
-                    }
-                }
-            }else {
-                conversationId?.let { id ->
-                    CalleeParticipantItem(userId = id)
-                }
-            }
+    when {
+        isConnected && isUserSharingScreen && remoteParticipant != null -> {
+            // 显示屏幕分享画面
+            ScreenSharingView(room = room, participant = remoteParticipant)
+            // 显示屏幕分享时speaker悬浮窗
+            ScreenShareSpeakerView(viewModel = viewModel, shareScreenUser = remoteParticipant, callConfig = callConfig)
         }
-        else -> {
-            if (callRole == CallRole.CALLER ) {
-                conversationId?.let {
-                    CalleeParticipantItem(userId = it)
-                }
-            }
+        (isConnected || callRole == CallRole.CALLER) && participantUid != null -> {
+            // 统一使用同一个页面容器，避免状态切换时整页闪烁
+            SingleParticipantItem(
+                room = room,
+                participant = remoteParticipant,
+                uid = participantUid,
+            )
         }
     }
 
 
-    if((callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED) && !videoMuted && !isUserSharingScreen) {
+    if(isConnected && !videoMuted && !isUserSharingScreen) {
         // 展示自己的悬浮小窗口
         OneVOneSelfVideoView(viewModel, room = room)
     }
@@ -143,14 +131,22 @@ fun SingleParticipantCallPage(
     BarrageMessageView(
         viewModel,
         config = BarrageMessageConfig(
-            true,
-            callConfig.chatPresets ?: emptyList(),
-            displayDurationMillis = autoHideTimeout
+            isOneVOneCall = true,
+            barrageTexts= callConfig.chatPresets ?: emptyList(),
+            displayDurationMillis = autoHideTimeout,
+            baseSpeed = callConfig.bubbleMessage?.baseSpeed ?: 4600L,
+            deltaSpeed = callConfig.bubbleMessage?.deltaSpeed ?: 400L,
+            columns = callConfig.bubbleMessage?.columns ?: listOf(10, 40, 70),
+            emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
+            textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
+            textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
         ),
-        { message, topic ->
-            viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
+        { message, type, topic ->
+            viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
                 if (status) {
-                    viewModel.showCallBarrageMessage(room.localParticipant, message)
+                    if (type == RTM_MESSAGE_TYPE_DEFAULT) {
+                        viewModel.showCallBarrageMessage(room.localParticipant, message)
+                    }
                 } else {
                     L.e { "[Call] Failed to send barrage message status = $status." }
                 }
@@ -233,31 +229,22 @@ fun LocalParticipantVideoView(
     participant: Participant,
     modifier: Modifier = Modifier,
 ){
-    ConstraintLayout(
+    val coroutineScope = rememberCoroutineScope()
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Transparent)
             .clip(shape = RoundedCornerShape(8.dp))
-    ){
-
-        val (videoItem) = createRefs()
-
+    ) {
         VideoItemTrackSelector(
+            coroutineScope = coroutineScope,
             room = room,
             participant = participant,
             sourceType = Track.Source.CAMERA,
-            modifier = Modifier.constrainAs(videoItem) {
-                top.linkTo(parent.top)
-                bottom.linkTo(parent.bottom)
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-                width = Dimension.fillToConstraints
-                height = Dimension.fillToConstraints
-            },
+            modifier = Modifier.fillMaxSize(),
             viewType = ViewType.Texture,
             draggable = false
         )
-
     }
 }
 
@@ -265,13 +252,13 @@ fun LocalParticipantVideoView(
 @Composable
 fun SingleParticipantItem(
     room: Room,
-    participant: Participant,
+    participant: Participant?,
     modifier: Modifier = Modifier,
     uid: String,
 ){
-    val identity by participant::identity.flow.collectAsState()
-    val isSpeaking by participant::isSpeaking.flow.collectAsState()
-    val imageLoader = LocalImageLoaderProvider.localImageLoader()
+    val contactorCacheManager = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
 
     val contactsUpdate by LCallManager.getContactsUpdateListener().map { Pair(System.currentTimeMillis(), it) }.asFlow().collectAsState(Pair(0L, emptyList()))
 
@@ -280,26 +267,49 @@ fun SingleParticipantItem(
 
     var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
 
+    suspend fun updateNameAndAvatar(userId: String) {
+        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, userId)
+    }
+
+    LaunchedEffect(uid) {
+        coroutineScope.launch {
+            updateNameAndAvatar(uid)
+        }
+    }
+
+    LaunchedEffect(contactsUpdate) {
+        if(contactsUpdate.second.contains(IdUtil.getUidByIdentity(uid))){
+            coroutineScope.launch {
+                updateNameAndAvatar(uid)
+            }
+        }
+    }
+
+    if (participant == null) {
+        ParticipantAvatarInfo(
+            modifier = modifier,
+            userDisplayInfo = userDisplayInfo,
+            userId = uid
+        )
+        return
+    }
+
+    val identity by participant::identity.flow.collectAsState()
+    val isSpeaking by participant::isSpeaking.flow.collectAsState()
+    val imageLoader = LocalImageLoaderProvider.localImageLoader()
+
     val audioTrackMap by participant::audioTrackPublications.flow.collectAsState(initial = emptyList())
     val audioPubs = audioTrackMap.filter { (pub) -> pub.subscribed }
         .map { (pub) -> pub }
-
     val audioPub = audioPubs.firstOrNull { pub -> pub.source == Track.Source.MICROPHONE }
 
     val videoTrackMap by participant::videoTrackPublications.flow.collectAsState(initial = emptyList())
     val videoPubs = videoTrackMap.filter { (pub) -> pub.subscribed }
         .map { (pub) -> pub }
-
-    // Find the camera video stream to show
     val videoPub = videoPubs.firstOrNull { pub -> pub.source == Track.Source.CAMERA }
 
     var videoMuted by remember { mutableStateOf(true) }
-
     var audioMuted by remember { mutableStateOf(true) }
-
-    suspend fun updateNameAndAvatar(userId: String) {
-        userDisplayInfo = LCallManager.getParticipantDisplayInfo(context, userId)
-    }
 
     // monitor audio muted state
     LaunchedEffect(audioPub) {
@@ -317,89 +327,101 @@ fun SingleParticipantItem(
         }
     }
 
-    LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            updateNameAndAvatar(uid)
-        }
-    }
-
-    LaunchedEffect(contactsUpdate) {
-        if(contactsUpdate.second.contains(LCallManager.getUidByIdentity(uid))){
-            coroutineScope.launch {
-                updateNameAndAvatar(uid)
-            }
-        }
-    }
-
     Box(
         modifier = modifier.fillMaxSize()
             .clip(shape = RoundedCornerShape(8.dp))
-            .background(colorResource(id = R.color.bg1_night)),
-        contentAlignment = Alignment.Center )
-    {
+            .background(Color.Transparent),
+        contentAlignment = Alignment.Center
+    ) {
         if (!videoMuted) {
             VideoItemTrackSelector(
+                coroutineScope = coroutineScope,
                 room = room,
                 participant = participant,
                 // Specifies this view should display camera content
                 sourceType = Track.Source.CAMERA,
-                scaleType = if (LCallManager.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
+                scaleType = if (IdUtil.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
                 viewType = ViewType.Surface,
-                draggable = !LCallManager.isPersonalMobileDevice(identity?.value),
+                draggable = !IdUtil.isPersonalMobileDevice(identity?.value),
             )
-        }else {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                userDisplayInfo.avatar?.let { avatarImage ->
-                    AndroidView(
-                        factory = { avatarImage },
-                        modifier = Modifier
-                            .height(96.dp)
-                            .width(96.dp)
-                    )
-                }
+        } else {
+            ParticipantAvatarInfo(
+                userDisplayInfo = userDisplayInfo,
+                userId = identity?.value ?: uid,
+                audioMuted = audioMuted,
+                isSpeaking = isSpeaking,
+                showAudioStatus = true,
+                imageLoader = imageLoader
+            )
+        }
+    }
+}
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ){
-                    // 使用when表达式简化条件判断
-                    val painter = when {
-                        audioMuted -> painterResource(id = com.difft.android.call.R.drawable.microphone_off)
-                        !isSpeaking -> painterResource(id = com.difft.android.call.R.drawable.ic_silent)
-                        else -> rememberAsyncImagePainter(model = com.difft.android.call.R.drawable.speaking, imageLoader = imageLoader)
-                    }
-
-                    val tintColor = when {
-                        audioMuted -> Color.Unspecified // 不设置颜色，或者根据需要设置
-                        else -> Color(0xFF82C1FC)
-                    }
-
-                    Icon(
-                        painter = painter,
-                        contentDescription = "",
-                        modifier = Modifier
-                            .padding(2.dp)
-                            .size(14.dp),
-                        tint = tintColor
-                    )
-
-                    val username = "${userDisplayInfo.name ?: LCallManager.convertToBase58UserName(identity?.value)}"
-
-                    Text(
-                        text = StringUtil.getShowUserName(username, 14),
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+@Composable
+private fun ParticipantAvatarInfo(
+    modifier: Modifier = Modifier,
+    userDisplayInfo: CallUserDisplayInfo,
+    userId: String,
+    audioMuted: Boolean = true,
+    isSpeaking: Boolean = false,
+    showAudioStatus: Boolean = false,
+    imageLoader: coil3.ImageLoader? = null,
+) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        userDisplayInfo.avatar?.let { avatarImage ->
+            key(avatarImage) {
+                AndroidView(
+                    factory = {
+                        (avatarImage.parent as? ViewGroup)?.removeView(avatarImage)
+                        avatarImage
+                    },
+                    modifier = Modifier
+                        .height(96.dp)
+                        .width(96.dp)
+                )
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showAudioStatus && imageLoader != null) {
+                val painter = when {
+                    audioMuted -> painterResource(id = com.difft.android.call.R.drawable.microphone_off)
+                    !isSpeaking -> painterResource(id = com.difft.android.call.R.drawable.ic_silent)
+                    else -> rememberAsyncImagePainter(model = com.difft.android.call.R.drawable.speaking, imageLoader = imageLoader)
+                }
+
+                val tintColor = when {
+                    audioMuted -> Color.Unspecified
+                    else -> Color(0xFF82C1FC)
+                }
+
+                Icon(
+                    painter = painter,
+                    contentDescription = "",
+                    modifier = Modifier
+                        .padding(2.dp)
+                        .size(14.dp),
+                    tint = tintColor
+                )
+            }
+
+            val username = "${userDisplayInfo.name ?: IdUtil.convertToBase58UserName(userId)}"
+            Text(
+                text = StringUtil.truncateWithEllipsis(username, 14),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

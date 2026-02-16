@@ -1,20 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="chat_textsize_nickname">12sp</dimen>
+    <dimen name="chat_header_title_margin_start_no_back">16dp</dimen>
 
     <dimen name="local_preview_width">120dp</dimen>
     <dimen name="local_preview_height">214dp</dimen>
     <dimen name="spacing">8dp</dimen>
 
-    <dimen name="conversation_reaction_scrubber_height">48dp</dimen>
-    <dimen name="conversation_reaction_touch_deadzone_size">40dp</dimen>
-    <dimen name="conversation_reaction_scrub_deadzone_distance_from_touch_bottom">30dp</dimen>
-    <dimen name="conversation_reaction_scrub_vertical_translation">25dp</dimen>
-    <dimen name="conversation_reaction_scrub_horizontal_margin">12dp</dimen>
-
-    <dimen name="reaction_scrubber_anim_start_translation_y">25dp</dimen>
-    <dimen name="reaction_scrubber_anim_end_translation_y">0dp</dimen>
-    <dimen name="reaction_scrubber_width">288dp</dimen>
+    <!-- Emoji reaction item size, used in more emoji dialog -->
+    <dimen name="reaction_emoji_item_size">48dp</dimen>
     <dimen name="recording_voice_lock_target">-150dp</dimen>
     <dimen name="nine_dp">9dp</dimen>
     <dimen name="eight_dp">8dp</dimen>

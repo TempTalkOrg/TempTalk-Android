@@ -13,7 +13,6 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.R
-import util.logging.Log
 import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionViewModel
 import org.thoughtcrime.securesms.mediasend.v2.videos.VideoTrimData
 import org.thoughtcrime.securesms.mms.MediaConstraints
@@ -177,7 +176,7 @@ class VideoEditorFragment : Fragment(), PositionDragListener, MediaSendPageFragm
                 hud.visibility = View.VISIBLE
                 startPositionUpdates()
             } catch (e: IOException) {
-                Log.w(TAG, e)
+                L.w(e) { TAG }
             }
         }
     }
@@ -306,7 +305,7 @@ class VideoEditorFragment : Fragment(), PositionDragListener, MediaSendPageFragm
     }
 
     companion object {
-        private val TAG = Log.tag(VideoEditorFragment::class.java)
+        private val TAG = L.tag(VideoEditorFragment::class.java)
 
         private const val KEY_URI = "uri"
         private const val KEY_MAX_SEND = "max_send_size"

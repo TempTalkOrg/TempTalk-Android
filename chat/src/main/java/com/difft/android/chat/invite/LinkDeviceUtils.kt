@@ -1,6 +1,7 @@
 package com.difft.android.chat.invite
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.text.TextUtils
 import android.util.Base64
 import androidx.lifecycle.LifecycleOwner
@@ -10,7 +11,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.R
 import io.reactivex.rxjava3.core.Single
-import org.signal.libsignal.protocol.ecc.Curve
+import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.util.TextSecurePreferences
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
@@ -37,7 +38,7 @@ class LinkDeviceUtils @Inject constructor(
                     Single.fromCallable {
                         val accountManager = ApplicationDependencies.getSignalServiceAccountManager()
                         val verificationCode = accountManager.newDeviceVerificationCode
-                        val publicKey = Curve.decodePoint(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
+                        val publicKey = ECPublicKey(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
                         val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
                         val id = globalServices.myId
                         accountManager.addDevice(
@@ -57,7 +58,7 @@ class LinkDeviceUtils @Inject constructor(
                                 activity.finish()
                             }
                         }, { e ->
-                            e.printStackTrace()
+                            L.w { "[LinkDeviceUtils] addDevice error: ${e.stackTraceToString()}" }
                             TextSecurePreferences.setMultiDevice(activity, false)
 
                             if (needFinish) {

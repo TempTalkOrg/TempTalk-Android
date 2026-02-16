@@ -40,7 +40,6 @@ import com.difft.android.base.widget.ComposeDialog;
 import util.FontUtil;
 import util.concurrent.TTExecutors;
 import util.concurrent.SimpleTask;
-import util.logging.Log;
 
 import org.signal.imageeditor.core.Bounds;
 import org.signal.imageeditor.core.ColorableRenderer;
@@ -52,7 +51,7 @@ import org.signal.imageeditor.core.model.EditorModel;
 import org.signal.imageeditor.core.renderers.BezierDrawingRenderer;
 import org.signal.imageeditor.core.renderers.FaceBlurRenderer;
 import org.signal.imageeditor.core.renderers.MultiLineTextRenderer;
-import org.signal.libsignal.protocol.util.Pair;
+import android.util.Pair;
 import org.thoughtcrime.securesms.animation.ResizeAnimation;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.fonts.FontTypefaceProvider;
@@ -77,7 +76,7 @@ import java.util.Objects;
 
 public final class ImageEditorFragment extends Fragment implements ImageEditorHudV2.EventListener, MediaSendPageFragment, TextEntryDialogFragment.Controller {
 
-    private static final String TAG = Log.tag(ImageEditorFragment.class);
+    private static final String TAG = "ImageEditorFragment";
 
     public static final boolean CAN_RENDER_EMOJI = FontUtil.canRenderEmojiAtFontSize(1024);
 
@@ -335,7 +334,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
                 }
             }
         } else {
-            Log.w(TAG, "Received a bad saved state. Received class: " + state.getClass().getName());
+            L.w(() -> TAG + " Received a bad saved state. Received class: " + state.getClass().getName());
         }
     }
 
@@ -555,8 +554,8 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
         Matrix inverseCropPosition = model.getInverseCropPosition();
 
         if (cachedFaceDetection != null) {
-            if (cachedFaceDetection.first().equals(getUri()) && cachedFaceDetection.second().position.equals(inverseCropPosition)) {
-                renderFaceBlurs(cachedFaceDetection.second());
+            if (cachedFaceDetection.first.equals(getUri()) && cachedFaceDetection.second.position.equals(inverseCropPosition)) {
+                renderFaceBlurs(cachedFaceDetection.second);
                 imageEditorHud.showBlurToast();
                 return;
             } else {
@@ -824,7 +823,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
                     .withMimeType(MediaUtil.IMAGE_JPEG)
                     .createForDraftAttachmentAsync(context).get();
         } catch (Exception e) {
-            L.w(e::toString);
+            L.w(e, () -> "[ImageEditorFragment] createDraftAttachment error: ");
         }
         return null;
     }

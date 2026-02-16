@@ -16,7 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.media.DecryptableUriMediaInput;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.video.interfaces.MediaInput;
@@ -30,7 +30,7 @@ import java.util.List;
 @RequiresApi(api = 23)
 abstract public class VideoThumbnailsView extends View {
 
-  private static final String TAG           = Log.tag(VideoThumbnailsView.class);
+  private static final String TAG           = "VideoThumbnailsView";
   private static final int    CORNER_RADIUS = ViewUtil.dpToPx(8);
 
   protected Uri currentUri;
@@ -92,7 +92,7 @@ abstract public class VideoThumbnailsView extends View {
       try {
         input.close();
       } catch (IOException e) {
-        Log.w(TAG, e);
+        L.w(e, () -> TAG + " close input failed");
       }
     }
   }
@@ -205,7 +205,7 @@ abstract public class VideoThumbnailsView extends View {
 
     @Override
     protected Void doInBackground(Void... params) {
-      Log.i(TAG, "generate " + thumbnailCount + " thumbnails " + thumbnailWidth + "x" + thumbnailHeight);
+      L.i(() -> TAG + " generate " + thumbnailCount + " thumbnails " + thumbnailWidth + "x" + thumbnailHeight);
       VideoThumbnailsExtractor.extractThumbnails(input, thumbnailCount, (int) thumbnailHeight, new VideoThumbnailsExtractor.Callback() {
 
         @Override
@@ -224,7 +224,7 @@ abstract public class VideoThumbnailsView extends View {
 
         @Override
         public void failed() {
-          Log.w(TAG, "Thumbnail extraction failed");
+          L.w(() -> TAG + " Thumbnail extraction failed");
         }
       });
       return null;
@@ -251,7 +251,7 @@ abstract public class VideoThumbnailsView extends View {
       if (view != null) {
         view.setDuration(ThumbnailsTask.this.duration);
         view.invalidate();
-        Log.i(TAG, "onPostExecute, we have " + (thumbnails != null ? thumbnails.size() : "null") + " thumbs");
+        L.i(() -> TAG + " onPostExecute, we have " + (thumbnails != null ? thumbnails.size() : "null") + " thumbs");
       }
     }
   }

@@ -22,4 +22,7 @@ class InviteRepo @Inject constructor() {
         inviteService.getInviteCode(SecureSharedPrefsUtil.getToken(), regenerate, short)
 
     fun queryByInviteCode(inviteCode: String): Single<BaseResponse<QueryInviteCodeResponse>> = inviteService.queryByInviteCode(SecureSharedPrefsUtil.getToken(), QueryInviteCodeRequest(inviteCode))
+
+    fun queryByCustomUid(version: Int, customUid: String): Single<BaseResponse<QueryCustomUidResponse>> = inviteService.queryByCustomUid(SecureSharedPrefsUtil.getToken(), QueryCustomUidRequest(version, customUid))
+
 }

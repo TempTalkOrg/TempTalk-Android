@@ -1,10 +1,12 @@
 package com.difft.android.chat.ui
 
 import android.os.Bundle
+import com.difft.android.base.log.lumberjack.L
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.RxUtil
@@ -12,13 +14,12 @@ import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.LCallManager
+import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isBotId
 import com.difft.android.chat.databinding.ChatFragmentHeaderBinding
-import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
@@ -37,8 +38,15 @@ import org.difft.app.database.wcdb
 
 @AndroidEntryPoint
 class ChatHeaderFragment : CommonHeaderFragment() {
-    private val chatViewModel: ChatMessageViewModel by activityViewModels()
-    private val chatSettingViewModel: ChatSettingViewModel by activityViewModels()
+    // Use parent fragment as ViewModel owner when nested (in ChatFragment),
+    // otherwise use activity (when directly in ChatActivity).
+    // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
+    private val chatViewModel: ChatMessageViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
+    private val chatSettingViewModel: ChatSettingViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
 
     lateinit var binding: ChatFragmentHeaderBinding
 
@@ -66,7 +74,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 if (it.first == chatViewModel.forWhat.id) {
                     initView(it.second)
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatHeaderFragment] observe friendRemoved error: ${it.stackTraceToString()}" } })
 
         ContactorUtil.contactsUpdate
             .compose(RxUtil.getSchedulerComposer())
@@ -75,7 +83,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 if (it.contains(chatViewModel.forWhat.id)) {
                     initView(null)
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[ChatHeaderFragment] observe contactsUpdate error: ${it.stackTraceToString()}" } })
 
         chatViewModel.chatUIData.onEach {
             initView(null)
@@ -90,19 +98,17 @@ class ChatHeaderFragment : CommonHeaderFragment() {
 //            SingleChatSettingActivity.startActivity(requireActivity(), chatViewModel.forWhat.id)
 //        }
 
-        chatViewModel.showReactionShade
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it) binding.reactionsShade.visibility = View.VISIBLE else binding.reactionsShade.visibility = View.GONE
-            }, { it.printStackTrace() })
-
         // 观察选择状态来切换返回按钮行为
         chatViewModel.selectMessagesState.onEach {
-            if (it.editModel) {
+            if (isInDualPaneMode() && !it.editModel) {
+                // In dual-pane mode, hide back button when not in edit mode
+                binding.ibBack.visibility = View.GONE
+            } else if (it.editModel) {
+                binding.ibBack.visibility = View.VISIBLE
                 binding.ibBack.setImageResource(R.drawable.chat_icon_close)
                 binding.ibBack.setOnClickListener { chatViewModel.selectModel(false) }
             } else {
+                binding.ibBack.visibility = View.VISIBLE
                 binding.ibBack.setImageResource(R.mipmap.chat_tabler_arrow_left)
                 binding.ibBack.setOnClickListener { activity?.finish() }
             }
@@ -119,7 +125,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         binding.buttonCall.visibility = View.GONE
 
         if (contact.id == globalServices.myId) {
-            binding.textviewNickname.text = getString(R.string.chat_favorites)
+            binding.textviewNickname.text = getString(com.difft.android.base.R.string.chat_favorites)
         } else if (contact.id.isBotId()) {
             binding.textviewNickname.text = contact.getDisplayNameForUI()
         } else {
@@ -129,6 +135,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 val isFriend = friend ?: withContext(Dispatchers.IO) {
                     wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contact.id)) != null
                 }
+                if (!isAdded || view == null) return@launch
                 if (isFriend) {
                     binding.imageviewCreateGroup.visibility = View.VISIBLE
                     binding.imageviewCreateGroup.setOnClickListener {
@@ -139,8 +146,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                     binding.buttonCall.setOnClickListener {
                         lifecycleScope.launch {
                             val chatRoomName = withContext(Dispatchers.IO) {
-                                chatViewModel.chatUIData.value.contact?.getDisplayNameForUI()
-                                    ?: LCallManager.getDisplayName(chatViewModel.forWhat.id) ?: ""
+                                chatViewModel.chatUIData.value.contact?.getDisplayNameForUI() ?: ""
                             }
                             chatViewModel.startCall(requireActivity(), chatRoomName)
                         }

@@ -38,10 +38,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import io.livekit.android.room.Room
@@ -51,12 +51,14 @@ import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import io.livekit.android.util.flow
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * This widget primarily serves as a way to observe changes in [Participant.videoTrackPublications].
  */
 @Composable
 fun VideoItemTrackSelector(
+    coroutineScope: CoroutineScope,
     room: Room,
     participant: Participant,
     sourceType: Track.Source, // Track.Source.SCREEN_SHARE or Track.Source.CAMERA
@@ -97,6 +99,7 @@ fun VideoItemTrackSelector(
     if (videoTrack != null && !videoMuted) {
         key (videoTrack, room.state) {
             VideoRenderer(
+                coroutineScope = coroutineScope,
                 modifier = modifier,
                 room = room,
                 videoTrack = videoTrack,
@@ -135,7 +138,7 @@ fun VideoItemTrackSelector(
                         style = TextStyle(
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
-                            fontFamily = SfProFont,
+                            fontFamily = FontFamily.Default,
                             fontWeight = FontWeight(400),
                             color = colorResource(id = com.difft.android.base.R.color.t_third),
                         )

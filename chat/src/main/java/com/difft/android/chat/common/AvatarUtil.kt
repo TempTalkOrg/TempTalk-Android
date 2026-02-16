@@ -5,12 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.text.TextUtils
 import android.util.Base64
-import android.view.View
-import android.widget.ImageView
-import com.bumptech.glide.Glide
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.dp
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import dagger.hilt.InstallIn
@@ -18,6 +14,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.rx3.awaitFirst
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -55,24 +52,30 @@ object AvatarUtil {
         return colors[safeIndex]
     }
 
-    fun saveBitmapFile(url: String, bitmap: Bitmap, size: AvatarCacheSize) {
-        try {
-            val file = getFileFormUrl(url, size)
-            BufferedOutputStream(FileOutputStream(file)).use { bos ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, bos)
-                bos.flush()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    /**
+     * Get existing cache file, checking new format first, then legacy _SMALL format
+     */
+    fun getCacheFile(url: String): File? {
+        val baseName = "avatar_${url.substringAfterLast("/")}"
+        val cacheDir = FileUtil.getAvatarCachePath()
+
+        // Check new format (no suffix)
+        val newFile = File(cacheDir, baseName)
+        if (newFile.exists()) return newFile
+
+        // Check legacy format (_SMALL)
+        val legacyFile = File(cacheDir, "${baseName}_SMALL")
+        if (legacyFile.exists()) return legacyFile
+
+        return null
     }
 
-    enum class AvatarCacheSize {
-        BIG, SMALL
-    }
 
-    fun getFileFormUrl(url: String, size: AvatarCacheSize): File {
-        val fileName = "avatar_${url.substringAfterLast("/")}_$size"
+    /**
+     * Get file path for saving new cache (always uses new format without suffix)
+     */
+    private fun getNewCacheFile(url: String): File {
+        val fileName = "avatar_${url.substringAfterLast("/")}"
         return File(FileUtil.getAvatarCachePath(), fileName)
     }
 
@@ -99,97 +102,44 @@ object AvatarUtil {
                     val decData = cipher.doFinal(bytes, 12, bytes.size - 12)
                     decData
                 }
-                .blockingFirst() // 使用 blockingFirst() 替代 suspendCancellableCoroutine
+                .awaitFirst()
         } catch (e: Exception) {
-            L.e { "[AvatarUtil] fetchAvatar error: ${e.stackTraceToString()}" }
+            L.e(e) { "[AvatarUtil] fetchAvatar error:" }
             throw e
         }
     }
 
-    // 加载图片并保存到本地
-    suspend fun loadAndSaveBitmap(context: Context, content: Any, url: String, imageView: ImageView, defaultDisplayView: View, size: AvatarCacheSize) {
-        // 获取 ImageView 尺寸，如果没有则使用默认值
-        val targetWidth = if (imageView.width > 0) imageView.width else {
-            when (size) {
-                AvatarCacheSize.SMALL -> 50.dp // 50dp
-                AvatarCacheSize.BIG -> -1 // 保持原尺寸
-            }
-        }
-
-        val targetHeight = if (imageView.height > 0) imageView.height else {
-            when (size) {
-                AvatarCacheSize.SMALL -> 50.dp // 50dp
-                AvatarCacheSize.BIG -> -1 // 保持原尺寸
-            }
-        }
-        L.d { "[AvatarUtil] loadAndSaveBitmap targetWidth:${targetWidth} targetHeight:${targetHeight}" }
-        // 直接获取调整后的 Bitmap（已经在 IO 线程中，不需要 withContext）
-        val bitmap = Glide.with(context)
-            .asBitmap()
-            .load(content)
-            .submit(targetWidth, targetHeight) // 使用计算后的尺寸
-            .get()
-
-        // 保存到本地
-        saveBitmapFile(url, bitmap, size)
-
-        // 设置到 ImageView
-        withContext(Dispatchers.Main) {
-            imageView.visibility = View.VISIBLE
-            defaultDisplayView.visibility = View.GONE
-            imageView.setImageBitmap(bitmap)
-        }
-    }
-
     /**
-     * 智能头像加载方法，合并了下载、解密、加载和保存
-     * @return true if avatar loaded successfully, false otherwise
+     * Ensure avatar is cached. Downloads and decrypts if not already cached.
+     * This method is safe to call from any scope - it only handles caching, not UI.
+     * @return The cache file if successful, null if failed
      */
-    suspend fun loadAvatar(
-        context: Context,
-        url: String,
-        key: String,
-        imageView: ImageView,
-        defaultDisplayView: View,
-        size: AvatarCacheSize,
-        forceRefresh: Boolean = false
-    ): Boolean = withContext(Dispatchers.IO) {
+    suspend fun ensureCached(context: Context, url: String, key: String): File? = withContext(Dispatchers.IO) {
         try {
-            // 1. 检查本地缓存
-            val file = getFileFormUrl(url, size)
-            if (!forceRefresh && file.exists()) {
-                // 本地文件存在，直接加载
-                withContext(Dispatchers.Main) {
-                    defaultDisplayView.visibility = View.GONE
-                    imageView.visibility = View.VISIBLE
-                    Glide.with(context)
-                        .asBitmap()
-                        .load(file)
-                        .into(imageView)
-                }
-                return@withContext true
+            // Check if already cached
+            val existingCache = getCacheFile(url)
+            if (existingCache != null) {
+                return@withContext existingCache
             }
 
-            // 2. 本地文件不存在，从网络下载并解密
-            val result = fetchAvatar(context, url, key)
-
-            // 3. 加载并保存
-            loadAndSaveBitmap(context, result, url, imageView, defaultDisplayView, size)
-            return@withContext true
+            // Download and decrypt
+            val bytes = fetchAvatar(context, url, key)
+            
+            // Save to cache
+            val cacheFile = getNewCacheFile(url)
+            cacheFile.writeBytes(bytes)
+            return@withContext cacheFile
         } catch (e: Exception) {
-            L.e { "[AvatarUtil] loadAvatar first attempt failed: ${e.stackTraceToString()}" }
-            withContext(Dispatchers.Main) {
-                imageView.visibility = View.INVISIBLE
-                defaultDisplayView.visibility = View.VISIBLE
-            }
-            // 重试一次
+            L.e { "[AvatarUtil] ensureCached failed: ${e.message}" }
+            // Retry once
             try {
-                val result = fetchAvatar(context, url, key)
-                loadAndSaveBitmap(context, result, url, imageView, defaultDisplayView, size)
-                return@withContext true
+                val bytes = fetchAvatar(context, url, key)
+                val cacheFile = getNewCacheFile(url)
+                cacheFile.writeBytes(bytes)
+                return@withContext cacheFile
             } catch (retryException: Exception) {
-                L.e { "[AvatarUtil] loadAvatar retry also failed: ${retryException.message}" }
-                return@withContext false
+                L.e { "[AvatarUtil] ensureCached retry also failed: ${retryException.message}" }
+                return@withContext null
             }
         }
     }
@@ -204,8 +154,7 @@ object AvatarUtil {
             bos.close()
             return filePath
         } catch (e: Exception) {
-            e.printStackTrace()
-            L.e { "[AvatarUtil] generateRandomAvatarFile error:" + e.stackTraceToString() }
+            L.e(e) { "[AvatarUtil] generateRandomAvatarFile error:" }
         }
         return filePath
     }

@@ -30,6 +30,7 @@ import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.Reaction
+import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
@@ -109,14 +110,25 @@ fun Table<GroupMemberContactorModel>.search(keyword: String): List<GroupMemberCo
 }
 
 fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
-    return contactor.getFirstObject(DBContactorModel.id.eq(id))
-        ?: groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
-            ?.convertToContactorModel()
+    val fromContactor = contactor.getFirstObject(DBContactorModel.id.eq(id))
+    if (fromContactor != null) {
+        return fromContactor
+    }
+    val fromGroupMember = groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
+    if (fromGroupMember != null) {
+        L.i { "[WCDBExtensions] getContactorFromAllTable id:$id from groupMemberContactor" }
+        return fromGroupMember.convertToContactorModel()
+    }
+    return null
 }
 
 fun WCDB.getContactorsFromAllTable(ids: List<String>): List<ContactorModel> {
     val foundContactors = contactor.getAllObjects(DBContactorModel.id.`in`(ids))
     val otherIds = ids.toList() - foundContactors.map { it.id }.toSet()
+
+    if (otherIds.isNotEmpty()) {
+        L.i { "[WCDBExtensions] getContactorsFromAllTable ids from groupMemberContactor: $otherIds" }
+    }
 
     val othersFromGroupMember =
         groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.`in`(otherIds))
@@ -224,6 +236,7 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     val sharedContacts: List<SharedContact>? = sharedContacts().takeIf { it.isNotEmpty() }
     val translateData: TranslateData? = translateData()
     val speechToTextData: SpeechToTextData? = speechToTextData()
+    val screenShot: ScreenShot? = screenShot()
 
     // Construct the `For` objects.
     // Adjust the logic to match how you define and use `For` in your codebase.
@@ -254,13 +267,13 @@ fun MessageModel.convertToTextMessage(): TextMessage {
         mentions = mentions,
         atPersons = atPersons,
         reactions = reactions,
-        screenShot = null, // No screenshot data present in the given schema
+        screenShot = screenShot,
         sharedContact = sharedContacts,
-        readInfo = readInfo,
         translateData = translateData,
         speechToTextData = speechToTextData,
         receiverIds = receiverIds,
         criticalAlertType = criticalAlertType,
+        isUnsupported = type == MessageModel.TYPE_UNSUPPORTED,
     )
 }
 
@@ -424,6 +437,16 @@ fun MessageModel.speechToTextData(): SpeechToTextData? {
     }
 }
 
+fun MessageModel.screenShot(): ScreenShot? {
+    return screenShotJson?.takeIf { it.isNotEmpty() }?.let {
+        runCatching {
+            Gson().fromJson(it, ScreenShot::class.java)
+        }.onFailure { e ->
+            L.e { "parse screenShot error: ${e.stackTraceToString()}" }
+        }.getOrNull()
+    }
+}
+
 fun MessageModel.quote(): Quote? = quoteDatabaseId?.let { qId ->
     wcdb.quote.getFirstObject(DBQuoteModel.databaseId.eq(qId))?.let { qm ->
         Quote(
@@ -540,6 +563,8 @@ fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L) {
     val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
     if (existing == null) {
         putMessage(message, roomReadPosition)
+    } else {
+        L.i { "[Message] message existing:${message.timeStamp}" }
     }
 }
 
@@ -666,7 +691,11 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         }
         this.speechToText.insertObject(speechToTextModel)
     }
-    val messageType = if (message.isAttachmentMessage()) 1 else if (message.recall != null) 3 else 0
+    val messageType = when {
+        message.isUnsupported -> MessageModel.TYPE_UNSUPPORTED
+        message.isAttachmentMessage() -> MessageModel.TYPE_ATTACHMENT
+        else -> MessageModel.TYPE_TEXT
+    }
     // 计算 readTime:
     // 1. 如果是自己发的消息，直接设置 readTime = systemShowTimestamp（自己发的消息视为已读）
     // 2. 如果消息的 systemShowTimestamp <= room.readPosition，说明这条消息已经被读过了
@@ -689,7 +718,6 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         sequenceId = message.sequenceId
         mode = message.mode
         atPersons = message.atPersons
-        readInfo = message.readInfo
         messageText = message.text ?: ""
         type = messageType
         playStatus = message.playStatus
@@ -699,6 +727,7 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         this.quoteDatabaseId = quoteDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
         this.cardModelDatabaseId = cardModelDatabaseId
+        this.screenShotJson = message.screenShot?.let { Gson().toJson(it) }
     }
     return messageModel
 }
@@ -834,9 +863,11 @@ fun MessageModel.deleteRelatedDataForMessage() {
             wcdb.card.deleteObjects(DBCardModel.databaseId.eq(it))
         }
 
+        wcdb.translate.deleteObjects(DBTranslateModel.messageId.eq(id))
+        wcdb.speechToText.deleteObjects(DBSpeechToTextModel.messageId.eq(id))
+
         wcdb.pendingMessageNew.deleteObjects(DBPendingMessageModelNew.originalMessageTimeStamp.eq(this.timeStamp))
     } catch (e: Exception) {
-        e.printStackTrace()
         L.e { "deleteRelatedDataForMessage Error:${e.stackTraceToString()}" }
     }
 }
@@ -861,6 +892,39 @@ private fun ForwardModel.deleteForwardRelatedData() {
     wcdb.forward.deleteObjects(DBForwardModel.databaseId.eq(databaseId))
 }
 
+/**
+ * Convert a confidential message to a placeholder (recipient has read, awaiting sender confirmation to delete).
+ * 1. Delete all sub-data (attachments, quotes, mentions, reactions, etc.)
+ * 2. Update message type to TYPE_CONFIDENTIAL_PLACEHOLDER
+ * 3. Clear message text and related IDs
+ * 4. Notify UI to refresh
+ */
+fun MessageModel.convertToConfidentialPlaceholder() {
+    if (type == MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER) return
+    deleteRelatedDataForMessage()
+    type = MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER
+    messageText = ""
+    quoteDatabaseId = null
+    forwardContextDatabaseId = null
+    wcdb.message.updateRow(
+        arrayOf(
+            Value(type),
+            Value(messageText),
+            quoteDatabaseId.dbValue(),
+            forwardContextDatabaseId.dbValue()
+        ),
+        arrayOf(
+            DBMessageModel.type,
+            DBMessageModel.messageText,
+            DBMessageModel.quoteDatabaseId,
+            DBMessageModel.forwardContextDatabaseId
+        ),
+        DBMessageModel.databaseId.eq(databaseId)
+    )
+    L.i { "[Confidential] convertToConfidentialPlaceholder done: id=$id, databaseId=$databaseId" }
+    RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
+}
+
 fun MessageModel.isAttachmentMessage(): Boolean {
     return type == 1
 }
@@ -873,10 +937,17 @@ fun MessageModel.isNotifyMessage(): Boolean {
     return type == 2
 }
 
+fun MessageModel.isUnsupportedMessage(): Boolean {
+    return type == MessageModel.TYPE_UNSUPPORTED
+}
+
 fun MessageModel.previewContent(): String {
     val senderName = if (roomType == 1) (wcdb.getContactorFromAllTable(fromWho)?.getDisplayNameForUI()
         ?: fromWho) + ": " else ""
-    return if (mode == 1) {
+    // Check unsupported message first
+    return if (isUnsupportedMessage()) {
+        senderName + ResUtils.getString(R.string.chat_message_unsupported)
+    } else if (mode == 1) {
         senderName + ResUtils.getString(R.string.chat_message_confidential_message)
     } else {
         if (isAttachmentMessage()) {
@@ -1013,10 +1084,14 @@ fun RoomModel.updateRoomNameAndAvatar() {
 
 /**
  * Converts [ContactorModel] into [GroupMemberContactorModel].
+ * NOTE: This conversion does NOT preserve avatar data!
  */
 fun ContactorModel.covertToGroupMemberContactorModel(): GroupMemberContactorModel {
+    if (this.avatar != null) {
+        L.w { "[WCDBExtensions] covertToGroupMemberContactorModel id:${this.id} avatar will be lost" }
+    }
     val memberContactor = GroupMemberContactorModel()
-    memberContactor.gid = "" //special gid for temp friend contactor, that requested and not accept state
+    memberContactor.gid = ""
     memberContactor.id = this.id
     memberContactor.displayName = this.getDisplayNameForUI()
     memberContactor.remark = this.remark

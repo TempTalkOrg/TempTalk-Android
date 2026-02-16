@@ -1,7 +1,7 @@
 package com.difft.android.chat.group
 
-
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -75,7 +75,7 @@ class GroupMembersSearchActivity : BaseActivity() {
                 } else {
                     showNoResults(getString(R.string.search_messages_default_tips))
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupMembersSearchActivity] search debounce error: ${it.stackTraceToString()}" } })
 
         mBinding.recyclerviewChatHistory.apply {
             this.layoutManager = LinearLayoutManager(this@GroupMembersSearchActivity)
@@ -114,7 +114,7 @@ class GroupMembersSearchActivity : BaseActivity() {
                 }
             }, {
                 showNoResults(getString(R.string.search_no_results_found))
-                it.printStackTrace()
+                L.w { "[GroupMembersSearchActivity] search error: ${it.stackTraceToString()}" }
             })
     }
 

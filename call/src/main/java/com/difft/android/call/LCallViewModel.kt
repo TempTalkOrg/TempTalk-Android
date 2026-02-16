@@ -27,11 +27,15 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.BarrageMessage
+import com.difft.android.call.data.BubbleMessageType
+import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.FeedbackCallInfo
@@ -41,22 +45,36 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RAISE_HANDS_UP
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
+import com.difft.android.call.data.RTM_MESSAGE_TYPE_BUBBLE
+import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.data.RoomMetadata
 import com.difft.android.call.data.RtmMessage
+import com.difft.android.call.data.TextBubbleMessage
+import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.exception.DisconnectException
 import com.difft.android.call.exception.NetworkConnectionPoorException
 import com.difft.android.call.exception.ServerConnectionException
 import com.difft.android.call.exception.StartCallException
 import com.difft.android.call.manager.AudioDeviceManager
-import com.difft.android.call.manager.HandsUpManager
+import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.manager.CallFeedbackManager
+import com.difft.android.call.manager.CallRingtoneManager
+import com.difft.android.call.manager.CallTimeoutManager
+import com.difft.android.call.manager.CallVibrationManager
+import com.difft.android.call.manager.ContactorCacheManager
+import com.difft.android.call.handler.HandsUpManager
 import com.difft.android.call.manager.ParticipantManager
-import com.difft.android.call.manager.RtmMessageHandler
+import com.difft.android.call.handler.RtmMessageHandler
 import com.difft.android.call.manager.TimerManager
+import com.difft.android.call.service.ForegroundService
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.CriticalAlertRequestBody
+import com.difft.android.network.requests.CriticalAlertDestination
+import com.difft.android.network.requests.CriticalAlertGroup
+import com.difft.android.network.requests.CriticalAlertRequestBodyNew
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import com.google.gson.Gson
 import com.twilio.audioswitch.AudioDevice
@@ -81,6 +99,7 @@ import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -91,16 +110,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.collect
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import livekit.org.webrtc.CameraXHelper
 import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import javax.net.ssl.SSLHandshakeException
+import kotlin.collections.emptyList
+import kotlin.collections.plus
 import kotlin.concurrent.Volatile
 
 
@@ -116,9 +140,15 @@ class LCallViewModel (
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
     interface EntryPoint {
-        var callToChatController: LCallToChatController
-        var messageEncryptor: INewMessageContentEncryptor
-        var onGoingCallStateManager: OnGoingCallStateManager
+        val callToChatController: LCallToChatController
+        val messageEncryptor: INewMessageContentEncryptor
+        val onGoingCallStateManager: OnGoingCallStateManager
+        val callDataManager: CallDataManager
+        val callVibrationManager: CallVibrationManager
+        val callRingtoneManager: CallRingtoneManager
+        val contactorCacheManager: ContactorCacheManager
+        val callFeedbackManager: CallFeedbackManager
+        val callTimeoutManager: CallTimeoutManager
 
         @ChativeHttpClientModule.Chat
         fun httpClient(): ChativeHttpClient
@@ -135,6 +165,30 @@ class LCallViewModel (
         EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).onGoingCallStateManager
     }
 
+    private val callDataManager: CallDataManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callDataManager
+    }
+
+    private val callVibrationManager: CallVibrationManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callVibrationManager
+    }
+
+    private val callRingtoneManager: CallRingtoneManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callRingtoneManager
+    }
+
+    private val callFeedbackManager: CallFeedbackManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callFeedbackManager
+    }
+
+    private val contactorCacheManager: ContactorCacheManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
+
+    private val callTimeoutManager: CallTimeoutManager by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callTimeoutManager
+    }
+
     private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
 
     private val mySelfId: String by lazy { globalServices.myId }
@@ -146,8 +200,8 @@ class LCallViewModel (
 
     // ---- Managers ----
     lateinit var rtm: RtmMessageHandler
-    private val handsUpManager = HandsUpManager(viewModelScope, application)
-    private val participantManager = ParticipantManager(viewModelScope)
+    private val handsUpManager = HandsUpManager(viewModelScope, application, contactorCacheManager)
+    val participantManager = ParticipantManager(viewModelScope)
     val callUiController = CallUiController()
     val timerManager = TimerManager(viewModelScope)
     val audioDeviceManager = AudioDeviceManager(application, callIntent.callType)
@@ -187,7 +241,7 @@ class LCallViewModel (
     // --------------- Internals ---------------
     @Volatile
     private var isRetryUrlConnecting = false
-    private var isCallResourceReleased = false
+    private val isCallResourceReleased = AtomicBoolean(false)
 
     private var lastLocalPoorErrorTime: Long = 0L
     private val goodQualities = setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)
@@ -203,7 +257,11 @@ class LCallViewModel (
     // --- current speaker switch ---
     private var lastSpeakers: List<Participant>? = null
     private var hasSpeaker: Boolean = false
+    private var hasOtherActiveSpeaker = false
     private var debounceSpeakerUpdateJob: Job? = null
+
+    private val cleanupMutex = Mutex()
+    private val cleanupJobRef = AtomicReference<Job?>(null)
 
 
     init {
@@ -279,14 +337,15 @@ class LCallViewModel (
         rtm = RtmMessageHandler(
             room = room,
             scope = viewModelScope,
-            encryptor = { plain ->
+            encryptor = { plain, timestamp ->
                 val localPrivateKey =
                     callToChatController.getLocalPrivateKey() ?: return@RtmMessageHandler null
                 try {
                     messageEncryptor.encryptRtmMessage(
                         plain,
                         localPrivateKey,
-                        e2eeKey ?: error("E2EE key not found")
+                        e2eeKey ?: error("E2EE key not found"),
+                        timestamp
                     )
                 } catch (e: Exception) {
                     L.e { "[Call] LCallViewModel rtm encrypt error = ${e.message}" }
@@ -370,7 +429,7 @@ class LCallViewModel (
             audioHandler.let { handler ->
                 handler.audioDeviceChangeListener = object : AudioDeviceChangeListener {
                     override fun invoke(audioDevices: List<AudioDevice>, selectedAudioDevice: AudioDevice?) {
-                        L.i { "[call] LCallViewModel audioDevice changeListener selectedAudioDevice = ${selectedAudioDevice?.name}" }
+                        L.d { "[call] LCallViewModel audioDevice changeListener selectedAudioDevice = ${selectedAudioDevice?.name}" }
                         callConfig.let {
                             val excludedNameRegex = it.denoise?.bluetooth?.excludedNameRegex
                             val deviceName = selectedAudioDevice?.name
@@ -397,11 +456,20 @@ class LCallViewModel (
             val response = withTimeoutOrNull(15000L) { room::ttCallResp.flow.filterNotNull().first() }
             L.i { "[Call] LCallViewModel start call response callback." }
             if (response == null) {
-                roomCtl.collectError(StartCallException("call response timeout"))
+                L.e { "[Call] LCallViewModel start call response is null." }
+                roomCtl.collectError(StartCallException(ResUtils.getString(R.string.call_connect_exception_error)))
                 return@launch
             }
             if (response.body == null || response.base.status != 0) {
-                roomCtl.collectError(StartCallException("call response exception, status:${response.base.status}"))
+                L.e { "[Call] LCallViewModel start call response error, status:${response.base.status} reason:${response.base.reason}." }
+                when (response.base.status) {
+                    22001 -> {
+                        roomCtl.collectError(StartCallException(ResUtils.getString(R.string.call_connect_error_ended)))
+                    }
+                    else -> {
+                        roomCtl.collectError(StartCallException(response.base.reason))
+                    }
+                }
                 return@launch
             }
             roomId = response.body.roomId
@@ -417,7 +485,7 @@ class LCallViewModel (
             if (e2eeEnable) {
                 val mk = messageEncryptor.decryptCallKey(response.body.publicKey, response.body.emk)
                 if (mk == null) {
-                    roomCtl.collectError(StartCallException("e2ee key is null or emk missing"))
+                    roomCtl.collectError(StartCallException(ResUtils.getString(R.string.call_e2ee_key_error)))
                     return@launch
                 } else e2eeKey = mk
             }
@@ -444,14 +512,14 @@ class LCallViewModel (
                 putExtra(LCallConstants.BUNDLE_KEY_CALL_TYPE, callType.type)
                 putExtra(LCallConstants.BUNDLE_KEY_CALL_ROLE, CallRole.CALLER.type)
             }
-            LCallManager.startRingTone(ringIntent)
+            callRingtoneManager.startRingTone(ringIntent)
         }
     }
 
     /**
      * Registers an error collector to handle and log errors from the ViewModel's error stream.
      */
-    private fun registerErrorCollector() { viewModelScope.launch { error.collect { it?.let { L.e { it.stackTraceToString() } } } } }
+    private fun registerErrorCollector() { viewModelScope.launch { error.collect { it?.let { L.e { "[LCallViewModel] registerErrorCollector error: ${it.stackTraceToString()}" } } } } }
 
     /**
      * Registers a participant change listener to monitor and manage call participant updates.
@@ -475,7 +543,7 @@ class LCallViewModel (
      * Registers a listener for contact updates and maintains the call contact cache.
      */
     private fun registerContactsUpdateListener() {
-        viewModelScope.launch(Dispatchers.IO) { callToChatController.getContactsUpdateListener().collect { LCallManager.updateCallContactorCache(it) } }
+        viewModelScope.launch(Dispatchers.IO) { callToChatController.getContactsUpdateListener().collect { contactorCacheManager.updateCallContactorCache(it) } }
     }
 
     private fun registerGroupsUpdateListener() {
@@ -506,7 +574,7 @@ class LCallViewModel (
             val isSilent = participantsList.firstOrNull { it.isMicrophoneEnabled } == null || speakers.isEmpty()
             if (hasRemote) {
                 if (isSilent) {
-
+                    hasOtherActiveSpeaker = false
                     if (isOnePersonChecking) { noSpeakJob?.cancel(); isOnePersonChecking = false; roomCtl.updateNoSpeakSoloTimeout(false) }
                     if (!isNoSpeakerChecking && isTimeoutCheckApplicable()) {
                         isNoSpeakerChecking = true; isOnePersonChecking = false
@@ -517,6 +585,7 @@ class LCallViewModel (
                         }
                     }
                 } else {
+                    hasOtherActiveSpeaker = true
                     noSpeakJob?.cancel(); isNoSpeakerChecking = false; isOnePersonChecking = false; roomCtl.updateNoSpeakSoloTimeout(false)
                 }
             } else {
@@ -589,13 +658,13 @@ class LCallViewModel (
     private fun handleDataReceived(it: RoomEvent.DataReceived) {
         rtm.handleDataReceived(
             event = it,
-            onChat = { p, text -> showCallBarrageMessage(p, text) },
+            onChat = { p, text, type -> showCallBarrageMessage(p, text, type) },
             onMuteMe = { setMicEnabled(false) },
             onResumeMe = {
                 if (getCurrentCallType() == CallType.ONE_ON_ONE.type) resetNoBodySpeakCheck()
             },
             onEndCall = {
-                roomId?.let { rid -> LCallManager.removeCallData(rid); sendHangUpBroadcast(rid) }
+                roomId?.let { rid -> callDataManager.removeCallData(rid); sendHangUpBroadcast(rid) }
             },
             onCountDown = { data, topic ->
                 when (topic) {
@@ -637,13 +706,91 @@ class LCallViewModel (
     /**
      * Displays a call barrage message (floating chat message) in the call UI for a specific participant.
      */
-    fun showCallBarrageMessage(participant: Participant, message: String) {
+    fun showCallBarrageMessage(participant: Participant, message: String, type: Int? = RTM_MESSAGE_TYPE_DEFAULT) {
         participant.identity?.value?.let { identityValue ->
+            if(message.isEmpty()) return@let
             viewModelScope.launch(Dispatchers.IO) {
-                val name = LCallManager.getDisplayName(identityValue) ?: LCallManager.convertToBase58UserName(identityValue) ?: identityValue
-                val showName = StringUtil.getShowUserName(name, 14)
-                val barrageMessage = BarrageMessage(showName, message, System.currentTimeMillis())
-                withContext(Dispatchers.Main) { callUiController.setBarrageMessage(barrageMessage) }
+                when (type) {
+                    RTM_MESSAGE_TYPE_DEFAULT -> {
+                        val name = contactorCacheManager.getDisplayName(identityValue) ?: IdUtil.convertToBase58UserName(identityValue) ?: identityValue
+                        val showName = StringUtil.truncateWithEllipsis(name, 10)
+                        val barrageMessage = BarrageMessage(showName, message, System.currentTimeMillis())
+                        withContext(Dispatchers.Main) { callUiController.setBarrageMessage(barrageMessage) }
+                    }
+                    // 气泡消息
+                    RTM_MESSAGE_TYPE_BUBBLE -> {
+                        // 获取用户名（与 RTM_MESSAGE_TYPE_DEFAULT 保持一致）
+                        val name = contactorCacheManager.getDisplayName(identityValue) 
+                            ?: IdUtil.convertToBase58UserName(identityValue) 
+                            ?: identityValue
+                        val showName = StringUtil.truncateWithEllipsis(name, 10)
+
+                        // 从 callConfig 获取气泡消息配置
+                        val bubbleConfig = callConfig.bubbleMessage
+                        val baseSpeed = bubbleConfig?.baseSpeed ?: 4600L // 基础时间5秒
+                        val deltaSpeed = bubbleConfig?.deltaSpeed ?: 400L // 偏移时间2秒，总范围5-7秒
+                        val columns = bubbleConfig?.columns ?: listOf(10, 40, 70)
+
+                        // 判断消息类型并解析内容
+                        // 使用 BreakIterator 获取第一个 grapheme，判断整个消息是否是一个 emoji
+                        val (emojiInfo, textInfo, bubbleType) = run {
+                            val iterator = java.text.BreakIterator.getCharacterInstance()
+                            iterator.setText(message)
+                            val firstStart = iterator.first()
+                            val firstEnd = iterator.next()
+                            
+                            if (firstEnd != java.text.BreakIterator.DONE) {
+                                val firstGrapheme = message.substring(firstStart, firstEnd)
+                                val isSingleEmoji = firstGrapheme == message && StringUtil.isEmojiGrapheme(firstGrapheme)
+                                
+                                if (isSingleEmoji) {
+                                    // 整个消息是一个 emoji
+                                    Triple(firstGrapheme, "", BubbleMessageType.EMOJI)
+                                } else {
+                                    // 多字符，尝试分离文本和末尾 emoji
+                                    val (text, emoji) = StringUtil.splitTextAndTrailingEmoji(message)
+                                    Triple(emoji, text, BubbleMessageType.TEXT)
+                                }
+                            } else {
+                                // 空消息或无法解析，默认为 TEXT
+                                Triple(null, message, BubbleMessageType.TEXT)
+                            }
+                        }
+
+                        // 随机选择位置和持续时间
+                        val startOffsetPercent = columns.random()
+                        val durationMillis = (kotlin.random.Random.nextDouble() * deltaSpeed + baseSpeed).toLong()
+
+                        // 创建并发送气泡消息
+                        when (bubbleType) {
+                            BubbleMessageType.EMOJI -> {
+                                emojiInfo?.let{
+                                    val bubbleMessage = EmojiBubbleMessage(
+                                        emoji = emojiInfo,
+                                        userName = showName,
+                                        startOffsetPercent = startOffsetPercent,
+                                        durationMillis = durationMillis
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        callUiController.setEmojiBubbleMessage(bubbleMessage)
+                                    }
+                                }
+                            }
+                            BubbleMessageType.TEXT -> {
+                                val bubbleMessage = TextBubbleMessage(
+                                    emoji = emojiInfo,
+                                    text = textInfo,
+                                    userName = showName,
+                                    startOffsetPercent = startOffsetPercent,
+                                    durationMillis = durationMillis
+                                )
+                                withContext(Dispatchers.Main) {
+                                    callUiController.setTextBubbleMessage(bubbleMessage)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -720,29 +867,35 @@ class LCallViewModel (
     /**
      * Handles the state when the call is successfully connected.
      */
-    private fun handleConnectedState() {
+    fun handleConnectedState() {
         roomCtl.updateCallStatus(CallStatus.CONNECTED)
         timerManager.startCallTimer { show ->
-            roomId?.let { LCallManager.updateCallingTime(it, show) }
+            roomId?.let { onGoingCallStateManager.updateCallingTime(it, show) }
         }
+    }
+
+    fun stopRingToneAndTimeoutCheck() {
+        callRingtoneManager.stopRingTone()
+        callVibrationManager.stopVibration()
+        cancelCallTimeoutCheck()
     }
 
     /**
      * Switches the current call type to INSTANT call mode and updates relevant call metadata.
      */
-    private fun switchToInstantCall() {
-        val callingListData = LCallManager.getCallListData()
+    fun switchToInstantCall() {
+        val callingListData = callDataManager.getCallListData()
         roomId?.let { rid ->
             viewModelScope.launch(Dispatchers.IO) {
                 if (rid.isNotEmpty() && callingListData?.containsKey(rid) == true) {
                     _callRoomName = if(callRole == CallRole.CALLER)
-                        "${LCallManager.getDisplayNameById(mySelfId)}${getString(R.string.call_instant_call_title)}"
+                        "${contactorCacheManager.getDisplayNameById(mySelfId)}${getString(R.string.call_instant_call_title)}"
                     else
                         "${callIntent.roomName}${getString(R.string.call_instant_call_title)}"
 
                     callingListData[rid]?.type = CallType.INSTANT.type
                     callingListData[rid]?.callName = _callRoomName
-                    LCallManager.updateCallingListData(callingListData)
+                    callDataManager.updateCallingListData(callingListData)
                     roomCtl.updateCallType(CallType.INSTANT.type)
                 }
             }
@@ -765,14 +918,19 @@ class LCallViewModel (
             userSid = room.localParticipant.sid.value
             userIdentity = room.localParticipant.identity?.value
             roomSid = room.sid?.sid
-            LCallManager.updateCallingState(rid, isInCalling = true)
+            callDataManager.updateCallingState(rid, isInCalling = true)
             if (getCurrentCallType() == CallType.ONE_ON_ONE.type) {
                 setMicEnabled(true)
                 if (room.remoteParticipants.size > 1) { switchToInstantCall(); handleConnectedState() }
                 else if (room.remoteParticipants.size == 1) handleConnectedState()
                 else start1V1CallTimeout(rid)
             } else {
-                handleConnectedState(); setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+                handleConnectedState()
+                room::ttCallResp.get()?.let { response ->
+                    val autoPublishSilenceAudio = response.callOptions.autoPublishSilenceAudio
+                    L.i { "[call] LCallViewModel room event connected, autoPublishSilenceAudio=$autoPublishSilenceAudio" }
+                    if (autoPublishSilenceAudio) setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+                }
             }
             refreshRoomMetadata()
         }
@@ -783,13 +941,13 @@ class LCallViewModel (
      */
     private fun onParticipantConnected(participant: Participant) {
         showCallBarrageMessage(participant, getString(R.string.call_barrage_message_join))
-        LCallManager.stopRingTone(); LCallManager.stopVibration(); cancelCallTimeoutCheck()
+        stopRingToneAndTimeoutCheck()
         if (getCurrentCallType() == CallType.ONE_ON_ONE.type) {
             handleConnectedState()
-            if(callIntent.callRole == CallRole.CALLER.type) callUiController.setCriticalAlertEnable(false)
             if (room.remoteParticipants.size > 1) switchToInstantCall()
         }
         refreshRoomMetadata()
+        participantManager.updateAwaitingJoinInvitees()
     }
 
     /**
@@ -799,7 +957,11 @@ class LCallViewModel (
         if (getCurrentCallType() == CallType.ONE_ON_ONE.type && onGoingCallStateManager.isInCalling()) {
             timeoutCheckState = TimeoutCheckState.PARTICIPANT_LEAVE
             roomId?.let { rid ->
-                LCallManager.checkCallWithTimeout(LCallManager.CallState.LEAVE_CALL, LCallManager.DEF_LEAVE_CALL_TIMEOUT, rid) { status ->
+                callTimeoutManager.checkCallWithTimeout(
+                    CallTimeoutManager.CallState.LEAVE_CALL,
+                    CallTimeoutManager.DEF_LEAVE_CALL_TIMEOUT,
+                    rid
+                ) { status ->
                     if (status) sendTimeoutBroadcast(rid)
                 }
             }
@@ -812,7 +974,11 @@ class LCallViewModel (
     private fun start1V1CallTimeout(rid: String) {
         roomCtl.updateCallStatus(if (callRole == CallRole.CALLER) CallStatus.CALLING else CallStatus.JOINING)
         timeoutCheckState = TimeoutCheckState.ONGOING_CALL
-        LCallManager.checkCallWithTimeout(LCallManager.CallState.ONGOING_CALL, LCallManager.DEF_ONGOING_CALL_TIMEOUT, rid) { sendTimeoutBroadcast(rid) }
+        callTimeoutManager.checkCallWithTimeout(
+            CallTimeoutManager.CallState.ONGOING_CALL,
+            CallTimeoutManager.DEF_ONGOING_CALL_TIMEOUT,
+            rid
+        ) { sendTimeoutBroadcast(rid) }
     }
 
     /**
@@ -820,7 +986,7 @@ class LCallViewModel (
      */
     private fun cancelCallTimeoutCheck() {
         if (timeoutCheckState != TimeoutCheckState.NONE) {
-            roomId?.let { if (it.isNotEmpty()) LCallManager.cancelCallWithTimeout(it) }
+            roomId?.let { if (it.isNotEmpty()) callTimeoutManager.cancelCallWithTimeout(it) }
             timeoutCheckState = TimeoutCheckState.NONE
         }
     }
@@ -829,6 +995,20 @@ class LCallViewModel (
      * Sends a broadcast notification when a call timeout occurs.
      */
     private fun sendTimeoutBroadcast(roomId: String) {
+        val currentRoomId = onGoingCallStateManager.getCurrentRoomId()
+        if (!onGoingCallStateManager.isInCalling() ||
+            onGoingCallStateManager.isInCallEnding() ||
+            currentRoomId == null ||
+            currentRoomId != roomId
+        ) {
+            L.i { "[Call] LCallViewModel skip timeout broadcast. inCalling=${onGoingCallStateManager.isInCalling()} isEnding=${onGoingCallStateManager.isInCallEnding()} currentRoomId=$currentRoomId roomId=$roomId" }
+            return
+        }
+        L.i {
+            "[Call] LCallViewModel send timeout broadcast. " +
+                "roomId=$roomId role=${callRole.type} status=${callStatus.value} " +
+                "callType=${callType.value} timeoutState=$timeoutCheckState"
+        }
         val intent = Intent(LCallConstants.CALL_ONGOING_TIMEOUT).apply {
             putExtra(LCallConstants.BUNDLE_KEY_ROOM_ID, roomId)
             setPackage(ApplicationHelper.instance.packageName)
@@ -840,7 +1020,7 @@ class LCallViewModel (
      * Determines whether barrage (floating comments/messages) should be shown for a remote participant.
      * */
     private fun shouldShowBarrageForRemoteParticipant(participant: Participant): Boolean {
-        val participantUid = LCallManager.getUidByIdentity(participant.identity?.value)
+        val participantUid = IdUtil.getUidByIdentity(participant.identity?.value)
         return participantUid != null && participantUid != mySelfId
     }
 
@@ -929,31 +1109,159 @@ class LCallViewModel (
         }
     }
 
+    /**
+     * Initiates resource cleanup when exiting the call.
+     * 
+     * The cleanup is performed asynchronously in a background thread to avoid blocking
+     * the UI thread and prevent ANR (Application Not Responding) issues.
+     */
     fun doExitClear() {
-        onCleared()
-        isCallResourceReleased = true
+        startCleanupIfNeeded(reason = "doExitClear")
     }
 
     /**
-     * Cleans up resources when the ViewModel is cleared.
+     * Cleans up resources when the ViewModel is cleared by Android lifecycle.
+     * 
+     * Both [doExitClear] and [onCleared] use the same cleanup entry point
+     * ([startCleanupIfNeeded]) to ensure consistent cleanup behavior and proper
+     * concurrency handling.
      */
     override fun onCleared() {
         super.onCleared()
         L.i { "[Call] LCallViewModel onCleared start." }
-        if (isCallResourceReleased) return
-        shouldTriggerFeedbackView()
-        roomCtl.disconnectAndRelease()
-        try { audioHandler.stop(); audioHandler.audioDeviceChangeListener = null } catch (_: Exception) {}
-        LCallManager.resetCallingTime()
-        timerManager.stopCallTimer(); timerManager.stopCountdown()
-        setConnectedServerUrl(null)
-        resetFeedbackData()
-        // 取消所有协程Job，防止内存泄漏
+        // 兜底触发：同一套入口，同一套并发语义
+        startCleanupIfNeeded(reason = "onCleared")
+        
+        L.i { "[Call] LCallViewModel onCleared done." }
+    }
+
+    /**
+     * Starts the cleanup process if not already running.
+     * 
+     * This method implements a thread-safe mechanism to prevent duplicate cleanup
+     * operations. It checks if a cleanup job is already active and skips starting
+     * a new one if cleanup is in progress. The actual cleanup execution is delegated
+     * to [cleanupOnce], which uses a Mutex to ensure only one cleanup operation
+     * executes at a time.
+     * 
+     * The cleanup is performed in the [appScope] on [Dispatchers.IO] to avoid
+     * blocking the main thread. The cleanup job is wrapped with [NonCancellable]
+     * to ensure it completes even if the ViewModel scope is cancelled.
+     * 
+     * @param reason A string identifier indicating why the cleanup was triggered
+     *               (e.g., "doExitClear", "onCleared") for logging purposes.
+     */
+    private fun startCleanupIfNeeded(reason: String) {
+        val job = appScope.launch(Dispatchers.IO) {
+            withContext(NonCancellable) {
+                cleanupOnce(reason)
+            }
+        }
+
+        // 只有在当前没有 job 的情况下，才允许设置成功
+        if (!cleanupJobRef.compareAndSet(null, job)) {
+            job.cancel()  // Cancel our new job, keep the existing one
+            L.i { "[Call] LCallViewModel cleanup already running, cancelled duplicate job. reason=$reason" }
+            return
+        }
+    }
+
+
+    /**
+     * Performs the actual resource cleanup operations.
+     * 
+     * This method is protected by a [cleanupMutex] to ensure only one cleanup
+     * operation executes at a time, even if called concurrently. It uses an
+     * atomic flag ([isCallResourceReleased]) to guarantee idempotency - if cleanup
+     * has already been executed, subsequent calls will return immediately.
+     * 
+     * Each cleanup step is wrapped in [runCatching] to ensure that failures in
+     * one step do not prevent other steps from executing. All errors are logged
+     * for debugging purposes.
+     * 
+     * @param reason A string identifier indicating why the cleanup was triggered,
+     *               used for logging and debugging.
+     */
+    private suspend fun cleanupOnce(reason: String) {
+        cleanupMutex.withLock {
+            if (!isCallResourceReleased.compareAndSet(false, true)) {
+                L.i { "[Call] LCallViewModel cleanupOnce: already executed, skip. reason=$reason" }
+                return
+            }
+
+            L.i { "[Call] LCallViewModel cleanupOnce start. reason=$reason" }
+
+            runCatching { shouldTriggerFeedbackView() }
+                .onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: shouldTriggerFeedbackView failed" } }
+
+            // 0) 退出时取消可能仍在运行的超时检测，避免误触发退出广播
+            runCatching {
+                cancelCallTimeoutCheck()
+            }.onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: cancelCallTimeoutCheck failed" } }
+
+            // 1) LiveKit/Room 重 IO：必须后台线程执行
+            runCatching {
+                withTimeoutOrNull(5000L) {
+                roomCtl.disconnectAndRelease()
+            } ?: L.w { "[Call] cleanupOnce: roomCtl.disconnectAndRelease timeout" } }
+                .onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: roomCtl.disconnectAndRelease failed" } }
+
+            // 2) 音频处理器停止 & listener 解绑
+            runCatching {
+                audioHandler.stop()
+                audioHandler.audioDeviceChangeListener = null
+            }.onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: stopping audioHandler failed" } }
+
+            // 3) 停止定时器
+            runCatching {
+                timerManager.stopCallTimer()
+                timerManager.stopCountdown()
+            }.onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: stopping timers failed" } }
+
+            // 4) 停止前台服务
+            runCatching {
+                checkAndStopOngoingCallService()
+            }.onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: stopping Service failed" } }
+
+            // 5) 其他资源清理（确保不依赖 Activity/UI）
+            runCatching {
+                setConnectedServerUrl(null)
+                resetFeedbackData()
+                cancelLocalJobs()
+            }.onFailure { L.e(it) { "[Call] LCallViewModel cleanupOnce: other cleanup failed" } }
+
+            L.i { "[Call] LCallViewModel cleanupOnce done. reason=$reason" }
+        }
+    }
+
+    /**
+     * Cancels local coroutine jobs that are no longer needed.
+     * 
+     * Cancelling these jobs prevents memory leaks and ensures that background
+     * operations are properly terminated when the call ends.
+     */
+    private fun cancelLocalJobs() {
         noSpeakJob?.cancel()
         noSpeakJob = null
         debounceSpeakerUpdateJob?.cancel()
         debounceSpeakerUpdateJob = null
-        L.i { "[Call] LCallViewModel onCleared done." }
+    }
+
+    /**
+     * Checks if the foreground service is running and stops it if necessary.
+     * 
+     * The service is stopped to ensure proper cleanup when the call ends, preventing
+     * the service from remaining in the foreground unnecessarily.
+     */
+    private suspend fun checkAndStopOngoingCallService() {
+        if (!ForegroundService.isServiceRunning) {
+            return
+        }
+        L.i { "[Call] LCallViewModel stop ongoing call service." }
+        withContext(Dispatchers.Main) {
+            val serviceIntent = Intent(application, ForegroundService::class.java)
+            application.stopService(serviceIntent)
+        }
     }
 
     /**
@@ -1033,7 +1341,7 @@ class LCallViewModel (
     /**
      * Retrieves the current call type from the call manager.
      */
-    private fun getCurrentCallType(): String { return LCallManager.getCallData(roomId)?.type ?: "" }
+    private fun getCurrentCallType(): String { return callDataManager.getCallData(roomId)?.type ?: "" }
 
     /**
      * Creates and adds a new call data entry to the call manager with the provided call details.
@@ -1050,7 +1358,7 @@ class LCallViewModel (
             callName = callName,
             source = CallDataSourceType.LOCAL
         )
-        LCallManager.addCallData(callData)
+        callDataManager.addCallData(callData)
     }
 
     /**
@@ -1059,7 +1367,7 @@ class LCallViewModel (
     private fun sendStartCallTextMessage(forWhat: For, callType: CallType, systemShowTimestamp: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val createCallMessageTime = System.currentTimeMillis()
-            val mySelfName = LCallManager.getDisplayName(mySelfId)
+            val mySelfName = contactorCacheManager.getDisplayName(mySelfId)
             val textContent = if (callType == CallType.GROUP) ApplicationHelper.instance.getString(R.string.call_group_send_message, mySelfName) else ApplicationHelper.instance.getString(R.string.call_1v1_send_message)
             LCallManager.sendOrLocalCallTextMessage(CallActionType.START, textContent, DEFAULT_DEVICE_ID, createCallMessageTime, systemShowTimestamp, For.Account(mySelfId), forWhat, callType, callConfig.createCallMsg)
         }
@@ -1107,7 +1415,7 @@ class LCallViewModel (
                         conversation = callIntent.conversationId,
                         roomId = roomId
                     )
-                    val joinCallParams = LCallManager.createStartCallParams(body)
+                    val joinCallParams = createStartCallParams(body)
                     connectToRoom(listOf(url), joinCallParams, LCallEngine.isUseQuicSignal())
                 }
         }
@@ -1138,7 +1446,7 @@ class LCallViewModel (
                     conversation = callIntent.conversationId,
                     roomId = roomId
                 )
-                val joinCallParams = LCallManager.createStartCallParams(body)
+                val joinCallParams = createStartCallParams(body)
                 // 选取 server URL
                 val serverUrls = serverNode?.url
                     ?.let(::listOf)
@@ -1154,14 +1462,14 @@ class LCallViewModel (
      */
     fun shouldTriggerFeedbackView() {
         if (timerManager.getCurrentDuration()< 60) return
-        if(CallFeedbackTriggerManager.shouldTriggerFeedback(currentCallNetworkPoor)) {
+        if(callFeedbackManager.shouldTriggerFeedback(currentCallNetworkPoor)) {
             val callInfo = FeedbackCallInfo(
-                userIdentity = userIdentity ?: LCallManager.getMyIdentity(),
+                userIdentity = userIdentity ?: IdUtil.getMyIdentity(),
                 userSid = userSid ?: "",
                 roomId = getRoomId() ?: "",
                 roomSid = roomSid ?: "",
             )
-            LCallManager.setCallFeedbackInfo(callInfo)
+            callFeedbackManager.setCallFeedbackInfo(callInfo)
         }
     }
 
@@ -1178,14 +1486,34 @@ class LCallViewModel (
     /**
      * Handles the sending of a critical alert notification to the server.
      */
-    fun handleCriticalAlert(uid: String ?= null, gid: String ?= null, callback: ((Boolean) -> Unit)? = null) {
+    fun handleCriticalAlertNew(gid: String ?= null, callback: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
-            val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).httpClient()
+            val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(application).httpClient()
             val auth = SecureSharedPrefsUtil.getBasicAuth()
-            val timestamp = System.currentTimeMillis() // 用于本地critical alert消息生成
-            val request = CriticalAlertRequestBody(destination = uid, gid = gid, timestamp = timestamp)
+            var baseTimestamp = System.currentTimeMillis() // 用于本地critical alert消息生成
+
+            val awaitingJoinInvitees = participantManager.awaitingJoinInvitees.value
+
+            val destinations = if (awaitingJoinInvitees.isEmpty()) emptyList() else {
+                awaitingJoinInvitees.map {
+                    baseTimestamp = baseTimestamp + 1
+                    CriticalAlertDestination(number = it, timestamp = baseTimestamp)
+                }
+            }
+
+            val criticalAlertGroup = if(gid.isNullOrEmpty()) null else CriticalAlertGroup(
+                gid = gid,
+                timestamp = baseTimestamp +1,
+            )
+
+            val requestBody = CriticalAlertRequestBodyNew(
+                destinations = destinations,
+                group = criticalAlertGroup,
+                roomId = roomId ?: "",
+            )
+
             withContext(Dispatchers.IO) {
-                chatHttpClient.httpService.sendCriticalAlert(auth, request)
+                chatHttpClient.httpService.sendCriticalAlertNew(auth, requestBody)
                     .subscribe({
                         if(it.status == 0) {
                             callback?.invoke(true)
@@ -1196,27 +1524,36 @@ class LCallViewModel (
 
                             it.serverTimestamp?.let { serverTimestamp ->
                                 L.i { "[Call] sendCriticalAlert response serverTimestamp:$serverTimestamp" }
-                                // 本地生成 critical alert 文本消息
-                                val myUid = callToChatController.getMySelfUid()
-                                val fromWho = difft.android.messageserialization.For.Account(myUid)
-                                val forWhat = if (gid != null) {
-                                    difft.android.messageserialization.For.Group(gid)
-                                } else {
-                                    uid?.let { difft.android.messageserialization.For.Account(it) }
+                                it.data?.delivers?.forEach { deliver ->
+                                    val myUid = callToChatController.getMySelfUid()
+                                    val fromWho = For.Account(myUid)
+                                    val forWhat = For.Account(deliver)
+                                    // 本地生成 critical alert 文本消息
+                                    requestBody.destinations?.find { it.number == deliver }?.timestamp?.let { timestamp ->
+                                        viewModelScope.launch {
+                                            callToChatController.createCriticalAlertMessage(serverTimestamp, timestamp, fromWho, forWhat, DEFAULT_DEVICE_ID)
+                                        }
+                                    }
                                 }
-                                forWhat?.let { target ->
-                                    viewModelScope.launch {
-                                        callToChatController.createCriticalAlertMessage(serverTimestamp, timestamp, fromWho, target, DEFAULT_DEVICE_ID)
+
+                                gid?.let {
+                                    val myUid = callToChatController.getMySelfUid()
+                                    val fromWho = For.Account(myUid)
+                                    val forWhat = For.Group(gid)
+                                    requestBody.group?.timestamp?.let { timestamp ->
+                                        viewModelScope.launch {
+                                            callToChatController.createCriticalAlertMessage(serverTimestamp, timestamp, fromWho, forWhat, DEFAULT_DEVICE_ID)
+                                        }
                                     }
                                 }
                             }
                         }else {
                             L.e { "[Call] handleCriticalAlert failed, status = ${it.status} reason = ${it.reason}" }
                             callback?.invoke(false)
-                            getString(R.string.call_barrage_message_critical_alert_failed)
+                            showToastMessage(getString(R.string.call_barrage_message_critical_alert_failed))
                         }
                     }, {
-                        it.printStackTrace()
+                        L.w { "[LCallViewModel] handleCriticalAlertNew error: ${it.stackTraceToString()}" }
                         val reason = it.message
                         val code = (it as? HttpException)?.code()
                         callback?.invoke(false)
@@ -1273,6 +1610,10 @@ class LCallViewModel (
         return callType.value == CallType.GROUP.type && isCriticalAlertEnable
     }
 
+    fun isInstantCriticalAlertEnable(awaitingJoinInvitees: List<String>): Boolean {
+        return callType.value == CallType.INSTANT.type && awaitingJoinInvitees.isNotEmpty()
+    }
+
     fun isRequestingPermission() = callUiController.isRequestingPermission.value
 
     fun isControlButtonClickEnabled(): Boolean {
@@ -1282,4 +1623,14 @@ class LCallViewModel (
             callStatus.value == CallStatus.CONNECTED || callStatus.value == CallStatus.RECONNECTED
         }
     }
+
+    fun hasOtherActiveSpeaker(): Boolean {
+        L.i { "[Call] hasOtherActiveSpeaker: $hasOtherActiveSpeaker" }
+        return hasOtherActiveSpeaker
+    }
+
+    fun addAwaitingJoinInvitees(inviteeIds: List<String>) {
+        participantManager.addAwaitingJoinInvitees(inviteeIds)
+    }
+
 }

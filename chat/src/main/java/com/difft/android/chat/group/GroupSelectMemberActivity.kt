@@ -15,13 +15,14 @@ import com.difft.android.base.log.lumberjack.L
 
 import org.difft.app.database.convertToContactorModels
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
 import org.difft.app.database.search
 import org.difft.app.database.wcdb
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.contactsall.GroupMemberRoleComparator
-import com.difft.android.chat.contacts.contactsall.PinyinComparator2
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
+import com.difft.android.chat.contacts.contactsall.sortedByRoleThenPinyin
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.FriendSourceType
@@ -38,11 +39,12 @@ import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.rx3.awaitFirstOrNull
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import java.util.Collections
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
@@ -181,17 +183,18 @@ class GroupSelectMemberActivity : BaseActivity() {
                         it.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER,
                         isSelected = false,
                         checkBoxEnable = true,
-                        showCheckBox = canOperate
+                        showCheckBox = canOperate,
+                        letterName = it.getDisplayNameWithoutRemarkForUI()
                     )
                 )
             }
 
             withContext(Dispatchers.Main) {
-                // 使用自定义比较器排序
-                list.sortWith(GroupMemberRoleComparator())
+                // 使用扩展函数排序
+                val sortedList = list.sortedByRoleThenPinyin()
 
-                addRoleDecoration(list)
-                mAdapter.submitList(list)
+                addRoleDecoration(sortedList)
+                mAdapter.submitList(sortedList)
             }
         }
     }
@@ -238,14 +241,14 @@ class GroupSelectMemberActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    groupRepo.removeMembers(gid, currentSelectedIds.toList()).blockingGet()
+                    groupRepo.removeMembers(gid, currentSelectedIds.toList()).await()
                 }
 
                 if (response.status == 0) {
                     // 移除成员成功后，刷新群组信息
                     try {
                         withContext(Dispatchers.IO) {
-                            GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).blockingFirst()
+                            GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).awaitFirstOrNull()
                         }
                     } catch (e: Exception) {
                         L.e { "[GroupSelectMemberActivity] Failed to refresh group info after removing members: ${e.message}" }
@@ -260,7 +263,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                 }
             } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
-                e.printStackTrace()
+                L.w { "[GroupSelectMemberActivity] removeMembers error: ${e.stackTraceToString()}" }
                 ToastUtil.showLong(R.string.chat_net_error)
             }
         }
@@ -293,7 +296,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                 lifecycleScope.launch {
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.addMembers(gid, currentSelectedIds.toList()).blockingGet()
+                            groupRepo.addMembers(gid, currentSelectedIds.toList()).await()
                         }
 
                         when (response.status) {
@@ -301,7 +304,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                                 // 添加成员成功后，刷新群组信息
                                 try {
                                     withContext(Dispatchers.IO) {
-                                        GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).blockingFirst()
+                                        GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).awaitFirstOrNull()
                                     }
                                 } catch (e: Exception) {
                                     L.e { "[GroupSelectMemberActivity] Failed to refresh group info after adding members: ${e.message}" }
@@ -324,7 +327,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                         }
                     } catch (e: Exception) {
                         ComposeDialogManager.dismissWait()
-                        e.printStackTrace()
+                        L.w { "[GroupSelectMemberActivity] addMembers error: ${e.stackTraceToString()}" }
                         ToastUtil.showLong(R.string.chat_net_error)
                     }
                 }
@@ -367,7 +370,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                     refreshContactsList(contacts)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[GroupSelectMemberActivity] searchContacts error: ${e.stackTraceToString()}" }
             }
         }
     }
@@ -401,14 +404,13 @@ class GroupSelectMemberActivity : BaseActivity() {
                 0,
                 isCurrentlySelected, // 总的选择状态
                 !isInInitialSelection, // 只有不在初始选择列表中的才能操作checkbox
-                true
+                true,
+                letterName = contact.getDisplayNameWithoutRemarkForUI()
             )
-        }.let { ArrayList(it) }
-
-        searchResultList.let {
-            Collections.sort(it, PinyinComparator2())
-            mAdapter.submitList(it)
         }
+
+        val sortedList = searchResultList.sortedByPinyin()
+        mAdapter.submitList(sortedList)
     }
 
     private fun resetButtonClear(etContent: String?) {

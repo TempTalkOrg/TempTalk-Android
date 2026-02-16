@@ -7,7 +7,6 @@
     <color name="error" tools:ignore="ResourceName">#F84135</color>
     <color name="divider" tools:ignore="ResourceName">#2B3139</color>
     <color name="line" tools:ignore="ResourceName">#474D57</color>
-    <color name="line_indicator" >#EAECEF</color>
     <color name="icon" tools:ignore="ResourceName">#B7BDC6</color>
 
     <color name="loading_secondary_icon" tools:ignore="ResourceName">@color/t.secondary</color>
@@ -25,11 +24,9 @@
     <color name="t.success" tools:ignore="ResourceName">#01BC6A</color>
     <color name="t.info" tools:ignore="ResourceName">#82C1FC</color>
 
-
     <color name="bg.secondary.clicked" tools:ignore="ResourceName">@color/bg3</color>
     <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
     <color name="bg.confidential" tools:ignore="ResourceName">#5E6673</color>
-    <color name="bg.emoji" tools:ignore="ResourceName">@color/bg.disable</color>
 
     <!--Background Color-->
     <color name="bg1" tools:ignore="ResourceName">#181A20</color>
@@ -45,6 +42,9 @@
 
     <color name="bg.setting" tools:ignore="ResourceName">#181A20</color>
     <color name="bg.setting.item" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bgpage_primary" tools:ignore="ResourceName">#0B0E11</color>
+    <color name="bg5" tools:ignore="ResourceName">#181A20</color>
+    <color name="border" tools:ignore="ResourceName">#2B3139</color>
 
     <color name="login_logo_color" tools:ignore="ResourceName">#FFFFFF</color>
 

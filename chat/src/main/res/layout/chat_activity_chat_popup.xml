@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/coordinator_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
+
+    <!-- Scrim (dimmed background overlay) - starts transparent, fades in with animation -->
+    <View
+        android:id="@+id/scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:background="@color/transparent_black_32" />
+
+    <!-- Bottom Sheet Container -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bottom_sheet"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_forward_message_bottom_sheet"
+        android:clickable="true"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:focusable="true"
+        app:behavior_hideable="true"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <!-- Drag Handle indicator -->
+        <View
+            android:id="@+id/drag_handle"
+            android:layout_width="36dp"
+            android:layout_height="5dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_bottom_sheet_drag_handle"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Chat header (with popup-specific layout) -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container_view_header"
+            android:name="com.difft.android.chat.ui.ChatPopupHeaderFragment"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/drag_handle"
+            tools:layout="@layout/chat_fragment_header_popup" />
+
+        <!-- Message list -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container_view_contents"
+            android:name="com.difft.android.chat.ui.ChatMessageListFragment"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:tag="chatMessageListFragment"
+            app:layout_constraintBottom_toTopOf="@id/fragment_container_view_input"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_header"
+            tools:layout="@layout/chat_fragment_message_list" />
+
+        <!-- Input area -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container_view_input"
+            android:name="com.difft.android.chat.ui.ChatMessageInputFragment"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:tag="chatMessageInputFragment"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            tools:layout="@layout/chat_fragment_input" />
+
+        <!-- Voice recording overlay -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_voice_record"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            tools:visibility="visible">
+
+            <View
+                android:id="@+id/v_voice_record_bg"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:layout_marginBottom="60dp"
+                android:background="@drawable/voice_record_bg"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                tools:visibility="visible" />
+
+            <com.difft.android.chat.widget.VoiceRecorderView
+                android:id="@+id/v_voice_recorder"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="88dp"
+                android:layout_marginEnd="44dp"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <include
+            android:id="@+id/include_full_input"
+            layout="@layout/layout_chat_full_input" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

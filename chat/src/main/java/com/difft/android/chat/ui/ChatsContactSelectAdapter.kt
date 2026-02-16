@@ -59,7 +59,7 @@ class ChatsContactItemViewHolder(val parentView: ViewGroup, val myID: String, pr
         } else {
             binding.imageviewAvatar.visibility = View.VISIBLE
             if (data.id == myID && !showMeOriginal) {
-                binding.textviewLabel.text = parentView.context.getString(R.string.chat_favorites)
+                binding.textviewLabel.text = parentView.context.getString(com.difft.android.base.R.string.chat_favorites)
                 binding.imageviewAvatar.showFavorites()
             } else {
                 binding.textviewLabel.text = data.name

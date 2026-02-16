@@ -2,6 +2,7 @@ package com.difft.android.chat.group
 
 import android.os.Bundle
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatActivityGroupEditInfoBinding
@@ -54,7 +55,7 @@ class GroupEditInfoActivity : BaseActivity() {
                             it.second.reason?.let { message -> ToastUtil.showLong(message) }
                         }
                     }, {
-                        it.printStackTrace()
+                        L.w { "[GroupEditInfoActivity] changeGroupSettings error: ${it.stackTraceToString()}" }
                         ToastUtil.showLong(R.string.chat_net_error)
                     })
             } else {

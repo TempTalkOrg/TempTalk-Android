@@ -1,5 +1,7 @@
 package com.luck.picture.lib.config;
 
+import com.difft.android.base.log.lumberjack.L;
+
 
 import android.text.TextUtils;
 
@@ -222,7 +224,7 @@ public final class PictureMimeType {
         try {
             return mineType.substring(mineType.lastIndexOf("/")).replace("/", ".");
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureMimeType] getLastSourceSuffix error:");
             return JPG;
         }
     }
@@ -241,7 +243,7 @@ public final class PictureMimeType {
                 result = path.substring(lastIndexOf + 1);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureMimeType] getUrlToFileName error:");
         }
         return result;
     }

@@ -21,14 +21,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.rememberAsyncImagePainter
-import com.difft.android.base.ui.theme.SfProFont
-import com.difft.android.call.LCallManager
-import com.difft.android.call.LocalImageLoaderProvider
 import com.difft.android.call.R
+import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -85,15 +84,15 @@ fun ShowSpeakerStatusView(participant: Participant, userName: String?) {
             tint = tintColor,
         )
 
-        val username = "${userName ?: LCallManager.convertToBase58UserName(participant.identity?.value)}"
+        val username = "${userName ?: IdUtil.convertToBase58UserName(participant.identity?.value)}"
 
         Text(
-            text = StringUtil.getShowUserName(username, 14),
+            text = StringUtil.truncateWithEllipsis(username, 14),
             // SF/P4
             style = TextStyle(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
-                fontFamily = SfProFont,
+                fontFamily = FontFamily.Default,
                 fontWeight = FontWeight(400),
                 color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
             )

@@ -68,7 +68,7 @@ class MessageTestUtil @Inject constructor(
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show("create success")
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 e.message?.let { message -> ToastUtil.show(message) }
             }
@@ -105,7 +105,7 @@ class MessageTestUtil @Inject constructor(
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show("disband or leave success")
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 e.message?.let { message -> ToastUtil.show(message) }
             }
@@ -133,7 +133,45 @@ class MessageTestUtil @Inject constructor(
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show("send success")
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
+    }
+
+    fun sendTestMessageToSingleGroup(
+        activity: Activity,
+        scope: CoroutineScope,
+        count: Int = 50,
+        isConfidential: Boolean = false
+    ) {
+        ComposeDialogManager.showWait(activity, "")
+
+        scope.launch {
+            try {
+                val targetGroup = withContext(Dispatchers.IO) {
+                    wcdb.group.allObjects
+                        .filter { it.name?.startsWith(testGroupNamePrefix) == true }
+                        .minByOrNull { it.name?.replace(testGroupNamePrefix, "")?.toIntOrNull() ?: Int.MAX_VALUE }
+                }
+
+                if (targetGroup == null) {
+                    ComposeDialogManager.dismissWait()
+                    ToastUtil.show("No test group found")
+                    return@launch
+                }
+
+                L.d { "[test] sendTestMessageToSingleGroup target: ${targetGroup.name}, count: $count" }
+
+                repeat(count) {
+                    val content = generateTestMessage()
+                    sendTextPush(targetGroup.gid, content, isConfidential)
+                }
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("send $count messages to ${targetGroup.name}")
+            } catch (e: Exception) {
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 e.message?.let { message -> ToastUtil.show(message) }
             }

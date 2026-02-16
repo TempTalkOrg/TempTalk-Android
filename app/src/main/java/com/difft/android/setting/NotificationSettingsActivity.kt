@@ -3,29 +3,15 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.provider.Settings
-import android.view.View
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.commit
+import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.user.GlobalNotificationType
-import com.difft.android.base.user.NotificationContentDisplayType
-import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.call.util.FullScreenPermissionHelper
-import com.difft.android.chat.R
-import com.difft.android.chat.group.GroupGlobalNotificationSettingsActivity
-import com.difft.android.databinding.ActivityNotificationSettingsBinding
-import com.difft.android.push.FcmInitResult
-import com.difft.android.push.PushUtil
-import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import org.thoughtcrime.securesms.messages.MessageForegroundService
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import javax.inject.Inject
 
-
+/**
+ * Activity container for NotificationSettingsFragment
+ * The actual UI logic is in NotificationSettingsFragment for dual-pane support
+ */
 @AndroidEntryPoint
 class NotificationSettingsActivity : BaseActivity() {
 
@@ -36,147 +22,14 @@ class NotificationSettingsActivity : BaseActivity() {
         }
     }
 
-    private val mBinding: ActivityNotificationSettingsBinding by viewbind()
-
-    @Inject
-    lateinit var messageNotificationUtil: MessageNotificationUtil
-
-    @Inject
-    lateinit var userManager: UserManager
-
-    @Inject
-    lateinit var pushUtil: PushUtil
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        mBinding.ibBack.setOnClickListener { finish() }
-    }
+        setContentView(R.layout.activity_fragment_container)
 
-    override fun onResume() {
-        super.onResume()
-        initView()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-    }
-
-    private fun initView() {
-        // 设置全局通知开关状态
-        mBinding.tvGlobalNotification.text = when (userManager.getUserData()?.globalNotification) {
-            GlobalNotificationType.ALL.value -> getString(com.difft.android.chat.R.string.notification_all)
-            GlobalNotificationType.MENTION.value -> getString(com.difft.android.chat.R.string.notification_mention_only)
-            GlobalNotificationType.OFF.value -> getString(com.difft.android.chat.R.string.notification_off)
-            else -> getString(com.difft.android.chat.R.string.notification_all)
-        }
-        mBinding.clGlobalNotification.setOnClickListener {
-            GroupGlobalNotificationSettingsActivity.start(this@NotificationSettingsActivity)
-        }
-
-        mBinding.clMessageSound.setOnClickListener {
-            messageNotificationUtil.openMessageNotificationChannelSettings(this)
-        }
-
-        // 设置通知显示内容状态
-        mBinding.tvNotificationDisplay.text = when (userManager.getUserData()?.notificationContentDisplayType) {
-            NotificationContentDisplayType.NAME_AND_CONTENT.value -> getString(com.difft.android.chat.R.string.notification_display_name_and_content)
-            NotificationContentDisplayType.NAME_ONLY.value -> getString(com.difft.android.chat.R.string.notification_only_name)
-            NotificationContentDisplayType.NO_NAME_OR_CONTENT.value -> getString(com.difft.android.chat.R.string.notification_no_name_or_content)
-            else -> getString(com.difft.android.chat.R.string.notification_display_name_and_content)
-        }
-        mBinding.clNotificationDisplay.setOnClickListener {
-            NotificationContentDisplaySettingsActivity.start(this@NotificationSettingsActivity)
-        }
-
-        mBinding.tvNotificationSettingsStatus.text = if (messageNotificationUtil.canShowNotifications())
-            getString(com.difft.android.chat.R.string.notification_enable) else getString(com.difft.android.chat.R.string.notification_disable)
-
-        mBinding.clNotificationSettings.setOnClickListener {
-            messageNotificationUtil.openNotificationSettings(this@NotificationSettingsActivity)
-        }
-
-        if (FullScreenPermissionHelper.isOppoEcosystemDevice()) {
-            mBinding.tvFullScreenNotificationSettingsStatus.visibility = View.GONE
-            mBinding.tvFullScreenNotificationTip.visibility = View.VISIBLE
-            mBinding.tvFullScreenNotificationTip.text = FullScreenPermissionHelper.getFullScreenSettingTip()
-        } else {
-            mBinding.tvFullScreenNotificationSettingsStatus.visibility = View.VISIBLE
-            if (messageNotificationUtil.hasFullScreenNotificationPermission()) {
-                mBinding.tvFullScreenNotificationSettingsStatus.text = getString(R.string.notification_enable)
-                mBinding.tvFullScreenNotificationTip.visibility = View.GONE
-            } else {
-                mBinding.tvFullScreenNotificationSettingsStatus.text = getString(R.string.notification_disable)
-                mBinding.tvFullScreenNotificationTip.visibility = View.VISIBLE
-                mBinding.tvFullScreenNotificationTip.text = FullScreenPermissionHelper.getFullScreenSettingTip()
+        if (savedInstanceState == null) {
+            supportFragmentManager.commit {
+                replace(R.id.fragment_container, NotificationSettingsFragment.newInstance())
             }
         }
-
-        mBinding.clFullScreenNotification.setOnClickListener {
-            messageNotificationUtil.openFullScreenNotificationSettings(this@NotificationSettingsActivity)
-        }
-
-        if (::messageNotificationUtil.isInitialized && messageNotificationUtil.isNotificationPolicyAccessGranted()) {
-            mBinding.tvCriticalAlertSettings.visibility = View.GONE
-            mBinding.tvCriticalAlertDisplay.text = getString(R.string.notification_enable)
-        } else {
-            mBinding.tvCriticalAlertSettings.text = ResUtils.getString(R.string.critical_alerts_content, PackageUtil.getAppName())
-            mBinding.tvCriticalAlertSettings.visibility = View.VISIBLE
-            mBinding.tvCriticalAlertDisplay.text = getString(R.string.notification_disable)
-        }
-
-        mBinding.clCriticalAlertDisplay.setOnClickListener {
-            val hasFcm = pushUtil.fcmInitResult.value is FcmInitResult.Success
-            val hasNotification = messageNotificationUtil.canShowNotifications()
-            val hasBgConnection = MessageForegroundService.isRunning
-            val dndSettingsEnabled = messageNotificationUtil.isNotificationPolicyAccessGranted()
-            val fullScreenNotificationEnabled = messageNotificationUtil.hasFullScreenNotificationPermission()
-
-            if (dndSettingsEnabled) {
-                openDndSettings()
-                return@setOnClickListener
-            }
-
-            val canOpenDnd = if (hasFcm) hasNotification && fullScreenNotificationEnabled else (hasNotification && hasBgConnection && fullScreenNotificationEnabled)
-
-            if (canOpenDnd) {
-                openDndSettings()
-                return@setOnClickListener
-            }
-
-            val errorMessageRes = when {
-                !hasNotification && (!hasFcm && !hasBgConnection) && !fullScreenNotificationEnabled -> R.string.critical_alert_all_permission_check_failed
-                !hasNotification -> R.string.critical_alert_notification_permission_check_failed
-                !fullScreenNotificationEnabled -> R.string.critical_alert_fullscreen_permission_check_failed
-                else -> R.string.critical_alert_background_connection_permission_check_failed
-            }
-
-            ComposeDialogManager.showMessageDialog(
-                context = this@NotificationSettingsActivity,
-                title = getString(R.string.tip),
-                message = getString(errorMessageRes),
-                confirmText = getString(R.string.invite_ok),
-                showCancel = false,
-                cancelable = false,
-            )
-        }
-
-        mBinding.clBackgroundConnection.setOnClickListener {
-            BackgroundConnectionSettingsActivity.startActivity(this@NotificationSettingsActivity)
-        }
     }
-
-    private val dndPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        // 当用户从设置页返回时，会回调到这里
-        val isGranted = messageNotificationUtil.isNotificationPolicyAccessGranted()
-        mBinding.tvCriticalAlertDisplay.text = if (isGranted) getString(R.string.notification_enable) else getString(R.string.notification_disable)
-        mBinding.tvCriticalAlertSettings.visibility = if (isGranted) View.GONE else View.VISIBLE
-    }
-
-    private fun openDndSettings() {
-        val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-        dndPermissionLauncher.launch(intent)
-    }
-
 }

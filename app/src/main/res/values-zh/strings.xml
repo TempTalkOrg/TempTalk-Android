@@ -40,7 +40,19 @@
     <string name="settings_new_key_time_format">yyyy-MM-dd HH:mm:ss</string>
 
     <string name="settings_about">关于</string>
-    <string name="settings_contact_ID">账号ID</string>
+    <string name="settings_contact_ID">联系人 ID</string>
+    <string name="settings_contact_ID_SWITCH">允许被搜索</string>
+    <string name="settings_contact_ID_status_success">设置成功</string>
+    <string name="settings_contact_ID_status_failed">设置失败</string>
+    <string name="settings_contact_ID_title">编辑联系人 ID</string>
+    <string name="settings_contact_ID_button_save">保存</string>
+    <string name="settings_contact_ID_input_hint">输入联系人 ID</string>
+    <string name="settings_contact_ID_valid_tip">· 长度为 6–20 个字符 \n· 须以字母或下划线开头 \n· 仅可使用字母、数字、下划线或减号 \n· 每 3 个月可修改一次</string>
+    <string name="settings_contact_ID_status_uid_limited">该 ID 每 3 个月只能修改一次。</string>
+    <string name="settings_contact_ID_status_uid_exists">该 ID 已被占用，请尝试其他，或使用 %s。</string>
+    <string name="settings_contact_ID_status_uid_invalid_1">必须以字母或“_”开头。请换一个再试。</string>
+    <string name="settings_contact_ID_status_uid_invalid_2">仅支持字母、数字、“_”或“-”。请换一个再试。</string>
+    <string name="settings_contact_ID_status_uid_length_invalid">长度需为 6–20 个字符。请换一个再试。</string>
     <string name="settings_information">信息</string>
     <string name="settings_version">版本</string>
     <string name="settings_build_version">构建版本</string>

@@ -1,5 +1,7 @@
 package com.luck.picture.lib.utils;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.ContentValues;
 import android.content.Context;
 import android.net.Uri;
@@ -112,7 +114,7 @@ public class DownloadFileUtils {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[DownloadFileUtils] saveLocalFile error:");
                 }
                 return null;
             }

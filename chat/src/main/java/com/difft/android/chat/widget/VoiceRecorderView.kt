@@ -276,7 +276,7 @@ class VoiceRecorderView @JvmOverloads constructor(
                     }
                     delay(100)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    L.w { "[VoiceRecorderView] error: ${e.stackTraceToString()}" }
                 }
             }
         }
@@ -396,7 +396,6 @@ class VoiceRecorderView @JvmOverloads constructor(
                 stop()
                 release()
             } catch (e: Exception) {
-                e.printStackTrace()
                 L.i { "[VoiceRecorder] stop failed:" + e.stackTraceToString() }
             }
         }

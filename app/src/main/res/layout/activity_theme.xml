@@ -34,7 +34,8 @@
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="@+id/ib_back"
             app:layout_constraintLeft_toRightOf="@+id/ib_back"
-            app:layout_constraintTop_toTopOf="@+id/ib_back" />
+            app:layout_constraintTop_toTopOf="@+id/ib_back"
+            app:layout_goneMarginStart="16dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

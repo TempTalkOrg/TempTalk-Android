@@ -1,7 +1,7 @@
 package com.difft.android.chat.ui
 
-
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import androidx.fragment.app.Fragment
@@ -74,7 +74,7 @@ class EmojiReactionActivity : BaseActivity() {
                     initViewPager(reactions)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[EmojiReactionActivity] error: ${e.stackTraceToString()}" }
             }
         }
     }

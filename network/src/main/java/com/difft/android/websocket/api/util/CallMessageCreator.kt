@@ -26,14 +26,14 @@ import org.whispersystems.signalservice.internal.push.CallMessageKt.reject
 import org.whispersystems.signalservice.internal.push.callMessage
 import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.encryptContent
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class CallMessageCreator @Inject constructor(
-    @Named("message_sender_max_envelope_size")
+    @param:Named("message_sender_max_envelope_size")
     private val maxEnvelopeSize: Long,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val conversationManager: ConversationManager,

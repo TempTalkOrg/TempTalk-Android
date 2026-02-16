@@ -31,10 +31,10 @@ import com.difft.android.base.widget.MessageDialog
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
- * 统一的Dialog测试页面
- * 展示ComposeDialogManager的两种调用方式：
- * 1. 直接调用API - 适用于所有Activity
- * 2. Composable函数 - 适用于Compose环境
+ * Unified Dialog Test Page
+ * Demonstrates two ways to call ComposeDialogManager:
+ * 1. Direct API Call - Works with all Activities
+ * 2. Composable Functions - Compose environment only
  */
 @AndroidEntryPoint
 class DialogTestActivity : BaseActivity() {
@@ -54,23 +54,23 @@ class DialogTestActivity : BaseActivity() {
         }
     }
 
-    // === 直接调用API方法 - 可在任何Activity中使用 ===
+    // === Direct API methods - Works with all Activities ===
 
     fun showMessageDialogDirect() {
         ComposeDialogManager.showMessageDialog(
             context = this,
-            title = "直接调用API",
-            message = "这是通过ComposeDialogManager.showMessageDialog()直接调用的对话框",
+            title = "Direct API Call",
+            message = "This dialog is called directly via ComposeDialogManager.showMessageDialog()",
             showCancel = true,
             cancelable = true,
             onConfirm = {
-                ComposeDialogManager.showTip(this, "用户点击了确定")
+                ComposeDialogManager.showTip(this, "User clicked OK")
             },
             onCancel = {
-                ComposeDialogManager.showTip(this, "用户点击了取消")
+                ComposeDialogManager.showTip(this, "User clicked Cancel")
             },
             onDismiss = {
-                ComposeDialogManager.showTip(this, "对话框已关闭")
+                ComposeDialogManager.showTip(this, "Dialog dismissed")
             }
         )
     }
@@ -87,7 +87,7 @@ class DialogTestActivity : BaseActivity() {
         ComposeDialogManager.showBottomDialog(
             activity = this,
             onDismiss = {
-                ComposeDialogManager.showTip(this, "底部Dialog已关闭")
+                ComposeDialogManager.showTip(this, "Bottom dialog dismissed")
             }
         ) {
             Column(
@@ -95,22 +95,22 @@ class DialogTestActivity : BaseActivity() {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "直接调用API",
+                    text = "Direct API Call",
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
                 Text(
-                    text = "这是通过ComposeDialogManager.showBottomDialog()直接调用的底部对话框",
+                    text = "This bottom dialog is called directly via ComposeDialogManager.showBottomDialog()",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
                 Button(
-                    onClick = { /* 关闭逻辑在onDismiss中处理 */ },
+                    onClick = { /* Close logic handled in onDismiss */ },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("关闭")
+                    Text("Close")
                 }
             }
         }
@@ -121,11 +121,11 @@ class DialogTestActivity : BaseActivity() {
             activity = this,
             layoutId = R.layout.test_custom_view_dialog,
             onDismiss = {
-                ComposeDialogManager.showTip(this, "自定义View底部Dialog已关闭")
+                ComposeDialogManager.showTip(this, "Custom view bottom dialog dismissed")
             }
         ) { view ->
             view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
-                // 关闭逻辑在onDismiss中处理
+                // Close logic handled in onDismiss
             }
         }
     }
@@ -134,7 +134,7 @@ class DialogTestActivity : BaseActivity() {
         ComposeDialogManager.showFullScreenBottomDialog(
             activity = this,
             onDismiss = {
-                ComposeDialogManager.showTip(this, "全屏底部Dialog已关闭")
+                ComposeDialogManager.showTip(this, "Fullscreen bottom dialog dismissed")
             }
         ) {
             Column(
@@ -144,22 +144,22 @@ class DialogTestActivity : BaseActivity() {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "全屏底部Dialog",
+                    text = "Fullscreen Bottom Dialog",
                     style = MaterialTheme.typography.headlineLarge,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
                 Text(
-                    text = "这是通过ComposeDialogManager.showFullScreenBottomDialog()直接调用的全屏底部对话框",
+                    text = "This fullscreen bottom dialog is called directly via ComposeDialogManager.showFullScreenBottomDialog()",
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
                 Button(
-                    onClick = { /* 关闭逻辑在onDismiss中处理 */ },
+                    onClick = { /* Close logic handled in onDismiss */ },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("关闭")
+                    Text("Close")
                 }
             }
         }
@@ -170,11 +170,11 @@ class DialogTestActivity : BaseActivity() {
             activity = this,
             layoutId = R.layout.test_custom_view_dialog,
             onDismiss = {
-                ComposeDialogManager.showTip(this, "全屏自定义View底部Dialog已关闭")
+                ComposeDialogManager.showTip(this, "Fullscreen custom view bottom dialog dismissed")
             }
         ) { view ->
             view.findViewById<View>(R.id.btn_close)?.setOnClickListener {
-                // 关闭逻辑在onDismiss中处理
+                // Close logic handled in onDismiss
             }
         }
     }
@@ -182,16 +182,16 @@ class DialogTestActivity : BaseActivity() {
     fun showNonDismissibleDialogDirect() {
         ComposeDialogManager.showMessageDialog(
             context = this,
-            title = "重要提示",
-            message = "这是一个不可通过点击外部取消的对话框，只能通过按钮操作。",
-            confirmText = "我知道了",
+            title = "Important Notice",
+            message = "This dialog cannot be dismissed by clicking outside. You must use the buttons.",
+            confirmText = "Got it",
             showCancel = true,
             cancelable = false,
             onConfirm = {
-                ComposeDialogManager.showTip(this, "用户确认了")
+                ComposeDialogManager.showTip(this, "User confirmed")
             },
             onCancel = {
-                ComposeDialogManager.showTip(this, "用户取消了")
+                ComposeDialogManager.showTip(this, "User cancelled")
             }
         )
     }
@@ -202,7 +202,7 @@ class DialogTestActivity : BaseActivity() {
 fun DialogTestScreen() {
     val context = LocalContext.current as DialogTestActivity
 
-    // === Composable函数方式的状态 ===
+    // === Composable function state ===
     var showMessageDialogComposable by remember { mutableStateOf(false) }
     var showWaitDialogComposable by remember { mutableStateOf(false) }
     var showBottomDialogComposable by remember { mutableStateOf(false) }
@@ -214,13 +214,14 @@ fun DialogTestScreen() {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .systemBarsPadding()
             .background(colorResource(id = com.difft.android.base.R.color.bg_setting))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
-                text = "Dialog测试页面",
+                text = "Dialog Test Page",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = colorResource(id = com.difft.android.base.R.color.t_primary),
@@ -228,14 +229,14 @@ fun DialogTestScreen() {
             )
             
             Text(
-                text = "展示ComposeDialogManager的两种调用方式",
+                text = "Demonstrates two ways to call ComposeDialogManager",
                 fontSize = 14.sp,
                 color = colorResource(id = com.difft.android.base.R.color.t_primary),
                 modifier = Modifier.padding(bottom = 16.dp)
             )
         }
 
-        // === 方式一：直接调用API ===
+        // === Method 1: Direct API Call ===
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -245,7 +246,7 @@ fun DialogTestScreen() {
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "方式一：直接调用API",
+                        text = "Method 1: Direct API Call",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF2196F3),
@@ -253,33 +254,33 @@ fun DialogTestScreen() {
                     )
                     
                     Text(
-                        text = "ComposeDialogManager.showXxx() - 适用于所有Activity",
+                        text = "ComposeDialogManager.showXxx() - Works with all Activities",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    // 消息对话框
+                    // Message Dialog
                     Button(
                         onClick = { context.showMessageDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("消息对话框 (直接调用)")
+                        Text("Message Dialog (Direct)")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 等待对话框
+                    // Wait Dialog
                     Button(
                         onClick = { context.showWaitDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("等待对话框 (直接调用)")
+                        Text("Wait Dialog (Direct)")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 底部Dialog
+                    // Bottom Dialog
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -288,20 +289,20 @@ fun DialogTestScreen() {
                             onClick = { context.showBottomDialogDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("底部Dialog", fontSize = 12.sp)
+                            Text("Bottom Dialog", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = { context.showBottomDialogWithViewDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("自定义View", fontSize = 12.sp)
+                            Text("Custom View", fontSize = 12.sp)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 全屏底部Dialog
+                    // Fullscreen Bottom Dialog
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -310,31 +311,31 @@ fun DialogTestScreen() {
                             onClick = { context.showFullScreenBottomDialogDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("全屏Dialog", fontSize = 12.sp)
+                            Text("Fullscreen", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = { context.showFullScreenBottomDialogWithViewDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("全屏View", fontSize = 12.sp)
+                            Text("Fullscreen View", fontSize = 12.sp)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 不可取消对话框
+                    // Non-dismissible Dialog
                     Button(
                         onClick = { context.showNonDismissibleDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("不可取消对话框 (直接调用)")
+                        Text("Non-dismissible Dialog (Direct)")
                     }
                 }
             }
         }
 
-        // === 方式二：Composable函数 ===
+        // === Method 2: Composable Functions ===
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -344,7 +345,7 @@ fun DialogTestScreen() {
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "方式二：Composable函数",
+                        text = "Method 2: Composable Functions",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF4CAF50),
@@ -352,33 +353,33 @@ fun DialogTestScreen() {
                     )
                     
                     Text(
-                        text = "@Composable fun XxxDialog() - 仅适用于Compose环境",
+                        text = "@Composable fun XxxDialog() - Compose environment only",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    // 消息对话框
+                    // Message Dialog
                     Button(
                         onClick = { showMessageDialogComposable = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("消息对话框 (Composable)")
+                        Text("Message Dialog (Composable)")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 等待对话框
+                    // Wait Dialog
                     Button(
                         onClick = { showWaitDialogComposable = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("等待对话框 (Composable)")
+                        Text("Wait Dialog (Composable)")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 底部Dialog
+                    // Bottom Dialog
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -387,20 +388,20 @@ fun DialogTestScreen() {
                             onClick = { showBottomDialogComposable = true },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("底部Dialog", fontSize = 12.sp)
+                            Text("Bottom Dialog", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = { showBottomDialogViewComposable = true },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("自定义View", fontSize = 12.sp)
+                            Text("Custom View", fontSize = 12.sp)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 全屏底部Dialog
+                    // Fullscreen Bottom Dialog
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -409,31 +410,31 @@ fun DialogTestScreen() {
                             onClick = { showFullScreenDialogComposable = true },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("全屏Dialog", fontSize = 12.sp)
+                            Text("Fullscreen", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = { showFullScreenDialogViewComposable = true },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("全屏View", fontSize = 12.sp)
+                            Text("Fullscreen View", fontSize = 12.sp)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 不可取消对话框
+                    // Non-dismissible Dialog
                     Button(
                         onClick = { showNonDismissibleDialogComposable = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("不可取消对话框 (Composable)")
+                        Text("Non-dismissible Dialog (Composable)")
                     }
                 }
             }
         }
 
-        // === 提示信息测试 ===
+        // === Snackbar Tips Test ===
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -443,7 +444,7 @@ fun DialogTestScreen() {
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "提示信息 (Snackbar)",
+                        text = "Snackbar Tips",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFFF9800),
@@ -458,25 +459,25 @@ fun DialogTestScreen() {
                             onClick = {
                                 ComposeDialogManager.showPopTip(
                                     context,
-                                    "简单提示消息"
+                                    "Simple tip message"
                                 )
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("简单提示", fontSize = 12.sp)
+                            Text("Simple", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = {
                                 ComposeDialogManager.showTip(
                                     context,
-                                    "成功消息",
+                                    "Success message",
                                     ComposeDialogManager.DialogType.SUCCESS
                                 )
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("成功提示", fontSize = 12.sp)
+                            Text("Success", fontSize = 12.sp)
                         }
                     }
 
@@ -490,30 +491,30 @@ fun DialogTestScreen() {
                             onClick = {
                                 ComposeDialogManager.showTip(
                                     context,
-                                    "错误消息",
+                                    "Error message",
                                     ComposeDialogManager.DialogType.ERROR
                                 )
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("错误提示", fontSize = 12.sp)
+                            Text("Error", fontSize = 12.sp)
                         }
 
                         Button(
                             onClick = {
                                 ComposeDialogManager.showTip(
                                     context,
-                                    "警告消息",
+                                    "Warning message",
                                     ComposeDialogManager.DialogType.WARNING,
-                                    actionText = "查看",
+                                    actionText = "View",
                                     onAction = {
-                                        ComposeDialogManager.showTip(context, "点击了查看")
+                                        ComposeDialogManager.showTip(context, "Clicked View")
                                     }
                                 )
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("警告+操作", fontSize = 12.sp)
+                            Text("Warning+Action", fontSize = 12.sp)
                         }
                     }
                 }
@@ -521,42 +522,42 @@ fun DialogTestScreen() {
         }
     }
 
-    // === Composable函数方式的Dialog调用 ===
+    // === Composable function Dialog calls ===
 
-    // 消息对话框
+    // Message Dialog
     MessageDialog(
         isVisible = showMessageDialogComposable,
-        title = "Composable函数",
-        message = "这是通过@Composable MessageDialog()函数调用的对话框",
+        title = "Composable Function",
+        message = "This dialog is called via @Composable MessageDialog() function",
         showCancel = true,
         cancelable = true,
         onConfirm = {
             showMessageDialogComposable = false
-            ComposeDialogManager.showTip(context, "用户点击了确定")
+            ComposeDialogManager.showTip(context, "User clicked OK")
         },
         onCancel = {
             showMessageDialogComposable = false
-            ComposeDialogManager.showTip(context, "用户点击了取消")
+            ComposeDialogManager.showTip(context, "User clicked Cancel")
         },
         onDismiss = {
             showMessageDialogComposable = false
-            ComposeDialogManager.showTip(context, "对话框已关闭")
+            ComposeDialogManager.showTip(context, "Dialog dismissed")
         }
     )
 
-    // 等待对话框
+    // Wait Dialog
     WaitDialog(
         isVisible = showWaitDialogComposable,
-        message = "正在处理中...",
+        message = "Processing...",
         cancelable = true
     )
 
-    // 底部Dialog - Compose内容
+    // Bottom Dialog - Compose content
     BottomDialog(
         isVisible = showBottomDialogComposable,
         onDismiss = { 
             showBottomDialogComposable = false
-            ComposeDialogManager.showTip(context, "底部Dialog已关闭")
+            ComposeDialogManager.showTip(context, "Bottom dialog dismissed")
         }
     ) {
         Column(
@@ -564,14 +565,14 @@ fun DialogTestScreen() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Composable函数",
+                text = "Composable Function",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
             
             Text(
-                text = "这是通过@Composable BottomDialog()函数调用的底部对话框",
+                text = "This bottom dialog is called via @Composable BottomDialog() function",
                 fontSize = 14.sp,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -584,25 +585,25 @@ fun DialogTestScreen() {
                     onClick = { showBottomDialogComposable = false },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("取消")
+                    Text("Cancel")
                 }
                 
                 Button(
                     onClick = { showBottomDialogComposable = false },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("确定")
+                    Text("OK")
                 }
             }
         }
     }
 
-    // 底部Dialog - 自定义View
+    // Bottom Dialog - Custom View
     BottomDialog(
         isVisible = showBottomDialogViewComposable,
         onDismiss = { 
             showBottomDialogViewComposable = false
-            ComposeDialogManager.showTip(context, "自定义View底部Dialog已关闭")
+            ComposeDialogManager.showTip(context, "Custom view bottom dialog dismissed")
         },
         layoutId = R.layout.test_custom_view_dialog
     ) { view ->
@@ -611,12 +612,12 @@ fun DialogTestScreen() {
         }
     }
 
-    // 全屏底部Dialog
+    // Fullscreen Bottom Dialog
     FullScreenBottomDialog(
         isVisible = showFullScreenDialogComposable,
         onDismiss = { 
             showFullScreenDialogComposable = false
-            ComposeDialogManager.showTip(context, "全屏底部Dialog已关闭")
+            ComposeDialogManager.showTip(context, "Fullscreen bottom dialog dismissed")
         }
     ) {
         Column(
@@ -626,14 +627,14 @@ fun DialogTestScreen() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "全屏底部Dialog",
+                text = "Fullscreen Bottom Dialog",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             
             Text(
-                text = "这是通过@Composable FullScreenBottomDialog()函数调用的全屏底部对话框",
+                text = "This fullscreen bottom dialog is called via @Composable FullScreenBottomDialog() function",
                 fontSize = 16.sp,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -642,17 +643,17 @@ fun DialogTestScreen() {
                 onClick = { showFullScreenDialogComposable = false },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("关闭")
+                Text("Close")
             }
         }
     }
 
-    // 全屏底部Dialog - 自定义View
+    // Fullscreen Bottom Dialog - Custom View
     FullScreenBottomDialog(
         isVisible = showFullScreenDialogViewComposable,
         onDismiss = { 
             showFullScreenDialogViewComposable = false
-            ComposeDialogManager.showTip(context, "全屏自定义View底部Dialog已关闭")
+            ComposeDialogManager.showTip(context, "Fullscreen custom view bottom dialog dismissed")
         },
         layoutId = R.layout.test_custom_view_dialog
     ) { view ->
@@ -661,21 +662,21 @@ fun DialogTestScreen() {
         }
     }
 
-    // 不可取消对话框
+    // Non-dismissible Dialog
     MessageDialog(
         isVisible = showNonDismissibleDialogComposable,
-        title = "重要提示",
-        message = "这是一个不可通过点击外部取消的对话框，只能通过按钮操作。",
-        confirmText = "我知道了",
+        title = "Important Notice",
+        message = "This dialog cannot be dismissed by clicking outside. You must use the buttons.",
+        confirmText = "Got it",
         showCancel = true,
         cancelable = false,
         onConfirm = { 
             showNonDismissibleDialogComposable = false
-            ComposeDialogManager.showTip(context, "用户确认了")
+            ComposeDialogManager.showTip(context, "User confirmed")
         },
         onCancel = { 
             showNonDismissibleDialogComposable = false
-            ComposeDialogManager.showTip(context, "用户取消了")
+            ComposeDialogManager.showTip(context, "User cancelled")
         }
     )
 }
@@ -683,7 +684,7 @@ fun DialogTestScreen() {
 @Preview(showBackground = true, name = "Dialog Test Preview")
 @Composable
 fun DialogTestPreview() {
-    // 预览版本，不依赖特定Activity
+    // Preview version, no dependency on specific Activity
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -693,7 +694,7 @@ fun DialogTestPreview() {
     ) {
         item {
             Text(
-                text = "Dialog测试页面",
+                text = "Dialog Test Page",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = colorResource(id = com.difft.android.base.R.color.t_primary),
@@ -701,14 +702,14 @@ fun DialogTestPreview() {
             )
             
             Text(
-                text = "展示ComposeDialogManager的两种调用方式",
+                text = "Demonstrates two ways to call ComposeDialogManager",
                 fontSize = 14.sp,
                 color = colorResource(id = com.difft.android.base.R.color.t_primary),
                 modifier = Modifier.padding(bottom = 16.dp)
             )
         }
 
-        // === 方式一：直接调用API ===
+        // === Method 1: Direct API Call ===
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -718,7 +719,7 @@ fun DialogTestPreview() {
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "方式一：直接调用API",
+                        text = "Method 1: Direct API Call",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF2196F3),
@@ -726,33 +727,33 @@ fun DialogTestPreview() {
                     )
                     
                     Text(
-                        text = "ComposeDialogManager.showXxx() - 适用于所有Activity",
+                        text = "ComposeDialogManager.showXxx() - Works with all Activities",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    // 示例按钮（预览模式不可点击）
+                    // Sample buttons (not clickable in preview mode)
                     Button(
-                        onClick = { /* 预览模式 */ },
+                        onClick = { /* Preview mode */ },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("消息对话框 (直接调用)")
+                        Text("Message Dialog (Direct)")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = { /* 预览模式 */ },
+                        onClick = { /* Preview mode */ },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("等待对话框 (直接调用)")
+                        Text("Wait Dialog (Direct)")
                     }
                 }
             }
         }
 
-        // === 方式二：Composable函数 ===
+        // === Method 2: Composable Functions ===
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -762,7 +763,7 @@ fun DialogTestPreview() {
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "方式二：Composable函数",
+                        text = "Method 2: Composable Functions",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF4CAF50),
@@ -770,26 +771,26 @@ fun DialogTestPreview() {
                     )
                     
                     Text(
-                        text = "@Composable fun XxxDialog() - 仅适用于Compose环境",
+                        text = "@Composable fun XxxDialog() - Compose environment only",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
                     Button(
-                        onClick = { /* 预览模式 */ },
+                        onClick = { /* Preview mode */ },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("消息对话框 (Composable)")
+                        Text("Message Dialog (Composable)")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = { /* 预览模式 */ },
+                        onClick = { /* Preview mode */ },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("等待对话框 (Composable)")
+                        Text("Wait Dialog (Composable)")
                     }
                 }
             }

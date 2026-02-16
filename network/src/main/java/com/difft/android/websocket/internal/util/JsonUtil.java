@@ -1,8 +1,4 @@
-/*
- * Copyright (C) 2014-2016 Open Whisper Systems
- *
- * Licensed according to the LICENSE file in this repository.
- */
+
 
 package com.difft.android.websocket.internal.util;
 
@@ -26,7 +22,7 @@ import com.difft.android.websocket.api.push.ACI;
 import com.difft.android.websocket.api.push.ServiceId;
 import com.difft.android.websocket.api.push.exceptions.MalformedResponseException;
 import com.difft.android.websocket.api.util.UuidUtil;
-import com.difft.android.websocket.util.Base64;
+import com.difft.android.base.utils.Base64;
 
 import java.io.IOException;
 import java.util.UUID;

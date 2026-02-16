@@ -12,6 +12,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
@@ -29,7 +30,7 @@ import com.difft.android.base.widget.ChativePopupWindow
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.LCallManager
+import com.difft.android.call.manager.CallDataManager
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatBinding
 import com.difft.android.chat.group.CreateGroupActivity
@@ -50,11 +51,13 @@ import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import io.reactivex.rxjava3.core.Single
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.rx3.asFlow
+import kotlinx.coroutines.withContext
 import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
@@ -63,6 +66,10 @@ import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
 import javax.inject.Inject
+import dagger.Lazy
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
@@ -92,10 +99,17 @@ class RecentChatFragment : DisposableManageFragment() {
     @Inject
     lateinit var logoutManager: LogoutManager
 
+    @Inject
+    lateinit var callDataManagerLazy: Lazy<CallDataManager>
+
     private lateinit var binding: ChatFragmentRecentChatBinding
     private var popupWindow: PopupWindow? = null
     private lateinit var popupItemList: MutableList<ChativePopupView.Item>
     private val recentChatViewModel: RecentChatViewModel by viewModels(ownerProducer = { requireActivity() })
+
+    private val callDataManager: CallDataManager by lazy {
+        callDataManagerLazy.get()
+    }
 
     private val mAdapter: RecentChatAdapter by lazy {
         object : RecentChatAdapter(requireActivity()) {
@@ -108,21 +122,32 @@ class RecentChatFragment : DisposableManageFragment() {
                     return
                 }
 
+                // Check if parent Activity supports dual-pane navigation
+                val navigationCallback = activity as? ConversationNavigationCallback
+
                 when (roomViewData.type) {
                     is Type.OneOnOne -> {
-                        L.i { "BH_Lin: onItemClicked - OneOnOne ChattingRoom" }
-                        ChatActivity.startActivity(
-                            requireActivity(),
-                            roomViewData.roomId
-                        )
+                        L.i { "onItemClicked - OneOnOne ChattingRoom" }
+                        if (navigationCallback != null) {
+                            navigationCallback.onOneOnOneConversationSelected(roomViewData.roomId)
+                        } else {
+                            ChatActivity.startActivity(
+                                requireActivity(),
+                                roomViewData.roomId
+                            )
+                        }
                     }
 
                     is Type.Group -> {
-                        L.i { "BH_Lin: onItemClicked - Group ChattingRoom" }
-                        GroupChatContentActivity.startActivity(
-                            requireActivity(),
-                            roomViewData.roomId
-                        )
+                        L.i { "onItemClicked - Group ChattingRoom" }
+                        if (navigationCallback != null) {
+                            navigationCallback.onGroupConversationSelected(roomViewData.roomId)
+                        } else {
+                            GroupChatContentActivity.startActivity(
+                                requireActivity(),
+                                roomViewData.roomId
+                            )
+                        }
                     }
                 }
             }
@@ -142,9 +167,9 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun registerCallingListener() {
-        LCallManager.callingList
-            .asFlow()
+        callDataManager.callingList
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .distinctUntilChanged()
             .onEach { callingList ->
                 L.d { "[Call] RecentChatFragment registerCallingListener: callingList = $callingList" }
                 val currentList: List<RoomViewData> = recentChatViewModel.allRecentRoomsStateFlow.value
@@ -153,27 +178,32 @@ class RecentChatFragment : DisposableManageFragment() {
             .launchIn(lifecycleScope)
     }
 
-
-    private fun moveCallingRoomsToTheTop(currentList: List<RoomViewData>, callingList: MutableMap<String, CallData>?): List<RoomViewData> {
+    private fun buildSortedListForCalling(
+        currentList: List<RoomViewData>,
+        callingList: Map<String, CallData>?,
+        instantCallRoomViewData: Map<String, RoomViewData>,
+        instantCallDefaultName: String
+    ): Pair<List<RoomViewData>, Map<String, RoomViewData>> {
         L.d { "[Call] RecentChatFragment moveCallingRoomsToTheTop: callingList = $callingList" }
-        val instantCallRoomViewData = recentChatViewModel.instantCallRoomViewData
+        val workingList = currentList.map { it.copy() }.toMutableList()
+        val instantCallRoomViewDataMap = instantCallRoomViewData.toMutableMap()
         // 如果没有callingList，则清除currentList中的callData 并清除instantCallRoomViewData的记录
         if (callingList.isNullOrEmpty()) {
-            currentList.forEach { item ->
+            workingList.forEach { item ->
                 item.callData = null
             }
-            instantCallRoomViewData.clear()
+            instantCallRoomViewDataMap.clear()
         }
 
         // 针对instant call 创建roomViewData
-        val currentRoomIds: List<String> = currentList.map { it.roomId }.toList()
+        val currentRoomIds: List<String> = workingList.map { it.roomId }.toList()
         callingList?.forEach { callDataMap ->
             val callData = callDataMap.value
             val roomId = callData.roomId
             when (callData.type) {
                 CallType.INSTANT.type -> {
-                    if (!currentRoomIds.contains(roomId) && !instantCallRoomViewData.containsKey(roomId)) {
-                        val callName = callData.callName ?: getString(com.difft.android.call.R.string.call_instant_call_title_default)
+                    if (!currentRoomIds.contains(roomId) && !instantCallRoomViewDataMap.containsKey(roomId)) {
+                        val callName = callData.callName ?: instantCallDefaultName
                         val roomViewData = RoomViewData(
                             roomId = roomId,
                             type = Type.Group,
@@ -186,13 +216,13 @@ class RecentChatFragment : DisposableManageFragment() {
                             isInstantCall = true,
                             callData = callData
                         )
-                        instantCallRoomViewData[roomId] = roomViewData
+                        instantCallRoomViewDataMap[roomId] = roomViewData
                     }
                 }
             }
         }
 
-        currentList.forEach { item ->
+        workingList.forEach { item ->
             val conversationId = item.roomId
             val callData = item.callData
             if (callData != null) {
@@ -201,7 +231,7 @@ class RecentChatFragment : DisposableManageFragment() {
                 if (!roomId.isNullOrEmpty()) {
                     if (callingList?.containsKey(roomId) != true) {
                         item.callData = null
-                        instantCallRoomViewData.remove(roomId)
+                        instantCallRoomViewDataMap.remove(roomId)
                     } else if ((callData.type == CallType.INSTANT.type && !callingList.containsKey(item.roomId))) {
                         item.callData = null
                     }
@@ -236,28 +266,28 @@ class RecentChatFragment : DisposableManageFragment() {
         val sortedList = ArrayList<RoomViewData>()
 
         // filter the pinned rooms
-        val pinnedRooms = currentList.filter { item ->
+        val pinnedRooms = workingList.filter { item ->
             item.isPinned && item.callData == null
         }
         pinnedRooms.sortedByDescending { item ->
             item.pinnedTime
         }
         // filter the meeting rooms
-        val meetingRooms = currentList.filter { item ->
+        val meetingRooms = workingList.filter { item ->
             item.callData != null && item.callData?.type != CallType.INSTANT.type
         }
         // filter the others rooms
-        val otherRooms = currentList.filter { item ->
+        val otherRooms = workingList.filter { item ->
             item.callData == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
         }
 
         // add instant call rooms
-        val currentInstantCallRooms = currentList.filter { item ->
+        val currentInstantCallRooms = workingList.filter { item ->
             item.callData != null && item.callData?.type == CallType.INSTANT.type
         }
-        if (instantCallRoomViewData.isNotEmpty()) {
+        if (instantCallRoomViewDataMap.isNotEmpty()) {
             val existingRoomIds = currentInstantCallRooms.map { it.roomId }.toSet()
-            val newInstantRooms = instantCallRoomViewData.values.filterNot { it.roomId in existingRoomIds }
+            val newInstantRooms = instantCallRoomViewDataMap.values.filterNot { it.roomId in existingRoomIds }
             val roomsToAdd = if (newInstantRooms.isNotEmpty()) {
                 currentInstantCallRooms + newInstantRooms
             } else {
@@ -273,17 +303,31 @@ class RecentChatFragment : DisposableManageFragment() {
         sortedList.addAll(meetingRooms.sortedByDescending { it.lastActiveTime })
         // add pinned rooms
         sortedList.addAll(pinnedRooms.sortedByDescending { it.lastActiveTime })
-        // add other rooms
-        sortedList.addAll(otherRooms.sortedByDescending { it.lastActiveTime })
-        return sortedList
+        // add other rooms (lastDisplayContent 为空的排后面，再按时间倒序)
+        sortedList.addAll(otherRooms.sortedWith(
+            compareBy<RoomViewData> { it.lastDisplayContent.isNullOrEmpty() }
+                .thenByDescending { it.lastActiveTime }
+        ))
+        return sortedList to instantCallRoomViewDataMap
     }
 
-    private fun sortingChatRoomsByCall(currentList: List<RoomViewData>, callingList: MutableMap<String, CallData>? = null) {
+    private fun submitSortedChatRooms(sortedList: List<RoomViewData>) {
         val items = mutableListOf<ListItem>()
         items.add(ListItem.SearchInput)
-        val sortedList = moveCallingRoomsToTheTop(currentList, callingList)
         items.addAll(sortedList.map { ListItem.ChatItem(it) })
         mAdapter.submitList(items)
+    }
+
+    private suspend fun sortingChatRoomsByCall(currentList: List<RoomViewData>, callingList: Map<String, CallData>? = null) {
+        val instantSnapshot = recentChatViewModel.instantCallRoomViewData.toMap()
+        val instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
+        val (sortedList, updatedInstantMap) = withContext(Dispatchers.Default) {
+            buildSortedListForCalling(currentList, callingList, instantSnapshot, instantCallDefaultName)
+        }
+        if (!isAdded || view == null || !this::binding.isInitialized) return
+        recentChatViewModel.instantCallRoomViewData.clear()
+        recentChatViewModel.instantCallRoomViewData.putAll(updatedInstantMap)
+        submitSortedChatRooms(sortedList)
     }
 
     override fun onCreateView(
@@ -362,6 +406,15 @@ class RecentChatFragment : DisposableManageFragment() {
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { mAdapter.notifyDataSetChanged() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    mAdapter.updateCallBarTick()
+                    delay(1000)
+                }
+            }
+        }
     }
 
     override fun onResume() {
@@ -371,14 +424,12 @@ class RecentChatFragment : DisposableManageFragment() {
 
         recentChatViewModel.retrieveCallingList()
 
-        mAdapter.startUpdateCallBar()
     }
 
     override fun onPause() {
         super.onPause()
 
         ConversationUtils.isConversationListVisible = false
-        mAdapter.stopUpdateCallBar()
     }
 
     private fun initActions() {
@@ -440,7 +491,7 @@ class RecentChatFragment : DisposableManageFragment() {
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({}, { e ->
-                e.printStackTrace()
+                L.w { "[RecentChatFragment] checkDevices error: ${e.stackTraceToString()}" }
                 if (e is AuthorizationFailedException) {
                     L.i { "[Message] AuthorizationFailedException" }
                     logoutManager.doLogoutWithoutRemoveData()
@@ -475,7 +526,6 @@ class RecentChatFragment : DisposableManageFragment() {
                             it.reason?.let { message -> ToastUtil.show(message) }
                         }
                     }) {
-                        it.printStackTrace()
                         L.e { "activate Device fail:" + it.stackTraceToString() }
                         it.message?.let { message -> ToastUtil.show(message) }
                     }
@@ -484,18 +534,19 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
 
-    private fun sortingChatRooms(
+    private suspend fun sortingChatRooms(
         list: List<RoomViewData>
     ) {
-        // 根据livekit call再次进行排序
-        val sortedListByCall = moveCallingRoomsToTheTop(list, LCallManager.getCallListData())
-
-        val items = mutableListOf<ListItem>()
-
-        items.add(ListItem.SearchInput)
-        items.addAll(sortedListByCall.map { ListItem.ChatItem(it) })
-
-        mAdapter.submitList(items)
+        val callingList = callDataManager.getCallListData()
+        val instantSnapshot = recentChatViewModel.instantCallRoomViewData.toMap()
+        val instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
+        val (sortedList, updatedInstantMap) = withContext(Dispatchers.Default) {
+            buildSortedListForCalling(list, callingList, instantSnapshot, instantCallDefaultName)
+        }
+        if (!isAdded || view == null || !this::binding.isInitialized) return
+        recentChatViewModel.instantCallRoomViewData.clear()
+        recentChatViewModel.instantCallRoomViewData.putAll(updatedInstantMap)
+        submitSortedChatRooms(sortedList)
     }
 
     private fun observeChatWSConnection() {
@@ -541,7 +592,7 @@ class RecentChatFragment : DisposableManageFragment() {
         groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
-            .subscribe({}, { it.printStackTrace() })
+            .subscribe({}, { L.w { "[RecentChatFragment] leaveGroup error: ${it.stackTraceToString()}" } })
     }
 
     private fun disbandGroup(group: GroupModel) {
@@ -556,7 +607,7 @@ class RecentChatFragment : DisposableManageFragment() {
                 groupRepo.deleteGroup(group.gid)
                     .compose(RxUtil.getSingleSchedulerComposer())
                     .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { it.printStackTrace() })
+                    .subscribe({}, { L.w { "[RecentChatFragment] disbandGroup error: ${it.stackTraceToString()}" } })
             }
         )
     }

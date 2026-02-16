@@ -1,8 +1,4 @@
-/*
- * Copyright (C) 2014-2016 Open Whisper Systems
- *
- * Licensed according to the LICENSE file in this repository.
- */
+
 package com.difft.android.websocket.api.messages
 
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
@@ -132,6 +128,7 @@ data class Group(
 
 data class Member(
     val uid: String?,
+    val customUid: String?,
     val displayName: String?,
     val rapidRole: Int,
     val role: Int,
@@ -153,8 +150,7 @@ data class PublicConfigs(
 )
 
 data class PrivateConfigs(
-    val globalNotification: Int?,
-    val saveToPhotos: Boolean
+    val globalNotification: Int?
 )
 
 data class OperatorInfo(

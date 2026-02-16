@@ -6,8 +6,6 @@ import android.content.Intent;
 
 import com.difft.android.base.log.lumberjack.L;
 
-import util.logging.Log;
-
 public class BootReceiver extends BroadcastReceiver {
 
   private static final String TAG = L.INSTANCE.tag(BootReceiver.class);

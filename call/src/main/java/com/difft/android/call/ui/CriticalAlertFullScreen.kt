@@ -34,7 +34,6 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -169,7 +168,7 @@ fun CriticalAlertFullScreen(
                     style = TextStyle(
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
-                        fontFamily = FontFamily(Font(R.font.sf_pro)),
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
                         color = colorResource(R.color.t_primary_night),
                         textAlign = TextAlign.Center,
@@ -184,7 +183,7 @@ fun CriticalAlertFullScreen(
                     style = TextStyle(
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
-                        fontFamily = FontFamily(Font(R.font.sf_pro)),
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         color = colorResource(R.color.t_secondary_night),
                         textAlign = TextAlign.Center,
@@ -204,7 +203,7 @@ fun CriticalAlertFullScreen(
                     Text(
                         text = stringResource(id = com.difft.android.call.R.string.join_call),
                         color = Color.White,
-                        fontFamily = FontFamily(Font(R.font.sf_pro)),
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
                         fontSize = 14.sp,
                         lineHeight = 20.sp,

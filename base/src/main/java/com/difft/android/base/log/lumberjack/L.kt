@@ -79,8 +79,11 @@ object L {
             for (entry in logChannel) {
                 try {
                     executeLog(entry.t, entry.t2, entry.timestamp, entry.logBlock)
-                } catch (_: Exception) {
-                    // 单条日志失败不影响后续日志
+                } catch (e: Exception) {
+                    // 单条日志失败不影响后续日志，仅在 debug 模式输出
+                    if (com.difft.android.base.BuildConfig.DEBUG) {
+                        android.util.Log.w("L", "[L] executeLog failed: ${e.message}")
+                    }
                 }
             }
         }
@@ -215,8 +218,11 @@ object L {
                 setLogTimestamp(timestamp)
                 logBlock()
             }
-        } catch (_: Exception) {
-            // 如果StackData创建失败，降级到直接执行
+        } catch (e: Exception) {
+            // 如果StackData创建失败，降级到直接执行，仅在 debug 模式输出警告
+            if (com.difft.android.base.BuildConfig.DEBUG) {
+                android.util.Log.w("L", "[L] StackData creation failed: ${e.message}")
+            }
             logBlock()
         }
     }

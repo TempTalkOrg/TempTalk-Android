@@ -10,7 +10,7 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.chat.R
 import com.luck.picture.lib.entity.LocalMedia
 import util.getParcelableArrayListExtraCompat
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.v2.review.MediaReviewFragment
 import org.thoughtcrime.securesms.util.FullscreenHelper
@@ -19,8 +19,11 @@ import com.difft.android.base.widget.ToastUtil
 
 class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
 
+    // Disable auto padding - this Activity uses fullscreen layout with FullscreenHelper
+    override fun shouldApplySystemBarsPadding(): Boolean = false
+
     companion object {
-        private val TAG = Log.tag(MediaSelectionActivity::class.java)
+        private val TAG = L.tag(MediaSelectionActivity::class.java)
 
         const val MEDIA = "media"
 

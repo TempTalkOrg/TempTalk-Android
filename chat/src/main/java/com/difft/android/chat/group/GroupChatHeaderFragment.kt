@@ -7,10 +7,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.databinding.ChatFragmentGroupHeaderBinding
@@ -32,8 +34,15 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
 
     private lateinit var binding: ChatFragmentGroupHeaderBinding
 
-    private val chatViewModel: ChatMessageViewModel by activityViewModels()
-    private val chatSettingViewModel: ChatSettingViewModel by activityViewModels()
+    // Use parent fragment as ViewModel owner when nested (in GroupChatFragment),
+    // otherwise use activity (when directly in GroupChatContentActivity).
+    // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
+    private val chatViewModel: ChatMessageViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
+    private val chatSettingViewModel: ChatSettingViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
 
 
     override fun onCreateView(
@@ -60,6 +69,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                 Pair(members.size, role)
             }
 
+            if (!isAdded || view == null) return@onEach
             if (TextUtils.isEmpty(group.name)) {
                 binding.title.text = getString(R.string.group_unknown_group)
             } else {
@@ -97,15 +107,11 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
 
         // 给整个 header 区域添加点击事件，跳转到群组详情页面
         binding.titleContainerInner.setOnClickListener {
-            (activity as GroupChatContentActivity).openGroupInfoActivity()
+            // In dual-pane mode, parentFragment is GroupChatFragment
+            // In single-pane mode, activity is GroupChatContentActivity
+            (parentFragment as? GroupChatFragment)?.openGroupInfoActivity()
+                ?: (activity as? GroupChatContentActivity)?.openGroupInfoActivity()
         }
-
-        chatViewModel.showReactionShade
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                binding.reactionsShade.visibility = if (it) View.VISIBLE else View.GONE
-            }, {})
 
         // 统一订阅 conversationSet，处理配置相关的 UI 更新
         chatSettingViewModel.conversationSet
@@ -117,10 +123,15 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
 
         // 观察选择状态来切换返回按钮行为
         chatViewModel.selectMessagesState.onEach {
-            if (it.editModel) {
+            if (isInDualPaneMode() && !it.editModel) {
+                // In dual-pane mode, hide back button when not in edit mode
+                binding.ibBack.visibility = View.GONE
+            } else if (it.editModel) {
+                binding.ibBack.visibility = View.VISIBLE
                 binding.ibBack.setImageResource(R.drawable.chat_icon_close)
                 binding.ibBack.setOnClickListener { chatViewModel.selectModel(false) }
             } else {
+                binding.ibBack.visibility = View.VISIBLE
                 binding.ibBack.setImageResource(R.mipmap.chat_tabler_arrow_left)
                 binding.ibBack.setOnClickListener { activity?.finish() }
             }
@@ -135,6 +146,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
             )
 
             withContext(Dispatchers.Main) {
+                if (!isAdded || view == null) return@withContext
                 val intent = Intent(requireContext(), GroupSelectMemberActivity::class.java).apply {
                     putExtra(GroupSelectMemberActivity.EXTRA_TYPE, GroupSelectMemberActivity.TYPE_ADD_MEMBER)
                     putStringArrayListExtra(GroupSelectMemberActivity.EXTRA_SELECTED_MEMBER_IDS, ArrayList(memberIds))

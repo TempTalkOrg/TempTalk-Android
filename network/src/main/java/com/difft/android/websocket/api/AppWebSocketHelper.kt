@@ -1,7 +1,6 @@
 package com.difft.android.websocket.api
 
-import com.difft.android.base.log.lumberjack.L.i
-import com.difft.android.base.log.lumberjack.L.w
+import com.difft.android.base.log.lumberjack.L
 import io.reactivex.rxjava3.core.Single
 import com.difft.android.websocket.api.messages.ChatDataMessageFlag
 import com.difft.android.websocket.api.messages.ConversationPreviewWrapper
@@ -27,7 +26,7 @@ import javax.inject.Singleton
 class AppWebSocketHelper
 @Inject constructor(
     // chat socket
-    @Named("chat-data")
+    @param:Named("chat-data")
     val chatDataWebSocketConnection: WebSocketConnection,
 ) {
     fun sendChatMessage(
@@ -61,28 +60,27 @@ class AppWebSocketHelper
             val request = chatDataWebSocketConnection.readRequest()
             try {
                 if (isSignalServiceEnvelope(request)) {
-                    i { "[Message] read message envelope:" + request.requestId }
+                    L.i { "[AppWebSocketHelper] read message envelope:" + request.requestId }
                     val envelope: Envelope? = parseSignalServiceEnvelope(request)
                     return Pair(request.requestId, envelope)
                 } else if (isSocketConversationRequest(request)) {
-                    i { "[Message] read message conversation:" + request.requestId }
+                    L.i { "[AppWebSocketHelper] read message conversation:" + request.requestId }
                     val conversationPreview: ConversationPreview? = readConversationMsgInfo(request)
                     return Pair(
                         request.requestId,
                         ConversationPreviewWrapper(conversationPreview)
                     )
                 } else if (isSocketConversationEmptyRequest(request)) {
-                    i { "[Message] read message conversation empty:" + request.requestId }
+                    L.i { "[AppWebSocketHelper] read message conversation empty:" + request.requestId }
                     sendAckToChatDataWebSocket(request.requestId);
                     return Pair(request.requestId, ChatDataMessageFlag.END_CONVERSATION_PREVIEW_MGS)
                 } else {
-                    i { "[Message] read message other type:" + request.path }
+                    L.i { "[AppWebSocketHelper] read message other type:" + request.path }
                     sendAckToChatDataWebSocket(request.requestId);
                     return null
                 }
             } catch (e: Exception) {
-                w { "[Message] read message exception:" + e.message }
-                e.printStackTrace()
+                L.w(e) { "[AppWebSocketHelper] read message exception:" }
             }
         }
     }
@@ -96,10 +94,10 @@ class AppWebSocketHelper
         val input = request.body.toByteArray()
         val envelope: Envelope? = EnvelopDeserializer.deserializeFrom(input)
         if (envelope == null) {
-            w { "[Message] read message envelope is null:" + request.requestId }
+            L.w { "[AppWebSocketHelper] read message envelope is null:" + request.requestId }
             sendAckToChatDataWebSocket(request.requestId);
         } else {
-            i { "[Message] parse envelope success: ${request.requestId} ${envelope.timestamp}" }
+            L.i { "[AppWebSocketHelper] parse envelope success: ${request.requestId} ${envelope.timestamp}" }
         }
         return envelope
     }
@@ -108,7 +106,7 @@ class AppWebSocketHelper
     @Throws(IOException::class)
     fun sendAckToChatDataWebSocket(requestId: Long) {
         sendAckToChatDataWebSocketWithoutLog(requestId)
-        i { "[Message] send ack -> requestId:$requestId" }
+        L.i { "[AppWebSocketHelper] send ack -> requestId:$requestId" }
     }
 
     @Throws(IOException::class)

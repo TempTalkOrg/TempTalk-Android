@@ -1,65 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/fragment_container_view_content"
-        android:name="androidx.navigation.fragment.NavHostFragment"
+        android:id="@+id/fragment_container_group_chat"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:navGraph="@navigation/chat_navigation_group_chat" />
+        android:layout_height="match_parent" />
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_voice_record"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_marginBottom="8dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        tools:visibility="visible">
-
-        <View
-            android:id="@+id/v_voice_record_bg"
-            android:layout_width="match_parent"
-            android:layout_height="200dp"
-            android:layout_marginBottom="54dp"
-            android:background="@drawable/voice_record_bg"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            tools:visibility="visible" />
-
-        <com.difft.android.chat.widget.VoiceRecorderView
-            android:id="@+id/v_voice_recorder"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="88dp"
-            android:layout_marginEnd="44dp"
-            app:layout_constraintBottom_toBottomOf="parent" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <!--为了遮盖voice view-->
-    <FrameLayout
-        android:id="@+id/reactions_shade"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:layout_gravity="bottom"
-        android:background="@color/reactions_screen_light_shade_color"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="@color/reactions_screen_dark_shade_color"
-        android:visibility="gone" />
-
-    <include
-        android:id="@+id/include_full_input"
-        layout="@layout/layout_chat_full_input" />
 </FrameLayout>

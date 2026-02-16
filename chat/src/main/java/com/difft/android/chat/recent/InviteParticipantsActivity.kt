@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
+import com.difft.android.base.BaseActivity
 import androidx.core.content.ContextCompat
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.log.lumberjack.L
@@ -15,7 +15,7 @@ import com.difft.android.chat.databinding.ActivityInviteParticipantsBinding
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class InviteParticipantsActivity : AppCompatActivity() {
+class InviteParticipantsActivity : BaseActivity() {
 
     companion object {
         const val TAG = "InviteParticipantsActivity"

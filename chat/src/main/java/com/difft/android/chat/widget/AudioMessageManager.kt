@@ -2,6 +2,7 @@ package com.difft.android.chat.widget
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.PlaybackParams
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.chat.common.SendType
@@ -10,7 +11,10 @@ import difft.android.messageserialization.model.isAudioMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -25,6 +29,9 @@ object AudioMessageManager {
     const val PLAY_STATUS_PLAYED = 0
     const val PLAY_STATUS_NOT_PLAY = 1
 
+    // Available playback speeds
+    val PLAYBACK_SPEEDS = listOf(1.0f, 1.5f, 2.0f)
+
     private val _playStatusUpdate = MutableSharedFlow<Pair<TextChatMessage, Int>>(replay = 0, extraBufferCapacity = 64)
     val playStatusUpdate: SharedFlow<Pair<TextChatMessage, Int>> = _playStatusUpdate
 
@@ -34,6 +41,10 @@ object AudioMessageManager {
 
     private val _progressUpdate = MutableSharedFlow<Pair<TextChatMessage, Float>>(replay = 0, extraBufferCapacity = 64)
     val progressUpdate: SharedFlow<Pair<TextChatMessage, Float>> = _progressUpdate
+
+    // Playback speed state flow - for UI observation
+    private val _playbackSpeed = MutableStateFlow(1.0f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
     private var mediaPlayer: MediaPlayer? = null
     var currentPlayingMessage: TextChatMessage? = null
@@ -49,6 +60,44 @@ object AudioMessageManager {
         ProximitySensorManager.setAudioDeviceChangeListener(object : ProximitySensorManager.AudioDeviceChangeListener {
             override fun onAudioDeviceChanged(isNear: Boolean) {}
         })
+    }
+
+    /**
+     * Set the playback speed and apply it immediately if audio is playing
+     * @param speed The playback speed (1.0f, 1.5f, or 2.0f)
+     */
+    fun setPlaybackSpeed(speed: Float) {
+        if (speed !in PLAYBACK_SPEEDS) return
+        _playbackSpeed.value = speed
+        applyPlaybackSpeed()
+    }
+
+    /**
+     * Cycle to the next playback speed (1.0 -> 1.5 -> 2.0 -> 1.0)
+     * @return The new speed value
+     */
+    fun cyclePlaybackSpeed(): Float {
+        val currentIndex = PLAYBACK_SPEEDS.indexOf(_playbackSpeed.value)
+        val nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.size
+        val newSpeed = PLAYBACK_SPEEDS[nextIndex]
+        setPlaybackSpeed(newSpeed)
+        return newSpeed
+    }
+
+    /**
+     * Apply the current playback speed to the media player
+     */
+    private fun applyPlaybackSpeed() {
+        try {
+            mediaPlayer?.let { player ->
+                if (player.isPlaying || isPaused) {
+                    val params = PlaybackParams().setSpeed(_playbackSpeed.value)
+                    player.playbackParams = params
+                }
+            }
+        } catch (e: Exception) {
+            L.e { "[AudioMessageManager] applyPlaybackSpeed Exception: ${e.stackTraceToString()}" }
+        }
     }
 
     // 初始化 MediaPlayer，并准备播放
@@ -138,6 +187,9 @@ object AudioMessageManager {
                 setOnPreparedListener { player ->
                     prepareTimeoutJob?.cancel() // 取消超时任务
                     try {
+                        // Apply playback speed before starting
+                        val params = PlaybackParams().setSpeed(_playbackSpeed.value)
+                        player.playbackParams = params
                         player.start() // 开始播放
                         emitPlayStatusUpdate(message, PLAY_STATUS_START)
                         startUpdatingProgress() // 开始更新进度
@@ -188,6 +240,9 @@ object AudioMessageManager {
             mediaPlayer?.apply {
                 if (isPaused) {
                     seekTo(currentPlayPosition) // 恢复到暂停时的进度
+                    // Apply playback speed before resuming
+                    val params = PlaybackParams().setSpeed(_playbackSpeed.value)
+                    playbackParams = params
                     start()
                     isPaused = false
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_START)

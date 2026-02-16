@@ -16,10 +16,11 @@ import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.utils.RxUtil
 import org.difft.app.database.convertToContactorModels
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.contactsall.GroupMemberRoleComparator
+import com.difft.android.chat.contacts.contactsall.sortedByRoleThenPinyin
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.FriendSourceType
@@ -30,6 +31,7 @@ import com.difft.android.chat.databinding.ChatActivityGroupInfoBinding
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
+import com.difft.android.chat.setting.SaveToPhotosSettingsActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
@@ -47,6 +49,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
@@ -94,14 +97,16 @@ class GroupInfoActivity : BaseActivity() {
 
         binding.ibBack.setOnClickListener { finish() }
 
-        // 统一订阅 conversationSet，处理所有配置相关的 UI 更新
+        // Subscribe to conversationSet for all config-related UI updates
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach { conversationSet ->
-                // 更新 mute 状态
+                // Update mute status
                 binding.switch2mute.isChecked = conversationSet.isMuted
-                // 更新 disappearing time
+                // Update disappearing time
                 binding.disappearingTimeText.text = conversationSet.messageExpiry.toArchiveTimeDisplayText()
+                // Update save to photos
+                binding.saveToPhotosText.text = getSaveToPhotosDisplayText(conversationSet.saveToPhotos)
             }
             .launchIn(lifecycleScope)
 
@@ -117,13 +122,16 @@ class GroupInfoActivity : BaseActivity() {
             )
         }
 
-        binding.switchStick.isChecked = isPined()
-        binding.switchStick.setOnClickListener {
-            if (isPined()) {
-                pinChattingRoom(false)
-            } else {
-                pinChattingRoom(true)
+        // 异步加载置顶状态
+        lifecycleScope.launch(Dispatchers.IO) {
+            val isPinned = isPined()
+            withContext(Dispatchers.Main) {
+                binding.switchStick.isChecked = isPinned
             }
+        }
+        binding.switchStick.setOnClickListener {
+            val newPinned = binding.switchStick.isChecked
+            pinChattingRoom(newPinned)
         }
 
 
@@ -139,14 +147,14 @@ class GroupInfoActivity : BaseActivity() {
                     }
                     initView()
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupInfoActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } })
 
         ContactorUtil.contactsUpdate
             .compose(RxUtil.getSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
                 setMembersView()
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupInfoActivity] observe contactsUpdate error: ${it.stackTraceToString()}" } })
 
         getGroupInfo()
     }
@@ -164,7 +172,7 @@ class GroupInfoActivity : BaseActivity() {
                     }
                     initView()
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[GroupInfoActivity] getGroupInfo error: ${it.stackTraceToString()}" } })
     }
 
     private fun initView() {
@@ -267,15 +275,18 @@ class GroupInfoActivity : BaseActivity() {
                             contactAvatar?.getContactAvatarUrl(),
                             contactAvatar?.encKey,
                             member.getDisplayNameForUI().getSortLetter(),
-                            member.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER
+                            member.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER,
+                            letterName = member.getDisplayNameWithoutRemarkForUI()
                         )
                     )
                 }
 
-                members.sortWith(GroupMemberRoleComparator())
+                val sortedMembers = members.sortedByRoleThenPinyin().toMutableList()
 
-                if (!showAll && members.size > defaultDisplaySize) {
-                    members = members.subList(0, defaultDisplaySize)
+                if (!showAll && sortedMembers.size > defaultDisplaySize) {
+                    members = sortedMembers.subList(0, defaultDisplaySize)
+                } else {
+                    members = sortedMembers
                 }
 
                 members.add(GroupMemberModel("", "+", "", "", ""))
@@ -291,6 +302,14 @@ class GroupInfoActivity : BaseActivity() {
     private fun setOtherView() {
         binding.llSearchChatHistory.setOnClickListener {
             SearchMessageActivity.startActivity(this@GroupInfoActivity, groupId, true, null)
+        }
+
+        binding.saveToPhotosContainer.setOnClickListener {
+            val target = groupId
+                .takeIf { it.isNotBlank() }
+                ?.let { For.Group(it) } ?: return@setOnClickListener
+
+            SaveToPhotosSettingsActivity.start(this@GroupInfoActivity, target)
         }
 
         binding.disappearingTimeContainer.setOnClickListener {
@@ -358,7 +377,7 @@ class GroupInfoActivity : BaseActivity() {
                                     finish()
                                 }
                             }, {
-                                it.printStackTrace()
+                                L.w { "[GroupInfoActivity] deleteGroup error: ${it.stackTraceToString()}" }
                                 ToastUtil.showLong(R.string.chat_net_error)
                             })
                     }
@@ -381,13 +400,12 @@ class GroupInfoActivity : BaseActivity() {
                         ).compose(RxUtil.getSingleSchedulerComposer())
                             .to(RxUtil.autoDispose(this))
                             .subscribe({
-                                L.i { "BH_Lin: response leave group it.status=${it.status}" }
+                                L.i { "response leave group it.status=${it.status}" }
                                 if (it.status == 0) {
                                     finish()
                                 }
                             }, {
-                                it.printStackTrace()
-                                L.i { "BH_Lin: leave group error it=${it.message}" }
+                                L.i { "leave group error it=${it.message}" }
                                 ToastUtil.showLong(R.string.chat_net_error)
                             })
                     }
@@ -411,10 +429,31 @@ class GroupInfoActivity : BaseActivity() {
         )
             .compose(RxUtil.getCompletableTransformer())
             .autoDispose(this, Lifecycle.Event.ON_DESTROY)
-            .subscribe({}, { it.printStackTrace() })
+            .subscribe({}, { L.w { "[GroupInfoActivity] pinChattingRoom error: ${it.stackTraceToString()}" } })
     }
 
-    private fun isPined(): Boolean {
-        return dbRoomStore.getPinnedTime(For.Group(groupId)).blockingGet().isPresent
+    private suspend fun isPined(): Boolean {
+        return dbRoomStore.getPinnedTime(For.Group(groupId)).await().isPresent
+    }
+
+    /**
+     * Get the display text for save to photos setting
+     * @param saveToPhotos null: follow global, 0: never, 1: always
+     */
+    private fun getSaveToPhotosDisplayText(saveToPhotos: Int?): String {
+        return when (saveToPhotos) {
+            1 -> getString(R.string.save_to_photos_always)
+            0 -> getString(R.string.save_to_photos_never)
+            else -> {
+                // Default - show dynamic status based on global setting
+                val globalEnabled = userManager.getUserData()?.saveToPhotos == true
+                val statusText = if (globalEnabled) {
+                    getString(R.string.save_to_photos_on)
+                } else {
+                    getString(R.string.save_to_photos_off)
+                }
+                getString(R.string.save_to_photos_default, statusText)
+            }
+        }
     }
 }

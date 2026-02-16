@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- 初始/确认页面 -->
+    <LinearLayout
+        android:id="@+id/container_initial"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/bgpage_primary"
+        android:visibility="visible">
+
+        <!-- 顶部标题栏 -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:id="@+id/iv_close_initial"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_centerVertical="true"
+                android:src="@drawable/close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="4dp"
+                app:tint="@color/t.primary.night"
+                tools:ignore="ContentDescription" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_title_initial"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="@string/call_invite_members_title"
+                android:textColor="@color/t.primary.night"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_invite"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="center_vertical"
+                android:text="@string/call_toolbar_bottom_invite_text"
+                android:textColor="@color/primary"
+                android:textSize="17sp"
+                android:alpha="0.5"
+                android:enabled="false" />
+        </RelativeLayout>
+
+        <!-- 成员标题 -->
+
+        <!-- 添加按钮 -->
+        <LinearLayout
+            android:id="@+id/ll_add_member"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_add_member"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/call_invite_add"
+                android:textColor="@color/t.primary.night"
+                android:textSize="17sp" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/call_ic_arrow_right"
+                app:tint="@color/t.secondary.night" />
+        </LinearLayout>
+
+        <!-- 已选成员列表 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerview_selected_members"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <!-- 添加成员页面 -->
+    <LinearLayout
+        android:id="@+id/container_add_members"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/bgpage_primary"
+        android:visibility="gone">
+
+        <!-- 顶部导航栏 -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:id="@+id/iv_close_add"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_centerVertical="true"
+                android:src="@drawable/close"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="4dp"
+                app:tint="@color/t.primary.night"
+                tools:ignore="ContentDescription" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_title_add"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="@string/call_toolbar_bottom_invite_text"
+                android:textColor="@color/t.primary.night"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_done"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="center_vertical"
+                android:text="@string/call_invite_done"
+                android:textColor="@color/primary"
+                android:textSize="17sp"
+                android:alpha="0.5"
+                android:enabled="false"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:padding="8dp" />
+        </RelativeLayout>
+
+        <!-- 搜索框 -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
+
+            <androidx.appcompat.widget.AppCompatEditText
+                android:id="@+id/edittext_search_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_search_input"
+                android:drawableStart="@drawable/ic_search_input"
+                android:drawablePadding="6dp"
+                android:hint="@string/call_invite_search_placeholder"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:lines="1"
+                android:paddingStart="10dp"
+                android:paddingEnd="40dp"
+                android:textColor="@color/t.primary.night"
+                android:textColorHint="@color/t.secondary.night"
+                android:textSize="14sp"
+                app:drawableTint="@color/t.secondary.night"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/button_clear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:background="@null"
+                android:src="@drawable/ic_search_clear"
+                android:tint="@color/t.secondary.night"
+                android:alpha="0"
+                app:layout_constraintBottom_toBottomOf="@+id/edittext_search_input"
+                app:layout_constraintEnd_toEndOf="@+id/edittext_search_input"
+                app:layout_constraintTop_toTopOf="@+id/edittext_search_input" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- 已选择成员区 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerview_selected_strip"
+            android:layout_width="match_parent"
+            android:layout_height="104dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_selected_participants_strip"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            android:paddingTop="6dp"
+            android:paddingBottom="16dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:scrollbars="none"
+            android:visibility="gone" />
+
+        <!-- 无结果提示 -->
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_no_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="@string/call_invite_search_no_result"
+            android:textColor="@color/t.secondary.night"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <!-- 联系人列表 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerview_contacts"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:scrollbars="vertical" />
+    </LinearLayout>
+
+</FrameLayout>
+

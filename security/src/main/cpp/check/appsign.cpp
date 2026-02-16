@@ -1,7 +1,3 @@
-//
-// Created by neo on 2023/9/19.
-//
-
 #include "appsign.h"
 #include "../utils/register.h"
 #include "../log/logutil.h"

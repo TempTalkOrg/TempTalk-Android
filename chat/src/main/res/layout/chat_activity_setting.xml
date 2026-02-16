@@ -251,6 +251,44 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <RelativeLayout
+                    android:id="@+id/save_to_photos_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:text="@string/me_save_to_photos"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/save_to_photos_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_marginEnd="10dp"
+                        android:layout_toStartOf="@id/arrow_save_to_photos"
+                        android:gravity="end"
+                        android:lineSpacingExtra="5sp"
+                        android:textColor="@color/t.third"
+                        android:textSize="16sp"
+                        tools:text="Default" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/arrow_save_to_photos"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+                </RelativeLayout>
+
+                <RelativeLayout
                     android:id="@+id/disappearing_time_container"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"

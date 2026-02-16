@@ -1,10 +1,5 @@
 package com.difft.android.chat.message
 
-import difft.android.messageserialization.model.AttachmentStatus
-import com.difft.android.base.utils.FileUtil
-import difft.android.messageserialization.model.isAudioMessage
-import difft.android.messageserialization.model.isLongText
-import org.difft.app.database.models.ContactorModel
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Mode
 import java.io.Serializable
 
@@ -82,55 +77,6 @@ fun ChatMessage.isConfidential(): Boolean {
     return this.mode == Mode.CONFIDENTIAL_VALUE
 }
 
-/**
- * 是否可以下载文件（排除 long text 和 audio message）
- */
-fun ChatMessage.canDownloadFile(): Boolean {
-    if (this is TextChatMessage) {
-        // 检查当前消息的附件
-        if (this.isAttachmentMessage()
-            && (this.attachment?.isAudioMessage() != true)
-            && (this.attachment?.isLongText() != true)
-            && (this.attachment?.status == AttachmentStatus.SUCCESS.code || this.getAttachmentProgress() == 100)
-        ) {
-            return true
-        }
-
-        // 检查转发消息的附件
-        val forwards = this.forwardContext?.forwards
-        if (forwards?.size == 1) {
-            val forward = forwards.firstOrNull()
-            val attachment = forward?.attachments?.firstOrNull()
-            if (attachment != null
-                && !attachment.isAudioMessage()
-                && !attachment.isLongText()
-                && (attachment.status == AttachmentStatus.SUCCESS.code || this.getAttachmentProgress() == 100)
-            ) {
-                return true
-            }
-        }
-    }
-    return false
-}
-
-/**
- * 是否是长文本附件类型
- */
-fun ChatMessage.isLongTextAttachment(): Boolean {
-    if (this is TextChatMessage) {
-        // 检查当前消息的附件
-        if (this.isAttachmentMessage() && this.attachment?.isLongText() == true) {
-            return true
-        }
-
-        // 检查转发消息的附件
-        val forwards = this.forwardContext?.forwards
-        if (forwards?.size == 1) {
-            val attachment = forwards.firstOrNull()?.attachments?.firstOrNull()
-            if (attachment?.isLongText() == true) {
-                return true
-            }
-        }
-    }
-    return false
+fun ChatMessage.isConfidentialPlaceholder(): Boolean {
+    return this is ConfidentialPlaceholderChatMessage
 }

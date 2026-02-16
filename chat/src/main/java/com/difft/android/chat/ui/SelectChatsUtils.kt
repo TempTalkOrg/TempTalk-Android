@@ -22,6 +22,8 @@ import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
+import com.difft.android.network.config.GlobalConfigsManager
+import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.members
 import org.difft.app.database.search
 import org.difft.app.database.searchByNameAndGroupMembers
@@ -29,9 +31,10 @@ import org.difft.app.database.wcdb
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.GroupAvatarView
-import com.difft.android.chat.contacts.contactsall.PinyinComparator
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
+import com.difft.android.chat.contacts.data.isBotId
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getFirstLetter
@@ -55,7 +58,7 @@ import com.difft.android.network.BaseResponse
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.GetConversationSetResponseBody
 import com.difft.android.base.widget.sideBar.SectionDecoration
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -72,6 +75,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.rx3.awaitFirst
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
 import org.difft.app.database.models.ContactorModel
@@ -97,7 +101,9 @@ data class ChatsContact(
     val avatarJson: String?
 )
 
-class SelectChatsUtils @Inject constructor() {
+class SelectChatsUtils @Inject constructor(
+    private val globalConfigsManager: GlobalConfigsManager
+) {
 
     @Inject
     lateinit var messageArchiveManager: MessageArchiveManager
@@ -134,7 +140,7 @@ class SelectChatsUtils @Inject constructor() {
      * 任务失败后的统一处理
      */
     private suspend fun handleTaskError(e: Exception) {
-        L.e { "[SelectChatsUtils] forward message failed:" + e.stackTraceToString() }
+        L.e(e) { "[SelectChatsUtils] forward message failed:" }
         withContext(Dispatchers.Main) {
             dismissWaitDialog()
             ToastUtil.show(R.string.operation_failed)
@@ -179,7 +185,11 @@ class SelectChatsUtils @Inject constructor() {
                 onDismiss = { fragment.dismiss() }
             )
         }
-        fragment.show((context as FragmentActivity).supportFragmentManager, "ChatSelectDialog")
+        try {
+            fragment.show((context as FragmentActivity).supportFragmentManager, "ChatSelectDialog")
+        } catch (e: IllegalStateException) {
+            L.e { "[SelectChatsUtils] show ChatSelectDialog error: ${e.message}" }
+        }
     }
 
     fun showContactSelectDialog(
@@ -188,7 +198,11 @@ class SelectChatsUtils @Inject constructor() {
     ) {
         val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = true)
         fragment.onSelected = onSelected
-        fragment.show((context as FragmentActivity).supportFragmentManager, "ContactSelectDialog")
+        try {
+            fragment.show((context as FragmentActivity).supportFragmentManager, "ContactSelectDialog")
+        } catch (e: IllegalStateException) {
+            L.e { "[SelectChatsUtils] show ContactSelectDialog error: ${e.message}" }
+        }
     }
 
     fun search(scope: CoroutineScope) {
@@ -233,7 +247,7 @@ class SelectChatsUtils @Inject constructor() {
             }
 
             // 如果需要添加收藏房间且结果中不包含，则添加
-            val rooms = baseRooms + if (ResUtils.getString(R.string.chat_favorites).uppercase().contains(searchKey.uppercase()) &&
+            val rooms = baseRooms + if (ResUtils.getString(com.difft.android.base.R.string.chat_favorites).uppercase().contains(searchKey.uppercase()) &&
                 !baseRooms.any { it.roomId == globalServices.myId }
             ) {
                 wcdb.room.getFirstObject(DBRoomModel.roomId.eq(globalServices.myId))?.let { listOf(it) } ?: emptyList()
@@ -341,7 +355,17 @@ class SelectChatsUtils @Inject constructor() {
                         val forWhat = if (chatsContact.isGroup) For.Group(chatsContact.id) else For.Account(chatsContact.id)
                         val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
                         val response = getConversationConfigs(context, listOf(forWhat.id))
-                        val mode = response.data?.conversations?.find { body -> body.conversation == forWhat.id }?.confidentialMode ?: 0
+                        var mode = response.data?.conversations?.find { body -> body.conversation == forWhat.id }?.confidentialMode ?: 0
+                        // Check group member limit or bot: force mode to 0
+                        if (mode == 1) {
+                            if (chatsContact.isGroup) {
+                                val memberCount = wcdb.getGroupMemberCount(chatsContact.id)
+                                val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
+                                if (memberCount >= limit) mode = 0
+                            } else if (chatsContact.id.isBotId()) {
+                                mode = 0
+                            }
+                        }
                         processForwardContextsSequentially(context, forwardContexts, content, chatsContact, archiveTime = time.toInt(), confidentialMode = mode)
                     }
                 } else {
@@ -484,7 +508,7 @@ class SelectChatsUtils @Inject constructor() {
                         sendTextPush(activity, content, chatsContact.id, chatsContact.isGroup, forwardContext, archiveTime = archiveTime, confidentialMode = confidentialMode, sharedContactId = forwardContext.sharedContactId, sharedContactName = forwardContext.sharedContactName)
                     }
                 } catch (e: Exception) {
-                    L.e { "[SelectChatsUtils] processForwardContextsSequentially task error: ${e.stackTraceToString()}" }
+                    L.e(e) { "[SelectChatsUtils] processForwardContextsSequentially task error:" }
                     throw e
                 }
             }
@@ -494,7 +518,7 @@ class SelectChatsUtils @Inject constructor() {
         awaitAll(*deferredTasks.toTypedArray())
     }
 
-    private fun givePermissionForAttachments(
+    private suspend fun givePermissionForAttachments(
         activity: Activity,
         content: String,
         accountID: String,
@@ -507,7 +531,7 @@ class SelectChatsUtils @Inject constructor() {
         try {
             val recipientIds = mutableListOf<String>()
             if (isGroup) {
-                val group = GroupUtil.getSingleGroupInfo(activity, accountID, false).blockingFirst()
+                val group = GroupUtil.getSingleGroupInfo(activity, accountID, false).awaitFirst()
                 if (group.isPresent) {
                     group.get().members.forEach { member ->
                         recipientIds.add(member.id)
@@ -567,7 +591,7 @@ class SelectChatsUtils @Inject constructor() {
         }
     }
 
-    private fun requestPermission(
+    private suspend fun requestPermission(
         activity: Activity,
         forwardContext: ForwardContext?,
         attachmentList: List<Attachment>,
@@ -649,7 +673,7 @@ class SelectChatsUtils @Inject constructor() {
         }
     }
 
-    private fun sendTextPush(
+    private suspend fun sendTextPush(
         activity: Activity,
         content: String?,
         accountID: String,
@@ -702,11 +726,20 @@ class SelectChatsUtils @Inject constructor() {
         if (archiveTime != null && confidentialMode != null) {
             sendMessage(archiveTime, confidentialMode)
         } else {
-            // 由于需要调用 await()，这里需要启动协程
             try {
-                val time = messageArchiveManager.getMessageArchiveTime(forWhat).blockingGet()
+                val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
                 val response = getConversationConfigs(activity, listOf(accountID))
-                val mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
+                var mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
+                // Check group member limit or bot: force mode to 0
+                if (mode == 1) {
+                    if (isGroup) {
+                        val memberCount = wcdb.getGroupMemberCount(accountID)
+                        val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
+                        if (memberCount >= limit) mode = 0
+                    } else if (accountID.isBotId()) {
+                        mode = 0
+                    }
+                }
                 sendMessage(time.toInt(), mode)
             } catch (e: Exception) {
                 L.e { "[SelectChatsUtils] sendTextPush error: ${e.stackTraceToString()}" }
@@ -715,7 +748,7 @@ class SelectChatsUtils @Inject constructor() {
         }
     }
 
-    private fun sendFile(context: Activity, attachmentUri: Uri, accountID: String, isGroup: Boolean = false) {
+    private suspend fun sendFile(context: Activity, attachmentUri: Uri, accountID: String, isGroup: Boolean = false) {
         val forWhat: For = if (isGroup) {
             For.Group(accountID)
         } else {
@@ -725,7 +758,7 @@ class SelectChatsUtils @Inject constructor() {
         val timeStamp = getSafeTimestamp()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
-        val fileName = FileUtils.getFileName(attachmentUri.path).replace(" ", "")
+        val fileName = FileUtils.getFileName(attachmentUri.path)
         //copy file
         try {
             val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
@@ -751,9 +784,19 @@ class SelectChatsUtils @Inject constructor() {
                 AttachmentStatus.LOADING.code
             )
 
-            val time = messageArchiveManager.getMessageArchiveTime(forWhat).blockingGet()
+            val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
             val response = getConversationConfigs(context, listOf(accountID))
-            val mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
+            var mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
+            // Check group member limit or bot: force mode to 0
+            if (mode == 1) {
+                if (isGroup) {
+                    val memberCount = wcdb.getGroupMemberCount(accountID)
+                    val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
+                    if (memberCount >= limit) mode = 0
+                } else if (accountID.isBotId()) {
+                    mode = 0
+                }
+            }
 
             val attachmentMessage = TextMessage(
                 messageId,
@@ -778,14 +821,14 @@ class SelectChatsUtils @Inject constructor() {
     }
 
 
-    private fun getConversationConfigs(
+    private suspend fun getConversationConfigs(
         activity: Activity,
         conversations: List<String>
     ): BaseResponse<GetConversationSetResponseBody> {
-        try {
-            return activity.getEntryPoint().getHttpClient().httpService
+        return try {
+            activity.getEntryPoint().getHttpClient().httpService
                 .fetchGetConversationSet(SecureSharedPrefsUtil.getBasicAuth(), GetConversationSetRequestBody(conversations))
-                .blockingGet()
+                .await()
         } catch (e: Exception) {
             L.e { "[SelectChatsUtils] getConversationConfigs error: ${e.stackTraceToString()}" }
             throw e
@@ -797,7 +840,7 @@ class SelectChatsUtils @Inject constructor() {
  * 聊天选择底部弹窗Fragment
  */
 @AndroidEntryPoint
-class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
+class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
@@ -818,40 +861,13 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.chat_layout_forward_select_chat, container, false)
-    }
+    // 使用默认容器（带圆角和拖拽条）
+    override fun getContentLayoutResId(): Int = R.layout.chat_layout_forward_select_chat
 
-    override fun onStart() {
-        super.onStart()
+    // 全屏显示
+    override fun isFullScreen(): Boolean = true
 
-        // 设置底部弹窗为全屏显示
-        val dialog = dialog
-        if (dialog != null) {
-            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            if (bottomSheet != null) {
-                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
-                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
-
-                // 设置底部弹窗高度为全屏
-                val layoutParams = bottomSheet.layoutParams
-                layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-                bottomSheet.layoutParams = layoutParams
-            }
-        }
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // 设置背景色
-        view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1))
-
+    override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
         if (isContactOnly) {
             view.findViewById<TextView>(R.id.title).text = getString(R.string.select_contact)
         }
@@ -897,7 +913,7 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
         lifecycleScope.launch {
             if (isContactOnly) {
                 selectChatsUtils._contactsFlow.collect { contacts ->
-                    val contactsList = contacts.sortedWith(PinyinComparator()).map { contact ->
+                    val contactsList = contacts.sortedByPinyin().map { contact ->
                         ChatsContact(
                             contact.id,
                             contact.getDisplayNameForUI(),
@@ -953,6 +969,7 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
                     }
 
                     val groupsList = groups.filter { it.status == 0 }
+                        .sortedBy { it.name }
                         .map { group ->
                             ChatsContact(
                                 group.gid,
@@ -965,7 +982,7 @@ class ChatSelectBottomSheetFragment() : BottomSheetDialogFragment() {
                             )
                         }
 
-                    val contactsList = contacts.sortedWith(PinyinComparator()).map { contact ->
+                    val contactsList = contacts.sortedByPinyin().map { contact ->
                         ChatsContact(
                             contact.id,
                             contact.getDisplayNameForUI(),

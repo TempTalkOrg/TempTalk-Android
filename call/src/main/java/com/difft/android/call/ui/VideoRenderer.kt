@@ -45,15 +45,17 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
+import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.difft.android.base.ui.theme.SfProFont
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.call.FrameStatusListener
+import com.difft.android.call.receiver.FrameStatusListener
 import com.difft.android.call.R
 import io.livekit.android.renderer.SurfaceViewRenderer
 import io.livekit.android.renderer.TextureViewRenderer
@@ -63,8 +65,6 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import livekit.org.webrtc.RendererCommon
@@ -87,6 +87,7 @@ enum class ViewType {
  */
 @Composable
 fun VideoRenderer(
+    coroutineScope: CoroutineScope,
     modifier: Modifier = Modifier,
     room: Room,
     videoTrack: VideoTrack?,
@@ -106,13 +107,11 @@ fun VideoRenderer(
         return
     }
 
-    var hasFrame by remember { mutableStateOf(false) }
+    var dismissPlaceHolderView by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current // 获取当前配置
     val screenWidth = configuration.screenWidthDp.dp.value // 获取屏幕宽度（dp）
     val screenHeight = configuration.screenHeightDp.dp.value // 获取屏幕高度（dp）
-
-    val coroutineScope = remember { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
 
     val videoSinkVisibility = remember(room, videoTrack) { ComposeVisibility() }
     var boundVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
@@ -125,28 +124,145 @@ fun VideoRenderer(
     var offsetY by remember { mutableFloatStateOf(0f) }
 
     var frameStatusListener: FrameStatusListener? = null
+    var isReleased by remember { mutableStateOf(false) }
+    
+    // 获取 LifecycleOwner 以检查 Activity 状态
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     fun cleanupVideoTrack() {
-        view?.let{ boundVideoTrack?.removeRenderer(it as VideoSink) }
+        // 确保在主线程执行，避免线程安全问题
+        view?.let { renderer ->
+            try {
+                boundVideoTrack?.removeRenderer(renderer as VideoSink)
+            } catch (e: Exception) {
+                // 忽略已释放的 renderer 导致的异常
+                L.w { "[VideoRenderer] unbindTrack removeRenderer failed: ${e.stackTraceToString()}" }
+            }
+        }
+        boundVideoTrack = null
+    }
+    
+    /**
+     * 同步清理所有资源，确保在 Activity 销毁前立即执行
+     */
+    fun cleanupAllResourcesSync() {
+        if (isReleased) {
+            return
+        }
+        isReleased = true
+        
+        // 1. 先清理 video track 的 renderer 引用
+        view?.let { renderer ->
+            try {
+                boundVideoTrack?.removeRenderer(renderer as VideoSink)
+            } catch (e: Exception) {
+                // 忽略已释放的 renderer 导致的异常
+                L.w { "[VideoRenderer] cleanupAllResourcesSync removeRenderer failed: ${e.stackTraceToString()}" }
+            }
+        }
+        
+        // 2. 清理 videoSinkVisibility
+        try {
+            videoSinkVisibility.onDispose()
+        } catch (e: Exception) {
+            // 忽略异常
+            L.w { "[VideoRenderer] cleanupAllResourcesSync onDispose failed: ${e.stackTraceToString()}" }
+        }
+        
+        // 3. 清理 ScreenShareSurfaceViewRenderer 的监听器
+        frameStatusListener?.let {
+            try {
+                (view as? ScreenShareSurfaceViewRenderer)?.removeFrameStatusListener(it)
+            } catch (e: Exception) {
+                // 忽略已释放的 view 导致的异常
+                L.w { "[VideoRenderer] cleanupAllResourcesSync removeFrameStatusListener failed: ${e.stackTraceToString()}" }
+            }
+            frameStatusListener = null
+        }
+        
+        // 4. 清理 viewVisibility 引用
+        try {
+            when (viewType) {
+                ViewType.ScreenShare -> {
+                    (view as? ScreenShareSurfaceViewRenderer)?.viewVisibility = null
+                }
+                else -> {
+                    // 其他类型可能也有 viewVisibility，但 ScreenShare 是主要问题
+                }
+            }
+        } catch (e: Exception) {
+            // 忽略清理 viewVisibility 时的异常
+            L.w { "[VideoRenderer] cleanupAllResourcesSync viewVisibility cleanup failed: ${e.stackTraceToString()}" }
+        }
+        
+        // 5. 释放 renderer
+        try {
+            when (viewType) {
+                ViewType.Texture -> {
+                    (view as? TextureViewRenderer)?.release()
+                }
+                ViewType.Surface -> {
+                    (view as? SurfaceViewRenderer)?.release()
+                }
+                ViewType.ScreenShare -> {
+                    (view as? ScreenShareSurfaceViewRenderer)?.release()
+                }
+            }
+        } catch (e: Exception) {
+            // 忽略释放过程中的异常
+            L.w { "[VideoRenderer] cleanupAllResourcesSync release failed: ${e.stackTraceToString()}" }
+        }
+        
+        // 6. 清理所有引用
+        view = null
         boundVideoTrack = null
     }
 
     fun setupVideoIfNeeded(videoTrack: VideoTrack?, view: Any) {
+        // 如果已经释放，不再设置新的 video track
+        if (isReleased) {
+            return
+        }
+        
+        // 检查 Activity 生命周期状态，如果已销毁则不再执行
+        if (lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+            cleanupAllResourcesSync()
+            return
+        }
+        
         if (boundVideoTrack == videoTrack) {
             return
         }
 
         // 使用协程上下文来执行耗时操作
         coroutineScope.launch {
-            cleanupVideoTrack()
+            // 确保在主线程执行 cleanupVideoTrack，因为 removeRenderer 可能涉及 UI 操作
             withContext(Dispatchers.Main) {
+                // 再次检查状态，防止在异步操作期间 Activity 被销毁
+                if (isReleased || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                    cleanupAllResourcesSync()
+                    return@withContext
+                }
+                cleanupVideoTrack()
+            }
+            withContext(Dispatchers.Main) {
+                // 再次检查状态，防止在异步操作期间 Activity 被销毁
+                if (isReleased || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                    cleanupAllResourcesSync()
+                    return@withContext
+                }
                 boundVideoTrack = videoTrack
                 if (videoTrack != null) {
                     (view as? VideoSink)?.let { sink ->
-                        if (videoTrack is RemoteVideoTrack) {
-                            videoTrack.addRenderer(sink, videoSinkVisibility)
-                        } else {
-                            videoTrack.addRenderer(sink)
+                        try {
+                            if (videoTrack is RemoteVideoTrack) {
+                                videoTrack.addRenderer(sink, videoSinkVisibility)
+                            } else {
+                                videoTrack.addRenderer(sink)
+                            }
+                        } catch (e: Exception) {
+                            // 忽略添加 renderer 时的异常（可能 view 已释放）
+                            L.w { "[VideoRenderer] addRenderer failed: ${e.stackTraceToString()}" }
                         }
                     }
                 }
@@ -166,23 +282,17 @@ fun VideoRenderer(
     // And update the DisposableEffect:
     DisposableEffect(room, videoTrack) {
         onDispose {
-            videoSinkVisibility.onDispose()
-            cleanupVideoTrack()
-            coroutineScope.cancel() // Move this to proper cleanup
-            frameStatusListener?.let {
-                (view as? ScreenShareSurfaceViewRenderer)?.removeFrameStatusListener(it)
-                frameStatusListener = null
-            }
+            // 同步清理所有资源，确保在 Activity 销毁前立即执行
+            // 这是防止内存泄漏的关键：必须在 DisposableEffect 中同步清理
+            cleanupAllResourcesSync()
         }
     }
 
     DisposableEffect(currentCompositeKeyHash.toString()) {
         onDispose {
-            when (viewType) {
-                ViewType.Texture -> (view as TextureViewRenderer).release()
-                ViewType.Surface -> (view as SurfaceViewRenderer).release()
-                ViewType.ScreenShare -> (view as ScreenShareSurfaceViewRenderer).release()
-            }
+            // 同步清理所有资源，确保在 Activity 销毁前立即执行
+            // 这是防止内存泄漏的关键：必须在 DisposableEffect 中同步清理
+            cleanupAllResourcesSync()
         }
     }
 
@@ -226,11 +336,17 @@ fun VideoRenderer(
 
                         frameStatusListener = object : FrameStatusListener {
                             override fun onFrameAvailable() {
-                                hasFrame = true
                             }
 
                             override fun onNoFrameAvailable() {
-                                hasFrame = false
+                                // 占位图仅用于首次加载首帧之前，后续不再展示
+                            }
+
+                            override fun onFirstFrameRendered() {
+                            }
+
+                            override fun onDismissPlaceHolderView() {
+                                dismissPlaceHolderView = true
                             }
                         }
 
@@ -300,7 +416,7 @@ fun VideoRenderer(
         )
 
         // 占位 UI（根据 hasFrame 控制显示）
-        if ((sourceType == Track.Source.SCREEN_SHARE) && !hasFrame) {
+        if ((sourceType == Track.Source.SCREEN_SHARE) && !dismissPlaceHolderView) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -329,7 +445,7 @@ fun VideoRenderer(
                         style = TextStyle(
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
-                            fontFamily = SfProFont,
+                            fontFamily = FontFamily.Default,
                             fontWeight = FontWeight(400),
                             color = colorResource(id = com.difft.android.base.R.color.t_third),
                         )

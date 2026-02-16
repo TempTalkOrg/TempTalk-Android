@@ -288,18 +288,6 @@ public final class PictureSelectionCameraModel {
     }
 
     /**
-     * Do you want to open a foreground service to prevent the system from reclaiming the memory
-     * of some models due to the use of cameras
-     *
-     * @param isForeground
-     * @return
-     */
-    public PictureSelectionCameraModel isCameraForegroundService(boolean isForeground) {
-        selectionConfig.isCameraForegroundService = isForeground;
-        return this;
-    }
-
-    /**
      * Compatible with Fragment fallback scheme, default to true
      *
      * @param isNewKeyBackMode

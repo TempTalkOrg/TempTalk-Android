@@ -6,7 +6,7 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <androidx.appcompat.widget.AppCompatTextView
+    <com.difft.android.chat.ui.textpreview.SelectableTextView
         android:id="@+id/textView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -15,12 +15,12 @@
         android:padding="8dp"
         android:textColor="@color/t.primary"
         android:textColorLink="@color/t.info"
-        android:textIsSelectable="true"
         android:textSize="16sp"
+        android:textIsSelectable="false"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:text="asdasd asdasd sadasdasd sadasd asdasdasd sadasdasda sadasdasda sadasd">
 
-    </androidx.appcompat.widget.AppCompatTextView>
+    </com.difft.android.chat.ui.textpreview.SelectableTextView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

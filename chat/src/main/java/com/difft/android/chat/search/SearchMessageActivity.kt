@@ -1,7 +1,7 @@
 package com.difft.android.chat.search
 
-
 import android.annotation.SuppressLint
+import com.difft.android.base.log.lumberjack.L
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -93,7 +93,7 @@ class SearchMessageActivity : BaseActivity() {
                 } else {
                     showNoResults(getString(R.string.search_messages_default_tips))
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[SearchMessageActivity] search debounce error: ${it.stackTraceToString()}" } })
 
         mBinding.recyclerviewChatHistory.apply {
             this.layoutManager = LinearLayoutManager(this@SearchMessageActivity)
@@ -115,6 +115,7 @@ class SearchMessageActivity : BaseActivity() {
                 DBMessageModel.roomId.eq(conversationId).and(
                     DBMessageModel.messageText.upper().like("%${key.uppercase()}%")
                         .and(DBMessageModel.type.notEq(2))
+                        .and(DBMessageModel.mode.notEq(1)) // Exclude confidential messages
                 )
             )
         }
@@ -133,7 +134,7 @@ class SearchMessageActivity : BaseActivity() {
                 }
             }, {
                 showNoResults(getString(R.string.search_no_results_found))
-                it.printStackTrace()
+                L.w { "[SearchMessageActivity] search error: ${it.stackTraceToString()}" }
             })
     }
 

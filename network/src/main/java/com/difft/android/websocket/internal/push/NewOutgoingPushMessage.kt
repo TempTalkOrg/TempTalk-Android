@@ -16,7 +16,8 @@ data class NewOutgoingPushMessage(
     val realSource: RealSourceEntity?,
     val silent: Boolean,
     val timestamp: Long,
-    val recipients: List<Recipient>
+    val recipients: List<Recipient>,
+    val syncContent: String? = null  // v4 API: 1v1 sync content encrypted with own public key
 ) {
     data class Recipient(
         val uid: String,
@@ -85,7 +86,8 @@ data class NewOutgoingPushMessage(
         var realSource: RealSourceEntity? = null,
         var silent: Boolean = false,
         var timestamp: Long = 0L,
-        var recipients: List<Recipient> = listOf()
+        var recipients: List<Recipient> = listOf(),
+        var syncContent: String? = null
     ) {
         fun type(type: Int) = apply { this.type = type }
         fun destination(destination: String) = apply { this.destination = destination }
@@ -113,6 +115,8 @@ data class NewOutgoingPushMessage(
 
         fun recipients(recipients: List<Recipient>) = apply { this.recipients = recipients }
 
+        fun syncContent(syncContent: String?) = apply { this.syncContent = syncContent }
+
         fun build() = NewOutgoingPushMessage(
             type,
             destination,
@@ -129,7 +133,8 @@ data class NewOutgoingPushMessage(
             realSource,
             silent,
             timestamp,
-            recipients
+            recipients,
+            syncContent
         )
     }
 }

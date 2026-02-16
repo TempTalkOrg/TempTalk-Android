@@ -16,6 +16,7 @@ data class PushCustomContent(
     val uid: String?,
     val critical: Int,
     val timestamp: Long = 0,
+    val roomId: String? = null,
     ) {
     val passthroughData: Passthrough?
         get() = passthrough?.let {

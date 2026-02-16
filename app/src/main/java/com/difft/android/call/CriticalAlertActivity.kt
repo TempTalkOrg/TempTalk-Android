@@ -26,7 +26,10 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.globalServices
+import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.call.state.CriticalAlertStateManager
@@ -34,15 +37,18 @@ import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.CriticalAlertFullScreen
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.group.GroupRepo
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.awaitFirst
+import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import javax.inject.Inject
+import kotlin.collections.any
+import kotlin.collections.orEmpty
 
 @AndroidEntryPoint
 class CriticalAlertActivity: ComponentActivity() {
@@ -60,7 +66,17 @@ class CriticalAlertActivity: ComponentActivity() {
     lateinit var criticalAlertManager: CriticalAlertManager
 
     @Inject
+    lateinit var contactorCacheManager: ContactorCacheManager
+
+    @Inject
     lateinit var activityProvider: ActivityProvider
+
+    @Inject
+    lateinit var groupRepo: GroupRepo
+
+    private val mySelfId: String by lazy {
+        globalServices.myId
+    }
 
     @ChativeHttpClientModule.Call
     @Inject
@@ -114,17 +130,29 @@ class CriticalAlertActivity: ComponentActivity() {
             return
         }
 
+        val notificationId = intent.getIntExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, -1)
+        if (notificationId == -1) {
+            L.e { "[CriticalAlert] notificationId is error" }
+            criticalAlertStateManager.reset()
+            finish()
+            return
+        }
+
+        val isNotification = intent.getBooleanExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, false)
+
+        val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID)
+
         // 所有验证通过后，设置状态
         criticalAlertStateManager.setConversationId(conversationId)
         criticalAlertStateManager.setIsShowing(true)
 
         when(intent.action) {
             LCallConstants.CRITICAL_ALERT_ACTION_CLICKED -> {
-                handleJoinAction(conversationId)
+                handleJoinAction(conversationId, roomId)
                 showBlankTransparentUI()
             }
             else -> {
-                showCriticalAlertUI(conversationId, title, message)
+                showCriticalAlertUI(conversationId, title, message, roomId)
             }
         }
 
@@ -136,6 +164,9 @@ class CriticalAlertActivity: ComponentActivity() {
 
         // 默认延迟1分钟（60_000毫秒）后自动关闭
         scheduleAutoFinish()
+
+        // app前台启动activity 播放声音和闪光灯
+        if (!isNotification) criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
     }
 
     private fun showBlankTransparentUI() {
@@ -148,12 +179,13 @@ class CriticalAlertActivity: ComponentActivity() {
         }
     }
 
-    private fun showCriticalAlertUI(conversationId: String, title: String, message: String) {
+    private fun showCriticalAlertUI(conversationId: String, title: String, message: String, roomId: String? = null) {
         setContent {
             Content(
                 title = title,
                 message = message,
-                conversationId = conversationId
+                conversationId = conversationId,
+                roomId = roomId
             )
         }
     }
@@ -166,8 +198,10 @@ class CriticalAlertActivity: ComponentActivity() {
         val conversationId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION)
         val title = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE)
         val message = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE)
-        
-        if (conversationId.isNullOrEmpty() || title.isNullOrEmpty() || message.isNullOrEmpty()) {
+        val notificationId = intent.getIntExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, -1)
+        val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID)
+
+        if (conversationId.isNullOrEmpty() || title.isNullOrEmpty() || message.isNullOrEmpty() || notificationId == -1) {
             L.e { "[CriticalAlert] onNewIntent: Invalid parameters, finishing activity" }
             criticalAlertStateManager.reset()
             finish()
@@ -184,16 +218,19 @@ class CriticalAlertActivity: ComponentActivity() {
         // 更新UI
         when(intent.action) {
             LCallConstants.CRITICAL_ALERT_ACTION_CLICKED -> {
-                handleJoinAction(conversationId)
+                handleJoinAction(conversationId, roomId)
                 showBlankTransparentUI()
             }
             else -> {
-                showCriticalAlertUI(conversationId, title, message)
+                showCriticalAlertUI(conversationId, title, message, roomId)
             }
         }
         
         // 重新启动自动关闭
         scheduleAutoFinish()
+
+        // 播放声音和闪光灯
+        criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
     }
 
 
@@ -276,20 +313,21 @@ class CriticalAlertActivity: ComponentActivity() {
     fun Content(
         title: String,
         message: String,
-        conversationId: String
+        conversationId: String,
+        roomId: String? = null
     ) {
         CriticalAlertFullScreen(
             title = title,
             message = message,
-            onJoinClick = { handleJoinAction(conversationId) },
+            onJoinClick = { handleJoinAction(conversationId, roomId) },
             onCloseClick = { handleCancelAction(conversationId) }
         )
     }
 
-    private fun handleJoinAction(conversationId: String) {
+    private fun handleJoinAction(conversationId: String, roomId: String? = null) {
         // 取消自动关闭任务
         autoFinishJob?.cancel()
-        
+
         criticalAlertStateManager.setIsJoining(true)
         
         lifecycleScope.launch(Dispatchers.IO) {
@@ -302,7 +340,7 @@ class CriticalAlertActivity: ComponentActivity() {
                 } else {
                     // 2. 如果当前未进行通话，则调用 getCallingList 方法获取最新的会议列表
                     val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
-                        .awaitFirst()
+                        .await()
 
                     if (response.status != 0) {
                         L.e { "[CriticalAlert] getCallingList failed with status: ${response.status}" }
@@ -319,7 +357,11 @@ class CriticalAlertActivity: ComponentActivity() {
                         } else {
                             // 4. 如果会议列表不为空，则将当前 critical alert 通知的 conversationId 与会议列表数据中的 conversation 匹配
                             val matchedCall = calls.firstOrNull { call ->
-                                call.conversation == conversationId
+                                if (!roomId.isNullOrEmpty()) {
+                                    call.roomId == roomId
+                                } else {
+                                    call.conversation == conversationId
+                                }
                             }
 
                             if (matchedCall == null) {
@@ -331,12 +373,25 @@ class CriticalAlertActivity: ComponentActivity() {
                                 matchedCall.let { data ->
                                     if (data.callName.isNullOrEmpty()) {
                                         L.w { "[CriticalAlert] Call name is null or empty for conversationId: $conversationId" }
+                                        L.w { "[CriticalAlert]  data: $data" }
                                         when (data.type) {
                                             CallType.ONE_ON_ONE.type -> {
-                                                data.callName = LCallManager.getDisplayNameById(data.conversation)
+                                                data.callName = contactorCacheManager.getDisplayNameById(data.conversation)
                                             }
                                             CallType.GROUP.type -> {
-                                                data.callName = LCallManager.getDisplayGroupNameById(data.conversation)
+                                                val inGroup = checkUserIsInGroup(mySelfId, conversationId)
+                                                if (inGroup) {
+                                                    data.callName = contactorCacheManager.getDisplayGroupNameById(data.conversation)
+                                                } else {
+                                                    data.callName = "${contactorCacheManager.getDisplayNameById(conversationId)}${ResUtils.getString(
+                                                        R.string.call_instant_call_title
+                                                    )}"
+                                                }
+                                            }
+                                            CallType.INSTANT.type -> {
+                                                data.callName = "${contactorCacheManager.getDisplayNameById(conversationId)}${ResUtils.getString(
+                                                        R.string.call_instant_call_title
+                                                    )}"
                                             }
                                         }
                                     }
@@ -424,4 +479,18 @@ class CriticalAlertActivity: ComponentActivity() {
         }
     }
 
+    /**
+     * 检查用户是否在群组中
+     */
+    private suspend fun checkUserIsInGroup(userId: String, gid: String): Boolean {
+        return try {
+            val resp = groupRepo.getGroupInfo(gid).await()
+
+            val members = resp.data?.members.orEmpty()
+            members.any { it.uid == userId }
+        } catch (e: Exception) {
+            L.e { "[Call] CallMessageHandler checkUserIsInGroup error: ${e.stackTraceToString()}" }
+            false
+        }
+    }
 }

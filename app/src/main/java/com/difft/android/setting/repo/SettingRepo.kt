@@ -24,7 +24,7 @@ class SettingRepo @Inject constructor() {
 
     fun getProfile(token: String): Single<BaseResponse<GetProfileResponse>> = settingService.getProfile(token)
 
-    fun setProfile(token: String, searchByPhone: Int, searchByEmail: Int): Single<BaseResponse<GetProfileResponse>> = settingService.setProfile(token, SetStatusRequestBody(searchByPhone, searchByEmail))
+    fun setProfile(token: String, searchByPhone: Int? = null, searchByEmail: Int? = null, searchByCustomUid: Int? = null, customUid: String? = null): Single<BaseResponse<GetProfileResponse>> = settingService.setProfile(token, SetStatusRequestBody(searchByPhone, searchByEmail, searchByCustomUid, customUid))
 
     fun checkUpdate(token: String, version: String): Single<BaseResponse<CheckUpdateResponse>> = settingService.checkUpdate(token, version)
 }

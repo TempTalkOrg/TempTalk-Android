@@ -2,6 +2,8 @@ package com.difft.android.call.core
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.BarrageMessage
+import com.difft.android.call.data.EmojiBubbleMessage
+import com.difft.android.call.data.TextBubbleMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -9,6 +11,9 @@ class CallUiController() {
 
     private val _showBottomCallEndViewEnable = MutableStateFlow(false)
     val showBottomCallEndViewEnable = _showBottomCallEndViewEnable.asStateFlow()
+
+    private val _showInviteViewEnable = MutableStateFlow(false)
+    val showInviteViewEnable = _showInviteViewEnable.asStateFlow()
 
     private val _showToolBarBottomViewEnable = MutableStateFlow(false)
     val showToolBarBottomViewEnable = _showToolBarBottomViewEnable.asStateFlow()
@@ -37,6 +42,12 @@ class CallUiController() {
     private val _barrageMessage = MutableStateFlow<BarrageMessage?>(null)
     val barrageMessage = _barrageMessage.asStateFlow()
 
+    private val _emojiBubbleMessage = MutableStateFlow<EmojiBubbleMessage?>(null)
+    val emojiBubbleMessage = _emojiBubbleMessage.asStateFlow()
+
+    private val _textBubbleMessage = MutableStateFlow<TextBubbleMessage?>(null)
+    val textBubbleMessage = _textBubbleMessage.asStateFlow()
+
     private val _isShareScreening = MutableStateFlow(false)
     val isShareScreening = _isShareScreening.asStateFlow()
 
@@ -48,6 +59,9 @@ class CallUiController() {
 
     private val _isRequestingPermission = MutableStateFlow(false)
     val isRequestingPermission = _isRequestingPermission.asStateFlow()
+
+    private val _showCriticalAlertConfirmViewEnabled = MutableStateFlow(false)
+    val showCriticalAlertConfirmViewEnabled = _showCriticalAlertConfirmViewEnabled.asStateFlow()
 
     /**
      * Enables or disables the "Hands Up" feature for participants in a call or meeting.
@@ -87,11 +101,23 @@ class CallUiController() {
     }
 
     /**
+     * Sets whether the critical alert confirm view at the bottom of the view is enabled for display.
+     */
+    fun setShowCriticalAlertConfirmViewEnabled(enabled: Boolean) {
+        _showCriticalAlertConfirmViewEnabled.value = enabled
+    }
+
+    /**
      * Sets whether the bottom call end view is enabled for display.
      */
     fun setShowBottomCallEndViewEnable(enabled: Boolean) {
         L.i { "[Call] setShowBottomCallEndViewEnable enabled:${enabled}" }
         _showBottomCallEndViewEnable.value = enabled
+    }
+
+    fun setShowInviteViewEnable(enabled: Boolean) {
+        L.i { "[Call] setShowInviteViewEnable enabled:${enabled}" }
+        _showInviteViewEnable.value = enabled
     }
 
     /**
@@ -120,6 +146,20 @@ class CallUiController() {
      */
     fun setBarrageMessage(message: BarrageMessage?) {
         _barrageMessage.value = message
+    }
+
+    /**
+     * Updates the emoji bubble message displayed in the call UI.
+     */
+    fun setEmojiBubbleMessage(message: EmojiBubbleMessage?) {
+        _emojiBubbleMessage.value = message
+    }
+
+    /**
+     * Updates the text bubble message displayed in the call UI.
+     */
+    fun setTextBubbleMessage(message: TextBubbleMessage?) {
+        _textBubbleMessage.value = message
     }
 
     /**

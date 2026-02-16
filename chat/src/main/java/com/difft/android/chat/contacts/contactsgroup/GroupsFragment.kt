@@ -14,6 +14,7 @@ import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.chat.databinding.ChatFragmentGroupBinding
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
+import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,7 @@ class GroupsFragment : Fragment() {
                 val groups = withContext(Dispatchers.IO) {
                     wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
                 }
+                if (!isAdded || view == null) return@onEach
                 binding.smartRefreshLayout.finishRefresh()
                 submitSortedList(groups)
             }
@@ -74,6 +76,7 @@ class GroupsFragment : Fragment() {
             val groups = withContext(Dispatchers.IO) {
                 wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
             }
+            if (!isAdded || view == null) return@launch
             submitSortedList(groups)
         }
 
@@ -104,10 +107,16 @@ class GroupsFragment : Fragment() {
     private val mAdapter: GroupsAdapter by lazy {
         object : GroupsAdapter() {
             override fun onItemClick(group: GroupModel) {
-                GroupChatContentActivity.startActivity(
-                    this@GroupsFragment.requireActivity(),
-                    group.gid
-                )
+                // Use ConversationNavigationCallback for dual-pane support
+                val navigationCallback = activity as? ConversationNavigationCallback
+                if (navigationCallback != null) {
+                    navigationCallback.onGroupConversationSelected(group.gid)
+                } else {
+                    GroupChatContentActivity.startActivity(
+                        this@GroupsFragment.requireActivity(),
+                        group.gid
+                    )
+                }
             }
         }
     }
@@ -119,6 +128,6 @@ class GroupsFragment : Fragment() {
     }
 
     private fun submitSortedList(list: List<GroupModel>) {
-        mAdapter.submitList(list.sortedBy { it.name.lowercase() })
+        mAdapter.submitList(list.sortedBy { it.name })
     }
 }

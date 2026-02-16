@@ -38,8 +38,9 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.UrlManager
 import com.difft.android.network.group.GroupInfoByInviteCodeResp
 import com.difft.android.network.group.GroupRepo
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import com.difft.android.base.widget.ComposeDialogManager
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Observable
@@ -47,6 +48,7 @@ import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.rx3.await
 import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.shareText
 import java.util.concurrent.TimeUnit
@@ -133,7 +135,6 @@ class InviteUtils @Inject constructor() {
                 }
             }, {
                 ComposeDialogManager.dismissWait()
-                it.printStackTrace()
                 L.e { "getInviteCode error: ${it.stackTraceToString()}" }
                 ToastUtil.show(context.getString(R.string.chat_net_error))
             })
@@ -235,7 +236,6 @@ class InviteUtils @Inject constructor() {
                     showErrorAndFinish(it.reason ?: "", activity, needFinish)
                 }
             }, {
-                it.printStackTrace()
                 L.e { "queryByInviteCode error: ${it.stackTraceToString()}" }
                 showErrorAndFinish(activity.getString(R.string.chat_net_error), activity, needFinish)
             })
@@ -308,7 +308,6 @@ class InviteUtils @Inject constructor() {
                     it.reason?.let { message -> ToastUtil.show(message) }
                 }
             }, {
-                it.printStackTrace()
                 L.e { "getGroupInfoByInviteCode error: ${it.stackTraceToString()}" }
                 ToastUtil.show(activity.getString(R.string.chat_net_error))
             })
@@ -344,7 +343,7 @@ class InviteUtils @Inject constructor() {
                     showErrorAndFinish(message ?: "", activity, needFinish)
                 }
             }, {
-                it.printStackTrace()
+                L.w { "[InviteUtils] joinGroupByInviteCode error: ${it.stackTraceToString()}" }
                 showErrorAndFinish(it.message ?: "", activity, needFinish)
             })
     }
@@ -375,47 +374,43 @@ class InviteUtils @Inject constructor() {
  * 邀请码底部弹窗Fragment
  */
 @AndroidEntryPoint
-class InviteBottomSheetFragment() : BottomSheetDialogFragment() {
+class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
     @Inject
     lateinit var inviteUtils: InviteUtils
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.layout_invite, container, false)
-    }
+    // 使用默认容器
+    override fun getContentLayoutResId(): Int = R.layout.layout_invite
 
-    override fun onStart() {
-        super.onStart()
+    // 全屏显示
+    override fun isFullScreen(): Boolean = true
 
-        // 设置底部弹窗为全屏显示
-        val dialog = dialog
-        if (dialog != null) {
-            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            if (bottomSheet != null) {
-                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
-                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
+    // 不显示拖拽条，避免遮挡自定义背景
+    override fun showDragHandle(): Boolean = false
 
-                // 设置底部弹窗高度为全屏
-                val layoutParams = bottomSheet.layoutParams
-                layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-                bottomSheet.layoutParams = layoutParams
+    // 禁用默认背景，使用自定义ChatBackgroundDrawable
+    override fun useDefaultBackground(): Boolean = false
 
-                // 移除默认的圆角背景，避免白线问题
-                bottomSheet.background = null
-            }
-        }
+    override fun onBottomSheetReady(sheet: View, behavior: BottomSheetBehavior<*>) {
+        super.onBottomSheetReady(sheet, behavior)
+        // 移除sheet默认背景
+        sheet.background = null
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        // 现在可以安全使用ChatBackgroundDrawable，因为已经移除了默认的圆角背景
+        // 在根容器上设置自定义渐变背景，并启用圆角裁剪
         view.background = ChatBackgroundDrawable(requireContext(), view, false)
+        view.clipToOutline = true
+        view.outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                val radius = 16.dp.toFloat()
+                outline.setRoundRect(0, 0, view.width, view.height + radius.toInt(), radius)
+            }
+        }
+    }
+
+    override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
 
         var ivQR: AppCompatImageView? = null
         var clShare: ConstraintLayout? = null
@@ -443,7 +438,7 @@ class InviteBottomSheetFragment() : BottomSheetDialogFragment() {
 
         lifecycleScope.launch {
             val myInfo = withContext(Dispatchers.IO) {
-                ContactorUtil.getContactWithID(requireContext(), globalServices.myId).blockingGet()
+                ContactorUtil.getContactWithID(requireContext(), globalServices.myId).await()
             }
 
             myInfo.ifPresent { contact ->
@@ -480,8 +475,12 @@ class InviteBottomSheetFragment() : BottomSheetDialogFragment() {
             InviteCodeActivity.startActivity(requireActivity())
         }
 
-        // 初始化邀请码获取
-        inviteUtils.getInviteCode(requireActivity(), 0, 0, ivQR, clShare, clCopy, tvCode, progressBar, tvError)
+        // Delay fetching invite code until the dialog is fully displayed to prevent Loading being covered
+        view.post {
+            if (isAdded && context != null) {
+                inviteUtils.getInviteCode(requireActivity(), 0, 0, ivQR, clShare, clCopy, tvCode, progressBar, tvError)
+            }
+        }
     }
 
     override fun onDismiss(dialog: android.content.DialogInterface) {
@@ -494,7 +493,7 @@ class InviteBottomSheetFragment() : BottomSheetDialogFragment() {
  * 群组邀请底部弹窗Fragment
  */
 @AndroidEntryPoint
-class GroupInviteBottomSheetFragment() : BottomSheetDialogFragment() {
+class GroupInviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
     @Inject
     lateinit var inviteUtils: InviteUtils
@@ -522,39 +521,13 @@ class GroupInviteBottomSheetFragment() : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.layout_group_invite, container, false)
-    }
+    // 使用默认容器（带圆角和拖拽条）
+    override fun getContentLayoutResId(): Int = R.layout.layout_group_invite
 
-    override fun onStart() {
-        super.onStart()
+    // 全屏显示
+    override fun isFullScreen(): Boolean = true
 
-        // 设置底部弹窗为全屏显示
-        val dialog = dialog
-        if (dialog != null) {
-            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            if (bottomSheet != null) {
-                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
-                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
-
-                // 设置底部弹窗高度为全屏
-                val layoutParams = bottomSheet.layoutParams
-                layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-                bottomSheet.layoutParams = layoutParams
-            }
-        }
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // 设置背景色
-        view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
+    override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
 
         var ivQR: AppCompatImageView? = null
         var clShare: ConstraintLayout? = null
@@ -593,7 +566,7 @@ class GroupInviteBottomSheetFragment() : BottomSheetDialogFragment() {
  * 加入群组底部弹窗Fragment
  */
 @AndroidEntryPoint
-class JoinGroupBottomSheetFragment() : BottomSheetDialogFragment() {
+class JoinGroupBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
     @Inject
     lateinit var inviteUtils: InviteUtils
@@ -618,40 +591,14 @@ class JoinGroupBottomSheetFragment() : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.layout_join_group, container, false)
-    }
+    // 使用默认容器（带圆角和拖拽条）
+    override fun getContentLayoutResId(): Int = R.layout.layout_join_group
 
-    override fun onStart() {
-        super.onStart()
-
-        // 设置底部弹窗为全屏显示
-        val dialog = dialog
-        if (dialog != null) {
-            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            if (bottomSheet != null) {
-                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheet)
-                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-                behavior.skipCollapsed = true
-
-                // 设置底部弹窗高度为全屏
-                val layoutParams = bottomSheet.layoutParams
-                layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-                bottomSheet.layoutParams = layoutParams
-            }
-        }
-    }
+    // 全屏显示
+    override fun isFullScreen(): Boolean = true
 
     @SuppressLint("SetTextI18n")
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // 设置背景色
-        view.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg2))
+    override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
 
         view.findViewById<AppCompatImageView>(R.id.iv_close).setOnClickListener {
             dismiss()

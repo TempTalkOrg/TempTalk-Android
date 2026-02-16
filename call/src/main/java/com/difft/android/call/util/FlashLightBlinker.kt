@@ -116,7 +116,8 @@ object FlashLightBlinker {
                     // 确保闪光灯关闭并清理状态
                     try {
                         cameraManager.setTorchMode(id, false)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        L.w { "[FlashLightBlinker] setTorchMode off failed in finally: ${e.stackTraceToString()}" }
                     }
                     mutex.withLock {
                         isBlinking = false
@@ -155,7 +156,8 @@ object FlashLightBlinker {
                 val cameraManager =
                     context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 cameraManager.setTorchMode(id, false)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                L.w { "[FlashLightBlinker] stopBlinking setTorchMode failed: ${e.stackTraceToString()}" }
             }
         }
     }

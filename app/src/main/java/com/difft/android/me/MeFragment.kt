@@ -1,7 +1,7 @@
 package com.difft.android.me
 
-import android.content.Context
 import android.content.Intent
+import com.difft.android.base.log.lumberjack.L
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.LayoutInflater
@@ -9,66 +9,76 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.content.ContextCompat
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.R
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.TextSizeUtil
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.withContext
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.invite.InviteUtils
+import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.databinding.MeFragmentBinding
 import com.difft.android.login.ContactProfileSettingActivity
+import com.difft.android.login.ContactProfileSettingFragment
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.setting.AboutActivity
+import com.difft.android.setting.AboutFragment
 import com.difft.android.setting.AccountActivity
+import com.difft.android.setting.AccountFragment
 import com.difft.android.setting.ChatSettingsActivity
+import com.difft.android.setting.ChatSettingsFragment
 import com.difft.android.setting.NotificationSettingsActivity
+import com.difft.android.setting.NotificationSettingsFragment
 import com.difft.android.setting.PrivacySettingActivity
+import com.difft.android.setting.PrivacySettingFragment
 import com.difft.android.setting.TestActivity
 import com.difft.android.setting.language.LanguageActivity
+import com.difft.android.setting.language.LanguageFragment
 import com.difft.android.setting.theme.ThemeActivity
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.difft.android.base.widget.ComposeDialogManager
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.setting.theme.ThemeFragment
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
 import com.luck.picture.lib.language.LanguageConfig
+import com.luck.picture.lib.pictureselector.GlideEngine
+import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.asFlow
+import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import javax.inject.Inject
 
@@ -129,45 +139,70 @@ class MeFragment : Fragment() {
         binding.clAdvanced.visibility = View.GONE
 
         binding.llProfile.setOnClickListener {
-            ContactProfileSettingActivity.startActivity(
-                requireActivity(),
-                ContactProfileSettingActivity.BUNDLE_VALUE_FROM_CONTACT
-            )
+            navigateToDetailOrActivity(
+                ContactProfileSettingFragment.newInstance(ContactProfileSettingFragment.FROM_CONTACT)
+            ) {
+                ContactProfileSettingActivity.startActivity(
+                    requireActivity(),
+                    ContactProfileSettingActivity.BUNDLE_VALUE_FROM_CONTACT
+                )
+            }
         }
 
         binding.clAccount.setOnClickListener {
-            AccountActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(AccountFragment.newInstance()) {
+                AccountActivity.startActivity(requireActivity())
+            }
         }
 
         binding.clPrivacy.setOnClickListener {
-            PrivacySettingActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(PrivacySettingFragment.newInstance()) {
+                PrivacySettingActivity.startActivity(requireActivity())
+            }
         }
 
         binding.clChat.setOnClickListener {
-            ChatSettingsActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(ChatSettingsFragment.newInstance()) {
+                ChatSettingsActivity.startActivity(requireActivity())
+            }
         }
 
         binding.clNotification.setOnClickListener {
-            NotificationSettingsActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(NotificationSettingsFragment.newInstance()) {
+                NotificationSettingsActivity.startActivity(requireActivity())
+            }
         }
 
         binding.clHelp.visibility = View.VISIBLE
         binding.clHelp.setOnClickListener {
-            ChatActivity.startActivity(requireActivity(), getString(com.difft.android.chat.R.string.official_bot_id))
+            val botId = getString(com.difft.android.chat.R.string.official_bot_id)
+            val navigationCallback = activity as? ConversationNavigationCallback
+            if (navigationCallback?.isDualPaneMode == true) {
+                // Dual-pane mode: open chat in detail pane
+                navigationCallback.onOneOnOneConversationSelected(botId)
+            } else {
+                ChatActivity.startActivity(requireActivity(), botId)
+            }
         }
 
         binding.clAbout.setOnClickListener {
-            AboutActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(AboutFragment.newInstance()) {
+                AboutActivity.startActivity(requireActivity())
+            }
         }
 
         binding.clLanguage.setOnClickListener {
-            LanguageActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(LanguageFragment.newInstance()) {
+                LanguageActivity.startActivity(requireActivity())
+            }
         }
 
         binding.tvLanguage.text = LanguageUtils.getLanguageName(requireContext())
 
         binding.clTheme.setOnClickListener {
-            ThemeActivity.startActivity(requireActivity())
+            navigateToDetailOrActivity(ThemeFragment.newInstance()) {
+                ThemeActivity.startActivity(requireActivity())
+            }
         }
 
         binding.clTextSize.setOnClickListener {
@@ -200,13 +235,14 @@ class MeFragment : Fragment() {
                 val result = withContext(Dispatchers.IO) {
                     ContactorUtil.getContactWithID(requireContext(), globalServices.myId).await()
                 }
+                if (!isAdded || view == null) return@launch
                 if (result.isPresent) {
                     myself = result.get()
                     binding.appCompatTextViewUserName.text = result.get().getDisplayNameForUI()
                     binding.avatar.setAvatar(result.get())
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MeFragment] error: ${e.stackTraceToString()}" }
             }
         }
     }
@@ -274,32 +310,42 @@ class MeFragment : Fragment() {
         refreshTextSize(isLarger)
     }
 
+    /**
+     * Navigate to detail fragment in dual-pane mode, or start Activity in single-pane mode
+     * @param fragment The fragment to show in dual-pane mode
+     * @param fallbackAction The action to perform in single-pane mode (usually starting an Activity)
+     */
+    private fun navigateToDetailOrActivity(fragment: Fragment, fallbackAction: () -> Unit) {
+        val dualPaneHost = activity as? DualPaneHost
+        if (dualPaneHost?.isDualPaneMode == true) {
+            dualPaneHost.showDetailFragment(fragment)
+        } else {
+            fallbackAction()
+        }
+    }
 
     private fun openAvatarPreview() {
         if (myself == null || TextUtils.isEmpty(myself?.avatar)) return
-        val file = AvatarUtil.getFileFormUrl(myself?.avatar?.getContactAvatarData()?.getContactAvatarUrl() ?: "", AvatarUtil.AvatarCacheSize.SMALL)
-        if (!file.exists()) return
-        val list = arrayListOf<LocalMedia>().apply {
-            this.add(LocalMedia.generateLocalMedia(requireActivity(), file.path))
+        val avatarUrl = myself?.avatar?.getContactAvatarData()?.getContactAvatarUrl() ?: return
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val file = withContext(Dispatchers.IO) {
+                AvatarUtil.getCacheFile(avatarUrl)
+            } ?: return@launch
+
+            val list = arrayListOf<LocalMedia>().apply {
+                this.add(LocalMedia.generateLocalMedia(requireActivity(), file.path))
+            }
+            PictureSelector.create(requireActivity())
+                .openPreview()
+                .isHidePreviewDownload(true)
+                .isHidePreviewShare(true)
+                .setDefaultLanguage(LanguageConfig.ENGLISH)
+                .setLanguage(PictureSelectorUtils.getLanguage(requireContext()))
+                .setSelectorUIStyle(PictureSelectorUtils.getSelectorStyle(requireContext()))
+                .setImageEngine(GlideEngine.createGlideEngine())
+                .startActivityPreview(0, false, list)
         }
-        PictureSelector.create(requireActivity())
-            .openPreview()
-            .isHidePreviewDownload(false)
-            .isAutoVideoPlay(true)
-            .isVideoPauseResumePlay(true)
-            .setDefaultLanguage(LanguageConfig.ENGLISH)
-            .setLanguage(PictureSelectorUtils.getLanguage(requireContext()))
-            .setSelectorUIStyle(PictureSelectorUtils.getSelectorStyle(requireContext()))
-            .setImageEngine(GlideEngine.createGlideEngine())
-            .setExternalPreviewEventListener(object : OnExternalPreviewEventListener {
-                override fun onPreviewDelete(position: Int) {
-                }
-
-                override fun onLongPressDownload(context: Context?, media: LocalMedia?): Boolean {
-                    return false
-                }
-
-            }).startActivityPreview(0, false, list)
     }
 }
 
@@ -312,9 +358,8 @@ fun TextSizeSelectionDialog(
     currentSelection: Int,
     onItemSelected: (Int) -> Unit
 ) {
-    val context = LocalContext.current
-    val textColor = Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary))
-    val selectedColor = Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_info))
+    val textColor = colorResource(com.difft.android.base.R.color.t_primary)
+    val selectedColor = colorResource(com.difft.android.base.R.color.t_info)
 
     Column(
         modifier = Modifier

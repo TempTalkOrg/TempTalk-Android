@@ -12,7 +12,7 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.subjects.BehaviorSubject
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.v2.videos.VideoTrimData
 import org.thoughtcrime.securesms.mms.MediaConstraints
@@ -23,7 +23,6 @@ import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.livedata.Store
 import java.util.Collections
 import kotlin.math.max
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -34,7 +33,7 @@ class MediaSelectionViewModel(
     private val repository: MediaSelectionRepository
 ) : ViewModel() {
 
-    private val TAG = Log.tag(MediaSelectionViewModel::class.java)
+    private val TAG = L.tag(MediaSelectionViewModel::class.java)
 
     private val selectedMediaSubject: Subject<List<LocalMedia>> = BehaviorSubject.create()
 
@@ -77,17 +76,24 @@ class MediaSelectionViewModel(
         }.toList()
 
         store.update {
-            val initializedVideoEditorStates = newSelectionList.filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
+            // Initialize VideoTrimData for videos that don't have editor state yet
+            // Note: We initialize with totalInputDurationUs=0, and the accurate duration will be set
+            // when onEditVideoDuration is called with the precise value from MediaExtractor
+            val initializedVideoEditorStates = newSelectionList
+                .filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
                 .filter { media -> MediaUtil.isVideoType(media.mimeType) }
                 .associate { media: LocalMedia ->
-                    val duration = media.duration.milliseconds.inWholeMicroseconds
-                    Uri.parse(media.realPath) to VideoTrimData(false, duration, 0, duration)
+                    Uri.parse(media.realPath) to VideoTrimData()
                 }
-            val initializedImageEditorStates = newSelectionList.filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
+
+            // For images, preserve existing editor states (e.g., drawings, stickers)
+            val initializedImageEditorStates = newSelectionList
+                .filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
                 .filter { media -> MediaUtil.isImageAndNotGif(media.mimeType) }
                 .associate { media: LocalMedia ->
                     Uri.parse(media.realPath) to ImageEditorFragment.Data()
                 }
+
             it.copy(
                 selectedMedia = newSelectionList,
                 focusedMedia = it.focusedMedia ?: newSelectionList.first(),
@@ -203,20 +209,28 @@ class MediaSelectionViewModel(
             val clampedStartTime = max(startTimeUs, 0)
 
             val unedited = !data.isDurationEdited
-            val durationEdited = clampedStartTime > 0 || endTimeUs < totalDurationUs
-            val isEntireDuration = startTimeUs == 0L && endTimeUs == totalDurationUs
-            val endMoved = !isEntireDuration && data.endTimeUs != endTimeUs
+
+            // Check if this is the initial duration sync:
+            // 1. Video not yet edited (unedited=true)
+            // 2. Start time is 0 (no trim from start)
+            // 3. Either data.totalInputDurationUs is 0 (not yet initialized), or endTimeUs covers full duration
+            val isInitialDurationSync = unedited &&
+                clampedStartTime == 0L &&
+                (data.totalInputDurationUs == 0L || endTimeUs == totalDurationUs)
+
+            // On initial sync, use the accurate totalDurationUs as endTimeUs
+            val effectiveEndTimeUs = if (isInitialDurationSync) totalDurationUs else endTimeUs
+
+            val durationEdited = clampedStartTime > 0 || effectiveEndTimeUs < totalDurationUs
+            val isEntireDuration = clampedStartTime == 0L && effectiveEndTimeUs == totalDurationUs
+            val endMoved = !isEntireDuration && data.totalInputDurationUs > 0 && data.endTimeUs != effectiveEndTimeUs
             val maxVideoDurationUs: Long = it.transcodingPreset.calculateMaxVideoUploadDurationInSeconds(getMediaConstraints().getVideoMaxSize(context)).seconds.inWholeMicroseconds
             val preserveStartTime = unedited || !endMoved
-            val videoTrimData = VideoTrimData(durationEdited, totalDurationUs, clampedStartTime, endTimeUs)
+            val videoTrimData = VideoTrimData(durationEdited, totalDurationUs, clampedStartTime, effectiveEndTimeUs)
             val updatedData = clampToMaxClipDuration(videoTrimData, maxVideoDurationUs, preserveStartTime)
 
             if (updatedData != videoTrimData) {
-                Log.d(TAG, "Video trim clamped from ${videoTrimData.startTimeUs}, ${videoTrimData.endTimeUs} to ${updatedData.startTimeUs}, ${updatedData.endTimeUs}")
-            }
-
-            if (unedited && durationEdited) {
-                Log.d(TAG, "Canceling upload because the duration has been edited for the first time..")
+                L.d { "$TAG Video trim clamped from ${videoTrimData.startTimeUs}, ${videoTrimData.endTimeUs} to ${updatedData.startTimeUs}, ${updatedData.endTimeUs}" }
             }
 
             it.copy(

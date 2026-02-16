@@ -1,6 +1,9 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
     id("kotlin-parcelize")
@@ -15,10 +18,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     kapt {
         correctErrorTypes = true
     }
@@ -27,10 +26,6 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
     }
 
     buildTypes {
@@ -49,11 +44,32 @@ android {
     }
 
     packaging {
-        resources.excludes.addAll(setOf("libsignal_jni.dylib", "signal_jni.dll"))
-        jniLibs.pickFirsts.add("lib/arm64-v8a/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/armeabi-v7a/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/x86/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/x86_64/libc++_shared.so")
+        // Exclude non-Android platform libraries (following Signal's approach)
+        jniLibs {
+            excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll",
+                "**/libsignal_jni_testing.so"
+            )
+            pickFirsts += setOf(
+                "lib/arm64-v8a/libc++_shared.so",
+                "lib/armeabi-v7a/libc++_shared.so",
+                "lib/x86/libc++_shared.so",
+                "lib/x86_64/libc++_shared.so"
+            )
+        }
+        resources {
+            excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll"
+            )
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
 }
 
@@ -85,6 +101,7 @@ dependencies {
     // Hilt
     api(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlin.metadata.jvm)
 
     // RxJava
     api(libs.bundles.rxjava)
@@ -110,9 +127,6 @@ dependencies {
     api(libs.security.crypto)
     api(libs.firebase.analytics.ktx)
 
-    // 第三方UI组件
-    api(libs.mn.password.edit.text)
-
     // 刷新布局
     api(libs.bundles.smart.refresh)
 
@@ -128,12 +142,15 @@ dependencies {
 
     // 其他
     api(libs.libphonenumber)
-    implementation("net.java.dev.jna:jna:5.17.0@aar")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
     api(libs.keyboard.visibility.event)
 
     // Protobuf
     api(libs.protobuf.javalite)
     api(libs.protobuf.kotlin.lite)
+
+    // Foldable screen support
+    api(libs.androidx.window)
 
     // 测试相关
     testApi(libs.junit)

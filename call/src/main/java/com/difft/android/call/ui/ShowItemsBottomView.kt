@@ -7,8 +7,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -23,7 +25,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -33,16 +37,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.SfProFont
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallStatus
+import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,6 +57,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
     )
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val showToolBarBottomViewEnable by viewModel.callUiController.showToolBarBottomViewEnable.collectAsState(false)
     val isParticipantSharedScreen by viewModel.callUiController.isShareScreening.collectAsState(false)
@@ -59,9 +66,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
     val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
     val isCriticalAlertEnable by viewModel.callUiController.isCriticalAlertEnable.collectAsState(false)
+    val awaitingJoinInvitees by viewModel.participantManager.awaitingJoinInvitees.collectAsState()
     val cameraEnabled by viewModel.cameraEnabled.collectAsState(false)
     val callType by viewModel.callType.collectAsState()
 
+    val showCriticalAlertEnable = viewModel.is1v1ShowCriticalAlertEnable(callStatus) || viewModel.isGroupShowCriticalAlertEnable(isCriticalAlertEnable) || viewModel.isInstantCriticalAlertEnable(awaitingJoinInvitees)
 
     val itemSpace = when {
         cameraEnabled && callType == CallType.GROUP.type -> 8.dp
@@ -73,15 +82,32 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
         if (isSuccess) viewModel.callUiController.setShowToolBarBottomViewEnable(false)
     }
 
-    if(showToolBarBottomViewEnable && !isInPipMode){
+    val shouldShowSheet = showToolBarBottomViewEnable && !isInPipMode
+    val dismissSheet: () -> Unit = {
+        coroutineScope.launch {
+            sheetState.hide()
+            onDismiss()
+        }
+    }
+
+    LaunchedEffect(shouldShowSheet) {
+        if (shouldShowSheet) {
+            sheetState.show()
+        } else {
+            sheetState.hide()
+        }
+    }
+
+    if (shouldShowSheet || sheetState.isVisible) {
         ModalBottomSheet (
             modifier = Modifier
                 .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
                 .wrapContentHeight(),
             sheetState = sheetState,
             containerColor = colorResource(id = com.difft.android.base.R.color.bg3_night),
+            contentWindowInsets = { WindowInsets.navigationBars },
             onDismissRequest = {
-                onDismiss()
+                dismissSheet()
             },
         ) {
             Column(
@@ -115,7 +141,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                     L.i { "[call] ShowItemsBottomView onClick invite" }
                                     handleInviteUsersClick()
-                                    onDismiss()
+                                    dismissSheet()
                                 },
                             horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically,
@@ -140,11 +166,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                             }
                         }
                         Text(
-                            text = context.getString(R.string.call_toolbar_bottom_invite_text),
+                            text = ResUtils.getString(R.string.call_toolbar_bottom_invite_text),
                             style = TextStyle(
                                 fontSize = 14.sp,
                                 lineHeight = 20.sp,
-                                fontFamily = SfProFont,
+                                fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
                                 color = colorResource(id = com.difft.android.base.R.color.gray_50),
                             )
@@ -171,6 +197,17 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                             if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
                                                 viewModel.rtm.sendRaiseHandsRtmMessage(!handsUpEnabled, viewModel.room.localParticipant, onComplete = { status ->
                                                     if(status){
+                                                        if (!handsUpEnabled) {
+                                                            viewModel.room::ttCallResp.get()?.let { response ->
+                                                                val callOptions = response.callOptions
+                                                                val autoPublishSilenceAudio = callOptions.autoPublishSilenceAudio
+                                                                val disableSilenceOnRaiseHand = callOptions.disableSilenceOnRaiseHand
+                                                                L.i { "[call] ShowItemsBottomView raise hand autoPublishSilenceAudio=$autoPublishSilenceAudio, disableSilenceOnRaiseHand=$disableSilenceOnRaiseHand" }
+                                                                if (!autoPublishSilenceAudio && !disableSilenceOnRaiseHand) {
+                                                                    viewModel.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+                                                                }
+                                                            }
+                                                        }
                                                         viewModel.callUiController.setHandsUpEnable(!handsUpEnabled)
                                                     } else {
                                                         L.e { "[call] ShowItemsBottomView Error sending raise hand: $status" }
@@ -181,7 +218,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                                     it.showStyledPopTip(it.getString(R.string.call_connecting_retry_tip))
                                                 }
 
-                                            onDismiss()
+                                            dismissSheet()
                                         }
                                     },
                                 horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
@@ -198,11 +235,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                 )
                             }
                             Text(
-                                text = context.getString(R.string.call_toolbar_bottom_raise_hand_text),
+                                text = ResUtils.getString(R.string.call_toolbar_bottom_raise_hand_text),
                                 style = TextStyle(
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp,
-                                    fontFamily = SfProFont,
+                                    fontFamily = FontFamily.Default,
                                     fontWeight = FontWeight(400),
                                     color = colorResource(id = com.difft.android.base.R.color.gray_50),
                                 )
@@ -247,11 +284,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                             }
 
                             Text(
-                                text = context.getString(R.string.call_toolbar_bottom_switch_text),
+                                text = ResUtils.getString(R.string.call_toolbar_bottom_switch_text),
                                 style = TextStyle(
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp,
-                                    fontFamily = SfProFont,
+                                    fontFamily = FontFamily.Default,
                                     fontWeight = FontWeight(400),
                                     color = colorResource(id = com.difft.android.base.R.color.gray_50)
                                 )
@@ -259,7 +296,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                         }
                     }
 
-                    if(viewModel.isGroupShowCriticalAlertEnable(isCriticalAlertEnable) || viewModel.is1v1ShowCriticalAlertEnable(callStatus)) {
+                    if (showCriticalAlertEnable) {
                         Column(
                             modifier = Modifier
                                 .width(80.dp)
@@ -276,13 +313,13 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
                                             L.i { "[call] ShowItemsBottomView click critical alert" }
-                                            viewModel.conversationId?.let { conversationId ->
-                                                when {
-                                                    callType == CallType.GROUP.type -> viewModel.handleCriticalAlert(gid = conversationId, callback = onCriticalAlertComplete)
-                                                    else -> viewModel.handleCriticalAlert(uid = conversationId, callback = onCriticalAlertComplete)
+                                            if (callType == CallType.ONE_ON_ONE.type) {
+                                                viewModel.conversationId?.let {
+                                                    viewModel.handleCriticalAlertNew(callback = onCriticalAlertComplete)
                                                 }
-                                            } ?: run {
-                                                L.w { "[call] ShowItemsBottomView conversationId is null, cannot handle critical alert" }
+                                            } else {
+                                                viewModel.callUiController.setShowToolBarBottomViewEnable(false)
+                                                viewModel.callUiController.setShowCriticalAlertConfirmViewEnabled(true)
                                             }
                                         } catch (e: Exception) {
                                             L.e { "[call] ShowItemsBottomView click alert error: ${e.message}" }
@@ -303,11 +340,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                             }
 
                             Text(
-                                text = context.getString(R.string.call_toolbar_bottom_critical_alert_text),
+                                text = ResUtils.getString(R.string.call_toolbar_bottom_critical_alert_text),
                                 style = TextStyle(
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp,
-                                    fontFamily = SfProFont,
+                                    fontFamily = FontFamily.Default,
                                     fontWeight = FontWeight(400),
                                     color = colorResource(id = com.difft.android.base.R.color.gray_50)
                                 )
@@ -339,11 +376,11 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                             modifier = Modifier
                                 .wrapContentWidth()
                                 .height(24.dp),
-                            text = context.getString(R.string.call_toolbar_noise_suppression_text),
+                            text = ResUtils.getString(R.string.call_toolbar_noise_suppression_text),
                             style = TextStyle(
                                 fontSize = 16.sp,
                                 lineHeight = 24.sp,
-                                fontFamily = SfProFont,
+                                fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
                                 color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
                             )

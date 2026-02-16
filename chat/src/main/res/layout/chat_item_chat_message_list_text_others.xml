@@ -299,4 +299,21 @@
         tools:layout_height="20dp"
         tools:layout_width="20dp" />
 
+    <!-- Voice playback speed button - shown only during audio playback -->
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_voice_speed"
+        android:layout_width="36dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/chat_voice_speed_btn_bg"
+        android:gravity="center"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/contentContainer"
+        app:layout_constraintStart_toEndOf="@+id/contentContainer"
+        app:layout_constraintTop_toTopOf="@+id/contentContainer"
+        tools:text="1×"
+        tools:visibility="visible" />
+
 </com.difft.android.chat.ui.ChatMessageItemView>

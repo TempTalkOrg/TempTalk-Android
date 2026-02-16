@@ -317,7 +317,25 @@
         android:src="@drawable/chat_icon_message_sent_failed"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/contentContainer"
+        app:layout_constraintEnd_toStartOf="@+id/tv_voice_speed"
+        app:layout_constraintTop_toTopOf="@+id/contentContainer"
+        tools:visibility="visible" />
+
+    <!-- Voice playback speed button - shown only during audio playback -->
+    <!-- Position: right of iv_send_fail, left of contentContainer -->
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_voice_speed"
+        android:layout_width="36dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/chat_voice_speed_btn_bg"
+        android:gravity="center"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/contentContainer"
         app:layout_constraintEnd_toStartOf="@+id/contentContainer"
         app:layout_constraintTop_toTopOf="@+id/contentContainer"
+        tools:text="1×"
         tools:visibility="visible" />
 </com.difft.android.chat.ui.ChatMessageItemView>

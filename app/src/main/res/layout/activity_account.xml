@@ -35,7 +35,8 @@
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="@+id/ib_back"
             app:layout_constraintLeft_toRightOf="@+id/ib_back"
-            app:layout_constraintTop_toTopOf="@+id/ib_back" />
+            app:layout_constraintTop_toTopOf="@+id/ib_back"
+            app:layout_goneMarginStart="16dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -63,10 +64,11 @@
         android:orientation="vertical">
 
         <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_id"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:paddingStart="16dp"
-            android:paddingEnd="12dp">
+            android:paddingEnd="8dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_id_title"
@@ -85,10 +87,54 @@
                 android:gravity="center_vertical"
                 android:textColor="@color/t.third"
                 android:textSize="16sp"
+                android:layout_marginEnd="10dp"
                 app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/iv_id_arrow"
                 app:layout_constraintRight_toRightOf="parent"
+                app:layout_goneMarginEnd="0dp"
                 tools:text="1.0.0" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_id_arrow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/chat_ic_arrow_right"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/bg.setting" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_can_id_search"
+            style="@style/Widget.Chative.Switch"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="@color/bg.setting.item"
+            android:checked="false"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp"
+            android:text="@string/settings_contact_ID_SWITCH"
+            android:textSize="16sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginRight="16dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:orientation="vertical">
 
         <View
             android:layout_width="match_parent"

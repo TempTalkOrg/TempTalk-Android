@@ -20,8 +20,17 @@ const val RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP = "cancel-hand"
 const val RTM_MESSAGE_TOPIC_END_CALL = "end-call"
 const val RTM_MESSAGE_KEY_TEXT = "text"
 const val RTM_MESSAGE_KEY_TOPIC = "topic"
+const val RTM_MESSAGE_KEY_TYPE = "type"
 const val RTM_MESSAGE_KEY_IDENTITIES = "identities"
 const val RTM_MESSAGE_KEY_SENDTIMESTAMP = "sendTimestamp"
+const val RTM_MESSAGE_TYPE_DEFAULT = 0
+const val RTM_MESSAGE_TYPE_BUBBLE = 1
+
+enum class BubbleMessageType {
+    EMOJI,
+    TEXT
+}
+
 
 const val MUTE_ACTION_INDEX = 0
 
@@ -32,6 +41,7 @@ data class RtmMessage(
     @Serializable(with = IdentityListSerializer::class)
     val identities: List<Participant.Identity>? = null,
     val sendTimestamp: Long = 0L,
+    val type: Int? = 0,
     val text: String? = null
 )
 

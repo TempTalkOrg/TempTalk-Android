@@ -3,14 +3,14 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
-import org.difft.app.database.wcdb
-import com.difft.android.databinding.ActivityTestBinding
 import com.difft.android.test.MessageTestUtil
-import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
+import org.difft.app.database.wcdb
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -29,45 +29,46 @@ class TestActivity : BaseActivity() {
         }
     }
 
-    private val mBinding: ActivityTestBinding by viewbind()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        mBinding.ibBack.setOnClickListener { finish() }
-
-
-        mBinding.clCreateGroups.setOnClickListener {
-            val idsString = mBinding.etMember.text.toString().trim()
-            messageTestUtil.createTestGroups(
-                this@TestActivity,
-                lifecycleScope,
-                if (idsString.isEmpty()) null else idsString.split(",")
-            )
+        val composeView = ComposeView(this)
+        composeView.setContent {
+            DifftTheme(useSecondaryBackground = true) {
+                TestScreen(
+                    onNavigateBack = { finish() },
+                    onCreateGroups = { memberIds, count ->
+                        messageTestUtil.createTestGroups(
+                            this@TestActivity,
+                            lifecycleScope,
+                            if (memberIds.isEmpty()) null else memberIds.split(","),
+                            count
+                        )
+                    },
+                    onDisbandGroups = {
+                        messageTestUtil.disbandOrLeaveTestGroups(this@TestActivity, lifecycleScope)
+                    },
+                    onSendMessageToAllGroups = {
+                        messageTestUtil.sendTestMessageToAllTestGroups(this@TestActivity, lifecycleScope)
+                    },
+                    onSendMessageToSingleGroup = { count ->
+                        messageTestUtil.sendTestMessageToSingleGroup(this@TestActivity, lifecycleScope, count)
+                    },
+                    onCorruptDatabase = {
+                        wcdb.testCorruptDatabase()
+                    },
+                    onBackupDatabase = {
+                        wcdb.testBackupManually()
+                    },
+                    onSendRecoveryEvent = {
+                        wcdb.testRecoveryEvent()
+                    },
+                    onDialogTest = {
+                        DialogTestActivity.startActivity(this@TestActivity)
+                    }
+                )
+            }
         }
-
-        mBinding.clDisbandGroups.setOnClickListener {
-            messageTestUtil.disbandOrLeaveTestGroups(this@TestActivity, lifecycleScope)
-        }
-
-        mBinding.clSendMessage.setOnClickListener {
-            messageTestUtil.sendTestMessageToAllTestGroups(this@TestActivity, lifecycleScope)
-        }
-
-        mBinding.clCorruptDatabase.setOnClickListener {
-            wcdb.testCorruptDatabase()
-        }
-
-        mBinding.clBackupDatabase.setOnClickListener {
-            wcdb.testBackupManually()
-        }
-
-        mBinding.clSendRecoveryEvent.setOnClickListener {
-            wcdb.testRecoveryEvent()
-        }
-
-        mBinding.clDialogTest.setOnClickListener {
-            DialogTestActivity.startActivity(this@TestActivity)
-        }
+        setContentView(composeView)
     }
 }

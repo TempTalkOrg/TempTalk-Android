@@ -19,29 +19,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * MessageForegroundService 管理器
+ * MessageForegroundService Manager
  *
- * 职责：
- * 1. 管理前台Service的启动和停止
- * 2. 管理保活机制（AlarmManager）的注册和取消
- * 3. 检查并恢复Service状态
+ * Responsibilities:
+ * 1. Manage foreground Service start/stop
+ * 2. Manage keep-alive mechanism (AlarmManager) registration/cancellation
+ * 3. Check and recover Service state
  *
- * 保活机制生命周期：
- * - startService() -> 注册 AlarmManager，设置 keepAliveEnabled=true
- * - stopService() -> 取消 AlarmManager，设置 keepAliveEnabled=false
- * - onFcmAvailable() -> 取消 AlarmManager，设置 keepAliveEnabled=false
+ * Keep-alive lifecycle:
+ * - startService() -> Register AlarmManager, set keepAliveEnabled=true
+ * - stopService() -> Cancel AlarmManager, set keepAliveEnabled=false
+ * - onFcmAvailable() -> Cancel AlarmManager, set keepAliveEnabled=false
  *
- * 保活触发点：
- * - AlarmManager（自动选择精确/非精确闹钟，进程死亡后能唤醒）
- *   - 有精确闹钟权限：3分钟间隔（非Doze）/~9分钟（Doze，系统延长）
- *   - 无精确闹钟权限：3分钟间隔（非Doze）/30分钟-2小时（Doze，系统维护窗口）
- * - BOOT_COMPLETED（静态注册，系统重启后恢复 AlarmManager 和 Service）
+ * Keep-alive triggers:
+ * - AlarmManager (auto-selects exact/inexact alarm, can wake process after death)
+ *   - With exact alarm permission: 5 min interval (non-Doze) / ~15 min (Doze, system extended)
+ *   - Without exact alarm permission: 5 min interval (non-Doze) / 30min-2hr (Doze, maintenance window)
+ * - BOOT_COMPLETED (static registered, restores AlarmManager and Service after reboot)
  *
- * 注意：WebSocket 重连由 WebSocketHealthMonitor 管理（网络监听、心跳检测等）
+ * Note: WebSocket reconnection is managed by WebSocketHealthMonitor (network listener, heartbeat, etc.)
  */
 @Singleton
 class MessageServiceManager @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val userManager: UserManager,
     private val webSocketHealthMonitor: WebSocketHealthMonitor
@@ -50,100 +50,100 @@ class MessageServiceManager @Inject constructor(
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     companion object {
-        // 非精确闹钟间隔（setAndAllowWhileIdle）
-        // - 非Doze模式：3分钟触发
-        // - Doze模式：系统维护窗口触发（初期9-15分钟，深度30分钟-2小时）
-        private const val NON_EXACT_ALARM_INTERVAL_MS = 3 * 60 * 1000L // 3分钟
+        // Non-exact alarm interval (setAndAllowWhileIdle)
+        // - Non-Doze: triggers every 5 min
+        // - Doze: triggers in maintenance window (initially 15-25 min, deep 30min-2hr)
+        private const val NON_EXACT_ALARM_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
-        // 精确闹钟间隔（setExactAndAllowWhileIdle，需要 SCHEDULE_EXACT_ALARM 权限）
-        // - 非Doze模式：3分钟触发（及时检查）
-        // - Doze模式：系统自动延长到 ~9分钟（符合系统最小限制，不会被延长到几十分钟）
-        private const val EXACT_ALARM_INTERVAL_MS = 3 * 60 * 1000L // 3分钟
+        // Exact alarm interval (setExactAndAllowWhileIdle, requires SCHEDULE_EXACT_ALARM permission)
+        // - Non-Doze: triggers every 5 min (timely check)
+        // - Doze: system extends to ~15 min (meets system minimum, won't extend to hours)
+        private const val EXACT_ALARM_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
         private const val ALARM_REQUEST_CODE = 10001
     }
 
     /**
-     * 启动 Service
+     * Start Service
      *
-     * 流程：
-     * 1. 设置 keepAliveEnabled=true（服务层状态）
-     * 2. 注册 AlarmManager 保活机制
-     * 3. 启动 Service
+     * Flow:
+     * 1. Set keepAliveEnabled=true (service layer state)
+     * 2. Register AlarmManager keep-alive mechanism
+     * 3. Start Service
      **/
     fun startService() {
-        // 1. 启用保活机制（只修改服务层状态）
+        // 1. Enable keep-alive (only modify service layer state)
         userManager.update { keepAliveEnabled = true }
 
-        // 2. 注册保活机制（AlarmManager）
+        // 2. Register keep-alive mechanism (AlarmManager)
         scheduleAlarmCheck()
         L.i { "[MessageService] Keep-alive mechanism registered" }
 
-        // 3. 使用降级策略启动 Service
+        // 3. Start Service with fallback strategy
         doStartService()
     }
 
     /**
-     * 停止 Service
+     * Stop Service
      *
-     * 流程：
-     * 1. 停止 Service
-     * 2. 设置 keepAliveEnabled=false（服务层状态）
-     * 3. 取消 AlarmManager 保活机制
+     * Flow:
+     * 1. Stop Service
+     * 2. Set keepAliveEnabled=false (service layer state)
+     * 3. Cancel AlarmManager keep-alive mechanism
      **/
     fun stopService() {
-        // 1. 停止Service
+        // 1. Stop Service
         ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
 
-        // 2. 禁用保活机制（只修改服务层状态）
+        // 2. Disable keep-alive (only modify service layer state)
         userManager.update { keepAliveEnabled = false }
 
-        // 3. 取消保活机制
+        // 3. Cancel keep-alive mechanism
         cancelAlarmCheck()
         L.i { "[MessageService] Stopped, keep-alive mechanism cancelled" }
     }
 
     /**
-     * FCM可用时自动停止
+     * Auto-stop when FCM becomes available
      *
-     * 流程：
-     * 1. 停止 Service
-     * 2. 设置 keepAliveEnabled=false（不修改 autoStartMessageService，不是用户主动关闭）
-     * 3. 取消 AlarmManager 保活机制
+     * Flow:
+     * 1. Stop Service
+     * 2. Set keepAliveEnabled=false (don't modify autoStartMessageService, not user-initiated)
+     * 3. Cancel AlarmManager keep-alive mechanism
      */
     fun onFcmAvailable() {
         L.i { "[MessageService] FCM available, stopping service" }
 
-        // 1. 停止Service
+        // 1. Stop Service
         ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
 
-        // 2. 禁用保活机制（不修改 autoStartMessageService，保留用户意图）
+        // 2. Disable keep-alive (don't modify autoStartMessageService, preserve user intent)
         userManager.update { keepAliveEnabled = false }
 
-        // 3. 取消保活机制
+        // 3. Cancel keep-alive mechanism
         cancelAlarmCheck()
         L.i { "[MessageService] Keep-alive mechanism cancelled due to FCM available" }
     }
 
     /**
-     * 核心检查和恢复逻辑
+     * Core check and recover logic
      *
-     * 由 AlarmManager 和 BOOT_COMPLETED 触发
-     * ✅ 通过 Intent 唤醒或恢复 Service
+     * Triggered by AlarmManager and BOOT_COMPLETED
+     * Wakes up or recovers Service via Intent
      *
-     * 注意：调用前需要确保 keepAliveEnabled=true（即保活机制已启用）
+     * Note: Ensure keepAliveEnabled=true before calling (i.e., keep-alive is enabled)
      *
-     * 统一处理所有场景：
-     * 1. Service 正常运行：触发 onStartCommand()，无副作用
-     * 2. Service 被冻结（Doze模式）：Intent 唤醒 Service，恢复执行
-     * 3. Service 被杀死：重新创建并启动 Service
+     * Handles all scenarios uniformly:
+     * 1. Service running normally: triggers onStartCommand(), no side effects
+     * 2. Service frozen (Doze mode): Intent wakes Service, resumes execution
+     * 3. Service killed: recreates and starts Service
      *
-     * startService() 的行为：
-     * - Service 存在：只触发 onStartCommand()，不会重新创建
-     * - Service 不存在：创建新实例并启动
+     * startService() behavior:
+     * - Service exists: only triggers onStartCommand(), won't recreate
+     * - Service doesn't exist: creates new instance and starts
      */
     fun checkAndRecover() {
-        // 记录当前状态用于日志分析
+        // Record current state for log analysis
         val wasRunning = MessageForegroundService.isRunning
 
         if (!wasRunning) {
@@ -152,46 +152,46 @@ class MessageServiceManager @Inject constructor(
             L.i { "[MessageService] Service running, sending wakeup/check intent (may be frozen in Doze)" }
         }
 
-        // 统一调用启动逻辑（包含降级重试策略）
-        // - 如果 Service 正常运行或被冻结：成功触发 onStartCommand()，无异常
-        // - 如果 Service 被杀死：重新创建，失败时协程异步重试
+        // Unified start logic (with fallback retry strategy)
+        // - If Service running or frozen: successfully triggers onStartCommand(), no exception
+        // - If Service killed: recreates, retries via coroutine on failure
         doStartService()
 
-        // ✅ 通知 WebSocket 健康监控器：Alarm 已触发
-        // 作用：
-        // 1. 重置重试次数，下次重连立即执行（无 backoff delay）
-        // 2. 如果当前正在 backoff 等待中，立即打断并触发重连
+        // Notify WebSocket health monitor: Alarm triggered
+        // Effects:
+        // 1. Reset retry count, next reconnect executes immediately (no backoff delay)
+        // 2. If currently in backoff wait, interrupt and trigger reconnect
         webSocketHealthMonitor.onAlarmTriggered()
     }
 
     /**
-     * 核心启动逻辑（降级策略）
+     * Core start logic (fallback strategy)
      *
-     * 第一步：尝试直接启动
-     * 第二步：失败后协程异步重试（避免阻塞主线程）
+     * Step 1: Try direct start
+     * Step 2: Retry via coroutine on failure (avoid blocking main thread)
      *
-     * 注意：捕获所有异常，确保不会因为启动失败导致崩溃
-     * 可能的异常：UnableToStartException, SecurityException, IllegalStateException, IllegalArgumentException 等
+     * Note: Catches all exceptions to prevent crash from start failure
+     * Possible exceptions: UnableToStartException, SecurityException, IllegalStateException, IllegalArgumentException, etc.
      */
     private fun doStartService() {
         val intent = Intent(context, MessageForegroundService::class.java)
 
         try {
-            // 第一步：尝试直接启动
+            // Step 1: Try direct start
             ForegroundServiceUtil.start(context, intent)
             L.i { "[MessageService] Service started successfully" }
         } catch (e: Exception) {
-            // 启动失败，统一处理所有异常
-            // 可能的异常：UnableToStartException, SecurityException, IllegalStateException 等
+            // Start failed, handle all exceptions uniformly
+            // Possible exceptions: UnableToStartException, SecurityException, IllegalStateException, etc.
             L.w { "[MessageService] Direct start failed: ${e.stackTraceToString()}, deferring to background coroutine" }
 
-            // 在后台协程重试（避免阻塞主线程）
+            // Retry in background coroutine (avoid blocking main thread)
             appScope.launch {
                 try {
                     ForegroundServiceUtil.startWhenCapable(context, intent)
                     L.i { "[MessageService] Service started after background retry" }
                 } catch (e: Exception) {
-                    // 后台重试也失败，记录日志（保活机制会继续尝试）
+                    // Background retry also failed, log it (keep-alive will continue trying)
                     L.e { "[MessageService] Unable to start service even after background retry: ${e.stackTraceToString()}" }
                 }
             }
@@ -199,11 +199,11 @@ class MessageServiceManager @Inject constructor(
     }
 
     /**
-     * 调度定时检查（常驻）
+     * Schedule periodic check (persistent)
      *
-     * 策略：
-     * - 有精确闹钟权限：使用 setExactAndAllowWhileIdle（3分钟间隔，Doze下系统延长到~9分钟）
-     * - 无精确闹钟权限：使用 setAndAllowWhileIdle（3分钟间隔，Doze下延长到30分钟-2小时）
+     * Strategy:
+     * - With exact alarm permission: use setExactAndAllowWhileIdle (5 min interval, Doze extends to ~15 min)
+     * - Without exact alarm permission: use setAndAllowWhileIdle (5 min interval, Doze extends to 30min-2hr)
      */
     fun scheduleAlarmCheck() {
         val intent = Intent(context, ServiceCheckReceiver::class.java)
@@ -223,42 +223,42 @@ class MessageServiceManager @Inject constructor(
         val triggerTime = SystemClock.elapsedRealtime() + interval
 
         if (hasExactAlarmPermission) {
-            // 有权限：使用精确闹钟
-            // - Android 12 以下：不需要权限，直接使用
-            // - Android 12+：需要 SCHEDULE_EXACT_ALARM 权限
+            // Has permission: use exact alarm
+            // - Below Android 12: no permission needed, use directly
+            // - Android 12+: requires SCHEDULE_EXACT_ALARM permission
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 triggerTime,
                 pendingIntent
             )
-            L.i { "[MessageService] Exact alarm scheduled (3 min, Doze extends to ~9 min)" }
+            L.i { "[MessageService] Exact alarm scheduled (5 min, Doze extends to ~15 min)" }
         } else {
-            // 无权限：使用非精确闹钟（仅 Android 12+ 且用户未授权）
+            // No permission: use inexact alarm (only Android 12+ and user not authorized)
             alarmManager.setAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 triggerTime,
                 pendingIntent
             )
-            L.i { "[MessageService] Non-exact alarm scheduled (3 min, Doze may extend to 30min-2hr)" }
+            L.i { "[MessageService] Non-exact alarm scheduled (5 min, Doze may extend to 30min-2hr)" }
         }
     }
 
     /**
-     * 检查是否有精确闹钟权限
+     * Check if exact alarm permission is granted
      *
-     * Android 12 (API 31) 开始需要 SCHEDULE_EXACT_ALARM 权限
+     * Android 12 (API 31)+ requires SCHEDULE_EXACT_ALARM permission
      */
     private fun hasExactAlarmPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager.canScheduleExactAlarms()
         } else {
-            // Android 12 以下不需要权限
+            // Below Android 12: no permission needed
             true
         }
     }
 
     /**
-     * 取消定时检查
+     * Cancel periodic check
      */
     private fun cancelAlarmCheck() {
         val intent = Intent(context, ServiceCheckReceiver::class.java)
@@ -274,19 +274,19 @@ class MessageServiceManager @Inject constructor(
     }
 
     /**
-     * 检查后台连接的前置条件是否满足
+     * Check if background connection prerequisites are met
      *
-     * 检查项：
-     * 1. 后台限制（Android 9+）- 硬性阻止，无法启动后台服务
-     * 2. 电池优化（Android 6+）- Doze 模式下服务被冻结
-     * 3. 后台数据（Android 7+）- WebSocket 无法连接，服务虽然活着但收不到消息
+     * Checks:
+     * 1. Background restriction (Android 9+) - hard block, cannot start background service
+     * 2. Battery optimization (Android 6+) - service frozen in Doze mode
+     * 3. Background data (Android 7+) - WebSocket cannot connect, service alive but no messages
      *
-     * @return true 表示条件满足，可以启动服务
+     * @return true if requirements met, service can start
      */
     fun checkBackgroundConnectionRequirements(): Boolean {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
-        // 1. 检查后台限制（Android 9+）
+        // 1. Check background restriction (Android 9+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val isBackgroundRestricted = DeviceProperties.isBackgroundRestricted(context)
             if (isBackgroundRestricted) {
@@ -295,21 +295,21 @@ class MessageServiceManager @Inject constructor(
             }
         }
 
-        // 2. 检查电池优化（Android 6+）
+        // 2. Check battery optimization (Android 6+)
         val isIgnoringBatteryOpt = powerManager.isIgnoringBatteryOptimizations(context.packageName)
         if (!isIgnoringBatteryOpt) {
             L.w { "[MessageService] Battery optimization not ignored" }
             return false
         }
 
-        // 3. 检查后台数据（Android 7+）
+        // 3. Check background data (Android 7+)
         val dataSaverState = DeviceProperties.getDataSaverState(context)
         if (dataSaverState.isRestricted) {
             L.w { "[MessageService] Background data restricted" }
             return false
         }
 
-        // 4. 检查国产rom自启管理，没有标准api，所以无法获取准确信息
+        // 4. Check Chinese ROM auto-start management - no standard API, cannot get accurate info
 
         L.i { "[MessageService] All background connection requirements met" }
         return true

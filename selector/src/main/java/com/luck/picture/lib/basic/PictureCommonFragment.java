@@ -24,6 +24,7 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 
 import androidx.activity.OnBackPressedCallback;
+import com.difft.android.base.log.lumberjack.L;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -60,7 +61,6 @@ import com.luck.picture.lib.permissions.PermissionChecker;
 import com.luck.picture.lib.permissions.PermissionConfig;
 import com.luck.picture.lib.permissions.PermissionResultCallback;
 import com.luck.picture.lib.permissions.PermissionUtil;
-import com.luck.picture.lib.service.ForegroundService;
 import com.luck.picture.lib.style.PictureWindowAnimationStyle;
 import com.luck.picture.lib.thread.PictureThreadUtils;
 import com.luck.picture.lib.utils.ActivityCompatHelper;
@@ -736,7 +736,7 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
             tipsDialog = RemindDialog.buildDialog(getAppContext(), tips);
             tipsDialog.show();
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureCommonFragment] showTipsDialog error:");
         }
     }
 
@@ -894,7 +894,6 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
             } else {
                 Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 if (cameraIntent.resolveActivity(getActivity().getPackageManager()) != null) {
-                    ForegroundService.startForegroundService(getAppContext(), selectorConfig.isCameraForegroundService);
                     Uri imageUri = MediaStoreUtils.createCameraOutImageUri(getAppContext(), selectorConfig);
                     if (imageUri != null) {
                         if (selectorConfig.isCameraAroundState) {
@@ -941,7 +940,6 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
             } else {
                 Intent cameraIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
                 if (cameraIntent.resolveActivity(getActivity().getPackageManager()) != null) {
-                    ForegroundService.startForegroundService(getAppContext(), selectorConfig.isCameraForegroundService);
                     Uri videoUri = MediaStoreUtils.createCameraOutVideoUri(getAppContext(), selectorConfig);
                     if (videoUri != null) {
                         cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, videoUri);
@@ -962,7 +960,6 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
     @Override
     public void openSoundRecording() {
         if (selectorConfig.onRecordAudioListener != null) {
-            ForegroundService.startForegroundService(getAppContext(), selectorConfig.isCameraForegroundService);
             selectorConfig.onRecordAudioListener.onRecordAudio(this, PictureConfig.REQUEST_CAMERA);
         } else {
             throw new NullPointerException(OnRecordAudioInterceptListener.class.getSimpleName() + " interface needs to be implemented for recording");
@@ -975,7 +972,6 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
      */
     @Override
     public void onInterceptCameraEvent(int cameraMode) {
-        ForegroundService.startForegroundService(getAppContext(), selectorConfig.isCameraForegroundService);
         selectorConfig.onCameraInterceptListener.openCamera(this, cameraMode, PictureConfig.REQUEST_CAMERA);
     }
 
@@ -1045,7 +1041,7 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
                 soundPool = null;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureCommonFragment] releaseSoundPool error:");
         }
     }
 
@@ -1096,7 +1092,7 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
                     }
 
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[PictureCommonFragment] handleEditMediaResult error:");
                     ToastUtils.showToast(getAppContext(), e.getMessage());
                 }
 
@@ -1124,7 +1120,6 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
                 handlePermissionSettingResult(PermissionConfig.CURRENT_REQUEST_PERMISSION);
             }
         }
-        ForegroundService.stopService(getAppContext());
     }
 
     /**
@@ -1186,7 +1181,7 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
                 }
             }
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureCommonFragment] handleAudioCameraResult error:");
         }
     }
 
@@ -1385,22 +1380,34 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
         ArrayList<String> dataCropSource = new ArrayList<>();
         for (int i = 0; i < result.size(); i++) {
             LocalMedia media = result.get(i);
-            dataCropSource.add(media.getAvailablePath());
+            String availablePath = media.getAvailablePath();
+            // 确保路径有效才添加，防止 Android 9 等设备上可能出现的空路径问题
+            if (availablePath != null && !availablePath.isEmpty()) {
+                dataCropSource.add(availablePath);
+            }
             if (srcUri == null && PictureMimeType.isHasImage(media.getMimeType())) {
-                String currentCropPath = media.getAvailablePath();
-                if (PictureMimeType.isContent(currentCropPath) || PictureMimeType.isHasHttp(currentCropPath)) {
-                    srcUri = Uri.parse(currentCropPath);
-                } else {
-                    srcUri = Uri.fromFile(new File(currentCropPath));
+                String currentCropPath = availablePath;
+                if (currentCropPath != null && !currentCropPath.isEmpty()) {
+                    if (PictureMimeType.isContent(currentCropPath) || PictureMimeType.isHasHttp(currentCropPath)) {
+                        srcUri = Uri.parse(currentCropPath);
+                    } else {
+                        srcUri = Uri.fromFile(new File(currentCropPath));
+                    }
+                    String fileName = DateUtils.getCreateFileName("CROP_") + ".jpg";
+                    Context context = getAppContext();
+                    File externalFilesDir = new File(FileDirMap.getFileDirPath(context, SelectMimeType.TYPE_IMAGE));
+                    File outputFile = new File(externalFilesDir.getAbsolutePath(), fileName);
+                    destinationUri = Uri.fromFile(outputFile);
                 }
-                String fileName = DateUtils.getCreateFileName("CROP_") + ".jpg";
-                Context context = getAppContext();
-                File externalFilesDir = new File(FileDirMap.getFileDirPath(context, SelectMimeType.TYPE_IMAGE));
-                File outputFile = new File(externalFilesDir.getAbsolutePath(), fileName);
-                destinationUri = Uri.fromFile(outputFile);
             }
         }
-        selectorConfig.cropFileEngine.onStartCrop(this, srcUri, destinationUri, dataCropSource, Crop.REQUEST_CROP);
+        // 只有当有有效的裁剪源时才启动裁剪
+        if (!dataCropSource.isEmpty() && srcUri != null && destinationUri != null) {
+            selectorConfig.cropFileEngine.onStartCrop(this, srcUri, destinationUri, dataCropSource, Crop.REQUEST_CROP);
+        } else {
+            // 如果没有有效的裁剪源，跳过裁剪直接返回结果
+            onResultEvent(result);
+        }
     }
 
     @Override
@@ -1901,7 +1908,7 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
                 mLoadingDialog.show();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureCommonFragment] showLoading error:");
         }
     }
 
@@ -1916,7 +1923,7 @@ public abstract class PictureCommonFragment extends Fragment implements IPicture
                 mLoadingDialog.dismiss();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureCommonFragment] dismissLoading error:");
         }
     }
 

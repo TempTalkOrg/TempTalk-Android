@@ -1,7 +1,3 @@
-//
-// Created by neo on 2023/9/19.
-// 功能：调试日志
-//
 
 #ifndef ANDROID_SECURITY_SDK_LOGUTIL_H
 #define ANDROID_SECURITY_SDK_LOGUTIL_H

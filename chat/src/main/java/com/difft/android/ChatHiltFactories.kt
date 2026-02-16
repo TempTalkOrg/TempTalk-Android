@@ -92,10 +92,11 @@ interface ChatMessageViewModelFactory {
 }
 
 fun ChatMessageViewModelFactory.create(intent: Intent): ChatMessageViewModel {
-    val forWhat = if (!intent.groupID.isNullOrEmpty()) {
-        For.Group(intent.groupID!!)
+    val groupId = intent.groupID
+    val forWhat = if (!groupId.isNullOrEmpty()) {
+        For.Group(groupId)
     } else {
-        For.Account(intent.contactorID!!)
+        For.Account(intent.contactorID ?: "")
     }
     return create(forWhat, intent.jumpMessageTimeStamp)
 }

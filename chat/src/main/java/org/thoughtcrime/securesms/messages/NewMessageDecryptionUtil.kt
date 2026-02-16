@@ -9,7 +9,7 @@ import com.difft.android.websocket.api.util.removePadding
 import com.google.gson.Gson
 import org.signal.libsignal.protocol.InvalidVersionException
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
-import org.thoughtcrime.securesms.util.Base64
+import com.difft.android.base.utils.Base64
 import org.whispersystems.signalservice.internal.push.EncryptedMessageProtos
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 import uniffi.dtproto.DtProto
@@ -76,11 +76,11 @@ class NewMessageDecryptionUtil @Inject constructor(
         }
         if (envelope.getType().number == Envelope.Type.NOTIFY_VALUE) {
             val contentString = String(content)
-            L.d { "====收到notify消息===$contentString" }
             val notifyMessage = Gson().fromJson(
                 contentString,
                 TTNotifyMessage::class.java
             )
+            L.d { "[Message] 收到notify消息 ${notifyMessage.notifyType}" }
             return SignalServiceDataClass(envelope, null, notifyMessage)
         } else {
             val contentObj = org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content.parseFrom(content)

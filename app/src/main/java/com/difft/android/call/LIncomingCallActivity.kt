@@ -17,7 +17,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AppCompatActivity
+import com.difft.android.base.BaseActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
@@ -31,20 +31,29 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.databinding.CallActivityIncomingCallBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.manager.CallRingtoneManager
+import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.state.InComingCallStateManager
+import com.difft.android.call.util.StringUtil
+import dagger.Lazy
 
 @AndroidEntryPoint
-class LIncomingCallActivity : AppCompatActivity() {
+class LIncomingCallActivity : BaseActivity() {
 
     @Inject
     lateinit var callToChatController: LCallToChatController
@@ -54,6 +63,15 @@ class LIncomingCallActivity : AppCompatActivity() {
 
     @Inject
     lateinit var inComingCallStateManager: InComingCallStateManager
+
+    @Inject
+    lateinit var callDataManagerLazy: Lazy<CallDataManager>
+
+    @Inject
+    lateinit var callVibrationManager: CallVibrationManager
+
+    @Inject
+    lateinit var callRingtoneManager: CallRingtoneManager
 
     val binding: CallActivityIncomingCallBinding by viewbind()
 
@@ -74,22 +92,26 @@ class LIncomingCallActivity : AppCompatActivity() {
     @Inject
     lateinit var userManager: UserManager
 
+    private val callDataManager: CallDataManager by lazy {
+        callDataManagerLazy.get()
+    }
+
+    private var isAcceptingCall = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
 
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        // 仅在非宽屏设备上强制竖屏，宽屏设备允许自由旋转以撑满全屏
+        if (!WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
 
         initializeActivityState()
 
         registerIncomingCallReceiver()
 
-        if (onGoingCallStateManager.isInCalling()) {
-            showNewCallToastAndHangUp()
-            return
-        } else {
-            handleCallNotificationAction()
-        }
+        handleCallNotificationAction()
 
         initUI()
 
@@ -105,7 +127,6 @@ class LIncomingCallActivity : AppCompatActivity() {
 
     private fun initializeActivityState() {
         inComingCallStateManager.setIsActivityShowing(true)
-        LCallManager.isIncomingCalling = true
         callIntent = getCallIntent()
 
         if (isAppLockEnabled()) {
@@ -118,14 +139,14 @@ class LIncomingCallActivity : AppCompatActivity() {
     }
 
     private fun showNewCallToastAndHangUp() {
-        Toast.makeText(this, R.string.call_newcall_tip, Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, R.string.call_newcall_tip, Toast.LENGTH_LONG).show()
         hangUpTheCall("reject: local reject the new call")
     }
 
     private fun setupCallControlMessageListener() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                LCallManager.controlMessage.collect { message ->
+                onGoingCallStateManager.controlMessage.collect { message ->
                     handleCallControlMessage(message)
                 }
             }
@@ -135,8 +156,13 @@ class LIncomingCallActivity : AppCompatActivity() {
     private fun handleCallNotificationAction() {
         if (callIntent.action == CallIntent.Action.ACCEPT_CALL) {
             L.i { "[Call] LIncomingCallActivity handleCallNotificationAction ACCEPT_CALL roomId:${callIntent.roomId}" }
-            callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, inComingCallStateManager.isNeedAppLock()) { status ->
-                handleJoinCallResponse(status)
+            if (onGoingCallStateManager.isInCalling()) {
+                LCallManager.bringCallScreenToFront(this)
+                showNewCallToastAndHangUp()
+            } else {
+                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, inComingCallStateManager.isNeedAppLock()) { status ->
+                    handleJoinCallResponse(status)
+                }
             }
         }
     }
@@ -150,7 +176,7 @@ class LIncomingCallActivity : AppCompatActivity() {
     }
 
 
-    private fun handleCallControlMessage(controlMessage: LCallManager.ControlMessage?) {
+    private fun handleCallControlMessage(controlMessage: OnGoingCallStateManager.ControlMessage?) {
         if (controlMessage == null) return
         when (controlMessage.actionType) {
             CallActionType.REJECT, CallActionType.JOINED, CallActionType.CALLEND, CallActionType.CANCEL -> {
@@ -211,36 +237,55 @@ class LIncomingCallActivity : AppCompatActivity() {
                 }
             }, { error ->
                 L.e { "[Call] LIncomingCallActivity initUI: Failed to get contact with id: ${callIntent.callerId}" }
-                error.printStackTrace()
                 binding.callerName.text = callIntent.callerId
                 binding.callerAvatar.setAvatar(null, null, ContactorUtil.getFirstLetter(callIntent.callerId), callIntent.callerId)
             })
 
+        val roomName = StringUtil.truncateWithEllipsis(callIntent.roomName, 25)
 
         val tipMessage = if (callType.isGroup()) {
-            getString(com.difft.android.chat.R.string.call_invite_of_group) + ":" + callIntent.roomName
+            ResUtils.getString(com.difft.android.chat.R.string.call_invite_of_group) + ":" + roomName
         } else {
-            getString(com.difft.android.chat.R.string.call_invite)
+            ResUtils.getString(com.difft.android.chat.R.string.call_invite)
         }
         binding.tipMessage.text = tipMessage
 
         binding.acceptCallBtn.setOnClickListener {
-            if (!onGoingCallStateManager.isInCalling()) {
+            if (isAcceptingCall) return@setOnClickListener
+            isAcceptingCall = true
+            setAcceptLoading(true)
+            lifecycleScope.launch {
+                val canJoin = if (!onGoingCallStateManager.isInCalling()) {
+                    true
+                } else {
+                    L.i { "[Call] LIncomingCallActivity acceptCallBtn click: end current call before join." }
+                    endCurrentCallAndWaitForRelease()
+                }
+
+                if (!canJoin) {
+                    setAcceptLoading(false)
+                    isAcceptingCall = false
+                    return@launch
+                }
+
                 L.i { "[Call] LIncomingCallActivity initUI: acceptCallBtn click: callIntent:$callIntent" }
-                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, inComingCallStateManager.isNeedAppLock()) { status ->
+                callToChatController.joinCall(
+                    applicationContext,
+                    callIntent.roomId,
+                    callIntent.roomName,
+                    callIntent.callerId,
+                    callType,
+                    callIntent.conversationId,
+                    inComingCallStateManager.isNeedAppLock()
+                ) { status ->
                     handleJoinCallResponse(status)
                 }
-            } else {
-                runOnUiThread {
-                    ToastUtil.show(R.string.call_newcall_tip)
-                }
-                hangUpTheCall("reject: local reject the new call")
             }
         }
         binding.rejectCallBtn.setOnClickListener {
             callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId) {
                 if (callType == CallType.ONE_ON_ONE) {
-                    LCallManager.removeCallData(callIntent.roomId)
+                    callDataManager.removeCallData(callIntent.roomId)
                 }
                 hangUpTheCall("reject: local reject the call")
             }
@@ -270,12 +315,12 @@ class LIncomingCallActivity : AppCompatActivity() {
         L.d { "[Call] LIncomingCallActivity onDestroy: onDestroy" }
         unregisterReceiver(inComingCallReceiver)
         inComingCallStateManager.reset() // 一次性重置所有状态
-        LCallManager.isIncomingCalling = false
-        LCallManager.clearControlMessage()
+        onGoingCallStateManager.clearControlMessage()
         if (::backPressedCallback.isInitialized) {
             backPressedCallback.remove()
         }
         AppLockCallbackManager.removeListener(callbackId)
+        checkNotifyStateAndDismiss(callIntent.roomId)
     }
 
 
@@ -320,15 +365,15 @@ class LIncomingCallActivity : AppCompatActivity() {
         return when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 // 捕捉到音量增加键
-                LCallManager.stopRingTone(tag = "Volume Up Pressed")
-                LCallManager.stopVibration()
+                callRingtoneManager.stopRingTone("Volume Up Pressed")
+                callVibrationManager.stopVibration()
                 true  // 返回 true 表示你已经处理了该事件
             }
 
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
                 // 捕捉到音量减少键
-                LCallManager.stopRingTone(tag = "Volume Down Pressed")
-                LCallManager.stopVibration()
+                callRingtoneManager.stopRingTone("Volume Up Pressed")
+                callVibrationManager.stopVibration()
                 true
             }
 
@@ -412,6 +457,10 @@ class LIncomingCallActivity : AppCompatActivity() {
     }
 
     private fun handleJoinCallResponse(status: Boolean) {
+        runOnUiThread {
+            setAcceptLoading(false)
+            isAcceptingCall = false
+        }
         if(!status) {
             L.e { "[Call] LIncomingActivity join call failed." }
             runOnUiThread {
@@ -420,6 +469,42 @@ class LIncomingCallActivity : AppCompatActivity() {
             hangUpTheCall("accept: join the call failed")
         }else {
             hangUpTheCall("accept: join the call")
+        }
+    }
+
+    private fun setAcceptLoading(isLoading: Boolean) {
+        binding.acceptCallBtn.isEnabled = !isLoading
+        binding.rejectCallBtn.isEnabled = !isLoading
+    }
+
+    private suspend fun endCurrentCallAndWaitForRelease(): Boolean {
+        val currentRoomId = onGoingCallStateManager.getCurrentRoomId()
+        if (!currentRoomId.isNullOrEmpty()) {
+            val intent = Intent(LCallActivity.ACTION_IN_CALLING_CONTROL).apply {
+                putExtra(LCallActivity.EXTRA_CONTROL_TYPE, CallActionType.DECLINE.type)
+                putExtra(LCallActivity.EXTRA_PARAM_ROOM_ID, currentRoomId)
+                setPackage(ApplicationHelper.instance.packageName)
+            }
+            ApplicationHelper.instance.sendBroadcast(intent)
+        }
+
+        return try {
+            withTimeoutOrNull(15_000) {
+                onGoingCallStateManager.isInCalling.first { !it }
+                true
+            } ?: run {
+                L.w { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease timeout." }
+                runOnUiThread {
+                    ToastUtil.show(R.string.call_join_failed_tip)
+                }
+                false
+            }
+        } catch (e: Exception) {
+            L.e(e) { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease failed." }
+            runOnUiThread {
+                ToastUtil.show(R.string.call_join_failed_tip)
+            }
+            false
         }
     }
 
@@ -449,5 +534,11 @@ class LIncomingCallActivity : AppCompatActivity() {
         val hasPattern = !user.pattern.isNullOrEmpty()
         val hasPasscode = !user.passcode.isNullOrEmpty()
         return hasPattern || hasPasscode
+    }
+
+    private fun checkNotifyStateAndDismiss(roomId: String) {
+        if (callDataManager.getCallNotifyStatus(roomId)) {
+            LCallManager.stopIncomingCallService(roomId, "incoming call activity dismissed")
+        }
     }
 }

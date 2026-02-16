@@ -22,8 +22,10 @@ import org.thoughtcrime.securesms.util.ForegroundServiceUtil
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.system.exitProcess
 
+@Singleton
 class LogoutManagerImpl @Inject constructor(
     private val userManager: UserManager,
     private var messageStore: MessageStore,
@@ -82,7 +84,7 @@ class LogoutManagerImpl @Inject constructor(
         WCDBSecureSharedPrefsUtil(application).clear()
         messageStore.deleteDatabase()
 
-        FileUtil.clearAllFiles()
+        FileUtil.clearAllFilesExceptLogs()
     }
 
     private fun stopMessageService() {

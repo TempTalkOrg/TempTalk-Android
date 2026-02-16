@@ -210,7 +210,7 @@
             app:layout_constraintStart_toEndOf="@id/quality_selector"
             app:layout_goneMarginStart="10dp"
             app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.TT.Circle"
-            app:srcCompat="@drawable/symbol_save_android_24"
+            app:srcCompat="@drawable/chat_message_action_download"
             app:tint="@color/dark_colorOnSurface"
             tools:visibility="visible" />
 

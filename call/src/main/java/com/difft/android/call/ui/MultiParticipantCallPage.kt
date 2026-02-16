@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,20 +37,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
-import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.MUTE_ACTION_INDEX
+import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
+import com.difft.android.call.util.IdUtil
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
@@ -71,6 +78,7 @@ fun MultiParticipantCallPage(
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val whoSharedScreen by viewModel.screenSharingUser.collectAsState()
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -85,7 +93,7 @@ fun MultiParticipantCallPage(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(
                     start = 16.dp,
-                    top = 44.dp,
+                    top = topInset + 16.dp,
                     end = 16.dp,
                     bottom = 4.dp),
             ){
@@ -125,14 +133,22 @@ fun MultiParticipantCallPage(
     BarrageMessageView(
         viewModel,
         config = BarrageMessageConfig(
-            false,
-            callConfig.chatPresets ?: emptyList(),
-            displayDurationMillis = autoHideTimeout
+            isOneVOneCall = false,
+            barrageTexts = callConfig.chatPresets ?: emptyList(),
+            displayDurationMillis = autoHideTimeout,
+            baseSpeed = callConfig.bubbleMessage?.baseSpeed ?: 4600L,
+            deltaSpeed = callConfig.bubbleMessage?.deltaSpeed ?: 400L,
+            columns = callConfig.bubbleMessage?.columns ?: listOf(10, 40, 70),
+            emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
+            textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
+            textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
         ),
-        { message, topic ->
-            viewModel.rtm.sendChatBarrage(message, onComplete = { status ->
+        { message, type, topic ->
+            viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
                 if (status) {
-                    viewModel.showCallBarrageMessage(room.localParticipant, message)
+                    if (type == RTM_MESSAGE_TYPE_DEFAULT) {
+                        viewModel.showCallBarrageMessage(room.localParticipant, message)
+                    }
                 } else {
                     L.e { "[Call] Failed to send barrage message status = $status." }
                 }
@@ -165,6 +181,10 @@ fun MultiParticipantItem(
     onClickMute: () -> Unit,
     coroutineScope: CoroutineScope
 ){
+    val contactorCacheManager = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
+
     val contactsUpdate by LCallManager.getContactsUpdateListener().map { Pair(System.currentTimeMillis(), it) }.asFlow().collectAsState(Pair(0L, emptyList()))
 
     val videoTrackMap by participant::videoTrackPublications.flow.collectAsState(initial = emptyList())
@@ -194,7 +214,7 @@ fun MultiParticipantItem(
     }
 
     suspend fun updateNameAndAvatar(userId: String) {
-        userDisplayInfo = LCallManager.getParticipantDisplayInfo(context, userId)
+        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, userId)
     }
 
     fun handleClickScreen() {
@@ -218,7 +238,7 @@ fun MultiParticipantItem(
     }
 
     LaunchedEffect(contactsUpdate) {
-        if(contactsUpdate.second.contains(LCallManager.getUidByIdentity(uid))){
+        if(contactsUpdate.second.contains(IdUtil.getUidByIdentity(uid))){
             coroutineScope.launch {
                 updateNameAndAvatar(uid)
             }
@@ -243,7 +263,7 @@ fun MultiParticipantItem(
         ConstraintLayout(
             modifier = modifier
                 .clip(shape = RoundedCornerShape(8.dp))
-                .background(color = colorResource(id = R.color.bg2_night))
+                .background(color = DifftTheme.colors.background)
         ) {
             val (userView, statusView) = createRefs()
 
@@ -280,6 +300,7 @@ fun MultiParticipantItem(
                     }
                     if (!videoMuted) {
                         VideoItemTrackSelector(
+                            coroutineScope = coroutineScope,
                             modifier = Modifier.background(Color.Transparent),
                             room = room,
                             participant = participant,
@@ -300,7 +321,7 @@ fun MultiParticipantItem(
                     }
                     .wrapContentWidth()
                     .height(24.dp)
-                    .background(color = colorResource(id = R.color.gray_1000), shape = RoundedCornerShape(size = 4.dp))
+                    .background(color = DifftTheme.colors.backgroundElevate, shape = RoundedCornerShape(size = 4.dp))
                     .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
                 verticalAlignment = Alignment.Bottom,

@@ -54,7 +54,7 @@ import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.Base64
+import com.difft.android.base.utils.Base64
 import java.util.Locale
 import java.util.Optional
 
@@ -136,9 +136,10 @@ object ContactorUtil {
                 this.joinedAt = contactResponse.joinedAt
                 this.sourceDescribe = contactResponse.sourceDescribe
                 this.findyouDescribe = contactResponse.findyouDescribe
+                this.customUid = contactResponse.customUid
             }
         } catch (e: Exception) {
-            L.e { "[ContactorUtil] convert contactResponse data fail:" + e.stackTraceToString() }
+            L.e(e) { "[ContactorUtil] convert contactResponse data fail:" }
         }
         return null
     }
@@ -201,18 +202,34 @@ object ContactorUtil {
             .covertToContactors()
             .concatMap { contacts ->
                 if (contacts.isNotEmpty()) {
-                    //只对已经存在于联系人列表中的数据更新，不存在则存入非联系人表（避免好友关系逻辑判断出错）
+                    val noAvatarFromServer = contacts.filter { it.avatar == null }.map { it.id }
+                    if (noAvatarFromServer.isNotEmpty()) {
+                        L.i { "[ContactorUtil] fetchContactors server response without avatar: $noAvatarFromServer" }
+                    }
+                    
                     val list = wcdb.contactor.getAllObjects(DBContactorModel.id.`in`(*contacts.map { it.id }.toTypedArray()))
-
                     val existInContacts = contacts.filter { contact -> list.any { it.id == contact.id } }
+                    
+                    val avatarChanges = existInContacts.mapNotNull { contact ->
+                        val local = list.find { it.id == contact.id }
+                        val localHas = local?.avatar != null
+                        val serverHas = contact.avatar != null
+                        if (localHas != serverHas) "${contact.id}:$localHas->$serverHas" else null
+                    }
+                    if (avatarChanges.isNotEmpty()) {
+                        L.i { "[ContactorUtil] fetchContactors avatar changes: $avatarChanges" }
+                    }
 
                     wcdb.contactor.deleteObjects(DBContactorModel.id.`in`(existInContacts.map { it.id }))
                     wcdb.contactor.insertObjects(existInContacts.toList())
 
                     val notExistInContacts = contacts.filter { contact -> list.none { it.id == contact.id } }
+                    if (notExistInContacts.isNotEmpty()) {
+                        L.i { "[ContactorUtil] fetchContactors notExistInContacts: ${notExistInContacts.map { it.id }}" }
+                    }
 
                     val contactorOfGroupMember = notExistInContacts.map { contactor -> contactor.covertToGroupMemberContactorModel() }
-                    wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq("").and(DBGroupMemberContactorModel.id.`in`(contactorOfGroupMember.map { it.id }))) //here need delete the temp contact, not all the contact
+                    wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq("").and(DBGroupMemberContactorModel.id.`in`(contactorOfGroupMember.map { it.id })))
                     wcdb.groupMemberContactor.insertObjects(contactorOfGroupMember)
                     Single.just(contacts)
                 } else {
@@ -220,7 +237,7 @@ object ContactorUtil {
                 }
             }
             .onErrorResumeNext { throwable ->
-                L.e { "[ContactorUtil] fetch contactors data fail:" + throwable.stackTraceToString() }
+                L.e(throwable) { "[ContactorUtil] fetch contactors data fail:" }
                 Single.just(emptyList())
             }
 
@@ -246,7 +263,7 @@ object ContactorUtil {
             // 正则表达式，判断首字母是否是英文字母
             if (sortString.matches(Regex("[A-Z]"))) sortString.uppercase(Locale.getDefault()) else "#"
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w(e) { "[ContactorUtil] getFirstChar error:" }
             "#"
         }
     }
@@ -267,7 +284,7 @@ object ContactorUtil {
                 fetchAndSaveFlow.emit(true)
             }
         } else {
-            if (globalServices.userManager.getUserData()?.syncedContactsV2 == false) {
+            if (globalServices.userManager.getUserData()?.syncedContactsV4 == false) {
                 coroutineScope.launch {
                     fetchAndSaveFlow.emit(false)
                 }
@@ -305,7 +322,7 @@ object ContactorUtil {
 
                         // 检查是否需要跳过处理
                         val currentVersion = globalServices.userManager.getUserData()?.directoryVersionForContactors ?: 0
-                        val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContactsV2 ?: false
+                        val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContactsV4 ?: false
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors total count:" + contacts.size + " - directoryVersion:$directoryVersion, currentVersion:$currentVersion, isSyncedContacts:$isSyncedContacts, forceRefresh:$forceRefresh" }
 
@@ -336,28 +353,25 @@ object ContactorUtil {
                                     contacts.add(ContactResponse(number = officialBotId, name = officialBotName))
                                 }
                             } catch (e: Exception) {
-                                L.e { "[ContactorUtil] fetch official bot info error: ${e.stackTraceToString()}" }
+                                L.e(e) { "[ContactorUtil] fetch official bot info error:" }
                                 contacts.add(ContactResponse(number = officialBotId, name = officialBotName))
                             }
                         }
 
 
-                        // 保存到数据库
+                        val noAvatarIds = contacts.filter { it.avatar == null }.map { it.number ?: "null" }
+                        L.i { "[ContactorUtil] fetchAndSaveContactors total:${contacts.size}, withoutAvatar:${noAvatarIds.size}, ids:$noAvatarIds" }
+                        
                         wcdb.contactor.deleteObjects()
 
-                        // 根据数据量选择处理方式
                         if (contacts.size > 1000) {
-                            // 大量数据使用流式处理
-                            L.i { "[ContactorUtil] Large contact list detected (${contacts.size} > 1000), using streaming processing" }
+                            L.i { "[ContactorUtil] Large contact list (${contacts.size}), using streaming" }
                             processContactsStreaming(contacts)
                         } else {
-                            // 少量数据直接处理
                             val allContactEntities = contacts.mapNotNull { from(it) }
                             wcdb.contactor.insertObjects(allContactEntities)
-                            val allContactIds = allContactEntities.map { it.id }
-
-                            L.i { "[ContactorUtil] SaveContactors success:" + allContactEntities.size }
-                            emitContactsUpdate(allContactIds)
+                            L.i { "[ContactorUtil] SaveContactors success:${allContactEntities.size}" }
+                            emitContactsUpdate(allContactEntities.map { it.id })
                         }
 
                         // 数据保存成功后，才更新版本号
@@ -366,15 +380,14 @@ object ContactorUtil {
 
                         // 更新状态
                         globalServices.userManager.update {
-                            this.syncedContactsV2 = true
+                            this.syncedContactsV4 = true
                         }
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors complete" + contacts.size }
                         emitGetContactsStatusUpdate(true)
 
                     } catch (e: Exception) {
-                        e.printStackTrace()
-                        L.e { "[ContactorUtil] fetchAndSaveContactors fail: ${e.stackTraceToString()}" }
+                        L.e(e) { "[ContactorUtil] fetchAndSaveContactors fail:" }
                         emitGetContactsStatusUpdate(false)
                     }
                 }
@@ -405,7 +418,7 @@ object ContactorUtil {
                 this.contactRequestStatus = gson.toJson(set, type)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w(e) { "[ContactorUtil] processContactorFlow error:" }
         }
     }
 
@@ -448,7 +461,7 @@ object ContactorUtil {
                 val pushTextSendJobFactory = EntryPointAccessors.fromApplication<EntryPoint>(application).getPushTextSendJobFactory()
                 ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
             }.onFailure { e ->
-                L.w { "[ContactorUtil] sendFriendRequestMessage error:" + e.stackTraceToString() }
+                L.w(e) { "[ContactorUtil] sendFriendRequestMessage error:" }
             }
         }
     }
@@ -468,7 +481,7 @@ object ContactorUtil {
                 L.d { "[ContactorUtil] UpdateRemark remark: $remark" }
                 updateContactRemark(remark, contactId)
             } catch (e: Exception) {
-                L.e { "[ContactorUtil] UpdateRemark fail: ${e.stackTraceToString()}" }
+                L.e(e) { "[ContactorUtil] UpdateRemark fail:" }
             }
         }
     }
@@ -488,32 +501,27 @@ object ContactorUtil {
         emitContactsUpdate(listOf(contactId))
     }
 
-    /**
-     * 流式处理大量联系人数据，减少内存压力
-     */
     private suspend fun processContactsStreaming(contacts: List<ContactResponse>) {
         wcdb.contactor.deleteObjects()
 
-        val batchSize = 500 // 每批处理 500 个联系人
+        val batchSize = 500
         val allContactIds = mutableListOf<String>()
+        var totalWithoutAvatar = 0
+        val noAvatarIds = mutableListOf<String>()
 
-        contacts.chunked(batchSize).forEachIndexed { index, batch ->
-            L.d { "[ContactorUtil] Processing batch ${index + 1}/${contacts.size / batchSize + 1}" }
-
-            // 转换当前批次
+        contacts.chunked(batchSize).forEach { batch ->
             val contactEntities = batch.mapNotNull { from(it) }
-
-            // 插入数据库
+            contactEntities.filter { it.avatar == null }.forEach { 
+                totalWithoutAvatar++
+                noAvatarIds.add(it.id)
+            }
             wcdb.contactor.insertObjects(contactEntities)
-
-            // 收集 ID
             allContactIds.addAll(contactEntities.map { it.id })
 
-            // 让出协程，避免长时间阻塞
             yield()
         }
 
-        L.i { "[ContactorUtil] Streaming processing complete: ${allContactIds.size} contacts" }
+        L.i { "[ContactorUtil] Streaming complete: total:${allContactIds.size}, withoutAvatar:$totalWithoutAvatar, ids:$noAvatarIds" }
         emitContactsUpdate(allContactIds)
     }
 }
@@ -528,7 +536,7 @@ fun String?.getContactAvatarData(): AvatarResponse? {
     return try {
         Gson().fromJson(this, AvatarResponse::class.java)
     } catch (e: Exception) {
-        L.e { "[ContactorUtil] parse avatar data fail: $this === ${e.stackTraceToString()}" }
+        L.e(e) { "[ContactorUtil] parse avatar data fail: $this ===" }
         null
     }
 }

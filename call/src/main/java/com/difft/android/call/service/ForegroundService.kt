@@ -36,7 +36,6 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
-import com.difft.android.call.LCallManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.PermissionUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -103,7 +102,9 @@ open class ForegroundService : Service() {
         L.i { "[Call] +++ ForegroundService onCreate +++" }
         isServiceRunning = true
         createNotificationChannel()
-        addCallControlMessageListener()
+        serviceExecutor.execute {
+            addCallControlMessageListener()
+        }
     }
 
     private fun updateNotification(useCallStyle: Boolean) {
@@ -235,7 +236,7 @@ open class ForegroundService : Service() {
         if(!isCallMsgListenerStarted){
             isCallMsgListenerStarted = true
             serviceScope.launch {
-                LCallManager.controlMessage.collect {
+                onGoingCallStateManager.controlMessage.collect {
                     handleControlMessage(it)
                 }
             }
@@ -259,9 +260,9 @@ open class ForegroundService : Service() {
     }
 
 
-    private fun handleControlMessage( controlMessage: LCallManager.ControlMessage?) {
+    private fun handleControlMessage( controlMessage: OnGoingCallStateManager.ControlMessage?) {
         if (controlMessage == null) return
-        L.i { "[Call] ForegroundService handleControlMessage ${controlMessage.actionType} roomId:${controlMessage.roomId}}" }
+        L.i { "[Call] ForegroundService handleControlMessage ${controlMessage.actionType} roomId:${controlMessage.roomId}" }
         when (controlMessage.actionType) {
             CallActionType.CALLEND, CallActionType.HANGUP, CallActionType.REJECT -> {
                 sendCallControlBroadcast(this, controlMessage.actionType, controlMessage.roomId)

@@ -1,6 +1,7 @@
 package org.thoughtcrime.securesms.util
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.Base64
 import com.difft.android.websocket.api.util.EncryptCallKeyResult
 import com.difft.android.websocket.api.util.EncryptResult
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
@@ -132,13 +133,13 @@ class NewMessageEncryptor @Inject constructor(
                 return dtDecryptedKeyBytes
             }
         } catch (e: Exception) {
-            L.e { "decryptCallKey error:" + e.stackTraceToString() }
+            L.e(e) { "decryptCallKey error:" }
             return null
 //            throw RustEncryptionException(e)
         }
     }
 
-    override fun encryptRtmMessage(message: ByteArray, localPrivateKey: ByteArray, aesKey: ByteArray): String {
+    override fun encryptRtmMessage(message: ByteArray, localPrivateKey: ByteArray, aesKey: ByteArray, timestamp: Long): String {
         try {
             val dtProto = DtProto(MESSAGE_CURRENT_VERSION)  // Version is set to 2
             dtProto.use {
@@ -150,7 +151,7 @@ class NewMessageEncryptor @Inject constructor(
                 val payloadByteArray = android.util.Base64.encode(encryptedRtmMessage.cipherText.map { it.toByte() }.toByteArray(), android.util.Base64.NO_WRAP)
 
                 val encryptedMessage = JSONObject()
-                    .put("sendTimestamp", System.currentTimeMillis())
+                    .put("sendTimestamp", timestamp)
                     .put("uuid", UUID.randomUUID().toString())
                     .put("signature", String(signatureByteArray, Charsets.UTF_8))
                     .put("payload", String(payloadByteArray, Charsets.UTF_8))

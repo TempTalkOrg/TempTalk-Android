@@ -299,7 +299,7 @@ class JobController {
 
             return job;
         } catch (InterruptedException e) {
-            L.w(e::toString);
+            L.w(e, () -> "[JobController] createJob interrupted: ");
             throw new AssertionError(e);
         }
     }

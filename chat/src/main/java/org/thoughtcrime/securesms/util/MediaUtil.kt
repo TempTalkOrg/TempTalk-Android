@@ -15,13 +15,12 @@ import androidx.exifinterface.media.ExifInterface
 import com.difft.android.base.log.lumberjack.L
 import difft.android.messageserialization.model.Attachment
 import com.luck.picture.lib.entity.LocalMedia
-import util.logging.Log
 import org.thoughtcrime.securesms.mms.PartAuthority
 import java.io.IOException
 import java.util.Locale
 
 object MediaUtil {
-    private val TAG: String = Log.tag(MediaUtil::class.java)
+    private val TAG: String = L.tag(MediaUtil::class.java)
 
     const val IMAGE_PNG: String = "image/png"
     const val IMAGE_JPEG: String = "image/jpeg"
@@ -543,7 +542,7 @@ object MediaUtil {
                     height = bitmap.height
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MediaUtil] error: ${e.stackTraceToString()}" }
             } finally {
                 mmr.release()
             }

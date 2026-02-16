@@ -41,7 +41,7 @@
         android:layout_marginStart="4dp"
         android:background="@drawable/chat_topic_member_more_bg"
         android:paddingHorizontal="4dp"
-        android:src="@drawable/chat_contact_detail_ic_more"
+        android:src="@drawable/chat_message_action_more"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@color/icon" />

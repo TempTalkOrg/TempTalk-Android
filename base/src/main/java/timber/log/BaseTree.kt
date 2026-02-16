@@ -1,5 +1,6 @@
 package timber.log
 
+import android.os.Build
 import android.util.Log
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.log.lumberjack.data.StackData
@@ -168,8 +169,35 @@ abstract class BaseTree : Timber.Tree() {
 
         // custom: we create a stack data object
         val callStackCorrection = getCallStackCorrection() ?: 0
-        var stackData = getStackTrace()
-        stackData = stackData?.copy(callStackIndex = stackData.callStackIndex + callStackCorrection) ?: return
+        val stackDataLocal = getStackTrace()
+
+        val stackData = stackDataLocal?.let {
+            stackDataLocal.copy(callStackIndex = stackDataLocal.callStackIndex + callStackCorrection)
+        } ?: run {
+            t?.let {
+                StackData(t, 0, true)
+            } ?: run {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val frame = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
+                        .walk { frames ->
+                            frames.skip(CALL_STACK_INDEX.toLong())
+                                .filter { f -> !f.declaringClass.name.startsWith("timber.log") }
+                                .findFirst()
+                        }
+                    if (frame.isPresent) {
+                        StackData(listOf(frame.get().toStackTraceElement()), 0, true)
+                    } else {
+                        return
+                    }
+                } else {
+                    val t = Throwable()
+                    if (t.stackTrace.size <= CALL_STACK_INDEX) {
+                        return
+                    }
+                    StackData(t, CALL_STACK_INDEX, true)
+                }
+            }
+        }
 
         // Consume tag even when message is not loggable so that next message is correctly tagged.
         @Suppress("NAME_SHADOWING") var message = message
@@ -218,7 +246,8 @@ abstract class BaseTree : Timber.Tree() {
     // custom code - extended tag
     // --------------------
 
-    protected fun formatLine(prefix: String, message: String) = L.formatter.formatLine(this, prefix, message)
+    protected fun formatLine(prefix: String, message: String) =
+        L.formatter.formatLine(this, prefix, message)
 
     // --------------------
     // custom code - extended tag

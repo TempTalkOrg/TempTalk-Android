@@ -23,4 +23,10 @@ interface InviteService {
         @Body body: QueryInviteCodeRequest
     ): Single<BaseResponse<QueryInviteCodeResponse>>
 
+    @POST("v3/directory/search")
+    fun queryByCustomUid(
+        @Header("Authorization") token: String,
+        @Body body: QueryCustomUidRequest
+    ): Single<BaseResponse<QueryCustomUidResponse>>
+
 }

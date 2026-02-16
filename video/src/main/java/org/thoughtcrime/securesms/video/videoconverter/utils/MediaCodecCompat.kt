@@ -11,7 +11,7 @@ import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
 import androidx.annotation.RequiresApi
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import java.io.IOException
 
 object MediaCodecCompat {
@@ -116,7 +116,7 @@ object MediaCodecCompat {
         }
       }
     } catch (npe: NullPointerException) {
-      Log.d(TAG, "Could not update codec level in media format.")
+      L.d { "$TAG Could not update codec level in media format." }
       return false
     }
     return true

@@ -6,6 +6,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
+import com.difft.android.call.handler.InviteRequestState
 import difft.android.messageserialization.For
 import io.reactivex.rxjava3.core.Observable
 import org.difft.app.database.models.ContactorModel
@@ -34,9 +35,7 @@ interface LCallToChatController {
 
     fun getMySelfUid(): String
 
-    fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel>
-
-    fun inviteUsersToTheCall(context: Context, roomId: String, roomName: String, e2eeKey: ByteArray?, callType: String, conversationId: String?, excludedIds: ArrayList<String>)
+    suspend fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel>
 
     fun cancelNotificationById(notificationId: Int)
 
@@ -45,6 +44,13 @@ interface LCallToChatController {
     fun isNotificationShowing(notificationId: Int): Boolean
 
     fun sendOrCreateCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For, callType: CallType, createCallMsg: Boolean, inviteeLIst: List<String> = emptyList())
+
+    /**
+     * 发送截屏通知消息到对应会话
+     * @param conversationId 会话ID
+     * @param callType 会议类型
+     */
+    fun sendScreenshotNotification(conversationId: String, callType: CallType)
 
     /**
      * 创建本地 Critical Alert 文本消息
@@ -60,7 +66,7 @@ interface LCallToChatController {
 
     fun getTheirPublicKey(uid: String): String?
 
-    fun restoreIncomingCallActivityIfIncoming()
+    fun restoreIncomingCallScreenIfActive()
 
     fun isAppForegrounded(): Boolean
 
@@ -78,5 +84,13 @@ interface LCallToChatController {
 
     fun dismissCriticalAlertIfActive()
 
-    fun dismissCriticalAlertByConId(conversationId: String)
+    fun dismissCriticalAlert(conversationId: String)
+
+    fun cancelCriticalAlertNotification(conversationId: String? = null)
+
+    fun inviteCall(roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?, callback: (InviteRequestState) -> Unit = {})
+
+    fun isBotId(id: String): Boolean
+
+    fun contactorListSortedByPinyin(list : List<ContactorModel>): List<ContactorModel>
 }

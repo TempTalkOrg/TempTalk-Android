@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:tools="http://schemas.android.com/tools"
     android:clipChildren="false"
     android:clipToPadding="false">
 
-    <androidx.fragment.app.FragmentContainerView
+    <!-- Call status header (shown during active call) -->
+    <FrameLayout
         android:id="@+id/fragment_container_view_call"
-        android:name="com.difft.android.chat.ui.ChatHeaderCallFragment"
         android:layout_width="0dp"
         android:layout_height="44dp"
         android:visibility="gone"
@@ -18,6 +19,7 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:layout="@layout/chat_fragment_header_call" />
 
+    <!-- Group chat header -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/fragment_container_view_header"
         android:name="com.difft.android.chat.group.GroupChatHeaderFragment"
@@ -27,16 +29,21 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_call" />
 
+    <!-- Message list -->
     <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/fragment_container_view_message_list"
+        android:id="@+id/fragment_container_view_contents"
         android:name="com.difft.android.chat.ui.ChatMessageListFragment"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@+id/fragment_container_view_input"
+        android:clipChildren="false"
+        android:tag="chatMessageListFragment"
+        app:layout_constraintBottom_toTopOf="@id/fragment_container_view_input"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_header" />
+        app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_header"
+        tools:layout="@layout/chat_fragment_message_list" />
 
+    <!-- Input area -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/fragment_container_view_input"
         android:name="com.difft.android.chat.ui.ChatMessageInputFragment"
@@ -44,8 +51,44 @@
         android:layout_height="wrap_content"
         android:clipChildren="false"
         android:clipToPadding="false"
+        android:tag="chatMessageInputFragment"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        tools:layout="@layout/chat_fragment_input" />
+
+    <!-- Voice recording overlay -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_voice_record"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:visibility="visible">
+
+        <View
+            android:id="@+id/v_voice_record_bg"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_marginBottom="60dp"
+            android:background="@drawable/voice_record_bg"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            tools:visibility="visible" />
+
+        <com.difft.android.chat.widget.VoiceRecorderView
+            android:id="@+id/v_voice_recorder"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="88dp"
+            android:layout_marginEnd="44dp"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <include
+        android:id="@+id/include_full_input"
+        layout="@layout/layout_chat_full_input" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

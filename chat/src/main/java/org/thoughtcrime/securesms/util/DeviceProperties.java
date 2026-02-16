@@ -9,14 +9,14 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 /**
  * Easy access to various properties of the device, typically to make performance-related decisions.
  */
 public final class DeviceProperties {
 
-  private static final String TAG = Log.tag(DeviceProperties.class);
+  private static final String TAG = "DeviceProperties";
 
   /**
    * Whether or not we believe the device has the performance capabilities to efficiently render
@@ -39,7 +39,7 @@ public final class DeviceProperties {
     }
 
     if (memoryInfo.lowMemory) {
-      Log.w(TAG, "Currently in a low-memory situation! Can't render APNG.");
+      L.w(() -> TAG + " Currently in a low-memory situation! Can't render APNG.");
       return false;
     }
 

@@ -28,14 +28,14 @@ object PowUtil {
             // 检查哈希值的前 difficulty 位是否为 "1"
             hexHash.startsWith("1".repeat(difficulty))
         } catch (e: NoSuchAlgorithmException) {
-            e.printStackTrace()
+            L.w { "[PowUtil] error: ${e.stackTraceToString()}" }
             false
         }
     }
 
     // 生成符合难度要求的 solution
     fun generateSolution(uuid: String, timestamp: Long, version: Int, difficulty: Int): String {
-        L.i { "[PowUtil] start generate solution: $uuid $timestamp $version $difficulty" }
+        L.i { "[PowUtil] start generate solution, difficulty=$difficulty" }
 
         var solution: String
         var attempts = 0
@@ -46,7 +46,7 @@ object PowUtil {
 
             // 验证当前 solution 是否符合 PoW 难度
             if (verifySolution(uuid, timestamp, version, solution, difficulty)) {
-                L.i { "[PowUtil] Solution found: $solution Attempts: $attempts Time taken: ${System.currentTimeMillis() - startTime} ms" }
+                L.i { "[PowUtil] Solution found, attempts=$attempts, timeTaken=${System.currentTimeMillis() - startTime}ms" }
                 return solution
             }
             attempts++

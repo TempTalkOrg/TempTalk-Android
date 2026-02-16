@@ -11,11 +11,13 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.text.TextUtils;
-import android.util.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.FileProvider;
+
+// Logging is done via L
 
 import com.luck.picture.lib.config.FileSizeUnit;
 import com.luck.picture.lib.config.PictureMimeType;
@@ -206,7 +208,7 @@ public class PictureFileUtils {
                 return cursor.getString(column_index);
             }
         } catch (IllegalArgumentException ex) {
-            Log.i(TAG, String.format(Locale.getDefault(), "getDataColumn: _data - [%s]", ex.getMessage()));
+            L.i(() -> "[PictureFileUtils] getDataColumn: _data - " + ex);
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -223,8 +225,8 @@ public class PictureFileUtils {
      * Callers should check whether the path is local before assuming it
      * represents a local file.
      *
-     * @param context The context.
-     * @param uri     The Uri to query.
+     * @param ctx The context.
+     * @param uri The Uri to query.
      * @author paulburke
      */
     @SuppressLint("NewApi")
@@ -246,8 +248,6 @@ public class PictureFileUtils {
                         return Environment.getExternalStorageDirectory() + "/" + split[1];
                     }
                 }
-
-                // TODO handle non-primary volumes
             }
             // DownloadsProvider
             else if (isDownloadsDocument(uri)) {
@@ -316,7 +316,7 @@ public class PictureFileUtils {
             outputChannel = new FileOutputStream(pathTo).getChannel();
             inputChannel.transferTo(0, inputChannel.size(), outputChannel);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureFileUtils] copyFile error:");
         } finally {
             close(inputChannel);
             close(outputChannel);
@@ -344,7 +344,7 @@ public class PictureFileUtils {
             os.flush();
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureFileUtils] writeFileFromIS error:");
             return false;
         } finally {
             close(isBuffer);
@@ -394,7 +394,6 @@ public class PictureFileUtils {
      * Use {@link PictureCacheManager}
      *
      * @param context
-     * @param type    image、video、audio ...
      */
     @Deprecated
     public static void deleteAllCacheDirFile(Context context) {
@@ -512,8 +511,7 @@ public class PictureFileUtils {
      * Size of byte to fit size of memory.
      * <p>to three decimal places</p>
      *
-     * @param byteSize  Size of byte.
-     * @param precision The precision
+     * @param byteSize Size of byte.
      * @return fit size of memory
      */
     @SuppressLint("DefaultLocale")
@@ -548,8 +546,7 @@ public class PictureFileUtils {
      * Size of byte to fit size of memory.
      * <p>to three decimal places</p>
      *
-     * @param byteSize  Size of byte.
-     * @param precision The precision
+     * @param byteSize Size of byte.
      * @return fit size of memory
      */
     @SuppressLint("DefaultLocale")
@@ -583,6 +580,7 @@ public class PictureFileUtils {
                 c.close();
             } catch (Exception e) {
                 // silence
+                L.w(e, () -> "[PictureFileUtils] close failed");
             }
         }
     }

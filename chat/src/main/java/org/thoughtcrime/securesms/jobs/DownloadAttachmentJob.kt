@@ -4,7 +4,6 @@ import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.chat.fileshare.DownloadReq
 import com.difft.android.chat.fileshare.FileShareRepo
@@ -21,7 +20,7 @@ import org.thoughtcrime.securesms.util.FileDecryptionUtil
 import org.thoughtcrime.securesms.util.MediaUtil
 import org.thoughtcrime.securesms.util.SaveAttachmentTask
 import org.thoughtcrime.securesms.util.StorageUtil
-import org.thoughtcrime.securesms.util.whispersystems.Base64
+import com.difft.android.base.utils.Base64
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
 import java.io.FileOutputStream
@@ -99,6 +98,8 @@ class DownloadAttachmentJob private constructor(
         val buffer = ByteArray(8192)
 
         val encryptFile = File("$filePath.encrypt")
+        // Ensure parent directory exists before creating file
+        encryptFile.parentFile?.mkdirs()
         if (!encryptFile.exists()) {
             encryptFile.createNewFile()
         } else {
@@ -177,16 +178,19 @@ class DownloadAttachmentJob private constructor(
                             var bytesRead: Int
                             var totalBytesRead: Long = 0
                             var lastEmitTime = System.currentTimeMillis()
+                            var lastEmitProgress = 0
 
                             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                                 encryptOutputStream.write(buffer, 0, bytesRead)
                                 totalBytesRead += bytesRead
                                 val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt()
                                 val currentTime = System.currentTimeMillis()
-                                if ((currentTime - lastEmitTime >= 200)) {
+                                // Update every 50ms or when progress changes by >=5%
+                                if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
                                     L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/${downLoadResponseBody.contentLength()} = $progress%" }
                                     FileUtil.emitProgressUpdate(messageId, progress)
                                     lastEmitTime = currentTime
+                                    lastEmitProgress = progress
                                 }
                             }
                         } finally {
@@ -217,6 +221,8 @@ class DownloadAttachmentJob private constructor(
             if (shouldDecrypt) {
                 // 只在需要解密且下载成功后才创建realFile
                 val realFile = File(filePath).apply {
+                    // Ensure parent directory exists (same as encryptFile, but added for robustness)
+                    parentFile?.mkdirs()
                     if (!exists()) {
                         createNewFile()
                     } else {
@@ -228,9 +234,14 @@ class DownloadAttachmentJob private constructor(
                 encryptFile.delete()
             }
 
-            //判断是否需要自动保存到相册
-            if (autoSave && globalServices.userManager.getUserData()?.saveToPhotos == true) {
-                L.i { "[DownloadAttachmentJob] need to save: $filePath" }
+            // Auto save to photos if enabled
+            // Note: autoSave decision is made at call site considering:
+            // 1. Attachment type (image/video only)
+            // 2. Confidential mode
+            // 3. Conversation-level saveToPhotos setting
+            // 4. Global saveToPhotos setting
+            if (autoSave) {
+                L.i { "[DownloadAttachmentJob] auto save to photos: $filePath" }
                 if (StorageUtil.canWriteToMediaStore()) {
                     if (File(filePath).exists()) {
                         val fileUri = File(filePath).toUri()
@@ -247,8 +258,6 @@ class DownloadAttachmentJob private constructor(
                 } else {
                     L.w { "[DownloadAttachmentJob] cannot write to media store, auto save skipped: $filePath" }
                 }
-            } else {
-                L.i { "[DownloadAttachmentJob] no need to save: $filePath" }
             }
 
             updateAttachmentStatus(AttachmentStatus.SUCCESS.code)

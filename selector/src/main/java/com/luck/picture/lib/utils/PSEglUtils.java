@@ -9,7 +9,7 @@ import android.opengl.EGLSurface;
 import android.opengl.GLES10;
 import android.opengl.GLES20;
 import android.os.Build;
-import android.util.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import javax.microedition.khronos.egl.EGL10;
 
@@ -34,7 +34,7 @@ public class PSEglUtils {
                 return getMaxTextureEgl10();
             }
         } catch (Exception e) {
-            Log.d(TAG, "getMaxTextureSize: ", e);
+            L.d(e, () -> TAG + " getMaxTextureSize");
             return 0;
         }
     }

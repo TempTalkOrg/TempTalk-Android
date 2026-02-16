@@ -113,7 +113,7 @@ object PermissionUtil {
             ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
                 .also { context.startActivity(it) }
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[PermissionUtil] error: ${e.stackTraceToString()}" }
             L.i { "[AndroidPermission] launchSettings fail:" + e.stackTraceToString() }
         }
     }

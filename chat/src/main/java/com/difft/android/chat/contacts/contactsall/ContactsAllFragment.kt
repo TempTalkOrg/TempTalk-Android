@@ -10,27 +10,28 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.difft.android.base.utils.TextSizeUtil
+import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.sampleAfterFirst
+import com.difft.android.base.widget.sideBar.SectionDecoration
+import com.difft.android.base.widget.sideBar.SideBar
+import com.difft.android.chat.R
+import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
+import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.contacts.data.getSortLetter
+import com.difft.android.chat.recent.ConversationNavigationCallback
+import com.difft.android.chat.databinding.ChatFragmentContactsAllBinding
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.hi.dhl.binding.viewbind
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
-import com.difft.android.base.utils.TextSizeUtil
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.base.utils.globalServices
-import com.difft.android.chat.R
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
-import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.getSortLetter
-import com.difft.android.chat.databinding.ChatFragmentContactsAllBinding
-import com.difft.android.base.widget.sideBar.SectionDecoration
-import com.difft.android.base.widget.sideBar.SideBar
-import com.hi.dhl.binding.viewbind
-import dagger.hilt.android.AndroidEntryPoint
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
-import java.util.Collections
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -41,14 +42,14 @@ class ContactsAllFragment : Fragment() {
 
     val binding: ChatFragmentContactsAllBinding by viewbind()
 
-    private val pinyinComparator: PinyinComparator by lazy {
-        PinyinComparator()
-    }
 
     val mAdapter: ContactorsAdapter by lazy {
         object : ContactorsAdapter(globalServices.myId) {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
-                ContactDetailActivity.startActivity(this@ContactsAllFragment.requireActivity(), contact.id)
+                // Use ConversationNavigationCallback for dual-pane support
+                val navigationCallback = activity as? ConversationNavigationCallback
+                navigationCallback?.onContactDetailSelected(contact.id)
+                    ?: ContactDetailActivity.startActivity(this@ContactsAllFragment.requireActivity(), contact.id)
             }
         }
     }
@@ -90,6 +91,7 @@ class ContactsAllFragment : Fragment() {
 
         ContactorUtil.contactsUpdate
             .asFlow()
+            .sampleAfterFirst(2000)
             .onEach { initData() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -105,12 +107,10 @@ class ContactsAllFragment : Fragment() {
     private fun initData() {
         viewLifecycleOwner.lifecycleScope.launch {
             val contacts = withContext(Dispatchers.IO) {
-                val contacts = wcdb.contactor.allObjects
-                val contactList = contacts.toMutableList()
-                contactList.removeAll { it.id == getString(R.string.official_bot_id) }
-                Collections.sort(contactList, pinyinComparator)
-                contactList
+                wcdb.contactor.allObjects
+                    .sortedByPinyin()
             }
+            if (!isAdded || view == null) return@launch
             mAdapter.submitList(contacts)
             addLettersDecoration(contacts)
         }

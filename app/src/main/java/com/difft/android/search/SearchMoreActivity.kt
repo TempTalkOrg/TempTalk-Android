@@ -1,7 +1,7 @@
 package com.difft.android.search
 
-
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -118,7 +118,7 @@ class SearchMoreActivity : BaseActivity() {
                     mContactsAdapter.submitList(it)
                 }, {
                     mContactsAdapter.submitList(emptyList())
-                    it.printStackTrace()
+                    L.w { "[SearchMoreActivity] searchContacts error: ${it.stackTraceToString()}" }
                 })
         } else if (type == SEARCH_TYPE_GROUP) {
             mBinding.tvTitle.text = getString(R.string.search_more_groups)
@@ -132,7 +132,7 @@ class SearchMoreActivity : BaseActivity() {
                     mGroupsAdapter.submitList(it)
                 }, {
                     mGroupsAdapter.submitList(emptyList())
-                    it.printStackTrace()
+                    L.w { "[SearchMoreActivity] searchGroups error: ${it.stackTraceToString()}" }
                 })
         } else if (type == SEARCH_TYPE_MESSAGE) {
             mBinding.tvTitle.text = getString(R.string.search_more_messages)
@@ -142,6 +142,8 @@ class SearchMoreActivity : BaseActivity() {
             Single.fromCallable {
                 wcdb.message.getAllObjects(
                     DBMessageModel.messageText.upper().like("%${key.uppercase()}%")
+                        .and(DBMessageModel.type.notEq(2))
+                        .and(DBMessageModel.mode.notEq(1)) // Exclude confidential messages
                 )
                     .groupBy { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(it.roomId)) }.filter {
                         it.key != null
@@ -155,7 +157,7 @@ class SearchMoreActivity : BaseActivity() {
                     mSearchChatHistoryAdapter.submitList(it)
                 }, {
                     mSearchChatHistoryAdapter.submitList(emptyList())
-                    it.printStackTrace()
+                    L.w { "[SearchMoreActivity] initView searchMessages error: ${it.stackTraceToString()}" }
                 })
         }
     }

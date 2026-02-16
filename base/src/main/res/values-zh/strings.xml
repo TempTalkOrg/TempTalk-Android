@@ -6,7 +6,9 @@
     <string name="chat_message_audio">[语音]</string>
     <string name="chat_message_contact_card">[个人名片]</string>
     <string name="chat_message_chat_history">[聊天记录]</string>
+    <string name="chat_message_unsupported">[不支持的消息类型，请升级到最新版本。]</string>
     <string name="chat_history">聊天记录</string>
+    <string name="chat_favorites">收藏</string>
 
     <!-- DateUtils -->
     <string name="DateUtils_just_now">刚刚</string>

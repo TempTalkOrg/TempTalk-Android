@@ -9,6 +9,7 @@ import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.compose.SelectMessageState
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
@@ -46,6 +47,10 @@ abstract class ChatMessageAdapter(
         }) {
 
     companion object {
+        // Payload constants for partial refresh
+        const val PAYLOAD_SELECTION = "payload_selection"
+        const val PAYLOAD_HIGHLIGHT = "payload_highlight"
+
         // 消息内容类型定义（0-99）
         private const val CONTENT_TYPE_TEXT = 0
         private const val CONTENT_TYPE_IMAGE = 1
@@ -54,7 +59,7 @@ abstract class ChatMessageAdapter(
         private const val CONTENT_TYPE_ATTACH = 4
         private const val CONTENT_TYPE_CONTACT = 5
         private const val CONTENT_TYPE_MULTI_FORWARD = 6  // 合并转发消息
-        // 预留 7-99 用于未来扩展
+        // Reserved 7-99 for future content types
 
         // ViewType 计算偏移量
         private const val MINE_OFFSET = 0
@@ -78,6 +83,8 @@ abstract class ChatMessageAdapter(
         const val VIEW_TYPE_OTHERS_MULTI_FORWARD = OTHERS_OFFSET + CONTENT_TYPE_MULTI_FORWARD // 106
 
         const val VIEW_TYPE_NOTIFY = 200  // 调整到 200，避免冲突
+        const val VIEW_TYPE_SCREENSHOT = 201  // 截屏消息
+        const val VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER = 202  // Confidential message placeholder (same style as notify)
 
         // 内容类型配置表（layout + binder）
         private val contentTypeConfigs = mapOf(
@@ -100,12 +107,21 @@ abstract class ChatMessageAdapter(
         val message = getItem(position)
 
         // === 第一层：消息类型 ===
+        if (message is ConfidentialPlaceholderChatMessage) {
+            return VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER
+        }
+
         if (message is NotifyChatMessage) {
             return VIEW_TYPE_NOTIFY
         }
 
         // 判断消息内容类型
         if (message is TextChatMessage) {
+            // 截屏消息使用独立的 ViewType（居中显示，复用 notify 布局）
+            if (message.isScreenShotMessage) {
+                return VIEW_TYPE_SCREENSHOT
+            }
+
             // === 第二层：特殊结构（合并转发） ===
             // 合并转发消息（forwards.size > 1）使用独立的 ViewType
             val forwardsSize = message.forwardContext?.forwards?.size ?: 0
@@ -191,6 +207,24 @@ abstract class ChatMessageAdapter(
             )
         }
 
+        // 截屏消息（复用 notify 布局，使用独立的 ContentBinder）
+        if (viewType == VIEW_TYPE_SCREENSHOT) {
+            return ChatMessageViewHolder.Notify(
+                parentView = parent,
+                contentLayoutRes = R.layout.chat_item_content_notify,
+                contentBinder = ScreenShotContentBinder
+            )
+        }
+
+        // Confidential placeholder: reuses notify layout; change layout later if style needs to diverge
+        if (viewType == VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER) {
+            return ChatMessageViewHolder.Notify(
+                parentView = parent,
+                contentLayoutRes = R.layout.chat_item_content_notify,
+                contentBinder = ConfidentialPlaceholderContentBinder
+            )
+        }
+
         // 普通消息：解析 ViewType 获取消息类型和发送者
         val isMine = isMineType(viewType)
         val contentType = getContentType(viewType)
@@ -223,6 +257,30 @@ abstract class ChatMessageAdapter(
         data.editMode = selectMessageState.editModel
         data.selectedStatus = data.id in selectMessageState.selectedMessageIds
 
+        // ========== Payload partial refresh handling ==========
+        if (payloads.isNotEmpty()) {
+            // Handle selection state partial refresh
+            if (payloads.contains(PAYLOAD_SELECTION)) {
+                if (holder is ChatMessageViewHolder.Message) {
+                    holder.bindSelectionOnly(data) { id, selected ->
+                        onSelectedMessage(id, selected)
+                    }
+                }
+                // If only PAYLOAD_SELECTION, return early without full binding
+                if (payloads.size == 1) return
+            }
+
+            // Handle highlight partial refresh
+            if (payloads.contains(PAYLOAD_HIGHLIGHT)) {
+                if (holder is ChatMessageViewHolder.Message) {
+                    holder.bindHighlightOnly(data, mHighlightItemIds)
+                }
+                // If only PAYLOAD_HIGHLIGHT, return early without full binding
+                if (payloads.size == 1) return
+            }
+        }
+
+        // ========== Full binding logic ==========
         // 根据 ViewHolder 类型创建对应的 callbacks
         val callbacks = when (holder) {
             is ChatMessageViewHolder.Notify -> {
@@ -242,8 +300,7 @@ abstract class ChatMessageAdapter(
                         onReactionClick(message, emoji, remove, originTimeStamp)
                     },
                     onReactionLongClick = { message, emoji -> onReactionLongClick(message, emoji) },
-                    onSelectPinnedMessage = { id, selected -> onSelectedMessage(id, selected) },
-                    onSendStatusClicked = { rootView, message -> onSendStatusClicked(rootView, message) }
+                    onSelectPinnedMessage = { id, selected -> onSelectedMessage(id, selected) }
                 )
             }
 
@@ -253,29 +310,77 @@ abstract class ChatMessageAdapter(
             }
         }
 
-        // 使用简化的 bind 方法，highlightItemIds 作为独立参数，传递 contactorCache
-        holder.bind(data, callbacks, mHighlightItemIds, contactorCache)
+        // 使用简化的 bind 方法，highlightItemIds 作为独立参数，传递 contactorCache 和 shouldSaveToPhotos
+        holder.bind(data, callbacks, mHighlightItemIds, contactorCache, shouldSaveToPhotos)
+    }
+
+    override fun onViewRecycled(holder: ChatMessageViewHolder) {
+        super.onViewRecycled(holder)
+        // Clear pending highlight runnable to prevent memory leak
+        if (holder is ChatMessageViewHolder.Message) {
+            holder.clearHighlight()
+        }
     }
 
     private var mHighlightItemIds: ArrayList<Long>? = null
 
-    @SuppressLint("NotifyDataSetChanged")
+    /**
+     * Highlight specified messages
+     *
+     * Uses Payload partial refresh, only updates items that need highlighting
+     */
     fun highlightItem(ids: ArrayList<Long>) {
         mHighlightItemIds = ids
-        notifyDataSetChanged()
+        // Only refresh items that need highlighting
+        ids.forEach { timeStamp ->
+            val position = currentList.indexOfFirst { it.timeStamp == timeStamp }
+            if (position >= 0) {
+                notifyItemChanged(position, PAYLOAD_HIGHLIGHT)
+            }
+        }
     }
 
-    // ========== 选择状态管理 ==========
+    // ========== Selection state management ==========
     private var selectMessageState = SelectMessageState(false, emptySet(), 0)
 
+    // ========== Save to photos setting ==========
     /**
-     * 更新选择状态
+     * 是否应该自动保存到相册
+     * 由 Fragment/Activity 根据会话级别设置和全局设置计算后设置
+     */
+    var shouldSaveToPhotos: Boolean = false
+
+    /**
+     * Update selection state
+     *
+     * Optimized with Payload partial refresh:
+     * - Edit mode toggle: full refresh (all items need to show/hide checkbox)
+     * - Selection state change only: partial refresh (only update changed items)
      */
     @SuppressLint("NotifyDataSetChanged")
     fun updateSelectionState(newState: SelectMessageState) {
         if (selectMessageState == newState) return
+
+        val oldState = selectMessageState
         selectMessageState = newState
-        notifyDataSetChanged()
+
+        // Edit mode toggle -> full refresh (all items need to show/hide checkbox)
+        if (oldState.editModel != newState.editModel) {
+            notifyDataSetChanged()
+            return
+        }
+
+        // Selection state change only -> partial refresh
+        val addedIds = newState.selectedMessageIds - oldState.selectedMessageIds
+        val removedIds = oldState.selectedMessageIds - newState.selectedMessageIds
+        val changedIds = addedIds + removedIds
+
+        changedIds.forEach { messageId ->
+            val position = currentList.indexOfFirst { it.id == messageId }
+            if (position >= 0) {
+                notifyItemChanged(position, PAYLOAD_SELECTION)
+            }
+        }
     }
 
     // ========== 抽象方法（子类实现） ==========
@@ -297,5 +402,4 @@ abstract class ChatMessageAdapter(
     )
 
     open fun onSelectedMessage(messageId: String, selected: Boolean) = Unit
-    abstract fun onSendStatusClicked(rootView: View, message: TextChatMessage)
 }

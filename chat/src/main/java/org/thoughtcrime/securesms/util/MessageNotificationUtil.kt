@@ -28,7 +28,6 @@ import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NotificationContentDisplayType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.IMessageNotificationUtil
-import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SharedPrefsUtil
@@ -38,7 +37,6 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.call.CallIntent
-import com.difft.android.call.InComingNewCallActionReceiver
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
@@ -46,6 +44,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.ui.ChatActivity
+import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.chat.message.getRecordMessageContentTwo
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.ConversationUtils
@@ -65,22 +64,25 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CriticalAlertManager
+import com.difft.android.call.receiver.InComingCallNotificationReceiver
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.FlashLightBlinker
 import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.chat.common.StopCriticalAlertSoundReceiver
-import kotlinx.coroutines.delay
 import org.thoughtcrime.securesms.messages.MessageForegroundService
+import util.AppForegroundObserver
 
 
 @Singleton
 class MessageNotificationUtil @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val userManager: UserManager,
     private val appIconBadgeManager: AppIconBadgeManager,
     private val activityProvider: ActivityProvider,
     private val cacheManager: NotificationCacheManager,
     private val criticalAlertManager: CriticalAlertManager,
+    private val onGoingCallStateManager: OnGoingCallStateManager
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -95,6 +97,7 @@ class MessageNotificationUtil @Inject constructor(
         private const val CHANNEL_CONFIG_NAME_CRITICAL_ALERT = "CRITICAL_ALERT_V2"
         private const val CHANNEL_CONFIG_MESSAGE_GROUP = "MESSAGE_GROUP"
         const val STOP_CRITICAL_ALERT_SOUND = "STOP_CRITICAL_ALERT_SOUND"
+        private const val CRITICAL_ALERT_VALID_WINDOW_MS = 8 * 60 * 60 * 1000L
     }
 
     private val nm: NotificationManager by lazy {
@@ -131,7 +134,7 @@ class MessageNotificationUtil @Inject constructor(
                 criticalAlertManager.cleanupOldCriticalAlertCache()
             }
         } catch (e: Exception) {
-            L.e { "[MessageNotificationUtil] Failed to start cleanup task: ${e.message}" }
+            L.e(e) { "[MessageNotificationUtil] Failed to start cleanup task:" }
         }
     }
 
@@ -261,7 +264,7 @@ class MessageNotificationUtil @Inject constructor(
                 val group = NotificationChannelGroup(CHANNEL_CONFIG_MESSAGE_GROUP, CHANNEL_CONFIG_MESSAGE_GROUP)
                 nm.createNotificationChannelGroup(group)
             } catch (e: Exception) {
-                L.e { "[MessageNotificationUtil] create notification channel group $CHANNEL_CONFIG_MESSAGE_GROUP fail:" + e.stackTraceToString() }
+                L.e(e) { "[MessageNotificationUtil] create notification channel group $CHANNEL_CONFIG_MESSAGE_GROUP fail" }
             }
         }
     }
@@ -271,7 +274,7 @@ class MessageNotificationUtil @Inject constructor(
             try {
                 nm.deleteNotificationChannel(channelId)
             } catch (e: Exception) {
-                L.e { "[MessageNotificationUtil] delete notification channel $channelId fail:" + e.stackTraceToString() }
+                L.e(e) { "[MessageNotificationUtil] delete notification channel $channelId fail" }
             }
         }
     }
@@ -283,6 +286,11 @@ class MessageNotificationUtil @Inject constructor(
 
     fun getConversationChannelId(conversationId: String): String {
         return CHANNEL_CONFIG_NAME_MESSAGE + conversationId
+    }
+
+    fun isCriticalAlertTimestampValid(timestamp: Long): Boolean {
+        val now = System.currentTimeMillis()
+        return kotlin.math.abs(now - timestamp) <= CRITICAL_ALERT_VALID_WINDOW_MS
     }
 
     fun createChannelForConversation(conversationId: String, name: String) {
@@ -343,8 +351,6 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
 
-        val intent = createConversationIntent(forWhat)
-
         val fromId = message.fromWho.id
         var sender: ContactorModel? = null
 
@@ -388,12 +394,8 @@ class MessageNotificationUtil @Inject constructor(
 
         val notificationID = forWhat.id.hashCode()
 
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context,
-            notificationID,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        // 使用BroadcastReceiver路由，根据app前后台状态打开不同页面
+        val pendingIntent = createConversationPendingIntent(forWhat, notificationID)
 
         val personName = if (displayType == NotificationContentDisplayType.NO_NAME_OR_CONTENT.value) {
             PackageUtil.getAppName() ?: ""
@@ -514,9 +516,9 @@ class MessageNotificationUtil @Inject constructor(
         // 1. 检查聊天窗口/会话列表/屏幕共享状态
         if (SendMessageUtils.isExistChat(forWhat.id) ||
             ConversationUtils.isConversationListVisible ||
-            LCallManager.isCallScreenSharing()
+            onGoingCallStateManager.isInScreenSharing()
         ) {
-            L.i { "[MessageNotificationUtil] Intercepted: isExistChat:${SendMessageUtils.isExistChat(forWhat.id)} isConversationListVisible:${ConversationUtils.isConversationListVisible} isCallScreenSharing:${LCallManager.isCallScreenSharing()}" }
+            L.i { "[MessageNotificationUtil] Intercepted: isExistChat:${SendMessageUtils.isExistChat(forWhat.id)} isConversationListVisible:${ConversationUtils.isConversationListVisible} isCallScreenSharing:${onGoingCallStateManager.isInScreenSharing()}" }
             return true
         }
 
@@ -567,22 +569,36 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     /**
-     * 创建会话跳转Intent
+     * Create PendingIntent for conversation click via TrampolineActivity.
+     * TrampolineActivity routes to MainActivity based on foreground state:
+     * - Foreground: opens popup chat
+     * - Background/Cold start: normal deeplink flow
      */
-    private fun createConversationIntent(forWhat: For): Intent {
-        val intent = Intent(context, activityProvider.getActivityClass(ActivityType.MAIN))
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent.putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_MESSAGE)
-        if (forWhat is For.Group) {
-            intent.putExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID, forWhat.id)
-        } else {
-            intent.putExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID, forWhat.id)
+    private fun createConversationPendingIntent(forWhat: For, notificationId: Int): PendingIntent {
+        val isGroup = forWhat is For.Group
+        val conversationId = forWhat.id
+        
+        val intent = NotificationTrampolineActivity.createIntent(
+            context,
+            contactId = if (isGroup) null else conversationId,
+            groupId = if (isGroup) conversationId else null
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Add unique data URI to ensure PendingIntent uniqueness
+            // (PendingIntent matching doesn't include extras)
+            data = android.net.Uri.parse("app://notification/$notificationId/${System.currentTimeMillis()}")
         }
-        return intent
+        
+        return PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
     }
 
     /**
-     * 创建删除监听PendingIntent
+     * Create PendingIntent for notification dismiss.
      */
     private fun createDeletePendingIntent(conversationId: String): PendingIntent {
         val deleteIntent = Intent(context, NotificationDismissReceiver::class.java).apply {
@@ -626,16 +642,10 @@ class MessageNotificationUtil @Inject constructor(
             return@runCatching
         }
 
-        val intent = createConversationIntent(forWhat)
-
         createSummaryNotification(context)
 
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context,
-            notificationID,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        // 使用BroadcastReceiver路由，根据app前后台状态打开不同页面
+        val pendingIntent = createConversationPendingIntent(forWhat, notificationID)
 
         // 添加删除监听，用于清理缓存（虽然兜底通知不写缓存，但为了一致性和防止将来逻辑变化）
         val pendingDeleteIntent = createDeletePendingIntent(forWhat.id)
@@ -698,7 +708,7 @@ class MessageNotificationUtil @Inject constructor(
             .build()
         val acceptPendingIntent = createPendingIntent(context, notificationID, acceptIntent)
 
-        val rejectIntent = Intent(context, InComingNewCallActionReceiver::class.java).apply {
+        val rejectIntent = Intent(context, InComingCallNotificationReceiver::class.java).apply {
             action = CALL_NOTIFICATION_OPERATION_REJECT
             putExtra(LCallConstants.BUNDLE_KEY_CALLER_ID, callerId)
             putExtra(LCallConstants.KEY_CALLING_NOTIFICATION_ID, notificationID)
@@ -781,29 +791,37 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun createMessageForegroundNotification(): Notification {
-        // 创建点击跳转到后台连接设置页面的 Intent
-        val intent = Intent(context, activityProvider.getActivityClass(ActivityType.MAIN)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_BACKGROUND_CONNECTION_SETTINGS)
-        }
+        val pendingIntent = createBackgroundConnectionSettingsPendingIntent()
 
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            MessageForegroundService.FOREGROUND_ID,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_BACKGROUND)
+        return NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_BACKGROUND)
             .setContentTitle(PackageUtil.getAppName())
             .setContentText(ResUtils.getString(R.string.background_connection_enabled))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setWhen(0)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
-            .setContentIntent(pendingIntent) //点击跳转到后台连接设置
+            .setContentIntent(pendingIntent)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .build()
+    }
 
-        return notification
+    /**
+     * Create PendingIntent for background connection settings.
+     * Routes through MainActivity -> IndexActivity for proper back stack.
+     */
+    private fun createBackgroundConnectionSettingsPendingIntent(): PendingIntent {
+        val intent = Intent(context, activityProvider.getActivityClass(ActivityType.MAIN)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_BACKGROUND_CONNECTION_SETTINGS)
+            // Add unique data URI to ensure PendingIntent uniqueness
+            data = android.net.Uri.parse("app://notification/settings/${System.currentTimeMillis()}")
+        }
+        return PendingIntent.getActivity(
+            context,
+            MessageForegroundService.FOREGROUND_ID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
     }
 
     override fun cancelAllNotifications() {
@@ -1076,10 +1094,10 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     @Synchronized
-    fun showCriticalAlert(forWhat: For, alertTitle: String, alertContent: String, timestamp: Long) {
+    fun showCriticalAlert(forWhat: For, alertTitle: String, alertContent: String, timestamp: Long, roomId: String?) {
         val title = "🚨$alertTitle"
         val notificationId = timestamp.hashCode()
-        L.i { "[CriticalAlert] showCriticalAlert for ${forWhat.id}, timestamp=$timestamp, notificationId=$notificationId"}
+        L.i { "[CriticalAlert] showCriticalAlert for ${forWhat.id}, timestamp=$timestamp, notificationId=$notificationId, roomId=$roomId "}
 
         // 先检查本地缓存中是否已经处理过该通知（最快检查）
         if (criticalAlertManager.isCriticalAlertNotificationProcessed(forWhat.id, notificationId)) {
@@ -1104,21 +1122,30 @@ class MessageNotificationUtil @Inject constructor(
         }
 
         // 清除之前的InComing通知
-        forWhat.id.let { conversationId ->
-            LCallManager.dismissIncomingNotificationByConId(conversationId)
+        if (!roomId.isNullOrEmpty()) {
+            LCallManager.dismissIncomingNotificationByRoomId(roomId)
+        } else {
+            forWhat.id.let { conversationId ->
+                LCallManager.dismissIncomingNotification(conversationId)
+            }
         }
 
         if (AppForegroundObserver.isForegrounded()) {
             // App已经在前台，直接显示CriticalAlertActivity
-            criticalAlertManager.startCriticalAlertActivity(forWhat.id, alertTitle, alertContent)
+            L.i { "[CriticalAlert] App is in foreground, starting CriticalAlertActivity"}
+            criticalAlertManager.startCriticalAlertActivity(forWhat.id, alertTitle, alertContent, notificationId, roomId)
         } else {
             // App在后台，显示通知
             // 创建点击通知的 Intent, 跳转至 CriticalAlertActivity
+            L.i { "[CriticalAlert] App is in background, show critical alert notification" }
             val clickIntent = Intent(context, activityProvider.getActivityClass(ActivityType.CRITICAL_ALERT)).apply {
                 action = LCallConstants.CRITICAL_ALERT_ACTION_CLICKED
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, forWhat.id)
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, alertTitle)
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, alertContent)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, notificationId)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, true)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID, roomId)
             }
 
             val pendingIntent: PendingIntent = PendingIntent.getActivity(
@@ -1132,6 +1159,9 @@ class MessageNotificationUtil @Inject constructor(
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, forWhat.id)
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, alertTitle)
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, alertContent)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, notificationId)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, true)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID, roomId)
             }
 
             val fullScreenPendingIntent: PendingIntent = PendingIntent.getActivity(
@@ -1171,21 +1201,12 @@ class MessageNotificationUtil @Inject constructor(
                 L.i { "[CriticalAlert] Notifying critical alert: notificationId=$notificationId, title='$title', content='$alertContent', timestamp=$timestamp"}
                 nm.notify(notificationId, notification)
                 L.d { "[CriticalAlert] Critical alert notification posted successfully: notificationId=$notificationId"}
+                criticalAlertManager.playSoundAndFlashLight(forWhat.id, notificationId)
             } catch (e: Exception) {
-                L.e { "[CriticalAlert] showCriticalAlert failed: notificationId=$notificationId, error=${e.message}, stackTrace=${e.stackTraceToString()}" }
+                L.e(e) { "[CriticalAlert] showCriticalAlert failed: notificationId=$notificationId, error:" }
             }
         }
 
-        // 播放critical alert声音
-        criticalAlertManager.playSound(forWhat.id, notificationId)
-
-        // 启动闪光灯
-        if (FlashLightBlinker.hasCameraPermission(context)) {
-            appScope.launch(Dispatchers.IO) {
-                delay(500) // 延迟500ms，让通知先稳定显示
-                FlashLightBlinker.startBlinking(context, durationMs = 30000)
-            }
-        }
     }
 
     fun createStopSoundIntent(context: Context, notificationID: Int): PendingIntent {
@@ -1202,57 +1223,12 @@ class MessageNotificationUtil @Inject constructor(
         )
     }
 
-    @Synchronized
     fun cancelCriticalAlertNotification(conversationId: String? = null) {
         val shouldCancelAll = conversationId == null
-        val canceledIds = mutableListOf<Int>()
 
         // 统一先停止声音
         if (shouldCancelAll) {
             criticalAlertManager.stopSound()
-        }
-
-        // 如果只取消特定会话，需要从持久化存储中读取该会话的信息
-        if (!shouldCancelAll) {
-            val hashKey = criticalAlertManager.hashConversationId(conversationId!!)
-            val infos = criticalAlertManager.getCriticalAlertInfos()
-            val info = infos[hashKey]
-
-            if (info != null) {
-                info.notificationIds.forEach { notificationId ->
-                    try {
-                        // 检查通知是否还在展示
-                        if (isNotificationShowing(notificationId)) {
-                            nm.cancel(notificationId)
-                            L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
-                        }
-                        // 停止匹配的声音
-                        criticalAlertManager.stopSoundIfMatch(notificationId)
-                        canceledIds.add(notificationId)
-                    } catch (e: Exception) {
-                        L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
-                    }
-                }
-            }
-        } else {
-            // 取消所有通知：遍历所有持久化数据
-            val infos = criticalAlertManager.getCriticalAlertInfos()
-            infos.forEach { (hashKey, info) ->
-                info.notificationIds.forEach { notificationId ->
-                    try {
-                        // 检查通知是否还在展示
-                        if (isNotificationShowing(notificationId)) {
-                            nm.cancel(notificationId)
-                            L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
-                        }
-                        // 停止匹配的声音
-                        criticalAlertManager.stopSoundIfMatch(notificationId)
-                        canceledIds.add(notificationId)
-                    } catch (e: Exception) {
-                        L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
-                    }
-                }
-            }
         }
 
         // 若闪光灯在闪烁，停止
@@ -1260,7 +1236,60 @@ class MessageNotificationUtil @Inject constructor(
             FlashLightBlinker.stopBlinking(context)
         }
 
-        L.i { "[MessageNotificationUtil] cancelCriticalAlertNotification finished. conversationId=$conversationId, canceledIds=${canceledIds.size}" }
+        // 将耗时操作移到后台线程执行，避免阻塞主线程
+        appScope.launch(Dispatchers.IO) {
+            val canceledIds = mutableListOf<Int>()
+
+            try {
+                // 如果只取消特定会话，需要从持久化存储中读取该会话的信息
+                if (!shouldCancelAll) {
+                    val hashKey = criticalAlertManager.hashConversationId(conversationId!!)
+                    val infos = criticalAlertManager.getCriticalAlertInfos()
+                    val info = infos[hashKey]
+
+                    if (info != null) {
+                        info.notificationIds.forEach { notificationId ->
+                            try {
+                                // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
+                                // 移除 isNotificationShowing() 检查以避免阻塞主线程
+                                nm.cancel(notificationId)
+                                L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
+                                // 停止匹配的声音
+                                criticalAlertManager.stopSoundIfMatch(notificationId)
+                                canceledIds.add(notificationId)
+                            } catch (e: Exception) {
+                                L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
+                            }
+                        }
+                    }
+                } else {
+                    // 取消所有通知：遍历所有持久化数据
+                    val infos = criticalAlertManager.getCriticalAlertInfos()
+                    infos.forEach { (hashKey, info) ->
+                        info.notificationIds.forEach { notificationId ->
+                            try {
+                                // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
+                                // 移除 isNotificationShowing() 检查以避免阻塞主线程
+                                nm.cancel(notificationId)
+                                L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
+                                // 停止匹配的声音
+                                criticalAlertManager.stopSoundIfMatch(notificationId)
+                                canceledIds.add(notificationId)
+                            } catch (e: Exception) {
+                                L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification failed:${e.message}" }
+                            }
+                        }
+                    }
+                }
+
+                L.i { "[MessageNotificationUtil] cancelCriticalAlertNotification finished. conversationId=$conversationId, canceledIds=${canceledIds.size}" }
+            } catch (e: Exception) {
+                L.e { "[MessageNotificationUtil] cancelCriticalAlertNotification error:${e.message}" }
+            }
+        }
     }
+
+
+
 
 }

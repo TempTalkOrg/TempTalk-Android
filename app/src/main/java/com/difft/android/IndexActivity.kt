@@ -13,6 +13,7 @@ import android.os.Process
 import android.text.TextUtils
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
 import android.webkit.MimeTypeMap
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
@@ -31,7 +32,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.DeeplinkUtils
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
@@ -50,22 +50,30 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.call.util.NetUtil
 import com.difft.android.chat.R
-import com.difft.android.chat.common.ScreenShotUtil
 import com.difft.android.chat.contacts.ContactsFragment
+import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupChatContentActivity
+import com.difft.android.chat.group.GroupChatFragment
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.invite.InviteUtils
+import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.recent.RecentChatFragment
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.recent.RecentChatViewModel
 import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.ui.ChatActivity
+import com.difft.android.chat.ui.ChatBackgroundDrawable
+import com.difft.android.chat.ui.ChatFragment
+import com.difft.android.chat.ui.ChatInputFocusable
+import com.difft.android.chat.ui.ChatMessageListFragment
+import com.difft.android.chat.ui.ChatMessageListProvider
 import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.databinding.ActivityIndexBinding
 import com.difft.android.login.repo.LoginRepo
 import com.difft.android.me.MeFragment
+import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.config.UserAgentManager
@@ -74,6 +82,8 @@ import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
 import com.difft.android.setting.UpdateManager
+import com.google.firebase.crashlytics.ktx.crashlytics
+import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
 import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +91,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
@@ -99,8 +108,19 @@ import kotlin.system.exitProcess
 
 
 @AndroidEntryPoint
-class IndexActivity : BaseActivity() {
+class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessageListProvider, ChatInputFocusable {
     private lateinit var binding: ActivityIndexBinding
+
+    // Dual-pane layout support for large screens
+    // Using a marker view to detect dual-pane mode (w840dp layout)
+    override var isDualPaneMode = false
+        private set
+    private var currentConversationId: String? = null
+
+    // Store detail fragment for each tab (tab index -> Fragment)
+    // This allows preserving fragment state when switching tabs
+    private val tabDetailFragments = mutableMapOf<Int, Fragment?>()
+    private var currentTabIndex = 0
 
     private val indicators by lazy {
         listOf(
@@ -167,6 +187,9 @@ class IndexActivity : BaseActivity() {
         binding = ActivityIndexBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Setup dual-pane layout for large screens (w840dp)
+        setupDualPaneLayout()
+
         // Load and emit text size early to avoid ANR in UI components
         TextSizeUtil.loadAndEmitTextSize()
 
@@ -181,6 +204,12 @@ class IndexActivity : BaseActivity() {
         binding.viewpager.apply {
             offscreenPageLimit = 1
             isUserInputEnabled = false
+            // Disable overscroll effect in dual-pane mode
+            if (isDualPaneMode) {
+                overScrollMode = View.OVER_SCROLL_NEVER
+                // Also disable on internal RecyclerView
+                (getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)?.overScrollMode = View.OVER_SCROLL_NEVER
+            }
             adapter = object : FragmentStateAdapter(this@IndexActivity) {
                 private val fragmentClasses =
                     listOf(
@@ -198,18 +227,18 @@ class IndexActivity : BaseActivity() {
                 }
             }
 
-            ScreenShotUtil.setScreenShotEnable(this@IndexActivity, false)
-
             registerOnPageChangeCallback(object : OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     super.onPageSelected(position)
-                    if (position == 0) {
-                        ScreenShotUtil.setScreenShotEnable(this@IndexActivity, false)
-                    } else {
-                        ScreenShotUtil.setScreenShotEnable(this@IndexActivity, true)
-                    }
+                    // position 0 是会话列表，不允许截屏
+//                    ScreenShotUtil.refreshWithPagePolicy(this@IndexActivity, position != 0)
                     selectIndicator(position)
+                    // Handle detail pane visibility when tab changes in dual-pane mode
+                    handleTabChangeForDualPane(position)
                 }
+            }.also {
+                // 初始化时手动触发一次，因为 OnPageChangeCallback 默认不会触发第一页
+                it.onPageSelected(currentItem)
             })
 
             indicators.forEach {
@@ -233,21 +262,21 @@ class IndexActivity : BaseActivity() {
             gestureDetector.onTouchEvent(event)
         }
 
-        DeeplinkUtils.deeplink
-            .asFlow()
-            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
-            .onEach { linkData -> handleDeeplink(linkData) }
-            .launchIn(lifecycleScope)
-        handleShareIntent(intent)
+        // Handle Intent data (deeplink or external share)
+        handleIntentData(intent)
         recordUA()
 
         initWCDB()
+
+        initFirebaseCustomKey()
 
         startReceivingMessages()
 
         processPendingAndFailedMessages()
 
         WCDBUpdateService.start()
+
+        cleanEmptyRooms()
 
         initFCMPush()
 
@@ -268,6 +297,8 @@ class IndexActivity : BaseActivity() {
         setUserProfile()
 
         checkDisappearingMessage()
+
+        startFileCleanupTask()
 
         observeAndUpdateUnreadMessageCountBadge()
 
@@ -334,8 +365,8 @@ class IndexActivity : BaseActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        L.i { "[IndexActivity] onNewIntent" }
-        handleShareIntent(intent)
+        setIntent(intent)
+        handleIntentData(intent)
     }
 
     private fun syncContactAndGroupInfo() {
@@ -347,6 +378,11 @@ class IndexActivity : BaseActivity() {
 
     private fun recordUA() {
         L.i { "[UA] ======>" + UserAgentManager.getUserAgent() + "===uid:" + globalServices.myId }
+    }
+
+
+    private fun initFirebaseCustomKey() {
+        Firebase.crashlytics.setCustomKey("uid", globalServices.myId.formatBase58Id())
     }
 
     private fun startReceivingMessages() {
@@ -419,6 +455,8 @@ class IndexActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 刷新截屏状态（从后台恢复时需要重新检查屏幕锁）
+//        ScreenShotUtil.refreshWithPagePolicy(this, binding.viewpager.currentItem != 0)
         checkInsiderUpdate()
         checkNotificationFullScreenPermission()
         checkNotificationPermission()
@@ -426,6 +464,24 @@ class IndexActivity : BaseActivity() {
 
     private fun checkDisappearingMessage() {
         messageArchiveManager.startCheckTask()
+    }
+
+    private fun startFileCleanupTask() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            FileUtil.clearDraftAttachmentsDirectory()
+            FileUtil.deleteMessageAttachmentEmptyDirectories()
+        }
+    }
+
+    /**
+     * 清理空会话
+     * 包括：基本空会话 + 超时的空会话（根据 activeConversation 配置）
+     */
+    private fun cleanEmptyRooms() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val activeConversationConfig = globalConfigsManager.getActiveConversationConfig()
+            WCDBUpdateService.cleanEmptyRooms(activeConversationConfig)
+        }
     }
 
     /**
@@ -596,11 +652,71 @@ class IndexActivity : BaseActivity() {
         )
     }
 
-    private fun handleDeeplink(linkData: LinkDataEntity) {
-        L.i { "[Deeplink] Handle deeplink:${linkData.category} linkData:$linkData" }
+    /**
+     * 从 Intent 中提取 deeplink 数据并处理
+     * 统一处理所有场景：通知点击、Push、Scheme URL
+     * 
+     * 这种方式比 Flow 机制更简单可靠：
+     * - 不需要粘性事件/过滤机制
+     */
+    /**
+     * Unified handler for Intent data.
+     * Routes to deeplink handler or share handler based on action.
+     */
+    private fun handleIntentData(intent: Intent) {
+        when (intent.action) {
+            Intent.ACTION_SEND -> handleShareIntent(intent)
+            else -> handleDeeplinkFromIntent(intent)
+        }
+    }
 
-        // IndexActivity 的 singleTask 会清除已有的 ScreenLockActivity
-        // deeplink 场景需要手动触发锁屏检查
+    /**
+     * Handle deeplink data from Intent (notification click, push, scheme URL).
+     * Priority: linkCategory > pushData > schemeUri
+     */
+    private fun handleDeeplinkFromIntent(intent: Intent) {
+        val linkCategory = intent.getIntExtra(LinkDataEntity.LINK_CATEGORY, -1)
+        val pushData = intent.getStringExtra("pushData")
+        val groupId = intent.getStringExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID)
+        val contactId = intent.getStringExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID)
+        val schemeUri = intent.data
+        
+        var linkDataEntity: LinkDataEntity? = null
+        
+        // Priority 1: Explicit link category (notification click, background settings, etc.)
+        if (linkCategory != -1) {
+            linkDataEntity = LinkDataEntity(linkCategory, groupId, contactId, null)
+        }
+        // Priority 2: Push data
+        else if (!TextUtils.isEmpty(pushData)) {
+            try {
+                val pushCustomContent = com.google.gson.Gson().fromJson(
+                    pushData, 
+                    com.difft.android.chat.data.PushCustomContent::class.java
+                )
+                linkDataEntity = LinkDataEntity(
+                    category = LinkDataEntity.CATEGORY_PUSH,
+                    gid = pushCustomContent.gid,
+                    uid = pushCustomContent.uid,
+                    uri = null
+                )
+            } catch (e: Exception) {
+                L.e { "[IndexActivity] Error parsing pushData: ${e.message}" }
+            }
+        }
+        // Priority 3: Scheme URL (chative://)
+        else if (schemeUri != null) {
+            val scheme = schemeUri.scheme
+            if (scheme != null && AppScheme.allSchemes.contains(scheme)) {
+                linkDataEntity = LinkDataEntity(LinkDataEntity.CATEGORY_SCHEME, null, null, schemeUri)
+            }
+        }
+        
+        linkDataEntity?.let { handleDeeplink(it) }
+    }
+
+    private fun handleDeeplink(linkData: LinkDataEntity) {
+        // Trigger screen lock check for deeplink scenario
         (application as com.difft.android.app.TempTalkApplication).triggerScreenLockCheck()
 
         when (linkData.category) {
@@ -728,9 +844,9 @@ class IndexActivity : BaseActivity() {
             .compose(RxUtil.getSingleSchedulerComposer())
             .to(RxUtil.autoDispose(this))
             .subscribe({
-                L.i { "BH_Lin: setUserProfile success" }
+                L.i { "setUserProfile success" }
             }, { error ->
-                error.printStackTrace()
+                L.w { "[IndexActivity] setUserProfile error: ${error.stackTraceToString()}" }
             })
     }
 
@@ -837,7 +953,6 @@ class IndexActivity : BaseActivity() {
                 }
             } catch (e: Exception) {
                 L.e { "SharedContent Received Exception: ${e.stackTraceToString()}" }
-                e.printStackTrace()
             }
         }
     }
@@ -947,5 +1062,311 @@ class IndexActivity : BaseActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             FeatureGrayManager.init()
         }
+    }
+
+    // ==================== Dual-pane layout support ====================
+
+    /**
+     * Setup dual-pane layout for large screens (width >= 840dp AND height >= 480dp)
+     * Layout qualifier w840dp-h480dp ensures this layout only loads when both conditions are met.
+     * Detects dual-pane mode by checking for detail_pane view which only exists in that layout.
+     */
+    private fun setupDualPaneLayout() {
+        // Check for detail_pane view which only exists in the w840dp-h480dp layout variant
+        val detailPane = findViewById<View>(com.difft.android.R.id.detail_pane)
+        isDualPaneMode = detailPane != null
+
+        if (isDualPaneMode) {
+            // Clear any restored fragments from configuration change to prevent overlap
+            // tabDetailFragments map is empty after recreation but FragmentManager may restore fragments
+            clearRestoredDetailFragments()
+
+            // Show empty state initially
+            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
+            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
+        }
+    }
+
+    /**
+     * Clear any fragments that were restored by FragmentManager after configuration change.
+     * This prevents fragment overlap when tabDetailFragments map is empty but FragmentManager
+     * has restored fragments from the previous configuration.
+     */
+    private fun clearRestoredDetailFragments() {
+        // ViewPager fragments that should NOT be cleared
+        val viewPagerFragmentTypes = setOf(
+            RecentChatFragment::class.java,
+            ContactsFragment::class.java,
+            MeFragment::class.java
+        )
+
+        // Find all detail fragments (any fragment that is NOT a ViewPager fragment)
+        val restoredFragments = supportFragmentManager.fragments.filter { fragment ->
+            !viewPagerFragmentTypes.contains(fragment.javaClass)
+        }
+
+        if (restoredFragments.isNotEmpty()) {
+            val transaction = supportFragmentManager.beginTransaction()
+            restoredFragments.forEach { transaction.remove(it) }
+            transaction.commitNow()
+        }
+
+        // Clear the map as well
+        tabDetailFragments.clear()
+        currentConversationId = null
+    }
+
+    /**
+     * Show a one-on-one chat in the detail pane
+     */
+    private fun showChatInDetailPane(contactId: String, jumpMessageTimestamp: Long? = null) {
+        if (!isDualPaneMode) return
+
+        // Hide empty state
+        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
+        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+
+        // Set chat background on detail_pane (not affected by IME padding in Fragment)
+        setDetailPaneChatBackground()
+
+        currentConversationId = contactId
+
+        val newFragment = ChatFragment.newInstance(
+            contactId = contactId,
+            jumpMessageTimestamp = jumpMessageTimestamp
+        )
+
+        replaceDetailFragmentForCurrentTab(newFragment)
+    }
+
+    /**
+     * Show a group chat in the detail pane
+     */
+    private fun showGroupChatInDetailPane(groupId: String, jumpMessageTimestamp: Long? = null) {
+        if (!isDualPaneMode) return
+
+        // Hide empty state
+        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
+        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+
+        // Set chat background on detail_pane (not affected by IME padding in Fragment)
+        setDetailPaneChatBackground()
+
+        currentConversationId = groupId
+
+        val newFragment = GroupChatFragment.newInstance(
+            groupId = groupId,
+            jumpMessageTimestamp = jumpMessageTimestamp
+        )
+
+        replaceDetailFragmentForCurrentTab(newFragment)
+    }
+
+    /**
+     * Set chat background on detail_pane.
+     * Background is set here (not in Fragment) so it stays fixed when keyboard appears.
+     */
+    private fun setDetailPaneChatBackground() {
+        findViewById<View>(com.difft.android.R.id.detail_pane)?.background =
+            ChatBackgroundDrawable(this)
+    }
+
+    /**
+     * Clear chat background from detail_pane.
+     */
+    private fun clearDetailPaneChatBackground() {
+        findViewById<View>(com.difft.android.R.id.detail_pane)?.background = null
+    }
+
+    /**
+     * Handle tab change in dual-pane mode
+     * Hide current tab's detail fragment and show the target tab's detail fragment
+     */
+    private fun handleTabChangeForDualPane(newTabIndex: Int) {
+        if (!isDualPaneMode) return
+        if (newTabIndex == currentTabIndex) return
+
+        val oldFragment = tabDetailFragments[currentTabIndex]
+        val newFragment = tabDetailFragments[newTabIndex]
+
+        val transaction = supportFragmentManager.beginTransaction()
+
+        // Hide old fragment
+        oldFragment?.let { transaction.hide(it) }
+
+        // Show or restore new fragment
+        if (newFragment != null) {
+            transaction.show(newFragment)
+            // Hide empty state
+            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
+            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+            // Update currentConversationId and background based on fragment type
+            currentConversationId = when (newFragment) {
+                is ChatFragment -> {
+                    setDetailPaneChatBackground()
+                    newFragment.arguments?.getString("ARG_CONTACT_ID")
+                }
+                is GroupChatFragment -> {
+                    setDetailPaneChatBackground()
+                    newFragment.arguments?.getString("ARG_GROUP_ID")
+                }
+                is ContactDetailFragment -> {
+                    clearDetailPaneChatBackground()
+                    newFragment.arguments?.getString("ARG_CONTACT_ID")
+                }
+                else -> {
+                    clearDetailPaneChatBackground()
+                    null
+                }
+            }
+        } else {
+            // No fragment for this tab, show empty state
+            clearDetailPaneChatBackground()
+            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
+            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
+            currentConversationId = null
+        }
+
+        transaction.commit()
+        currentTabIndex = newTabIndex
+    }
+
+    /**
+     * Replace the detail fragment for current tab
+     * This removes the old fragment (if any) and adds the new one
+     */
+    private fun replaceDetailFragmentForCurrentTab(newFragment: Fragment, tag: String? = null) {
+        val oldFragment = tabDetailFragments[currentTabIndex]
+
+        val transaction = supportFragmentManager.beginTransaction()
+
+        // Remove old fragment for current tab
+        oldFragment?.let { transaction.remove(it) }
+
+        // Add new fragment
+        transaction.add(com.difft.android.R.id.fragment_container_detail, newFragment, tag)
+        transaction.commit()
+
+        // Update the map
+        tabDetailFragments[currentTabIndex] = newFragment
+    }
+
+    /**
+     * Clear the detail pane and show empty state for current tab
+     */
+    private fun clearDetailPane() {
+        if (!isDualPaneMode) return
+
+        currentConversationId = null
+
+        // Remove fragment for current tab
+        val oldFragment = tabDetailFragments[currentTabIndex]
+        oldFragment?.let {
+            supportFragmentManager.beginTransaction().remove(it).commit()
+        }
+        tabDetailFragments[currentTabIndex] = null
+
+        // Clear chat background
+        clearDetailPaneChatBackground()
+
+        // Show empty state
+        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
+        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
+    }
+
+    // ==================== ConversationNavigationCallback implementation ====================
+
+    override fun onOneOnOneConversationSelected(contactId: String, jumpMessageTimestamp: Long?) {
+        if (isDualPaneMode) {
+            showChatInDetailPane(contactId, jumpMessageTimestamp)
+        } else {
+            // Fallback to Activity navigation for single-pane mode
+            ChatActivity.startActivity(this, contactId, jumpMessageTimeStamp = jumpMessageTimestamp)
+        }
+    }
+
+    override fun onGroupConversationSelected(groupId: String, jumpMessageTimestamp: Long?) {
+        if (isDualPaneMode) {
+            showGroupChatInDetailPane(groupId, jumpMessageTimestamp)
+        } else {
+            // Fallback to Activity navigation for single-pane mode
+            GroupChatContentActivity.startActivity(this, groupId, jumpMessageTimestamp)
+        }
+    }
+
+    override fun onContactDetailSelected(contactId: String) {
+        if (isDualPaneMode) {
+            showContactDetailInDetailPane(contactId)
+        } else {
+            // Fallback to Activity navigation for single-pane mode
+            com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity.startActivity(this, contactId)
+        }
+    }
+
+    /**
+     * Show contact detail in the detail pane
+     */
+    private fun showContactDetailInDetailPane(contactId: String) {
+        if (!isDualPaneMode) return
+
+        // Hide empty state
+        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
+        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+
+        // Clear chat background (contact detail doesn't use chat background)
+        clearDetailPaneChatBackground()
+
+        currentConversationId = contactId
+
+        val newFragment = ContactDetailFragment.newInstance(contactId = contactId)
+
+        replaceDetailFragmentForCurrentTab(newFragment)
+    }
+
+    // ==================== DualPaneHost implementation ====================
+
+    /**
+     * Show any fragment in the detail pane (generic method for all detail pages)
+     * Used by settings pages, profile pages, etc.
+     */
+    override fun showDetailFragment(fragment: Fragment, tag: String?) {
+        if (!isDualPaneMode) return
+
+        // Hide empty state
+        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
+        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+
+        // Clear chat background (generic fragments don't use chat background)
+        clearDetailPaneChatBackground()
+
+        // Clear current conversation id as this is not a conversation
+        currentConversationId = null
+
+        replaceDetailFragmentForCurrentTab(fragment, tag)
+    }
+
+    /**
+     * Get ChatMessageListFragment from the detail pane in dual-pane mode
+     * This is used by ConfidentialBottomSheetFragments to access the chat message list
+     */
+    override fun getChatMessageListFragment(): ChatMessageListFragment? {
+        if (!isDualPaneMode) return null
+        val detailFragment = supportFragmentManager.findFragmentById(com.difft.android.R.id.fragment_container_detail)
+        return when (detailFragment) {
+            is ChatFragment -> detailFragment.getChatMessageListFragment()
+            is GroupChatFragment -> detailFragment.getChatMessageListFragment()
+            else -> null
+        }
+    }
+
+    // ==================== ChatInputFocusable implementation ====================
+
+    override fun focusCurrentChatInputIfMatches(conversationId: String): Boolean {
+        if (!isDualPaneMode || currentConversationId != conversationId) {
+            return false
+        }
+        val detailFragment = supportFragmentManager.findFragmentById(com.difft.android.R.id.fragment_container_detail)
+        (detailFragment as? ChatFragment)?.focusInputAndShowKeyboard()
+        return true
     }
 }

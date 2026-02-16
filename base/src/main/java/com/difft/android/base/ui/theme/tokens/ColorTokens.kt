@@ -29,9 +29,13 @@ object ColorTokens {
         val Background = Color(0xFFFFFFFF)           // bg1
         val BackgroundSecondary = Color(0xFFFAFAFA)  // bg.setting (bg2)
         val BackgroundTertiary = Color(0xFFF5F5F5)   // bg3
+        val BackgroundQuaternary = Color(0xFFB7BDC6) // bg4
+        val BackgroundActionPopup = Color(0xFFFFFFFF) // Light: pure white (for popup menu)
+        val BackgroundBottomSheet = Color(0xFFFFFFFF) // Light: pure white (for bottom sheets)
         val BackgroundDisabled = Color(0xFFEAECEF)
         val BackgroundBlue = Color(0xFFEBF7FF)
         val BackgroundSettingItem = Color(0xFFFFFFFF) // bg.setting.item
+        val BackgroundElevate = Color(0xFF0B0E11)
 
         // Surface colors
         val Surface = Color(0xFFF5F5F5)
@@ -46,6 +50,7 @@ object ColorTokens {
 
         // UI elements
         val Divider = Color(0xFFEAECEF)
+        val Line = Color(0xFFEAECEF)  // line color
         val Border = Color(0xFFEAECEF)
         val Icon = Color(0xFF474D57)
         val IconOnPrimary = Color(0xFFFFFFFF)
@@ -65,9 +70,14 @@ object ColorTokens {
         val Background = Color(0xFF181A20)           // bg1
         val BackgroundSecondary = Color(0xFF181A20)  // bg.setting (same as bg1 in dark mode)
         val BackgroundTertiary = Color(0xFF2B3139)   // bg3
+        val BackgroundQuaternary = Color(0xFF474D57) // bg4
+        val BackgroundActionPopup = Color(0xFF474D57) // Dark: bg4 value (for popup menu)
+        val BackgroundBottomSheet = Color(0xFF1E2329) // Dark: bg2 (same as bg.popup, for bottom sheets)
         val BackgroundDisabled = Color(0xFF474D57)
         val BackgroundBlue = Color(0xFF003366)
         val BackgroundSettingItem = Color(0xFF1E2329) // bg.setting.item (bg2)
+
+        val BackgroundElevate = Color(0xFF0B0E11)
 
         // Surface colors
         val Surface = Color(0xFF2B3139)
@@ -82,6 +92,7 @@ object ColorTokens {
 
         // UI elements
         val Divider = Color(0xFF2B3139)
+        val Line = Color(0xFF474D57)  // line color
         val Border = Color(0xFF474D57)
         val Icon = Color(0xFFB7BDC6)
         val IconOnPrimary = Color(0xFFFFFFFF)

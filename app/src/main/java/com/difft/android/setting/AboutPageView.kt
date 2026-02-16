@@ -38,13 +38,20 @@ fun AboutPageView(
     onCheckForUpdateClick: () -> Unit,
     joinDesktopClick: () -> Unit,
     callServerUrlNodeClick: () -> Unit,
-    isInsider: Boolean
+    isInsider: Boolean,
+    showBackButton: Boolean = true
 ) {
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colorResource(id = com.difft.android.base.R.color.bg_setting))
     ) {
 
-        TitleBar(titleText = stringResource(id = R.string.settings_about), onBackClick = onBackClick)
+        TitleBar(
+            titleText = stringResource(id = R.string.settings_about),
+            showBackButton = showBackButton,
+            onBackClick = onBackClick
+        )
 
         Column(
             modifier = Modifier

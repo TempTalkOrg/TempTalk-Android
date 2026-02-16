@@ -14,19 +14,38 @@
     <!--            android:layout_width="match_parent"-->
     <!--            android:layout_height="wrap_content" />-->
 
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_privacy_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingHorizontal="50dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/chat_privacy_banner"
+        android:textColor="@color/t.third"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerViewMessage"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
         android:paddingVertical="3dp"
-        android:scrollbars="vertical" />
+        android:scrollbars="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tv_privacy_banner" />
 
     <!--    </com.scwang.smart.refresh.layout.SmartRefreshLayout>-->
 
     <androidx.cardview.widget.CardView
+        android:id="@+id/cv_day_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
+        android:visibility="gone"
         app:cardBackgroundColor="@color/bg3"
         app:cardCornerRadius="8dp"
         app:cardElevation="3dp"
@@ -47,9 +66,7 @@
             android:textColor="@color/t.primary"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:visibility="gone"
-            tools:text="FRI ,DEC 25"
-            tools:visibility="visible" />
+            tools:text="FRI ,DEC 25" />
     </androidx.cardview.widget.CardView>
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -168,27 +185,6 @@
         </androidx.cardview.widget.CardView>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <FrameLayout
-        android:id="@+id/reactions_shade"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/reactions_screen_light_shade_color"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="@color/reactions_screen_dark_shade_color"
-        android:visibility="gone" />
-
-    <ViewStub
-        android:id="@+id/conversation_reaction_scrubber_stub"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:inflatedId="@+id/conversation_reaction_scrubber"
-        android:layout="@layout/conversation_reaction_scrubber"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
 
     <com.airbnb.lottie.LottieAnimationView
         android:id="@+id/lottie_view_loading"

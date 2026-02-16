@@ -1,5 +1,7 @@
 package com.luck.picture.lib.utils;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.annotation.SuppressLint;
 import android.content.Context;
 
@@ -85,7 +87,7 @@ public class DateUtils {
             long interval = l1 - d;
             return (int) Math.abs(interval);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[DateUtils] dateDiffer error:");
             return -1;
         }
     }

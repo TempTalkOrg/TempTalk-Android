@@ -7,8 +7,6 @@ import androidx.annotation.NonNull;
 
 import com.annimon.stream.Stream;
 import com.difft.android.base.log.lumberjack.L;
-
-import util.logging.Log;
 import org.thoughtcrime.securesms.util.WakeLockUtil;
 
 import java.util.List;

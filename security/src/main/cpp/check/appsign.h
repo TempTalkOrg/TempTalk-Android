@@ -1,6 +1,3 @@
-//
-// Created by neo on 2023/9/19.
-//
 
 #ifndef CHATIVE_APPSIGN_H
 #define CHATIVE_APPSIGN_H

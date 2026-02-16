@@ -40,17 +40,10 @@ import difft.android.messageserialization.model.isLongText
  */
 object TextContentBinder : ContentBinder {
 
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
-        val textView = contentFrame.findViewById<AppCompatTextView>(R.id.textView)
-
-        textView.setOnClickListener {
-            LinkTextUtils.findParentChatMessageItemView(textView)?.performClick()
-        }
-        textView.setOnLongClickListener {
-            LinkTextUtils.findParentChatMessageItemView(textView)?.performLongClick()
-            true
-        }
+        val textView = contentFrame.findViewById<com.difft.android.chat.ui.textpreview.SelectableTextView>(R.id.textView)
+        val rawText = textMessage.message.toString()
 
         textView.autoLinkMask = 0
 
@@ -59,6 +52,7 @@ object TextContentBinder : ContentBinder {
         val content = textMessage.message.toString()
 
         if (textMessage.isConfidential()) {
+            // 机密消息不设置双击预览，点击由 ChatMessageListFragment 统一处理机密消息弹窗
             textView.movementMethod = null
             val spannableText = getGrayBlockText(
                 content,
@@ -72,9 +66,11 @@ object TextContentBinder : ContentBinder {
             textView.text = spannableText
             textView.maxLines = 5
         } else {
+            // 非机密消息：设置双击打开文本预览
+            TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
+
             // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
             val messageId = textMessage.id
-            val rawText = textMessage.message.toString()
             textView.setTag(R.id.tag_truncation_message_id, messageId)
 
             // First render full text to measure line count
@@ -98,7 +94,8 @@ object TextContentBinder : ContentBinder {
                     TextTruncationUtil.showFullTextDialog(
                         textView,
                         rawText,
-                        textMessage.mentions
+                        textMessage.mentions,
+                        textMessage
                     )
                 }
             }
@@ -217,48 +214,58 @@ object TextContentBinder : ContentBinder {
  * 从 ImageContentAdapter 简化而来
  */
 object ImageContentBinder : ContentBinder {
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val imageMessageView = contentFrame.findViewById<ImageAndVideoMessageView>(R.id.imageMessageView)
         val textView = contentFrame.findViewById<TextView>(R.id.textView)
         val coverView = contentFrame.findViewById<TextView>(R.id.v_cover)
 
-        imageMessageView.setupImageView(textMessage)
+        imageMessageView.setupImageView(textMessage, shouldSaveToPhotos, containerWidth)
 
         if (!TextUtils.isEmpty(textMessage.message)) {
             textView.visibility = View.VISIBLE
 
             textView.autoLinkMask = 0
 
-            // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
-            val messageId = textMessage.id
-            val rawText = textMessage.message.toString()
-            textView.setTag(R.id.tag_truncation_message_id, messageId)
+            // 机密消息不设置双击预览，coverView 会覆盖在上面处理点击
+            if (!textMessage.isConfidential()) {
+                // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
+                val messageId = textMessage.id
+                val rawText = textMessage.message.toString()
+                textView.setTag(R.id.tag_truncation_message_id, messageId)
 
-            // First render full text to measure line count
-            LinkTextUtils.setMarkdownToTextview(
-                textView.context,
-                rawText,
-                textView,
-                textMessage.mentions
-            )
+                // 非机密消息：设置双击打开文本预览
+                TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
 
-            // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
-            textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
+                // First render full text to measure line count
+                LinkTextUtils.setMarkdownToTextview(
+                    textView.context,
+                    rawText,
+                    textView,
+                    textMessage.mentions
+                )
 
-            // doOnPreDraw to measure after layout and apply truncation
-            textView.doOnPreDraw {
-                TextTruncationUtil.applyTruncation(
-                    context = textView.context,
-                    textView = textView,
-                    messageId = messageId
-                ) {
-                    TextTruncationUtil.showFullTextDialog(
-                        textView,
-                        rawText,
-                        textMessage.mentions
-                    )
+                // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
+                textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
+
+                // doOnPreDraw to measure after layout and apply truncation
+                textView.doOnPreDraw {
+                    TextTruncationUtil.applyTruncation(
+                        context = textView.context,
+                        textView = textView,
+                        messageId = messageId
+                    ) {
+                        TextTruncationUtil.showFullTextDialog(
+                            textView,
+                            rawText,
+                            textMessage.mentions,
+                            textMessage
+                        )
+                    }
                 }
+            } else {
+                // 机密消息：简单显示文本，点击由 coverView 处理
+                textView.text = textMessage.message
             }
         } else {
             textView.visibility = View.GONE
@@ -278,7 +285,7 @@ object ImageContentBinder : ContentBinder {
  * 从 AudioContentAdapter 简化而来
  */
 object AudioContentBinder : ContentBinder {
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val voiceMessageView = contentFrame.findViewById<VoiceMessageView>(R.id.voice_message_view)
         val coverView = contentFrame.findViewById<TextView>(R.id.v_cover)
@@ -318,9 +325,14 @@ object AudioContentBinder : ContentBinder {
             coverView.setOnClickListener {
                 LinkTextUtils.findParentChatMessageItemView(coverView)?.performClick()
             }
+            coverView.setOnLongClickListener {
+                LinkTextUtils.findParentChatMessageItemView(coverView)?.performLongClick()
+                true
+            }
         } else {
             coverView.visibility = View.GONE
             coverView.setOnClickListener(null)
+            coverView.setOnLongClickListener(null)
         }
     }
 }
@@ -331,7 +343,7 @@ object AudioContentBinder : ContentBinder {
  * 从 AttachContentAdapter 简化而来
  */
 object AttachContentBinder : ContentBinder {
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val attachContentView = contentFrame.findViewById<com.difft.android.chat.widget.AttachMessageView>(
             R.id.attach_content_view
@@ -397,12 +409,18 @@ object AttachContentBinder : ContentBinder {
                     LinkTextUtils.findParentChatMessageItemView(textView)?.performLongClick()
                     true
                 }
+            } else if (textMessage.isConfidential()) {
+                // 普通机密附件消息：简单显示文本，点击由 coverView 处理
+                textView.text = textMessage.message
             } else {
-                // 普通文本处理
+                // 非机密消息：普通文本处理
                 // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
                 val messageId = textMessage.id
                 val rawText = textMessage.message.toString()
                 textView.setTag(R.id.tag_truncation_message_id, messageId)
+
+                // 设置双击打开文本预览
+                TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
 
                 // First render full text to measure line count
                 LinkTextUtils.setMarkdownToTextview(
@@ -428,13 +446,15 @@ object AttachContentBinder : ContentBinder {
                                 textView,
                                 longTextPath,
                                 rawText,
-                                textMessage.mentions
+                                textMessage.mentions,
+                                textMessage
                             )
                         } else {
                             TextTruncationUtil.showFullTextDialog(
                                 textView,
                                 rawText,
-                                textMessage.mentions
+                                textMessage.mentions,
+                                textMessage
                             )
                         }
                     }
@@ -467,7 +487,7 @@ object AttachContentBinder : ContentBinder {
  * 从 ContactContentAdapter 简化而来
  */
 object ContactContentBinder : ContentBinder {
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val chatMessage = message as TextChatMessage
         val contacts = chatMessage.sharedContacts
         if (contacts.isNullOrEmpty()) return
@@ -511,7 +531,7 @@ object ContactContentBinder : ContentBinder {
  * 注意：由于通知消息有交互（按钮点击），需要传入回调
  */
 class NotifyContentBinder() : ContentBinder {
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textChatMessage = message as com.difft.android.chat.message.NotifyChatMessage
         val textViewContent = contentFrame.findViewById<TextView>(R.id.tv_content)
         val textViewAction = contentFrame.findViewById<TextView>(R.id.tv_action)
@@ -522,13 +542,44 @@ class NotifyContentBinder() : ContentBinder {
 }
 
 /**
+ * 截屏消息内容绑定器
+ *
+ * 复用 notify 布局，显示截屏通知文本
+ */
+object ScreenShotContentBinder : ContentBinder {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
+        val textMessage = message as TextChatMessage
+        val textViewContent = contentFrame.findViewById<TextView>(R.id.tv_content)
+        val textViewAction = contentFrame.findViewById<TextView>(R.id.tv_action)
+
+        textViewAction.visibility = View.GONE
+        textViewContent.text = textMessage.message
+    }
+}
+
+/**
+ * Content binder for confidential message placeholder.
+ *
+ * Reuses notify layout (centered gray text). Shown to sender after recipient reads; batch-deleted when sender leaves the page.
+ * Change to a dedicated layout if placeholder style needs to diverge from notify later.
+ */
+object ConfidentialPlaceholderContentBinder : ContentBinder {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
+        val textViewContent = contentFrame.findViewById<TextView>(R.id.tv_content)
+        val textViewAction = contentFrame.findViewById<TextView>(R.id.tv_action)
+        textViewAction.visibility = View.GONE
+        textViewContent.text = contentFrame.context.getString(R.string.chat_confidential_message_viewed)
+    }
+}
+
+/**
  * 合并转发消息内容绑定器
  *
  * 处理多条消息的合并转发显示
  */
 object MultiForwardContentBinder : ContentBinder {
     @SuppressLint("ClickableViewAccessibility")
-    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil) {
+    override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val forwardContext = textMessage.forwardContext ?: return
         val forwards = forwardContext.forwards ?: return

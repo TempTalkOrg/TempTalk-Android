@@ -24,10 +24,10 @@ import javax.inject.Singleton
 
 @Singleton
 class ConversationManagerImpl @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val roomStore: RoomStore,
-    @ChativeHttpClientModule.Chat
+    @param:ChativeHttpClientModule.Chat
     private val chatHttpClient: ChativeHttpClient,
     private val gson: Gson,
     private val wcdb: WCDB,
@@ -54,7 +54,6 @@ class ConversationManagerImpl @Inject constructor(
             chatHttpClient.httpService.getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(uids)).blockingFirst().data?.keys
         } catch (e: Exception) {
             L.e { "Obtains new publicKeys error forWho ${room.id} ${e.message}" }
-            e.printStackTrace()
             null
         }
         if (publicKeys.isNullOrEmpty()) {
@@ -88,7 +87,6 @@ class ConversationManagerImpl @Inject constructor(
             chatHttpClient.httpService.getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(ids)).blockingFirst().data?.keys
         } catch (e: Exception) {
             L.e { "Obtains new publicKeys error: $ids ${e.message}" }
-            e.printStackTrace()
             null
         }
         return publicKeys

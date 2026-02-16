@@ -17,6 +17,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LChatToCallController
+import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.ChatMessageListBehavior
 import com.difft.android.chat.IChatPaginationController
@@ -26,6 +27,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageTwo
@@ -74,6 +76,7 @@ import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.convertToMessageModel
 import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.delete
 import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.getReadInfoList
@@ -101,7 +104,8 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val translateManager: TranslateManager,
     private val speechToTextManager: SpeechToTextManager,
     private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
-    private val onGoingCallStateManager: OnGoingCallStateManager
+    private val onGoingCallStateManager: OnGoingCallStateManager,
+    private val callDataManager: CallDataManager
 ) : ViewModel(),
     IChatPaginationController by chatPaginationControllerFactory.create(forWhat) {
 
@@ -188,6 +192,21 @@ class ChatMessageViewModel @AssistedInject constructor(
                         L.i { "MessageContactsCacheUtil: Refreshed ${idsToRefresh.size} cached contactors" }
                     }
                 }
+        }
+    }
+
+    /**
+     * Directly refresh a specific contact in the message contact cache.
+     *
+     * Used after the chat page fetches latest contact info from server,
+     * bypassing the global event bus (contactsUpdate) to avoid circular refresh.
+     */
+    fun refreshContactorInCache(contactor: ContactorModel) {
+        if (contactorCache.getCachedIds().contains(contactor.id)) {
+            contactorCache.put(contactor)
+            viewModelScope.launch {
+                _contactorCacheRefreshed.emit(Unit)
+            }
         }
     }
 
@@ -311,13 +330,13 @@ class ChatMessageViewModel @AssistedInject constructor(
         if (onGoingCallStateManager.isInCalling()) {
             if (onGoingCallStateManager.getConversationId() == forWhat.id) {
                 L.i { "[call] Bringing back current call" }
-                LCallManager.bringInCallScreenBack(activity)
+                LCallManager.bringCallScreenToFront(activity)
             } else {
                 ToastUtil.show(R.string.call_is_calling_tip)
             }
         } else {
             //判断当前是否有livekit会议，有则join会议
-            val callData = LCallManager.getCallDataByConversationId(forWhat.id)
+            val callData = callDataManager.getCallDataByConversationId(forWhat.id)
             if (callData != null) {
                 L.i { "[call] Joining existing call with roomId:${callData.roomId}" }
                 LCallManager.joinCall(activity.applicationContext, callData) { status ->
@@ -345,20 +364,15 @@ class ChatMessageViewModel @AssistedInject constructor(
         showOrHideFullInput.onNext(show to inputContent)
     }
 
-    var confidentialRecipient: Subject<ChatMessage> = BehaviorSubject.create()
-
-    var showReactionShade: Subject<Boolean> = BehaviorSubject.create()
+    var confidentialViewReceipt: Subject<ChatMessage> = BehaviorSubject.create()
 
     var translateEvent: Subject<Pair<String, TranslateData>> = BehaviorSubject.create()
 
     var speechToTextEvent: Subject<Pair<String, SpeechToTextData>> = BehaviorSubject.create()
 
-    fun showReactionShade(show: Boolean) {
-        showReactionShade.onNext(show)
-    }
-
-    fun setConfidentialRecipient(message: ChatMessage) {
-        confidentialRecipient.onNext(message)
+    fun sendConfidentialViewReceipt(message: ChatMessage) {
+        L.i { "[Confidential] Send view receipt, messageId: ${message.id}, timestamp: ${message.timeStamp}" }
+        confidentialViewReceipt.onNext(message)
     }
 
     fun quoteMessage(data: ChatMessage) {
@@ -379,6 +393,37 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     fun deleteMessage(messageId: String) {
         dbMessageStore.deleteMessage(listOf(messageId))
+    }
+
+    // ========== Confidential placeholder: track seen placeholders, batch delete on page close ==========
+    private val pendingConfidentialPlaceholders = mutableSetOf<Long>()
+
+    /**
+     * Record the timestamp of a seen confidential placeholder message.
+     * Called during scroll and after list updates. Only records, does not delete.
+     */
+    fun markConfidentialPlaceholderAsSeen(timestamp: Long) {
+        pendingConfidentialPlaceholders.add(timestamp)
+    }
+
+    /**
+     * Batch delete seen placeholder messages on page close.
+     */
+    suspend fun processPendingConfidentialPlaceholders() {
+        if (pendingConfidentialPlaceholders.isEmpty()) return
+
+        withContext(Dispatchers.IO) {
+            val timestamps = pendingConfidentialPlaceholders.toList()
+            pendingConfidentialPlaceholders.clear()
+
+            timestamps.forEach { timestamp ->
+                val messageModel = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp))
+                if (messageModel != null) {
+                    messageModel.delete()
+                    L.i { "[Confidential] Deleted placeholder message -> timestamp:${timestamp}" }
+                }
+            }
+        }
     }
 
     fun emojiReaction(emojiEvent: EmojiReactionEvent) {
@@ -643,12 +688,11 @@ class ChatMessageViewModel @AssistedInject constructor(
                 false
             }
 
-            val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat).blockingGet()
+            val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat).await()
             if (currentReadPosition > lastReadPosition) {
                 val messages = wcdb.message.getAllObjects(
                     DBMessageModel.roomId.eq(forWhat.id)
                         .and(DBMessageModel.fromWho.notEq(globalServices.myId))
-                        .and(DBMessageModel.mode.eq(0))
                         .and(DBMessageModel.systemShowTimestamp.between(lastReadPosition, currentReadPosition))
                 )
 
@@ -738,12 +782,12 @@ class ChatMessageViewModel @AssistedInject constructor(
 //        )
 //    }
 
-    fun getUnreadMessageInfo(): UnreadMessageInfo? {
-        try {
-            return dbRoomStore.getUnreadMessageInfo(forWhat).blockingGet()
+    suspend fun getUnreadMessageInfo(): UnreadMessageInfo? {
+        return try {
+            dbRoomStore.getUnreadMessageInfo(forWhat).await()
         } catch (e: Exception) {
             L.e { "[${forWhat.id}] Error getting unread message info: ${e.stackTraceToString()}" }
-            return null
+            null
         }
     }
 
@@ -759,24 +803,70 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     fun selectedMessage(messageId: String, selected: Boolean) {
-        var state = selectMessagesState.value
-        val newSelectMessageState = if (selected) {
-            state.copy(selectedMessageIds = state.selectedMessageIds + messageId)
-        } else {
-            state.copy(selectedMessageIds = state.selectedMessageIds - messageId)
+        viewModelScope.launch(Dispatchers.IO) {
+            val state = selectMessagesState.value
+            val newSelectedIds = if (selected) {
+                state.selectedMessageIds + messageId
+            } else {
+                state.selectedMessageIds - messageId
+            }
+            // Recalculate recallable messages based on new selection
+            val recallableIds = calculateRecallableMessageIds(newSelectedIds)
+            selectMessagesState.value = state.copy(
+                selectedMessageIds = newSelectedIds,
+                recallableMessageIds = recallableIds
+            )
         }
-        selectMessagesState.value = newSelectMessageState
     }
 
     fun selectModel(enable: Boolean) {
         val totalMessageCount = dbMessageStore.selectableMessageCount(forWhat)
-        // 关闭选择模式时清空已选消息
+        // 关闭选择模式时清空已选消息和可撤回消息
         val selectedIds = if (enable) selectMessagesState.value.selectedMessageIds else emptySet()
+        val recallableIds = if (enable) selectMessagesState.value.recallableMessageIds else emptySet()
         selectMessagesState.value = selectMessagesState.value.copy(
             editModel = enable,
             selectedMessageIds = selectedIds,
-            totalMessageCount = totalMessageCount
+            totalMessageCount = totalMessageCount,
+            recallableMessageIds = recallableIds
         )
+    }
+
+    /**
+     * Calculate which selected messages can be recalled
+     * Recall conditions: message.isMine && isWithinRecallTimeout
+     */
+    private suspend fun calculateRecallableMessageIds(selectedIds: Set<String>): Set<String> {
+        if (selectedIds.isEmpty()) return emptySet()
+        
+        val myId = globalServices.myId
+        val recallTimeoutInterval = (globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.recall?.timeoutInterval ?: (24 * 60 * 60)) * 1000L
+        val currentTime = System.currentTimeMillis()
+        
+        val messages = wcdb.message.getAllObjects(
+            DBMessageModel.id.`in`(*selectedIds.toTypedArray())
+        )
+        
+        return messages.filter { message ->
+            message.fromWho == myId && (currentTime - message.systemShowTimestamp <= recallTimeoutInterval)
+        }.map { it.id }.toSet()
+    }
+
+    // Event for batch recall using SharedFlow
+    private val _batchRecallMessages = MutableSharedFlow<Set<String>>()
+    val batchRecallMessages: SharedFlow<Set<String>> = _batchRecallMessages.asSharedFlow()
+
+    /**
+     * Called when user clicks the batch recall button
+     * Emits the set of recallable message IDs for the Fragment to handle
+     */
+    fun onBatchRecallClick() {
+        val recallableIds = selectMessagesState.value.recallableMessageIds
+        if (recallableIds.isNotEmpty()) {
+            viewModelScope.launch {
+                _batchRecallMessages.emit(recallableIds)
+            }
+        }
     }
 
     fun onForwardClick() = viewModelScope.launch(Dispatchers.IO) {
@@ -856,7 +946,11 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     private fun resetSelectMessageState() {
-        selectMessagesState.value = selectMessagesState.value.copy(editModel = false, selectedMessageIds = emptySet())
+        selectMessagesState.value = selectMessagesState.value.copy(
+            editModel = false,
+            selectedMessageIds = emptySet(),
+            recallableMessageIds = emptySet()
+        )
     }
 
     fun onSaveSelectedMessages() = viewModelScope.launch(Dispatchers.IO) {

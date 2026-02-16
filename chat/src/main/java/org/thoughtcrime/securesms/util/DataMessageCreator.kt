@@ -165,7 +165,6 @@ class DataMessageCreator @Inject constructor(
                 }
             } ?: emptyList()
         val attachment = wcdb.attachment.getFirstObject(DBAttachmentModel.messageId.eq(textMessage.id))
-        L.d { attachment.toString() }
         val signalServiceAttachment: AttachmentPointer? = attachment?.let {
             attachmentPointer {
                 cdnNumber = 0
@@ -204,9 +203,42 @@ class DataMessageCreator @Inject constructor(
                     type = SignalServiceProtos.DataMessage.Group.Type.DELIVER
                 }
             }?.let(::group::set)
-            requiredProtocolVersion = SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE
+            requiredProtocolVersion = calculateRequiredProtocolVersion(textMessage)
         }
+        L.i { "[Message] createDataMessage -> messageId:${textMessage.id}, requiredProtocolVersion:${createdDataMessage.requiredProtocolVersion}" }
         return createdDataMessage
+    }
+
+    /**
+     * Calculate the minimum required protocol version based on message content.
+     * This allows older clients to display "unsupported message" for features they don't support.
+     */
+    private fun calculateRequiredProtocolVersion(textMessage: TextMessage): Int {
+        var version = SignalServiceProtos.DataMessage.ProtocolVersion.INITIAL_VALUE
+
+        if (textMessage.forwardContext != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.FORWARD_VALUE)
+        }
+        if (!textMessage.sharedContact.isNullOrEmpty()) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CONTACT_VALUE)
+        }
+        if (textMessage.recall != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.RECALL_VALUE)
+        }
+        if (!textMessage.reactions.isNullOrEmpty()) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.REACTION_VALUE)
+        }
+        if (textMessage.card != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CARD_VALUE)
+        }
+        if (textMessage.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CONFIDE_VALUE)
+        }
+        if (textMessage.screenShot != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.SCREEN_SHOT_VALUE)
+        }
+
+        return version
     }
 
     private fun getForwardAttachments(forwardContext: ForwardContext): List<Attachment> {

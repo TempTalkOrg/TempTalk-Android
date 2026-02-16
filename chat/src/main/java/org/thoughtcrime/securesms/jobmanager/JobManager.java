@@ -13,7 +13,6 @@ import androidx.annotation.WorkerThread;
 import com.difft.android.base.log.lumberjack.L;
 
 import util.ThreadUtil;
-import util.logging.Log;
 import org.thoughtcrime.securesms.jobmanager.impl.DefaultExecutorFactory;
 import org.thoughtcrime.securesms.jobmanager.impl.JsonDataSerializer;
 import org.thoughtcrime.securesms.jobmanager.persistence.JobSpec;
@@ -287,7 +286,7 @@ public class JobManager implements ConstraintObserver.Notifier {
                 return Optional.empty();
             }
         } catch (InterruptedException e) {
-            L.w(() -> "Interrupted during runSynchronously()" + e);
+            L.w(e, () -> "Interrupted during runSynchronously()");
             return Optional.empty();
         }
 
@@ -315,7 +314,7 @@ public class JobManager implements ConstraintObserver.Notifier {
                 return "Timed out waiting for Job info.";
             }
         } catch (InterruptedException e) {
-            L.w(() -> "Failed to retrieve Job info." + e);
+            L.w(e, () -> "Failed to retrieve Job info.");
             return "Failed to retrieve Job info.";
         }
     }
@@ -361,7 +360,7 @@ public class JobManager implements ConstraintObserver.Notifier {
             latch.await();
             L.i(() -> "Successfully flushed.");
         } catch (InterruptedException e) {
-            L.w(() -> "Failed to finish flushing." + e);
+            L.w(e, () -> "Failed to finish flushing.");
         }
     }
 

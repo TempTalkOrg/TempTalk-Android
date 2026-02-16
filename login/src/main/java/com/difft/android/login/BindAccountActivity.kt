@@ -1,6 +1,7 @@
 package com.difft.android.login
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -11,8 +12,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.widget.doOnTextChanged
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.rx3.await
 import com.difft.android.base.utils.dp
 import com.difft.android.login.databinding.ActivityBindAccountBinding
 import com.difft.android.login.repo.BindRepo
@@ -159,62 +162,53 @@ class BindAccountActivity : BaseActivity() {
     private fun verifyAccount(nonce: String?) {
         val account = mBinding.account.text.toString().trim()
         val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
-//        viewModel.verifyEmail(basicAuth, email)
 
         loadingHandleZone()
 
-        if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
-            bindRepo.verifyEmail(basicAuth, account, nonce)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
+        lifecycleScope.launch {
+            try {
+                if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
+                    val result = bindRepo.verifyEmail(basicAuth, account, nonce).await()
                     enableHandleZone()
-                    if (it.status == 0) {
+                    if (result.status == 0) {
                         val bundle = VerifyCodeActivity.createBundle(false, type, account, nonce)
                         activityLauncher.launch(Intent(this@BindAccountActivity, VerifyCodeActivity::class.java).putExtras(bundle))
                     } else {
-                        if (it.status == 24) {
-                            it.data?.nonce?.let { nonce ->
-                                showAlreadyLinkedDialog(nonce)
-                            } ?: {
+                        if (result.status == 24) {
+                            result.data?.nonce?.let { nonceValue ->
+                                showAlreadyLinkedDialog(nonceValue)
+                            } ?: run {
                                 showInvalidView("Nonce is null")
                             }
                         } else {
-                            showInvalidView(it.reason)
+                            showInvalidView(result.reason)
                         }
                     }
-                }, {
-                    it.printStackTrace()
+                } else {
+                    val countryCode = mBinding.tvPhoneCode.text.toString().trim()
+                    val fullAccount = countryCode + account
+                    val result = bindRepo.verifyPhone(basicAuth, fullAccount, nonce).await()
                     enableHandleZone()
-                    showInvalidView(it.message)
-                })
-        } else {
-            val countryCode = mBinding.tvPhoneCode.text.toString().trim()
-            val fullAccount = countryCode + account
-            bindRepo.verifyPhone(basicAuth, fullAccount, nonce)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    enableHandleZone()
-                    if (it.status == 0) {
+                    if (result.status == 0) {
                         val bundle = VerifyCodeActivity.createBundle(false, type, fullAccount, nonce)
                         activityLauncher.launch(Intent(this@BindAccountActivity, VerifyCodeActivity::class.java).putExtras(bundle))
                     } else {
-                        if (it.status == 10109) {
-                            it.data?.nonce?.let { nonce ->
-                                showAlreadyLinkedDialog(nonce)
-                            } ?: {
+                        if (result.status == 10109) {
+                            result.data?.nonce?.let { nonceValue ->
+                                showAlreadyLinkedDialog(nonceValue)
+                            } ?: run {
                                 showInvalidView("Nonce is null")
                             }
                         } else {
-                            showInvalidView(it.reason)
+                            showInvalidView(result.reason)
                         }
                     }
-                }, {
-                    it.printStackTrace()
-                    enableHandleZone()
-                    showInvalidView(it.message)
-                })
+                }
+            } catch (e: Exception) {
+                L.w { "[BindAccountActivity] error: ${e.stackTraceToString()}" }
+                enableHandleZone()
+                showInvalidView(e.message)
+            }
         }
     }
 

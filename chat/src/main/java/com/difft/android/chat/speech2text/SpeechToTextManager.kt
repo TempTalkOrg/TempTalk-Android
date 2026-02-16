@@ -21,7 +21,7 @@ import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
 import okhttp3.RequestBody
 import util.FileUtils
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import java.io.File
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -29,7 +29,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SpeechToTextManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ){
 
     companion object {

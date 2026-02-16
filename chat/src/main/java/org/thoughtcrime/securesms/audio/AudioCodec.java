@@ -45,7 +45,7 @@ public class AudioCodec implements Recorder {
         try {
             audioRecord.startRecording();
         } catch (Exception e) {
-            L.w(e::toString);
+            L.w(e, () -> "[AudioCodec] startRecording error: ");
             mediaCodec.release();
             throw new IOException(e);
         }
@@ -83,25 +83,25 @@ public class AudioCodec implements Recorder {
                         if (!running) break;
                     }
                 } catch (IOException e) {
-                    L.w(e::toString);
+                    L.w(e, () -> "[AudioCodec] recording thread error: ");
                 } finally {
 
                     try {
                         mediaCodec.stop();
                     } catch (IllegalStateException ise) {
-                        L.w(() -> "mediaCodec stop failed." + ise);
+                        L.w(ise, () -> "mediaCodec stop failed.");
                     }
 
                     try {
                         audioRecord.stop();
                     } catch (IllegalStateException ise) {
-                        L.w(() -> "audioRecord stop failed." + ise);
+                        L.w(ise, () -> "audioRecord stop failed.");
                     }
 
                     try {
                         mediaCodec.release();
                     } catch (IllegalStateException ise) {
-                        L.w(() -> "mediaCodec release failed. Probably already released." + ise);
+                        L.w(ise, () -> "mediaCodec release failed. Probably already released.");
                     }
 
                     audioRecord.release();
@@ -210,7 +210,7 @@ public class AudioCodec implements Recorder {
         try {
             mediaCodec.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         } catch (Exception e) {
-            L.w(e::toString);
+            L.w(e, () -> "[AudioCodec] createMediaCodec configure error: ");
             mediaCodec.release();
             throw new IOException(e);
         }

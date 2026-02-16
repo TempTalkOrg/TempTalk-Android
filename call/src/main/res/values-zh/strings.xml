@@ -20,6 +20,8 @@
     <string name="call_push_stream_limit_tip">当前服务器已达到推流上限，请稍候再试。</string>
     <string name="call_connect_timeout_tip">连接超时，请稍后重试。</string>
     <string name="call_connect_exception_error">无法连接服务器，请稍后再试。</string>
+    <string name="call_e2ee_key_error">无法解密通话密钥</string>
+    <string name="call_connect_error_ended">通话已结束</string>
     <string name="call_no_internet_connection_tip">当前无网络连接，请检查后重试。</string>
     <string name="call_other_exception_error">异常错误</string>
     <string name="call_enable_camera_not_implemented_error">当前设备暂不支持打开摄像头，本次通话将以语音方式进行。</string>
@@ -36,11 +38,11 @@
     <string name="call_barrage_message_close_mic">关闭了麦克风 🔕</string>
     <string name="call_barrage_message_screensharing">开始屏幕分享 🖥</string>
     <string name="call_barrage_message_countdown_timer">starts a countdown timer</string>
-    <string name="call_barrage_message_critical_alert_success">sent a critical alert</string>
-    <string name="call_barrage_message_critical_alert_failed">发送重要提醒失败，请重试。</string>
+    <string name="call_barrage_message_critical_alert_success">发起紧急联络成功</string>
+    <string name="call_barrage_message_critical_alert_failed">发送紧急联络失败，请重试。</string>
     <string name="call_barrage_message_critical_alert_limited">发送过于频繁，请稍后重试。</string>
     <string name="call_attendees">参会者</string>
-    <string name="call_barrage_broadcast_message_tip">发送给所有人</string>
+    <string name="call_barrage_send">发送</string>
     <string name="call_other_network_poor_tip">当前通话对方网络不佳。</string>
     <string name="call_myself_network_poor_tip">当前通话你的网络不佳。</string>
     <string name="call_current_audio_device">%s ✓</string>
@@ -54,7 +56,9 @@
     <string name="call_toolbar_bottom_invite_text">邀请</string>
     <string name="call_toolbar_bottom_raise_hand_text">举手</string>
     <string name="call_toolbar_bottom_switch_text">翻转</string>
-    <string name="call_toolbar_bottom_critical_alert_text">重要提醒</string>
+    <string name="call_toolbar_bottom_critical_alert_text">紧急联络</string>
+    <string name="call_topbar_critical_alert_entrance_text1">没有回应？</string>
+    <string name="call_topbar_critical_alert_entrance_text2">发起紧急联络。</string>
     <string name="call_join_failed_tip">加入会议失败，请重试。</string>
     <string name="call_start_failed_tip">发起会议失败，请重试。</string>
     <string name="call_chat_header_1v1_another_device">使用其他设备通话中</string>
@@ -115,8 +119,27 @@
     <string name="fullscreen_notification_no_permission_huawei_tip">请为%s开启“后台弹窗”权限，以确保您在设备锁屏时也能正常接听来电。</string>
     <string name="fullscreen_notification_no_permission_xiaomi_tip">请为%s开启“后台弹出界面”权限，以确保您在设备锁屏时也能正常接听来电。</string>
     <string name="fullscreen_notification_no_permission_china_default_tip">请为%s启用“横幅通知”，以确保您在设备锁屏时也能正常接听来电。</string>
-    <string name="notification_critical_alert_title_default">重要提醒</string>
+    <string name="notification_critical_alert_title_default">紧急联络</string>
     <string name="notification_critical_alert_content_default">点击立即联系。</string>
-    <string name="notification_critical_alert_content_from">来自 %s 的重要提醒。</string>
+    <string name="notification_critical_alert_content_from">来自 %s 的紧急联络。</string>
     <string name="join_call">加入</string>
+    <string name="call_invite_members_title">邀请成员</string>
+    <string name="call_invite_members">成员</string>
+    <string name="call_invite_add">添加…</string>
+    <string name="call_invite_add_new_member">添加新成员</string>
+    <string name="call_invite_search_placeholder">搜索</string>
+    <string name="call_invite_add_contacts">添加联系人</string>
+    <string name="call_invite_done">完成</string>
+    <string name="call_invite_cancel">取消</string>
+    <string name="call_invite_search_no_result">未找到结果</string>
+    <string name="call_invite_member_tag">已在会议中</string>
+    <string name="call_end_forall_toast_title">仍有人正在发言</string>
+    <string name="call_end_forall_toast_message">是否确定要结束会议？</string>
+    <string name="call_critical_alert_confirm_view_message_group">发送给未入会的群成员。</string>
+    <string name="call_critical_alert_confirm_view_message_group_invitees">发送给未入会的群成员和邀请的人（%s）。</string>
+    <string name="call_critical_alert_confirm_view_message_instant">发送给 %s。</string>
+    <string name="call_critical_alert_confirm_view_message_invitees">和其他%s人</string>
+    <string name="call_critical_alert_confirm_view_button_send">发送</string>
+    <string name="call_critical_alert_tooltip">可突破静音和勿扰模式，仅用于紧急情况。</string>
+
 </resources>

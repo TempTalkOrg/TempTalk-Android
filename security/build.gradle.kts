@@ -21,6 +21,7 @@ android {
             cmake {
                 cppFlags("-std=c++17", "-fvisibility=hidden", "-fvisibility-inlines-hidden")
                 cFlags("-fvisibility=hidden", "-fvisibility-inlines-hidden")
+                arguments("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
             }
         }
     }
@@ -33,4 +34,5 @@ android {
 }
 
 dependencies {
+    implementation(project(":base"))
 }

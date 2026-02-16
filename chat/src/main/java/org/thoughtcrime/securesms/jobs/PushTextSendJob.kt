@@ -8,6 +8,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.MD5Utils
+import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.SecureSharedPrefsUtil
@@ -63,7 +64,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.security.MessageDigest
-import java.util.Random
+import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
@@ -152,10 +153,7 @@ class PushTextSendJob @AssistedInject constructor(
             result.success?.let {
                 if (textMessage.recall != null) {// recall消息成功，需要删除对应消息
                     wcdb.message.getFirstObject(DBMessageModel.id.eq(textMessage.id))?.delete()
-                } else if (!textMessage.reactions.isNullOrEmpty()) { // emoji reaction消息成功，更新数据
-                    textMessage.reactions?.firstOrNull()?.let { reaction ->
-                        messageStore.updateMessageReaction(textMessage.forWhat.id, reaction, null, null)
-                    }
+                    RecallResultTracker.emitResult(textMessage.id, true)
                 } else {
                     textMessage.systemShowTimestamp = it.systemShowTimestamp
                     textMessage.notifySequenceId = it.notifySequenceId
@@ -163,6 +161,9 @@ class PushTextSendJob @AssistedInject constructor(
                 }
                 updateMessage(SendType.Sent.rawValue)
             } ?: {
+                if (textMessage.recall != null) {
+                    RecallResultTracker.emitResult(textMessage.id, false)
+                }
                 updateMessage(SendType.SentFailed.rawValue)
             }
         } catch (e: Exception) {
@@ -170,16 +171,12 @@ class PushTextSendJob @AssistedInject constructor(
 
             // 处理已知的特定异常，这些异常不需要重试
             if (e is NonSuccessfulResponseCodeException) {
-                when (e.code) {
-                    430 -> {
-                        updateMessage(SendType.SentFailed.rawValue)
-                        return // 不重试，直接返回
-                    }
+                val shouldReturn = when (e.code) {
+                    430 -> true
 
                     432 -> { // 非好友限制为每天最多发送三条消息
                         appScope.launch { localMessageCreator.createNonFriendLimitMessage(textMessage.forWhat) }
-                        updateMessage(SendType.SentFailed.rawValue)
-                        return // 不重试，直接返回
+                        true
                     }
 
                     404 -> {
@@ -196,9 +193,18 @@ class PushTextSendJob @AssistedInject constructor(
                         } else { // 账号不可用
                             appScope.launch { localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED) }
                         }
-                        updateMessage(SendType.SentFailed.rawValue)
-                        return // 不重试，直接返回
+                        true
                     }
+                    
+                    else -> false
+                }
+                
+                if (shouldReturn) {
+                    if (textMessage.recall != null) {
+                        RecallResultTracker.emitResult(textMessage.id, false)
+                    }
+                    updateMessage(SendType.SentFailed.rawValue)
+                    return // 不重试，直接返回
                 }
             }
 
@@ -207,6 +213,9 @@ class PushTextSendJob @AssistedInject constructor(
                 throw e
             } else {
                 L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Exception no need to retry, failing directly, RetryCount: $runAttempt, Exception: ${e.stackTraceToString()}" }
+                if (textMessage.recall != null) {
+                    RecallResultTracker.emitResult(textMessage.id, false)
+                }
                 updateMessage(SendType.SentFailed.rawValue)
             }
         }
@@ -269,8 +278,8 @@ class PushTextSendJob @AssistedInject constructor(
      * 2. Then updating timestamps and status in one database operation
      */
     private fun updateMessage(status: Int) {
-        // Skip update for screenshot, reaction, and recall messages
-        if (textMessage.screenShot != null || textMessage.recall != null || textMessage.reactions?.isNotEmpty() == true) {
+        // Skip update for reaction and recall messages
+        if (textMessage.recall != null || textMessage.reactions?.isNotEmpty() == true) {
             return
         }
 
@@ -356,10 +365,10 @@ class PushTextSendJob @AssistedInject constructor(
             val digest256 = MessageDigest.getInstance("SHA-256")
             digest256.update(originKey)
             val fileHashByte = digest256.digest()
-            val fileHash = com.difft.android.websocket.util.Base64.encodeBytes(fileHashByte)
+            val fileHash = com.difft.android.base.utils.Base64.encodeBytes(fileHashByte)
 
             val iv = ByteArray(16)
-            Random().nextBytes(iv)
+            SecureRandom().nextBytes(iv)
             val ivParameterSpec = IvParameterSpec(iv)
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             val aesKeySpec = SecretKeySpec(originKey, 0, 32, "AES")
@@ -397,6 +406,7 @@ class PushTextSendJob @AssistedInject constructor(
             }
 
             var lastEmitTime = System.currentTimeMillis()
+            var lastEmitProgress = 0
             val fileExistResponse = fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, recipientIds)).execute()
             if (fileExistResponse.isSuccessful) {
                 fileExistResponse.body()?.data?.let { res ->
@@ -415,9 +425,11 @@ class PushTextSendJob @AssistedInject constructor(
                                 val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
                                     override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
                                         val currentTime = System.currentTimeMillis()
-                                        if ((currentTime - lastEmitTime >= 200)) {
+                                        // Update every 50ms or when progress changes by >=5%
+                                        if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
                                             FileUtil.emitProgressUpdate(textMessage.id, progress)
                                             lastEmitTime = currentTime
+                                            lastEmitProgress = progress
                                         }
                                     }
                                 })
@@ -510,6 +522,9 @@ class PushTextSendJob @AssistedInject constructor(
 
     override fun onFailure() {
         L.w { "[Message] Job最终失败 - MessageID: ${textMessage.id}, Target: ${textMessage.forWhat.id}, 最终重试次数: ${getRunAttempt()}, JobID: ${getId()}" }
+        if (textMessage.recall != null) {
+            RecallResultTracker.emitResult(textMessage.id, false)
+        }
         updateMessage(SendType.SentFailed.rawValue)
     }
 

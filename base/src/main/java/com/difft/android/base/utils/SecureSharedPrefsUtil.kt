@@ -42,7 +42,7 @@ object SecureSharedPrefsUtil {
                 putString(key, value)
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[SecureSharedPrefsUtil] error: ${e.stackTraceToString()}" }
             L.w { "[SecureSharedPrefsUtil] putString fail:$key===${e.stackTraceToString()}" }
         }
     }
@@ -55,7 +55,7 @@ object SecureSharedPrefsUtil {
                 defaultValue
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[SecureSharedPrefsUtil] error: ${e.stackTraceToString()}" }
             L.w { "[SecureSharedPrefsUtil] getString fail:$key===${e.stackTraceToString()}" }
             return defaultValue
         }

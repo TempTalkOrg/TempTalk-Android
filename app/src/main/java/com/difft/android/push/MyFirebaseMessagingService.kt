@@ -11,7 +11,7 @@ import com.difft.android.chat.PendingMessageHelper
 import com.difft.android.chat.data.NOTIFY_TYPE_CALL_HANGUP
 import com.difft.android.chat.data.PushCustomContent
 import com.difft.android.websocket.api.util.EnvelopDeserializer
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.google.gson.Gson
@@ -45,7 +45,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
                 when(pushCustomContent.critical) {
                     0 -> handleNormalMessage(entryPoint, pushCustomContent)
-                    1 -> handleCriticalAlertMessage(entryPoint, pushCustomContent)
+                    1 -> handleCriticalAlertMessage(entryPoint, pushCustomContent, remoteMessage.sentTime)
                     else -> {
                         L.w { "[fcm] Unknown critical value: ${pushCustomContent.critical}" }
                     }
@@ -58,11 +58,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             entryPoint.pendingMessageHelper.schedulePendingMessageWork()
         } catch (e: Exception) {
             L.i { "[fcm] onMessageReceived error - $e , ${remoteMessage.data}" }
-            e.printStackTrace()
         }
     }
 
-    private fun handleCriticalAlertMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent)  {
+    private fun handleCriticalAlertMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent, sentTime: Long)  {
 
         val gid = pushCustomContent.gid
         val uid = pushCustomContent.uid
@@ -77,21 +76,31 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         appScope.launch {
             withContext(Dispatchers.IO) {
-                L.i { "[CriticalAlert] handle fcm critical alert: id=${forWhat.id}, timestamp=$timestamp" }
-                val conversationId = forWhat.id
-                val source = pushCustomContent.uid
-                if (source == null) {
-                    L.w { "[Call] handle fcm critical alert: no source uid" }
-                    return@withContext
-                }
-                if (source == globalServices.myId) {
-                    L.w { "[CriticalAlert] handle fcm critical alert: source is myself, do not show notification" }
-                    return@withContext
-                }
+                try {
+                    L.i { "[CriticalAlert] handle fcm critical alert: id=${forWhat.id}, timestamp=$timestamp, sentTime=$sentTime" }
+                    if (!entryPoint.messageNotificationUtil.isCriticalAlertTimestampValid(sentTime)) {
+                        L.w { "[CriticalAlert] handle fcm critical alert: sentTime expired, skip. sentTime=$sentTime" }
+                        return@withContext
+                    }
+                    val conversationId = forWhat.id
+                    val source = pushCustomContent.uid
+                    val roomId = pushCustomContent.roomId
+                    if (source == null) {
+                        L.w { "[Call] handle fcm critical alert: no source uid" }
+                        return@withContext
+                    }
+                    if (source == globalServices.myId) {
+                        L.w { "[CriticalAlert] handle fcm critical alert: source is myself, do not show notification" }
+                        return@withContext
+                    }
 
-                val (title, content) = LCallManager.getCriticalAlertNotificationContent(conversationId, source)
-                entryPoint.messageNotificationUtil
-                    .showCriticalAlert(forWhat, title, content, timestamp)
+                    val (title, content) = LCallManager.getCriticalAlertNotificationContent(conversationId, source)
+                    entryPoint.messageNotificationUtil
+                        .showCriticalAlert(forWhat, title, content, timestamp, roomId)
+
+                } catch (e: Exception) {
+                    L.w { "[fcm] Processing critical message error: ${e.stackTraceToString()}" }
+                }
             }
         }
     }

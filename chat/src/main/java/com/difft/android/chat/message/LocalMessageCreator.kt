@@ -38,7 +38,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class LocalMessageCreator @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val messageStore: MessageStore,
     private val messageArchiveManager: MessageArchiveManager
 ) {
@@ -218,68 +218,6 @@ class LocalMessageCreator @Inject constructor(
         }.onFailure { error ->
             L.e { "[$TAG] createOfflineMessage error: ${error.message}" }
         }
-    }
-
-    /**
-     * 创建截图消息
-     *
-     * @param forWhat 消息所属会话
-     * @param messageId 消息ID
-     * @param userId 截图者用户ID
-     * @param notifySequenceId 通知序列ID
-     * @param sequenceId 序列ID
-     * @param timestamp 时间戳
-     * @param systemShowTimestamp 系统显示时间戳
-     * @param expiresInSeconds 过期时间
-     * @param saveToLocal 是否保存到本地数据库
-     * @return NotifyMessage 对象
-     */
-    suspend fun createScreenShotMessage(
-        forWhat: For,
-        messageId: String,
-        userId: String,
-        notifySequenceId: Long,
-        sequenceId: Long,
-        timestamp: Long,
-        systemShowTimestamp: Long,
-        expiresInSeconds: Int,
-        saveToLocal: Boolean = true
-    ): NotifyMessage = withContext(Dispatchers.IO) {
-        val name = if (userId == globalServices.myId) {
-            ResUtils.getString(R.string.you)
-        } else {
-            runCatching {
-                ContactorUtil.getContactWithID(context, userId).await().orElse(null)?.getDisplayNameForUI()
-            }.getOrNull() ?: userId.formatBase58Id()
-        }
-        val signalNotifyMessage = TTNotifyMessage(
-            Data(TTNotifyMessage.NOTIFY_ACTION_TYPE_SCREEN_SHOT),
-            timestamp,
-            TTNotifyMessage.NOTIFY_MESSAGE_TYPE_LOCAL
-        )
-        signalNotifyMessage.showContent = ResUtils.getString(R.string.chat_took_a_screen_shot, name)
-
-        val message = NotifyMessage(
-            messageId,
-            For.Account(userId),
-            forWhat,
-            systemShowTimestamp,
-            timestamp,
-            System.currentTimeMillis(),
-            SendType.Sent.rawValue,
-            expiresInSeconds,
-            notifySequenceId,
-            sequenceId,
-            0,
-            gson.toJson(signalNotifyMessage)
-        )
-
-        if (saveToLocal) {
-            messageStore.putWhenNonExist(message)
-            L.i { "[$TAG] createScreenShotMessage saved, messageId=$messageId" }
-        }
-
-        message
     }
 
     /**

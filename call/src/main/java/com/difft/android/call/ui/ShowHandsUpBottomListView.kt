@@ -18,13 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.HandUpUserInfo
 import com.difft.android.call.util.StringUtil
@@ -60,12 +60,12 @@ fun ShowHandsUpBottomListView(viewModel: LCallViewModel, handUpUserInfo: HandUpU
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-                text = StringUtil.getShowUserName(handUpUserInfo.userName, 10),
+                text = StringUtil.truncateWithEllipsis(handUpUserInfo.userName, 10),
                 // SF/P2
                 style = TextStyle(
                     fontSize = fontSize.sp,
                     lineHeight = lineHeight.sp,
-                    fontFamily = SfProFont,
+                    fontFamily = FontFamily.Default,
                     fontWeight = FontWeight(400),
                     color = colorResource(id = com.difft.android.base.R.color.t_white),
                 )
@@ -91,7 +91,7 @@ fun ShowHandsUpBottomListView(viewModel: LCallViewModel, handUpUserInfo: HandUpU
                 style = TextStyle(
                     fontSize = fontSize.sp,
                     lineHeight = lineHeight.sp,
-                    fontFamily = SfProFont,
+                    fontFamily = FontFamily.Default,
                     fontWeight = FontWeight(400),
                     color = colorResource(id = com.difft.android.base.R.color.t_secondary_night),
                 )

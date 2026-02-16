@@ -4,7 +4,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.chat.R
+import com.difft.android.base.R
 import com.difft.android.chat.contacts.data.getSortLetter
 import org.difft.app.database.models.ContactorModel
 

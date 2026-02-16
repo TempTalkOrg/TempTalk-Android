@@ -8,7 +8,6 @@ import com.bumptech.glide.Glide
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.dp
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -18,6 +17,8 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.rx3.awaitFirst
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -30,63 +31,38 @@ import javax.crypto.spec.SecretKeySpec
 
 object GroupAvatarUtil {
 
-    suspend fun saveBitmapFile(attachmentId: String, bitmap: Bitmap, size: AvatarCacheSize) {
-        withContext(Dispatchers.IO) {
-            try {
-                val bos = BufferedOutputStream(FileOutputStream(getGroupAvatarFile(attachmentId, size)))
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, bos)
-                bos.flush()
-                bos.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+    private fun saveToCache(attachmentId: String, bytes: ByteArray) {
+        try {
+            getNewCacheFile(attachmentId).writeBytes(bytes)
+        } catch (e: Exception) {
+            L.e { "[GroupAvatarUtil] saveToCache error: ${e.message}" }
         }
     }
 
-    enum class AvatarCacheSize {
-        BIG, SMALL
+    /**
+     * Get existing cache file, checking new format first, then legacy _SMALL format
+     */
+    fun getCacheFile(attachmentId: String): File? {
+        val baseName = "avatar_$attachmentId"
+        val cacheDir = FileUtil.getFilePath(FileUtil.FILE_DIR_GROUP_AVATAR)
+
+        // Check new format (no suffix)
+        val newFile = File(cacheDir, baseName)
+        if (newFile.exists()) return newFile
+
+        // Check legacy format (_SMALL)
+        val legacyFile = File(cacheDir, "${baseName}_SMALL")
+        if (legacyFile.exists()) return legacyFile
+
+        return null
     }
 
-    fun getGroupAvatarFile(attachmentId: String, size: AvatarCacheSize): File {
-        val fileName = "avatar_${attachmentId}_${size}"
-        val filePath = "${FileUtil.getFilePath(FileUtil.FILE_DIR_GROUP_AVATAR)}$fileName"
-        return File(filePath)
-    }
-
-    // 加载图片并保存到本地
-    suspend fun loadAndSaveBitmap(context: Context, content: Any, attachmentId: String, imageView: ImageView, size: AvatarCacheSize) {
-        // 获取 ImageView 尺寸，如果没有则使用默认值
-        val targetWidth = if (imageView.width > 0) imageView.width else {
-            when (size) {
-                AvatarCacheSize.SMALL -> 50.dp
-                AvatarCacheSize.BIG -> -1
-            }
-        }
-
-        val targetHeight = if (imageView.height > 0) imageView.height else {
-            when (size) {
-                AvatarCacheSize.SMALL -> 50.dp
-                AvatarCacheSize.BIG -> -1
-            }
-        }
-
-        L.d { "[GroupAvatarUtil] loadAndSaveBitmap targetWidth:${targetWidth} targetHeight:${targetHeight}" }
-
-        // 直接获取调整后的 Bitmap（已经在 IO 线程中，不需要 withContext）
-        val bitmap = Glide.with(context)
-            .asBitmap()
-            .load(content)
-            .submit(targetWidth, targetHeight)
-            .get()
-
-        // 保存到本地
-        saveBitmapFile(attachmentId, bitmap, size)
-
-        // 设置到 ImageView
-        withContext(Dispatchers.Main) {
-            imageView.visibility = android.view.View.VISIBLE
-            imageView.setImageBitmap(bitmap)
-        }
+    /**
+     * Get file path for saving new cache (always uses new format without suffix)
+     */
+    private fun getNewCacheFile(attachmentId: String): File {
+        val fileName = "avatar_$attachmentId"
+        return File(FileUtil.getFilePath(FileUtil.FILE_DIR_GROUP_AVATAR), fileName)
     }
 
     @dagger.hilt.EntryPoint
@@ -99,15 +75,17 @@ object GroupAvatarUtil {
         fun fileClient(): ChativeHttpClient
     }
 
-    // 重构为协程版本
+    /**
+     * Fetch and decrypt group avatar from server.
+     */
     suspend fun fetchGroupAvatar(context: Context, groupAvatarData: GroupAvatarData): ByteArray {
         try {
-            // 1. 获取下载 URL
+            // Get download URL
             val downloadUrlResponse = EntryPointAccessors.fromApplication<EntryPoint>(context)
                 .chatHttpClient()
                 .httpService
                 .getDownloadUrl(SecureSharedPrefsUtil.getBasicAuth(), groupAvatarData.serverId ?: "")
-                .blockingGet()
+                .await()
 
             val location = downloadUrlResponse.location
             if (location.isNullOrEmpty()) {
@@ -115,22 +93,19 @@ object GroupAvatarUtil {
                 throw NetworkException(message = "get group avatar location is null")
             }
 
-            // 2. 下载文件内容
+            // Download file content
             val responseBody = EntryPointAccessors.fromApplication<EntryPoint>(context)
                 .fileClient()
                 .httpService
                 .getResponseBody(location, emptyMap(), emptyMap())
-                .blockingFirst()
+                .awaitFirst()
 
             val bytes = responseBody.bytes()
-            L.d { "[GroupAvatarUtil] fetchGroupAvatar success: ${bytes.size}" }
 
-            // 3. 解密数据
+            // Decrypt data
             val decryptPass: ByteArray = Base64.decode(groupAvatarData.encryptionKey, Base64.DEFAULT)
             val digest: ByteArray = Base64.decode(groupAvatarData.digest, Base64.DEFAULT)
             val decData = decryptGroupAvatar(bytes, decryptPass, digest, groupAvatarData.byteCount?.toIntOrNull() ?: 0)
-
-            L.d { "[GroupAvatarUtil] cbcDecrypt group avatar success: ${decData.size}" }
             return decData
 
         } catch (e: Exception) {
@@ -140,44 +115,96 @@ object GroupAvatarUtil {
     }
 
     /**
-     * 智能群头像加载方法，合并了下载、解密、加载和保存
+     * Ensure group avatar is cached. Downloads and decrypts if not already cached.
+     * This method is safe to call from any scope - it only handles caching, not UI.
+     * @return The cache file if successful, null if failed
+     */
+    suspend fun ensureCached(context: Context, groupAvatarData: GroupAvatarData): File? = withContext(Dispatchers.IO) {
+        val serverId = groupAvatarData.serverId ?: return@withContext null
+        try {
+            // Check if already cached
+            val existingCache = getCacheFile(serverId)
+            if (existingCache != null) {
+                return@withContext existingCache
+            }
+
+            // Download and decrypt
+            val bytes = fetchGroupAvatar(context, groupAvatarData)
+            
+            // Save to cache
+            val cacheFile = getNewCacheFile(serverId)
+            cacheFile.writeBytes(bytes)
+            return@withContext cacheFile
+        } catch (e: Exception) {
+            L.e { "[GroupAvatarUtil] ensureCached failed: ${e.message}" }
+            // Retry once
+            try {
+                val bytes = fetchGroupAvatar(context, groupAvatarData)
+                val cacheFile = getNewCacheFile(serverId)
+                cacheFile.writeBytes(bytes)
+                return@withContext cacheFile
+            } catch (retryException: Exception) {
+                L.e { "[GroupAvatarUtil] ensureCached retry also failed: ${retryException.message}" }
+                return@withContext null
+            }
+        }
+    }
+
+    /**
+     * Load group avatar with automatic caching
+     * - Checks cache first (new format, then legacy _SMALL format)
+     * - Downloads and decrypts if not cached
+     * - Saves decrypted bytes directly to cache (preserves original format)
      * @return true if avatar loaded successfully, false otherwise
      */
     suspend fun loadGroupAvatar(
         context: Context,
         groupAvatarData: GroupAvatarData,
         imageView: ImageView,
-        size: AvatarCacheSize,
         forceRefresh: Boolean = false
     ): Boolean = withContext(Dispatchers.IO) {
         val serverId = groupAvatarData.serverId ?: return@withContext false
         try {
-            // 1. 检查本地缓存
-            val file = getGroupAvatarFile(serverId, size)
-            if (!forceRefresh && file.exists()) {
-                // 本地文件存在，直接加载
+            // 1. Check local cache (new format first, then legacy)
+            val cacheFile = getCacheFile(serverId)
+            if (!forceRefresh && cacheFile != null) {
                 withContext(Dispatchers.Main) {
                     imageView.visibility = android.view.View.VISIBLE
                     Glide.with(context)
-                        .asBitmap()
-                        .load(file)
+                        .load(cacheFile)
                         .into(imageView)
                 }
                 return@withContext true
             }
 
-            // 2. 本地文件不存在，从网络下载并解密
-            val result = fetchGroupAvatar(context, groupAvatarData)
+            // 2. Cache not found, download and decrypt
+            val bytes = fetchGroupAvatar(context, groupAvatarData)
 
-            // 3. 加载并保存
-            loadAndSaveBitmap(context, result, serverId, imageView, size)
+            // 3. Save decrypted bytes to cache
+            saveToCache(serverId, bytes)
+
+            // 4. Load from cache file and display
+            val newCacheFile = getNewCacheFile(serverId)
+            withContext(Dispatchers.Main) {
+                imageView.visibility = android.view.View.VISIBLE
+                Glide.with(context)
+                    .load(newCacheFile)
+                    .into(imageView)
+            }
             return@withContext true
         } catch (e: Exception) {
             L.e { "[GroupAvatarUtil] loadGroupAvatar first attempt failed: ${e.message}" }
-            // 重试一次
+            // Retry once
             try {
-                val result = fetchGroupAvatar(context, groupAvatarData)
-                loadAndSaveBitmap(context, result, serverId, imageView, size)
+                val bytes = fetchGroupAvatar(context, groupAvatarData)
+                saveToCache(serverId, bytes)
+                val newCacheFile = getNewCacheFile(serverId)
+                withContext(Dispatchers.Main) {
+                    imageView.visibility = android.view.View.VISIBLE
+                    Glide.with(context)
+                        .load(newCacheFile)
+                        .into(imageView)
+                }
                 return@withContext true
             } catch (retryException: Exception) {
                 L.e { "[GroupAvatarUtil] loadGroupAvatar retry also failed: ${retryException.message}" }
@@ -230,9 +257,8 @@ object GroupAvatarUtil {
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
         val paddedPlainText = cipher.doFinal(encryptedData)
 
-        // 如果没有指定 unpaddedSize，则直接返回解密后的数据
+        // Return decrypted data directly if no unpaddedSize specified
         if (paddedSize == 0) {
-            println("Decrypted attachment with unspecified size.")
             return paddedPlainText
         }
 
@@ -296,7 +322,7 @@ object GroupAvatarUtil {
     }
 
     /**
-     * 生成群头像文件（PNG），返回文件路径。
+     * Generate group avatar file (PNG), returns file path.
      */
     fun generateAvatarFile(items: List<LetterItem>, backgroundColor: Int): String? {
         val dirPath = FileUtil.getFilePath(FileUtil.FILE_DIR_GROUP_AVATAR)
@@ -313,7 +339,6 @@ object GroupAvatarUtil {
             }
             file.absolutePath
         } catch (e: Exception) {
-            e.printStackTrace()
             L.e { "[GroupAvatarUtil] generateAvatarFile error: ${e.stackTraceToString()}" }
             null
         }

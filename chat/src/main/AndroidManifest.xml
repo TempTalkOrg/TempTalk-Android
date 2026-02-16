@@ -11,6 +11,7 @@
     <uses-permission android:name="com.sec.android.provider.badge.permission.READ" />
     <uses-permission android:name="com.sec.android.provider.badge.permission.WRITE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE" />
 
     <uses-sdk
         android:minSdkVersion="24"
@@ -25,7 +26,20 @@
         <activity
             android:name=".ui.ChatForwardMessageActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.TT.TransparentActivity" />
+        <activity
+            android:name=".ui.ChatPopupActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:theme="@style/Theme.TT.TransparentActivity"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".group.GroupChatPopupActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:theme="@style/Theme.TT.TransparentActivity"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <service
             android:name="org.thoughtcrime.securesms.jobmanager.JobSchedulerScheduler$SystemService"
@@ -108,6 +122,11 @@
             android:exported="false"
             android:launchMode="singleTop" />
         <activity
+            android:name=".setting.SaveToPhotosSettingsActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:launchMode="singleTop" />
+        <activity
             android:name=".ui.SingleChatSettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
@@ -119,6 +138,11 @@
             android:name=".ui.EmojiReactionActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
+        <activity
+            android:name=".ui.textpreview.TextPreviewActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:theme="@style/Theme.TextPreview" />
         <activity
             android:name=".ui.MessageDetailActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -146,6 +170,20 @@
         <receiver
             android:name="org.thoughtcrime.securesms.util.MessageNotificationUtil$NotificationDismissReceiver"
             android:exported="false" />
+
+        <!-- Clipboard clear receiver for auto-clearing sensitive content -->
+        <receiver
+            android:name="org.thoughtcrime.securesms.util.ClearClipboardAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Notification trampoline activity for routing based on app foreground state -->
+        <!-- Decides whether to use CLEAR_TASK flag when starting MainActivity -->
+        <activity
+            android:name="org.thoughtcrime.securesms.util.NotificationTrampolineActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <receiver
             android:name=".common.StopCriticalAlertSoundReceiver"

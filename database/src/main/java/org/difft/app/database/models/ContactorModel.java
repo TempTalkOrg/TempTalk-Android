@@ -50,15 +50,18 @@ public class ContactorModel {
     @Nullable
     public GroupMemberContactorModel groupMemberContactor;
 
+    @WCDBField
+    public String customUid;
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         ContactorModel that = (ContactorModel) o;
-        return meetingVersion == that.meetingVersion && Objects.equals(id, that.id) && Objects.equals(name, that.name) && Objects.equals(email, that.email) && Objects.equals(avatar, that.avatar) && Objects.equals(publicName, that.publicName) && Objects.equals(timeZone, that.timeZone) && Objects.equals(remark, that.remark) && Objects.equals(joinedAt, that.joinedAt) && Objects.equals(sourceDescribe, that.sourceDescribe) && Objects.equals(findyouDescribe, that.findyouDescribe) && Objects.equals(groupMemberContactor, that.groupMemberContactor);
+        return meetingVersion == that.meetingVersion && Objects.equals(id, that.id) && Objects.equals(name, that.name) && Objects.equals(email, that.email) && Objects.equals(avatar, that.avatar) && Objects.equals(publicName, that.publicName) && Objects.equals(timeZone, that.timeZone) && Objects.equals(remark, that.remark) && Objects.equals(joinedAt, that.joinedAt) && Objects.equals(sourceDescribe, that.sourceDescribe) && Objects.equals(findyouDescribe, that.findyouDescribe) && Objects.equals(groupMemberContactor, that.groupMemberContactor) && Objects.equals(customUid, that.customUid);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, name, email, avatar, meetingVersion, publicName, timeZone, remark, joinedAt, sourceDescribe, findyouDescribe, groupMemberContactor);
+        return Objects.hash(id, name, email, avatar, meetingVersion, publicName, timeZone, remark, joinedAt, sourceDescribe, findyouDescribe, groupMemberContactor, customUid);
     }
 }

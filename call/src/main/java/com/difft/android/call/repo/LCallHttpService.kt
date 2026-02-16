@@ -7,11 +7,8 @@ import com.difft.android.base.call.ControlMessageResponseData
 import com.difft.android.base.call.InviteCallRequestBody
 import com.difft.android.base.call.InviteCallResponseData
 import com.difft.android.base.call.ServiceUrlData
-import com.difft.android.base.call.StartCallRequestBody
-import com.difft.android.base.call.StartCallResponseData
 import com.difft.android.call.response.RoomState
 import com.difft.android.network.BaseResponse
-import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -20,12 +17,6 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface LCallHttpService {
-
-    @POST("v3/call/start")
-    fun startCall(
-        @Header("Authorization") authorization: String,
-        @Body request: StartCallRequestBody
-    ): Single<BaseResponse<StartCallResponseData>>
 
     @POST("v3/call/controlmessages")
     fun controlMessages(
@@ -36,13 +27,13 @@ interface LCallHttpService {
     @GET("v3/call")
     fun getCallingList(
         @Header("Authorization") authorization: String,
-    ): Observable<BaseResponse<CallListResponseData>>
+    ): Single<BaseResponse<CallListResponseData>>
 
     @GET("v3/call/check")
     fun checkCall(
         @Header("Authorization") authorization: String,
         @Query("roomId") roomId: String?
-    ): Observable<BaseResponse<RoomState>>
+    ): Single<BaseResponse<RoomState>>
 
     @POST("v3/call/invite")
     fun inviteCall(

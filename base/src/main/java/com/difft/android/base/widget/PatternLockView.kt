@@ -121,26 +121,21 @@ class PatternLockView @JvmOverloads constructor(
         val heightMode = MeasureSpec.getMode(heightMeasureSpec)
         val heightSize = MeasureSpec.getSize(heightMeasureSpec)
 
-        val width = when (widthMode) {
-            MeasureSpec.EXACTLY -> widthSize
-            MeasureSpec.AT_MOST -> widthSize
-            else -> {
-                // Default size if no constraints
-                280.dp
-            }
+        // 获取可用宽度
+        val availableWidth = when (widthMode) {
+            MeasureSpec.EXACTLY, MeasureSpec.AT_MOST -> widthSize
+            else -> 280.dp // Default size if no constraints
         }
 
-        val height = when (heightMode) {
-            MeasureSpec.EXACTLY -> heightSize
-            MeasureSpec.AT_MOST -> heightSize
-            else -> {
-                // Default size if no constraints
-                280.dp
-            }
+        // 获取可用高度
+        val availableHeight = when (heightMode) {
+            MeasureSpec.EXACTLY, MeasureSpec.AT_MOST -> heightSize
+            else -> availableWidth // 如果高度没有约束，使用宽度（保证正方形）
         }
 
-        // Make it square by using the smaller dimension
-        val size = minOf(width, height)
+        // 正方形尺寸：取宽高的最小值
+        // 这样在宽屏设备上，如果高度小于宽度，会使用高度作为边长
+        val size = minOf(availableWidth, availableHeight)
         setMeasuredDimension(size, size)
     }
 

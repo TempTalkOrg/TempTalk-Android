@@ -11,8 +11,6 @@ import androidx.annotation.WorkerThread;
 
 import com.difft.android.base.log.lumberjack.L;
 
-import util.logging.Log;
-
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;

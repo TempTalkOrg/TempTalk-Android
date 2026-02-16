@@ -468,18 +468,6 @@ public final class PictureSelectionModel {
     }
 
     /**
-     * Do you want to open a foreground service to prevent the system from reclaiming the memory
-     * of some models due to the use of cameras
-     *
-     * @param isForeground
-     *
-     */
-    public PictureSelectionModel isCameraForegroundService(boolean isForeground) {
-        selectionConfig.isCameraForegroundService = isForeground;
-        return this;
-    }
-
-    /**
      * Android 10 preloads data first, then asynchronously obtains album list
      * <p>
      * Please consult the developer for detailed reasons

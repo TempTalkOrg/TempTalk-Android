@@ -5,14 +5,26 @@ import android.content.Intent
 import androidx.constraintlayout.widget.ConstraintLayout
 import autodispose2.autoDispose
 import com.difft.android.PushTextSendJobFactory
+import com.difft.android.base.call.Args
 import com.difft.android.base.call.CallActionType
+import com.difft.android.base.call.CallEncryptResult
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.ControlMessageRequestBody
+import com.difft.android.base.call.InviteCallRequestBody
 import com.difft.android.base.call.LCallConstants
+import com.difft.android.base.call.Notification
 import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.user.AutoLeave
+import com.difft.android.base.user.CallChat
+import com.difft.android.base.user.CallConfig
+import com.difft.android.base.user.CountdownTimer
+import com.difft.android.base.user.PromptReminder
+import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
+import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -20,13 +32,22 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.data.createStartCallParams
+import com.difft.android.call.handler.InviteRequestState
+import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.message.LocalMessageCreator
-import com.difft.android.chat.recent.InviteParticipantsActivity
+import com.difft.android.chat.common.SendType
+import com.difft.android.chat.setting.archive.MessageArchiveManager
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.RealSource
+import difft.android.messageserialization.model.ScreenShot
+import difft.android.messageserialization.model.TextMessage
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -38,7 +59,7 @@ import org.difft.app.database.models.GroupModel
 import util.concurrent.TTExecutors
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.AppForegroundObserver
+import util.AppForegroundObserver
 import org.thoughtcrime.securesms.util.ForegroundServiceUtil
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.UnableToStartException
@@ -49,6 +70,7 @@ import com.difft.android.websocket.api.util.CallMessageCreator
 import java.util.ArrayList
 import java.util.Optional
 import javax.inject.Inject
+import javax.inject.Singleton
 import com.difft.android.network.config.WsTokenManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,10 +78,18 @@ import kotlinx.coroutines.withContext
 import util.ScreenLockUtil
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
+import com.difft.android.call.util.IdUtil
+import com.difft.android.call.util.ScreenDeviceUtil
+import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
+import com.difft.android.chat.contacts.data.LENGTH_OF_BOT_ID
+import com.difft.android.network.BaseResponse
+import com.difft.android.network.config.GlobalConfigsManager
+import dagger.Lazy
 
-
+@Singleton
 class LCallToChatControllerImpl @Inject constructor(
-    @ChativeHttpClientModule.Call
+    @param:ChativeHttpClientModule.Call
     private val httpClient: ChativeHttpClient,
     private val callMessageCreator: CallMessageCreator,
     private val messageNotificationUtil: MessageNotificationUtil,
@@ -70,8 +100,12 @@ class LCallToChatControllerImpl @Inject constructor(
     private val localMessageCreator: LocalMessageCreator,
     private val dbRoomStore: DBRoomStore,
     private val inComingCallStateManager: InComingCallStateManager,
-    private val criticalAlertStateManager: CriticalAlertStateManager
-) : LCallToChatController {
+    private val criticalAlertStateManager: CriticalAlertStateManager,
+    private val messageArchiveManager: MessageArchiveManager,
+    private val callDataManagerLazy: Lazy<CallDataManager>,
+    private val contactorCacheManager: ContactorCacheManager,
+    private val globalConfigsManager: GlobalConfigsManager,
+    ) : LCallToChatController {
 
     private val autoDisposeCompletable = CompletableSubject.create()
 
@@ -81,6 +115,27 @@ class LCallToChatControllerImpl @Inject constructor(
 
     private val mySelfId: String by lazy {
         globalServices.myId
+    }
+
+    private val callConfig: CallConfig by lazy {
+        globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(
+            autoLeave = AutoLeave(promptReminder = PromptReminder()),
+            chatPresets = defaultBarrageTexts,
+            chat = CallChat(),
+            countdownTimer = CountdownTimer()
+        )
+    }
+
+    private val callDataManager: CallDataManager by lazy {
+        callDataManagerLazy.get()
+    }
+
+    // 常量定义
+    companion object {
+        private const val INVITE_NOTIFICATION_TYPE = 22
+        private const val RESPONSE_STATUS_SUCCESS = 0
+        private const val RESPONSE_STATUS_INVALID_UIDS = 2
+        private const val RESPONSE_STATUS_STALE = 11001
     }
 
     override fun joinCall(
@@ -93,7 +148,7 @@ class LCallToChatControllerImpl @Inject constructor(
         isNeedAppLock: Boolean,
         onComplete: (Boolean) -> Unit
     ) {
-        LCallManager.showWaitDialog(context)
+        CallWaitDialogUtil.show(context)
 
         appScope.launch(Dispatchers.IO) {
             try {
@@ -112,13 +167,13 @@ class LCallToChatControllerImpl @Inject constructor(
                     roomId = roomId
                 )
 
-                val callData = LCallManager.getCallData(roomId)
+                val callData = callDataManager.getCallData(roomId)
                 val callRole = if (callData?.caller?.uid == mySelfId && callData.caller.did == DEFAULT_DEVICE_ID)
                     CallRole.CALLER
                 else
                     CallRole.CALLEE
 
-                val startCallParams = LCallManager.createStartCallParams(body)
+                val startCallParams = createStartCallParams(body)
 
                 // 刷新 Token（若需要）
                 wsTokenManager.refreshTokenIfNeeded()
@@ -136,6 +191,7 @@ class LCallToChatControllerImpl @Inject constructor(
                     .withStartCallParams(startCallParams)
                     .withAppToken(SecureSharedPrefsUtil.getToken())
                     .withNeedAppLock(isNeedAppLock)
+                    .withCallWaitDialogShown(true)
 
                 val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
 
@@ -158,17 +214,18 @@ class LCallToChatControllerImpl @Inject constructor(
                         startCallInternal(context, intent, onComplete)
                     } else {
                         L.e { "[Call] joinCall getCallServerUrl failed, status:${response.status}" }
+                        withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
                         onComplete(false)
                     }
                 }.onFailure { e ->
-                    L.e { "[Call] joinCall getCallServerUrl error:${e.message}" }
+                    L.e(e) { "[Call] joinCall getCallServerUrl error:" }
+                    withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
                     onComplete(false)
                 }
             } catch (e: Exception) {
-                L.e { "[Call] joinCall unexpected error:${e.message}" }
+                L.e(e) { "[Call] joinCall unexpected error:" }
+                withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
                 onComplete(false)
-            } finally {
-                withContext(Dispatchers.Main) { LCallManager.dismissWaitDialog() }
             }
         }
     }
@@ -399,7 +456,7 @@ class LCallToChatControllerImpl @Inject constructor(
         val firstLetter = if (!name.isNullOrEmpty()) {
             name.substring(0, 1)
         } else {
-            LCallManager.convertToBase58UserName(userId).let {
+            IdUtil.convertToBase58UserName(userId).let {
                 if (!it.isNullOrEmpty()) {
                     it.substring(0, 1)
                 } else {
@@ -422,47 +479,8 @@ class LCallToChatControllerImpl @Inject constructor(
         return mySelfId
     }
 
-    override fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel> {
-        return GroupUtil.getSingleGroupInfo(context, conversationId).blockingFirst()
-    }
-
-
-    override fun inviteUsersToTheCall(context: Context, roomId: String, roomName: String, e2eeKey: ByteArray?, callType: String, conversationId: String?, excludedIds: ArrayList<String>) {
-        L.d { "[Call] inviteUsersToTheCall, params roomId:$roomId e2eeKey:${e2eeKey} callType:$callType conversationId:$conversationId excludedIds:${excludedIds}" }
-        val intent = Intent(context, InviteParticipantsActivity::class.java)
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_ACTION_TYPE,
-            InviteParticipantsActivity.NEW_REQUEST_ACTION_TYPE_INVITE
-        )
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_ROOM_ID,
-            roomId
-        )
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_CALL_NAME,
-            roomName
-        )
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_E2EE_KEY,
-            e2eeKey
-        )
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_CALL_TYPE,
-            callType
-        )
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_CONVERSATION_ID,
-            conversationId
-        )
-        intent.putExtra(
-            InviteParticipantsActivity.EXTRA_SHOULD_BRING_CALL_SCREEN_BACK,
-            true
-        )
-        intent.putStringArrayListExtra(
-            InviteParticipantsActivity.EXTRA_EXCLUDE_IDS,
-            excludedIds
-        )
-        context.startActivity(intent)
+    override suspend fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel> {
+        return GroupUtil.getSingleGroupInfo(context, conversationId).firstOrError().await()
     }
 
     override fun cancelNotificationById(notificationId: Int) {
@@ -523,7 +541,62 @@ class LCallToChatControllerImpl @Inject constructor(
                     )
                 }
             }.onFailure { e ->
-                L.e { "[Call] sendOrCreateCallTextMessage Error: ${e.message}" }
+                L.e(e) { "[Call] sendOrCreateCallTextMessage Error:" }
+            }
+        }
+    }
+
+    override fun sendScreenshotNotification(conversationId: String, callType: CallType) {
+        if (conversationId.isBlank()) {
+            return
+        }
+
+        appScope.launch {
+            runCatching {
+                val forWhat = if (callType == CallType.GROUP) {
+                    For.Group(conversationId)
+                } else {
+                    For.Account(conversationId)
+                }
+                val timeStamp = System.currentTimeMillis()
+                val messageId = "${timeStamp}${mySelfId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+                val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).await().toInt()
+                val screenShot = ScreenShot(
+                    RealSource(mySelfId, DEFAULT_DEVICE_ID, timeStamp, timeStamp)
+                )
+                val screenshotText = application.getString(
+                    com.difft.android.chat.R.string.chat_took_a_screen_shot,
+                    application.getString(com.difft.android.chat.R.string.you)
+                )
+                val textMessage = TextMessage(
+                    messageId,
+                    For.Account(mySelfId),
+                    forWhat,
+                    timeStamp,
+                    timeStamp,
+                    System.currentTimeMillis(),
+                    SendType.Sending.rawValue,
+                    expiresInSeconds,
+                    0,
+                    0,
+                    0,
+                    screenshotText,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    screenShot,
+                    null
+                )
+                ApplicationDependencies.getJobManager().add(
+                    pushTextJobFactory.create(null, textMessage, null)
+                )
+            }.onFailure { e ->
+                L.e(e) { "[Call] sendScreenshotNotification Error:" }
             }
         }
     }
@@ -584,9 +657,9 @@ class LCallToChatControllerImpl @Inject constructor(
         return publicKeyInfo.identityKey
     }
 
-    override fun restoreIncomingCallActivityIfIncoming() {
+    override fun restoreIncomingCallScreenIfActive() {
         L.i { "[Call] Status: inCalling=${inComingCallStateManager.isActivityShowing()}, isInForeground=${inComingCallStateManager.isInForeground()}" }
-        if (inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isInForeground() && !LCallManager.isScreenLocked(application)) {
+        if (inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isInForeground() && !ScreenDeviceUtil.isScreenLocked(application)) {
             L.i { "[Call] Status: OK> restoreIncomingCallActivityIfIncoming" }
             val intent = Intent(application, LIncomingCallActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -639,7 +712,7 @@ class LCallToChatControllerImpl @Inject constructor(
                 try {
                     ForegroundServiceUtil.startWhenCapable(context, intent)
                 } catch (e: UnableToStartException) {
-                    L.w { "[MessageForegroundService] Unable to start foreground service for websocket!" + e.stackTraceToString() }
+                    L.w(e) { "[MessageForegroundService] Unable to start foreground service for websocket!" }
                 }
             }
         }
@@ -660,7 +733,7 @@ class LCallToChatControllerImpl @Inject constructor(
         }
     }
 
-    override fun dismissCriticalAlertByConId(conversationId: String) {
+    override fun dismissCriticalAlert(conversationId: String) {
         if (criticalAlertStateManager.isShowing()) {
             val intent = Intent(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_CONID).apply {
                 `package` = application.packageName
@@ -670,6 +743,10 @@ class LCallToChatControllerImpl @Inject constructor(
         }
     }
 
+    override fun cancelCriticalAlertNotification(conversationId: String?) {
+        messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
+    }
+
     private suspend fun startCallInternal(context: Context, intent: Intent, onComplete: (Boolean) -> Unit) {
         withContext(Dispatchers.Main) {
             try {
@@ -677,11 +754,221 @@ class LCallToChatControllerImpl @Inject constructor(
                 context.applicationContext.startActivity(intent)
                 onComplete(true)
             } catch (e: Exception) {
-                L.e { "[Call] joinCall startCallInternal failed: ${e.message}" }
+                L.e(e) { "[Call] joinCall startCallInternal failed:" }
+                CallWaitDialogUtil.dismiss()
                 onComplete(false)
             }
         }
     }
 
+    /**
+     * 验证邀请通话参数
+     */
+    private fun validateInviteCallParams(roomId: String, inviteMembers: ArrayList<String>): Boolean {
+        if (roomId.isEmpty() || inviteMembers.isEmpty()) {
+            ToastUtil.show("roomId or invite members is empty")
+            return false
+        }
+        return true
+    }
+
+    /**
+     * 从字符串解析通话类型
+     */
+    private fun resolveCallTypeFromString(callType: String?): CallType {
+        return if (!callType.isNullOrEmpty()) {
+            CallType.fromString(callType) ?: CallType.INSTANT
+        } else {
+            CallType.INSTANT
+        }
+    }
+
+    /**
+     * 创建邀请通话请求体
+     */
+    private fun createInviteCallRequest(
+        roomId: String,
+        callEncryptResult: CallEncryptResult
+    ): InviteCallRequestBody {
+        val collapseId = MD5Utils.md5AndHexStr(
+            System.currentTimeMillis().toString() + mySelfId + DEFAULT_DEVICE_ID
+        )
+        val notification = Notification(Args(collapseId), INVITE_NOTIFICATION_TYPE)
+
+        return InviteCallRequestBody(
+            roomId = roomId,
+            timestamp = System.currentTimeMillis(),
+            cipherMessages = callEncryptResult.cipherMessages,
+            encInfos = callEncryptResult.encInfos,
+            notification = notification,
+            publicKey = callEncryptResult.publicKey
+        )
+    }
+
+    /**
+     * 处理邀请通话成功
+     */
+    private fun handleInviteCallSuccess(
+        responseData: com.difft.android.base.call.InviteCallResponseData?,
+        inviteMembers: ArrayList<String>,
+        callType: CallType,
+        createdAt: Long
+    ) {
+        appScope.launch {
+            val textContent = ApplicationHelper.instance.getString(
+                R.string.call_invite_send_message,
+                contactorCacheManager.getDisplayName(mySelfId)
+            )
+            val systemShowTimestamp = responseData?.systemShowTimestamp ?: createdAt
+
+            inviteMembers.forEach { uid ->
+                val forWhat = For.Account(uid)
+                LCallManager.sendOrLocalCallTextMessage(
+                    CallActionType.INVITE, textContent, DEFAULT_DEVICE_ID,
+                    createdAt, systemShowTimestamp,
+                    For.Account(mySelfId), forWhat, callType,
+                    callConfig.createCallMsg, inviteMembers
+                )
+            }
+        }
+    }
+
+    /**
+     * 处理邀请通话失败
+     */
+    private fun handleInviteCallFailure(
+        invalidUids: List<String>?,
+        stale: List<com.difft.android.base.call.Stale>?
+    ) {
+        when {
+            invalidUids != null -> {
+                appScope.launch {
+                    val inviteFailedNames = invalidUids.map { uid ->
+                        contactorCacheManager.getDisplayNameById(uid)
+                    }.joinToString(",")
+
+                    withContext(Dispatchers.Main) {
+                        ToastUtil.show("Invite failed for: $inviteFailedNames")
+                    }
+                }
+            }
+            stale != null -> {
+                appScope.launch {
+                    val inviteFailedNames = stale.map { staleData ->
+                        contactorCacheManager.getDisplayNameById(staleData.uid)
+                    }.joinToString(",")
+
+                    withContext(Dispatchers.Main) {
+                        ToastUtil.show("Invite failed for: $inviteFailedNames")
+                    }
+                }
+            }
+            else -> {
+                ToastUtil.show(R.string.call_invite_fail_tip)
+            }
+        }
+    }
+
+    /**
+     * 处理邀请通话的响应
+     */
+    private fun handleInviteCallResponse(
+        response: BaseResponse<com.difft.android.base.call.InviteCallResponseData>,
+        inviteMembers: ArrayList<String>,
+        callType: CallType,
+        createdAt: Long,
+        callback: (InviteRequestState) -> Unit
+    ) {
+        when (response.status) {
+            RESPONSE_STATUS_SUCCESS -> {
+                L.d { "[Call] inviteCall, invite success, response: reason:${response.reason}, data:${response.data}" }
+                handleInviteCallSuccess(response.data, inviteMembers, callType, createdAt)
+                callback(InviteRequestState.SUCCESS)
+            }
+            RESPONSE_STATUS_INVALID_UIDS -> {
+                L.e { "[Call] inviteCall, invite failed, response: status:${response.status}, reason:${response.reason}, data:${response.data}" }
+                handleInviteCallFailure(response.data?.invalidUids, null)
+                callback(InviteRequestState.FAILED)
+            }
+            RESPONSE_STATUS_STALE -> {
+                L.e { "[Call] inviteCall, invite failed, response: status:${response.status}, reason:${response.reason}, data:${response.data}" }
+                handleInviteCallFailure(null, response.data?.stale)
+                callback(InviteRequestState.FAILED)
+            }
+            else -> {
+                L.e { "[Call] inviteCall, invite failed, response: status:${response.status}, reason:${response.reason}, data:${response.data}" }
+                callback(InviteRequestState.FAILED)
+                ToastUtil.show(R.string.call_invite_fail_tip)
+            }
+        }
+    }
+
+    /**
+     * 处理邀请通话错误
+     */
+    private fun handleInviteCallError(error: Throwable) {
+        L.e { "[Call] inviteCall, request fail, error:${error.stackTraceToString()}" }
+        error.message?.let { message ->
+            ToastUtil.show(message)
+        }
+    }
+
+
+    override fun inviteCall(
+        roomId: String,
+        roomName: String?,
+        callType: String?,
+        mKey: ByteArray?,
+        inviteMembers: ArrayList<String>,
+        conversationId: String?,
+        callback: (InviteRequestState) -> Unit
+    ) {
+        if (!validateInviteCallParams(roomId, inviteMembers)) {
+            return
+        }
+
+        L.d { "[Call] inviteCall, params roomId:$roomId, roomName:$roomName callType:$callType" }
+
+        val type = resolveCallTypeFromString(callType)
+        val createdAt = System.currentTimeMillis()
+
+        appScope.launch(Dispatchers.IO) {
+            try {
+                // 创建通话消息
+                val callEncryptResult = callMessageCreator.createCallMessage(
+                    null,
+                    type,
+                    null,
+                    CallActionType.INVITE,
+                    conversationId = if (type == CallType.INSTANT) null else conversationId,
+                    inviteMembers,
+                    listOf(roomId),
+                    roomName,
+                    mySelfId,
+                    mKey,
+                    createCallMsg = callConfig.createCallMsg,
+                    createdAt = createdAt,
+                ).await()
+
+                // 创建请求体并发送邀请
+                val requestBody = createInviteCallRequest(roomId, callEncryptResult)
+                val response = callService.inviteCall(SecureSharedPrefsUtil.getToken(), requestBody)
+                    .await()
+
+                handleInviteCallResponse(response, inviteMembers, type, createdAt, callback)
+            } catch (error: Exception) {
+                handleInviteCallError(error)
+                callback(InviteRequestState.FAILED)
+            }
+        }
+    }
+
+    override fun isBotId(id: String): Boolean {
+        return id.length <= LENGTH_OF_BOT_ID
+    }
+
+    override fun contactorListSortedByPinyin(list : List<ContactorModel>): List<ContactorModel> {
+        return list.sortedByPinyin()
+    }
 
 }

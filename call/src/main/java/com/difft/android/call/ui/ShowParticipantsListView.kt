@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,15 +53,16 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.SfProFont
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.LocalImageLoaderProvider
 import com.difft.android.call.R
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.MUTE_ACTION_INDEX
+import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
@@ -121,7 +123,10 @@ fun ShowParticipantsListView(
                         ){
                             val (closeView, textView, userPlus) = createRefs()
                             Surface(
-                                onClick = { handleInviteUsersClick() },
+                                onClick = {
+                                    handleInviteUsersClick()
+                                    viewModel.callUiController.setShowUsersEnabled(false)
+                                },
                                 modifier = Modifier
                                     .constrainAs(userPlus) {
                                         start.linkTo(parent.start, margin = 10.dp)
@@ -225,7 +230,7 @@ fun ShowParticipantsListView(
                                                 style = TextStyle(
                                                     fontSize = 14.sp,
                                                     lineHeight = 20.sp,
-                                                    fontFamily = SfProFont,
+                                                    fontFamily = FontFamily.Default,
                                                     fontWeight = FontWeight(510),
                                                     color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
                                                 )
@@ -311,6 +316,10 @@ fun SmallParticipantViewItem(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    val contactorCacheManager = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
+
     var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
 
     val participantId = participant.identity?.value
@@ -332,7 +341,7 @@ fun SmallParticipantViewItem(
     LaunchedEffect(Unit) {
         coroutineScope.launch {
             participantId?.let { id ->
-                userDisplayInfo = LCallManager.getParticipantDisplayInfo(context, id)
+                userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, id)
             }
         }
     }
@@ -354,10 +363,10 @@ fun SmallParticipantViewItem(
     }
 
     LaunchedEffect(contactsUpdate) {
-        if(contactsUpdate.second.contains(LCallManager.getUidByIdentity(participantId))){
+        if(contactsUpdate.second.contains(IdUtil.getUidByIdentity(participantId))){
             coroutineScope.launch {
                 participantId?.let {
-                    userDisplayInfo = LCallManager.getParticipantDisplayInfo(context, participantId)
+                    userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, participantId)
                 }
             }
         }
@@ -418,13 +427,13 @@ fun SmallParticipantViewItem(
                                 start.linkTo(avatarView.end, 5.dp)
                                 centerVerticallyTo(parent)
                             },
-                        text = StringUtil.getShowUserName(userDisplayInfo.name ?: "", 14),
+                        text = StringUtil.truncateWithEllipsis(userDisplayInfo.name ?: "", 14),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = TextStyle(
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
-                            fontFamily = SfProFont,
+                            fontFamily = FontFamily.Default,
                             fontWeight = FontWeight(400),
                             color = Color.White,
                         )

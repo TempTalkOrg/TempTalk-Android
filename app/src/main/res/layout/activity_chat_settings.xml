@@ -35,7 +35,8 @@
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="@+id/ib_back"
             app:layout_constraintLeft_toRightOf="@+id/ib_back"
-            app:layout_constraintTop_toTopOf="@+id/ib_back" />
+            app:layout_constraintTop_toTopOf="@+id/ib_back"
+            app:layout_goneMarginStart="16dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -76,5 +77,64 @@
         android:textSize="12sp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/ib_back" />
+
+    <!-- Voice Playback Speed Setting -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_voice_playback_speed"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_voice_playback_speed_label"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:background="@null"
+            android:gravity="center_vertical"
+            android:text="@string/me_voice_playback_speed"
+            android:textColor="@color/t.primary"
+            android:textSize="16sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/tv_voice_playback_speed_value"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_voice_playback_speed_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/t.secondary"
+            android:textSize="16sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/iv_voice_playback_speed_arrow"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="1×" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_voice_playback_speed_arrow"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/chat_ic_arrow_right"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/t.primary" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_voice_playback_speed_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:paddingStart="32dp"
+        android:paddingEnd="28dp"
+        android:text="@string/me_voice_playback_speed_desc"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp" />
 
 </LinearLayout>

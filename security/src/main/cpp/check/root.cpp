@@ -1,6 +1,3 @@
-//
-// Created by neo on 2024/1/18.
-//
 
 #include "root.h"
 #include <jni.h>

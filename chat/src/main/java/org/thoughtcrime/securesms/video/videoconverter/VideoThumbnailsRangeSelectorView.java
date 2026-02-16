@@ -19,7 +19,7 @@ import androidx.annotation.RequiresApi;
 
 import com.difft.android.chat.R;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.util.ViewUtil;
 
 import java.util.Locale;
@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 @RequiresApi(api = 23)
 public final class VideoThumbnailsRangeSelectorView extends VideoThumbnailsView {
 
-    private static final String TAG = Log.tag(VideoThumbnailsRangeSelectorView.class);
+    private static final String TAG = "VideoThumbnailsRangeSelectorView";
 
     private static final long MINIMUM_SELECTABLE_RANGE = TimeUnit.MILLISECONDS.toMicros(500);
     private static final int ANIMATION_DURATION_MS = 100;

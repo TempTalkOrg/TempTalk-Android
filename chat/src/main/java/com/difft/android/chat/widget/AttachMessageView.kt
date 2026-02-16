@@ -11,7 +11,6 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutAttachMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.canAutoSaveAttachment
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import com.hi.dhl.binding.viewbind
@@ -146,7 +145,7 @@ class AttachMessageView @JvmOverloads constructor(
                     message.attachment?.authorityId ?: 0,
                     key,
                     message.shouldDecrypt(),
-                    message.canAutoSaveAttachment()
+                    false // Attachment files should never auto-save to photos
                 )
             )
         }

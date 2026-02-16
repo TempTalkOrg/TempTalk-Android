@@ -43,8 +43,8 @@ import kotlin.system.exitProcess
 
 @Singleton
 class WCDB @Inject constructor(
-    @ApplicationContext private val context: Context,
-    @Named("application") private val applicationScope: CoroutineScope,
+    @param:ApplicationContext private val context: Context,
+    @param:Named("application") private val applicationScope: CoroutineScope,
     private val recoveryPreferences: DatabaseRecoveryPreferences
 ) {
 

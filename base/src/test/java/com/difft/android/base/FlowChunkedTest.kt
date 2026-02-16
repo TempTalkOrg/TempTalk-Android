@@ -267,7 +267,7 @@ class ChunkedTest {
     @OptIn(InternalCoroutinesApi::class)
     internal class VirtualTimeDispatcher(enclosingScope: CoroutineScope) : CoroutineDispatcher(), Delay {
         private val originalDispatcher = enclosingScope.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher
-        private val heap = ArrayList<TimedTask>() // TODO use MPP heap/ordered set implementation (commonize ThreadSafeHeap)
+        private val heap = ArrayList<TimedTask>()
 
         var currentTime = 0L
             private set

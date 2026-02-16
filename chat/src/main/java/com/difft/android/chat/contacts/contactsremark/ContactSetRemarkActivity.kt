@@ -1,6 +1,7 @@
 package com.difft.android.chat.contacts.contactsremark
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
@@ -130,7 +131,7 @@ class ContactSetRemarkActivity : BaseActivity() {
                     mBinding.etName.setSelection(mBinding.etName.text?.length ?: 0)
                 }
             }, { error ->
-                error.printStackTrace()
+                L.w { "[ContactSetRemarkActivity] initData error: ${error.stackTraceToString()}" }
             })
     }
 }

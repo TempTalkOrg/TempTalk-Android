@@ -28,11 +28,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 
@@ -93,7 +93,7 @@ fun ShowHandsUpTipView(viewModel: LCallViewModel) {
                     style = TextStyle(
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
                         color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
                     )

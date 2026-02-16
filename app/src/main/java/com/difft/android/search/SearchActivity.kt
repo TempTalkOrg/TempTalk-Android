@@ -93,7 +93,7 @@ class SearchActivity : BaseActivity() {
                 } else {
                     showNoResults(getString(R.string.search_messages_default_tips))
                 }
-            }, { it.printStackTrace() })
+            }, { L.w { "[SearchActivity] initView searchSubject error: ${it.stackTraceToString()}" } })
 
 
         mBinding.buttonClear.setOnClickListener {
@@ -247,7 +247,7 @@ class SearchActivity : BaseActivity() {
             }
 
             // 如果需要添加收藏房间且结果中不包含，则添加
-            val rooms = baseRooms + if (getString(R.string.chat_favorites).contains(key, true) &&
+            val rooms = baseRooms + if (getString(com.difft.android.base.R.string.chat_favorites).contains(key, true) &&
                 !baseRooms.any { it.roomId == globalServices.myId }
             ) {
                 wcdb.room.getFirstObject(DBRoomModel.roomId.eq(globalServices.myId))?.let { listOf(it) } ?: emptyList()
@@ -306,6 +306,7 @@ class SearchActivity : BaseActivity() {
             val result = wcdb.message.getAllObjects(
                 DBMessageModel.messageText.upper().like("%${key.uppercase()}%")
                     .and(DBMessageModel.type.notEq(2))
+                    .and(DBMessageModel.mode.notEq(1)) // Exclude confidential messages
             ).groupBy { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(it.roomId)) }
 
             val topFourEntries = if (result.size > 4) {

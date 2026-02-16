@@ -21,7 +21,6 @@ import org.difft.app.database.wcdb
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.databinding.ActivityMessageDetailBinding
-import com.difft.android.chat.message.parseReadInfo
 import com.difft.android.chat.message.parseReceiverIds
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -72,7 +71,7 @@ class MessageDetailActivity : BaseActivity() {
                     initView(messageModel)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MessageDetailActivity] loadMessage error: ${e.stackTraceToString()}" }
             }
         }
     }
@@ -189,23 +188,11 @@ class MessageDetailActivity : BaseActivity() {
                 var readList: List<ContactorModel>? = null
                 var unreadList: List<ContactorModel>? = null
 
-                //group message
+                //group message（机密消息与普通消息使用相同的已读逻辑）
                 if (message.roomType == 1) {
-                    if (message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                        val readInfos = parseReadInfo(message.readInfo)
-
-                        if (readInfos.isNullOrEmpty()) {
-                            unreadList = receivers
-                        } else {
-                            val readUserIds = readInfos.keys.toSet()
-                            readList = receivers.filter { readUserIds.contains(it.id) }
-                            unreadList = receivers.filter { !readUserIds.contains(it.id) }
-                        }
-                    } else {
-                        val readUserIds = readInfoList.map { it.uid }.toSet()
-                        readList = receivers.filter { readUserIds.contains(it.id) }
-                        unreadList = receivers.filter { !readUserIds.contains(it.id) }
-                    }
+                    val readUserIds = readInfoList.map { it.uid }.toSet()
+                    readList = receivers.filter { readUserIds.contains(it.id) }
+                    unreadList = receivers.filter { !readUserIds.contains(it.id) }
                 } else {
                     if (message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
                         unreadList = receivers

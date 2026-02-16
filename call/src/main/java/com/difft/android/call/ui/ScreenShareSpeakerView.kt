@@ -35,10 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.util.ViewUtil
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.Participant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,6 +56,10 @@ fun ScreenShareSpeakerView(
     shareScreenUser: Participant,
     callConfig: CallConfig,
 ) {
+    val contactorCacheManager = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
+
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
@@ -61,8 +68,8 @@ fun ScreenShareSpeakerView(
 
     var screenSize by remember { mutableStateOf(ScreenSize(0, 0)) }
 
-    val speakerViewWith = 120.dp
-    val speakerViewHeight = 90.dp
+    val speakerViewWith = LCallUiConstants.SCREEN_SHARE_FLOATING_VIEW_WIDTH.dp
+    val speakerViewHeight = LCallUiConstants.SCREEN_SHARE_FLOATING_VIEW_HEIGHT.dp
 
     var dragViewOffsetX: Float by remember {
         mutableFloatStateOf(ViewUtil.dpToPx(12).toFloat())
@@ -78,7 +85,7 @@ fun ScreenShareSpeakerView(
     LaunchedEffect(showSpeaker) {
         coroutineScope.launch {
             showSpeaker.identity?.value?.let {
-                userDisplayInfo = LCallManager.getParticipantDisplayInfo(context, it)
+                userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, it)
             }
         }
     }

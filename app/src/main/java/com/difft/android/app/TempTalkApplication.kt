@@ -28,7 +28,7 @@ import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.state.InComingCallStateManager
-import com.difft.android.chat.common.ScreenShotUtil
+import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.login.PasscodeUtil
 import com.difft.android.login.ScreenLockActivity
@@ -46,15 +46,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.signal.libsignal.protocol.logging.SignalProtocolLogger
 import org.signal.libsignal.protocol.logging.SignalProtocolLoggerProvider
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencyProvider
-import org.thoughtcrime.securesms.util.AppForegroundObserver
+import util.AppForegroundObserver
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import util.ScreenLockUtil
 import java.lang.ref.WeakReference
@@ -88,6 +92,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     @Inject
     lateinit var criticalAlertStateManager: CriticalAlertStateManager
 
+    @Inject
+    lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
+
     // 追踪当前 resumed 的 Activity
     private var currentResumedActivity: WeakReference<FragmentActivity>? = null
 
@@ -110,6 +117,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 ApplicationDependencies.init(this, ApplicationDependencyProvider(this))
                 AppForegroundObserver.begin()
             }
+            .addBlocking("init UserData", this::initUserData)
             .addBlocking("init theme", this::initAppTheme)
             .addBlocking("lifecycle-observer") {
                 AppForegroundObserver.addListener(this)
@@ -118,6 +126,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("init notification", this::initNotification)
             .addBlocking("upgradeSecurityProvider", this::upgradeSecurityProvider)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
+            .addBlocking("thirdPartyActivityGuard") { ThirdPartyActivityGuard.register(this) }
+            .addBlocking("installCrashFilter", this::installCrashFilter)
             .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking { initCallEngine() }
             .addNonBlocking { monitorMainThreadBlocking() }
@@ -142,7 +152,24 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun initializeLogging() {
-        SignalProtocolLoggerProvider.setProvider(com.difft.android.logging.CustomSignalProtocolLogger())
+        SignalProtocolLoggerProvider.setProvider { priority, tag, message ->
+            when (priority) {
+                SignalProtocolLogger.VERBOSE, SignalProtocolLogger.DEBUG -> L.d { "[$tag] $message" }
+                SignalProtocolLogger.INFO -> L.i { "[$tag] $message" }
+                SignalProtocolLogger.WARN -> L.w { "[$tag] $message" }
+                SignalProtocolLogger.ERROR, SignalProtocolLogger.ASSERT -> L.e { "[$tag] $message" }
+            }
+        }
+    }
+
+    /**
+     * Initialize user data cache (inMemoryUserData) from EncryptedSharedPreferences.
+     * This prevents ANR when multiple threads try to access SecureSharedPrefsUtil concurrently.
+     * Uses timeout (2s) to prevent ANR on extremely slow devices - falls back to lazy init if timeout.
+     */
+    private fun initUserData() {
+        val job = async(Dispatchers.IO) { userManager.getUserData() }
+        runBlocking { withTimeoutOrNull(2000) { job.await() } }
     }
 
     private fun initAppTheme() {
@@ -192,11 +219,15 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     override fun onForeground() {
         recordLastUseTime()
         scheduleGrayConfigUpdateCheck()
-        LCallManager.restoreIncomingCallActivityIfIncoming()
+        LCallManager.restoreIncomingCallScreenIfActive()
+        globalConfigsManager.onAppStateChanged(isForeground = true)
+        messageArchiveManager.get().onAppStateChanged(isForeground = true)
     }
 
     override fun onBackground() {
         recordLastUseTimeDisposable?.dispose()
+        globalConfigsManager.onAppStateChanged(isForeground = false)
+        messageArchiveManager.get().onAppStateChanged(isForeground = false)
     }
 
     /**
@@ -249,21 +280,14 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 if (activity is FragmentActivity) {
                     currentResumedActivity = WeakReference(activity)
 
-                    // 原有的 ScreenShot 逻辑
-                    launch(Dispatchers.IO) {
-                        val userData = userManager.getUserData()
-                        withContext(Dispatchers.Main) {
-                            if (userData != null) {
-                                ScreenShotUtil.setScreenShotEnable(activity, userData.passcode.isNullOrEmpty() && userData.pattern.isNullOrEmpty())
-                            }
-                        }
-                    }
+                    // 刷新截屏状态（根据屏幕锁决定）
+                    SecureModeUtil.refreshByScreenLock(activity)
                 }
 
                 // 原有的 Call 反馈逻辑
                 if (activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
                     launch(Dispatchers.IO) {
-                        val callInfo = LCallManager.getCallFeedbackInfo()
+                        val callInfo = LCallManager.getAndClearCallFeedbackInfo()
                         if (callInfo != null && !activity.isDestroyed) {
                             withContext(Dispatchers.Main) {
                                 LCallManager.showCallFeedbackView(activity, callInfo)
@@ -311,7 +335,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                         this.lastUseTime = System.currentTimeMillis()
                     }
                 }
-            }, { e -> e.printStackTrace() })
+            }, { e -> L.w { "[TempTalkApplication] recordLastUseTime error: ${e.stackTraceToString()}" } })
     }
 
     /**
@@ -400,6 +424,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 2. 通话相关
+        if (criticalAlertStateManager.isShowing()) {
+            L.d { "[ScreenLock] Skip: critical alert" }
+            return false
+        }
+
         if (onGoingCallStateManager.isInCalling() && !onGoingCallStateManager.needAppLock) {
             L.d { "[ScreenLock] Skip: in call" }
             return false
@@ -432,6 +461,28 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         return isTimeout
     }
 
+    /**
+     * Intercept [android.util.SuperNotCalledException] to prevent it from being reported to
+     * Firebase Crashlytics. This exception is triggered by Hook frameworks (e.g., lhook on
+     * rooted emulators) that intercept Activity.onCreate() without calling through to the
+     * original implementation. It cannot occur during normal app usage and only pollutes
+     * crash-free metrics.
+     *
+     * Crashlytics initializes via ContentProvider (before Application.onCreate()),
+     * so calling this in Application.onCreate() guarantees our handler wraps theirs.
+     */
+    private fun installCrashFilter() {
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            if (throwable.javaClass.name == "android.util.SuperNotCalledException") {
+                L.w { "[CrashFilter] Suppressed SuperNotCalledException: ${throwable.message}" }
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } else {
+                previousHandler?.uncaughtException(thread, throwable)
+            }
+        }
+    }
+
     private fun upgradeSecurityProvider() {
         // Ensure an updated security provider is installed into the system when a new one is
         // available via Google Play services.
@@ -443,7 +494,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 override fun onProviderInstallFailed(errorCode: Int, recoveryIntent: Intent?) {}
             })
         } catch (ignorable: Exception) {
-            ignorable.printStackTrace()
+            L.w { "[TempTalkApplication] error: ${ignorable.stackTraceToString()}" }
         }
     }
 
@@ -452,33 +503,31 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun monitorMainThreadBlocking() {
-        // Define blocking time thresholds for different modes
-        val thresholds = if (BuildConfig.DEBUG) {
-            listOf(200) // Debug mode: only 200ms for quick detection
-        } else {
-            // Release mode: 500ms, 1000ms, 2000ms for detailed monitoring
-            //listOf(500, 1000, 2000)
-            listOf(500)
-        }
+        // 700ms aligns with Google's "frozen frame" threshold in Android Vitals.
+        val threshold = 700
 
-        // Create multiple ANRWatchDog instances for different thresholds
-        thresholds.forEach { threshold ->
-            ANRWatchDog(threshold)
-                .setIgnoreDebugger(true)
-                .setANRListener {
-                    L.w { "ANR(${threshold}ms) detected: ${it.stackTraceToString()}" }
-                    if (!BuildConfig.DEBUG) { // only report in release mode
-                        // Create a custom exception with ANR threshold info for better filtering
-                        val anrException = Exception("ANR(${threshold}ms)_main_thread_blocking - ${it.message}")
-                        anrException.initCause(it)
+        ANRWatchDog(threshold)
+            .setIgnoreDebugger(true)
+            .setANRListener { anrError ->
+                L.w { "ANR(${threshold}ms) detected: ${anrError.stackTraceToString()}" }
+                if (!BuildConfig.DEBUG) { // only report in release mode
+                    // Background ANRs are mostly false positives (OS deprioritizes the process),
+                    // skip reporting to reduce noise
+                    if (!AppForegroundObserver.isForegrounded()) return@setANRListener
 
-                        // Record the exception without modifying global custom keys
-                        FirebaseCrashlytics.getInstance().recordException(anrException)
+                    val anrException = Exception("ANR(${threshold}ms)_main_thread_blocking - ${anrError.message}")
+                    // Use main thread's actual blocking stack trace for Crashlytics grouping,
+                    // so events are grouped by real blocking location instead of this lambda
+                    anrError.cause?.stackTrace?.let { mainThreadStack ->
+                        anrException.stackTrace = mainThreadStack
                     }
+                    anrException.initCause(anrError)
+
+                    FirebaseCrashlytics.getInstance().recordException(anrException)
                 }
-                .setReportMainThreadOnly()
-                .start()
-        }
+            }
+            .setReportMainThreadOnly()
+            .start()
     }
 
     private fun scheduleGrayConfigUpdateCheck() {

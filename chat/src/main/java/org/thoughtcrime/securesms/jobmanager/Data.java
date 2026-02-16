@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import org.thoughtcrime.securesms.util.Base64;
+import com.difft.android.base.utils.Base64;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,7 +84,12 @@ public class Data {
 
     public byte[] getStringAsBlob(@NonNull String key) {
         String raw = getString(key);
-        return raw != null ? Base64.decodeOrThrow(raw) : null;
+        if (raw == null) return null;
+        try {
+            return Base64.decode(raw);
+        } catch (java.io.IOException e) {
+            throw new AssertionError("Failed to decode Base64 string for key: " + key, e);
+        }
     }
 
     public String getStringOrDefault(@NonNull String key, String defaultValue) {

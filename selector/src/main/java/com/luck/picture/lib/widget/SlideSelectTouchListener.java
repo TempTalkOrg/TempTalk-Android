@@ -1,5 +1,7 @@
 package com.luck.picture.lib.widget;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.view.MotionEvent;
@@ -211,7 +213,7 @@ public class SlideSelectTouchListener implements RecyclerView.OnItemTouchListene
                 mScroller.abortAnimation();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[SlideSelectTouchListener] reset error:");
         }
     }
 

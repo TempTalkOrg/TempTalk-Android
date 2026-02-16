@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.user.CallConfig
@@ -106,10 +107,11 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
             text = speakerCountDownDurationStr,
             style = TextStyle(
                 fontSize = 12.sp,
-                lineHeight = 16.sp,
                 fontWeight = FontWeight(400),
                 color = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer?.warningThreshold ?: 3000L) || countDownShakeAnim.isRunning) countDownEndColor else countDownStartColor,
-            )
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Clip
         )
 
     }

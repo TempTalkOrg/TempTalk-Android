@@ -23,9 +23,8 @@ import kotlin.Unit;
 
 import util.MapUtil;
 import util.StreamUtil;
-import util.logging.Log;
 
-import org.signal.libsignal.protocol.util.Pair;
+import android.util.Pair;
 import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.providers.MyBlobProvider;
 import org.thoughtcrime.securesms.util.task.ProgressDialogAsyncTask;
@@ -45,10 +44,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import com.difft.android.base.utils.PackageUtil;
 import com.difft.android.base.widget.ToastUtil;
 
 public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTask.Attachment, Void, Pair<Integer, SaveAttachmentTask.Attachment>> {
-    private static final String TAG = Log.tag(SaveAttachmentTask.class);
+    private static final String TAG = "SaveAttachmentTask";
 
     static final int SUCCESS = 0;
     private static final int FAILURE = 1;
@@ -102,7 +102,7 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
                 return new Pair<>(SUCCESS, attachments[0]);
             }
         } catch (IOException ioe) {
-            Log.w(TAG, ioe);
+            L.w(ioe, () -> TAG + " save attachment failed");
             return new Pair<>(FAILURE, null);
         }
     }
@@ -227,7 +227,9 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
         MimeTypeMap mimeTypeMap = MimeTypeMap.getSingleton();
         String extension = mimeTypeMap.getExtensionFromMimeType(contentType);
         SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS");
-        String base = "signal-" + dateFormatter.format(timestamp);
+        String appName = PackageUtil.INSTANCE.getAppName();
+        if (appName == null) appName = "attachment";
+        String base = appName + "-" + dateFormatter.format(timestamp);
 
         if (extension == null) extension = "attach";
 
@@ -246,7 +248,7 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
         String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
 
         if (MediaUtil.isOctetStream(mimeType) && MediaUtil.isImageVideoOrAudioType(contentType)) {
-            Log.d(TAG, "MimeTypeMap returned octet stream for media, changing to provided content type [" + contentType + "] instead.");
+            L.d(() -> TAG + " MimeTypeMap returned octet stream for media, changing to provided content type [" + contentType + "] instead.");
             mimeType = contentType;
         }
 
@@ -302,7 +304,7 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
             String dataPath = String.format("%s/%s", dir, outputFileName);
             int i = 0;
             while (pathInCache(outputUri, dataPath) || pathTaken(outputUri, dataPath)) {
-                Log.d(TAG, "The content exists. Rename and check again.");
+                L.d(() -> TAG + " The content exists. Rename and check again.");
                 outputFileName = base + "-" + (++i) + "." + extension;
                 dataPath = String.format("%s/%s", dir, outputFileName);
             }
@@ -310,11 +312,12 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
             contentValues.put(MediaStore.MediaColumns.DATA, dataPath);
         }
 
+        final String finalMimeType = mimeType;
         try {
             return new CreateMediaUriResult(outputUri, getContext().getContentResolver().insert(outputUri, contentValues));
         } catch (RuntimeException e) {
             if (e instanceof IllegalArgumentException || e.getCause() instanceof IllegalArgumentException) {
-                Log.w(TAG, "Unable to create uri in " + outputUri + " with mimeType [" + mimeType + "]");
+                L.w(() -> TAG + " Unable to create uri in " + outputUri + " with mimeType [" + finalMimeType + "]");
                 return new CreateMediaUriResult(StorageUtil.getDownloadUri(), getContext().getContentResolver().insert(StorageUtil.getDownloadUri(), contentValues));
             } else {
                 throw e;
@@ -387,20 +390,20 @@ public class SaveAttachmentTask extends ProgressDialogAsyncTask<SaveAttachmentTa
         super.onPostExecute(result);
         final Context context = contextReference.get();
         if (context == null) return;
-        Attachment attachment = result.second();
-        switch (result.first()) {
+        Attachment attachment = result.second;
+        switch (result.first) {
             case FAILURE:
                 if (attachment != null) {
-                    L.w(() -> "Failed to save attachment to storage:" + attachment.uri);
+                    L.w(() -> "Failed to save attachment to storage, contentType=" + attachment.contentType);
                 } else {
-                    L.w(() -> "Failed to save attachment to storage, null attachment");
+                    L.w(() -> "Failed to save attachment to storage, attachment is null");
                 }
                 ToastUtil.INSTANCE.show(context.getResources().getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card));
                 break;
             case SUCCESS:
                 if (attachment != null) {
                     if (attachment.shouldShowToast) {
-                        L.i(() -> "Success to save attachment to storage:" + attachment.uri);
+                        L.i(() -> "Success to save attachment to storage, contentType=" + attachment.contentType);
                         if (attachment.contentType.startsWith("video/") || attachment.contentType.startsWith("image/")) {
                             ToastUtil.INSTANCE.show(R.string.SaveAttachmentTask_saved_to_album);
                         } else if (attachment.contentType.startsWith("audio/")) {

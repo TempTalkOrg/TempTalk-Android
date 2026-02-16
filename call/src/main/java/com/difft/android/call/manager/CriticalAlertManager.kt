@@ -31,7 +31,7 @@ import javax.inject.Singleton
 
 @Singleton
 class CriticalAlertManager @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val gson: Gson,
     private val criticalAlertStateManager: CriticalAlertStateManager,
@@ -83,7 +83,7 @@ class CriticalAlertManager @Inject constructor(
                 gson.fromJson<Map<String, CriticalAlertInfo>>(json, type)?.toMutableMap() ?: mutableMapOf()
             }
         } catch (e: Exception) {
-            L.e { "[MessageNotificationUtil] Failed to load critical alert infos: ${e.message}" }
+            L.e { "[Call] CriticalAlertManager Failed to load critical alert infos: ${e.message}" }
             mutableMapOf()
         }
     }
@@ -97,7 +97,7 @@ class CriticalAlertManager @Inject constructor(
             val json = gson.toJson(infos)
             SharedPrefsUtil.putString(SP_KEY_CRITICAL_ALERT_INFOS, json)
         } catch (e: Exception) {
-            L.e { "[MessageNotificationUtil] Failed to save critical alert infos: ${e.message}" }
+            L.e { "[Call] CriticalAlertManager Failed to save critical alert infos: ${e.message}" }
         }
     }
 
@@ -122,12 +122,12 @@ class CriticalAlertManager @Inject constructor(
             if (expiredKeys.isNotEmpty()) {
                 expiredKeys.forEach { infos.remove(it) }
                 saveCriticalAlertInfos(infos)
-                L.i { "[MessageNotificationUtil] Cleanup completed: removed ${expiredKeys.size} expired critical alert entries" }
+                L.i { "[Call] CriticalAlertManager Cleanup completed: removed ${expiredKeys.size} expired critical alert entries" }
             } else {
-                L.d { "[MessageNotificationUtil] No expired critical alert cache to clean" }
+                L.d { "[Call] CriticalAlertManager No expired critical alert cache to clean" }
             }
         } catch (e: Exception) {
-            L.e { "[MessageNotificationUtil] Cleanup critical alert cache failed: ${e.stackTraceToString()}" }
+            L.e { "[Call] CriticalAlertManager Cleanup critical alert cache failed: ${e.stackTraceToString()}" }
         }
     }
 
@@ -149,10 +149,10 @@ class CriticalAlertManager @Inject constructor(
                 timestamp = System.currentTimeMillis()
             )
             saveCriticalAlertInfos(infos)
-            L.d { "[MessageNotificationUtil] Added notificationId=$notificationId to cache for conversationId=$conversationId (hashKey=$hashKey), total notifications=${notificationIds.size}"}
+            L.d { "[Call] CriticalAlertManager Added notificationId=$notificationId to cache for conversationId=$conversationId (hashKey=$hashKey), total notifications=${notificationIds.size}"}
             return true
         } else {
-            L.w { "[MessageNotificationUtil] NotificationId=$notificationId already exists in cache for conversationId=$conversationId (hashKey=$hashKey), skip adding"}
+            L.w { "[Call] CriticalAlertManager NotificationId=$notificationId already exists in cache for conversationId=$conversationId (hashKey=$hashKey), skip adding"}
             return false
         }
     }
@@ -175,7 +175,7 @@ class CriticalAlertManager @Inject constructor(
                 timestamp = System.currentTimeMillis()
             )
             saveCriticalAlertInfos(infos)
-            L.d { "[MessageNotificationUtil] Added notificationId=$notificationId to cache for conversationId=$conversationId (hashKey=$hashKey), total notifications=${notificationIds.size}"}
+            L.d { "[Call] CriticalAlertManager Added notificationId=$notificationId to cache for conversationId=$conversationId (hashKey=$hashKey), total notifications=${notificationIds.size}"}
         }
     }
 
@@ -203,7 +203,7 @@ class CriticalAlertManager @Inject constructor(
             val info = infos[hashKey]
             info?.notificationIds?.contains(notificationId) == true
         } catch (e: Exception) {
-            L.e { "[MessageNotificationUtil] Failed to check if critical alert notification is processed: ${e.message}" }
+            L.e { "[Call] CriticalAlertManager Failed to check if critical alert notification is processed: ${e.message}" }
             false // 出错时返回false，允许继续处理
         }
     }
@@ -235,12 +235,12 @@ class CriticalAlertManager @Inject constructor(
                 soundMutex.withLock {
                     // 若此时已有更新的播放任务，则放弃当前任务
                     if (token != criticalAlertStateManager.getCurrentPlayToken()) {
-                        L.i { "CriticalAlertManager Ignored old play call for id=$notificationId (token=$token)" }
+                        L.i { "[Call] CriticalAlertManager Ignored old play call for id=$notificationId (token=$token)" }
                         // 清理未使用的ringtone对象，防止资源泄漏
                         try {
                             ringtone?.stop()
                         } catch (e: Exception) {
-                            L.e { "CriticalAlertManager Failed to stop ringtone during cleanup: ${e.message}" }
+                            L.e { "[Call] CriticalAlertManager Failed to stop ringtone during cleanup: ${e.message}" }
                         }
                         return@withLock
                     }
@@ -248,13 +248,13 @@ class CriticalAlertManager @Inject constructor(
                     currentRingtone = ringtone
                     criticalAlertStateManager.setCurrentNotificationId(notificationId)
                     criticalAlertStateManager.setConversationId(conversationId)
-                    L.i { "CriticalAlertManager Playing ringtone for notification $notificationId" }
+                    L.i { "[Call] CriticalAlertManager Playing ringtone for notification $notificationId" }
                     ringtone?.play()
                     criticalAlertStateManager.setIsPlayingSound(true)
                 }
 
             } catch (e: Exception) {
-                L.e { "CriticalAlertManager Play failed: ${e.message}" }
+                L.e { "[Call] CriticalAlertManager Play failed: ${e.message}" }
             }
         }
     }
@@ -279,7 +279,7 @@ class CriticalAlertManager @Inject constructor(
             soundMutex.withLock {
                 if (notificationId == criticalAlertStateManager.getCurrentNotificationId()) {
                     stopSoundInternal()
-                    L.i { "CriticalAlertManager Stopped ringtone for $notificationId" }
+                    L.i { "[Call] CriticalAlertManager Stopped ringtone for $notificationId" }
                 }
             }
         }
@@ -287,14 +287,19 @@ class CriticalAlertManager @Inject constructor(
 
     /**
      * 内部方法：停止播放声音
+     * 始终调用 stop() 以确保底层 MediaPlayer 被释放，避免 finalize 超时崩溃
      */
     private fun stopSoundInternal() {
         try {
             currentRingtone?.let {
-                if (it.isPlaying) it.stop()
+                try {
+                    it.stop()
+                } catch (e: IllegalStateException) {
+                    L.e { "[Call] CriticalAlertManager Ringtone is in an illegal state: ${e.message}" }
+                }
             }
         } catch (e: Exception) {
-            L.e { "CriticalAlertManager Stop failed: ${e.message}" }
+            L.e { "[Call] CriticalAlertManager Stop failed: ${e.message}" }
         } finally {
             currentRingtone = null
             criticalAlertStateManager.resetSoundState()
@@ -313,7 +318,7 @@ class CriticalAlertManager @Inject constructor(
         return snapshot.isPlayingSound || snapshot.isShowing
     }
 
-    fun startCriticalAlertActivity(conversationId: String, title: String, content: String) {
+    fun startCriticalAlertActivity(conversationId: String, title: String, content: String, notificationId: Int, roomId: String? = null) {
         // 如果 LIncomingCallActivity 正在显示，等待它关闭后再启动 CriticalAlertActivity
         // 这样可以避免 CriticalAlertActivity 的背景显示为黑色（实际上是 LIncomingCallActivity 的窗口还在显示）
         appScope.launch(Dispatchers.Main) {
@@ -335,6 +340,9 @@ class CriticalAlertManager @Inject constructor(
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, conversationId)
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, title)
                 putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, content)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, notificationId)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, false)
+                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID, roomId)
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
@@ -344,6 +352,17 @@ class CriticalAlertManager @Inject constructor(
     fun stopSoundAndFlashLight() {
         stopSound()
         FlashLightBlinker.stopBlinking(application)
+    }
+
+    fun playSoundAndFlashLight(conversationId: String, notificationId: Int) {
+        appScope.launch(Dispatchers.IO) {
+            // 播放critical alert声音
+            playSound(conversationId, notificationId)
+            // 启动闪光灯
+            if (FlashLightBlinker.hasCameraPermission(context)) {
+                FlashLightBlinker.startBlinking(context, durationMs = 30000)
+            }
+        }
     }
 
 }

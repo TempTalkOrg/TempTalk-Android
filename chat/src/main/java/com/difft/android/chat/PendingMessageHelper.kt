@@ -8,7 +8,7 @@ import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.responses.PendingMessage
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import com.google.protobuf.ByteString
 import com.tencent.wcdb.base.WCDBException
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 class PendingMessageHelper @Inject constructor(
-    @ChativeHttpClientModule.Chat
+    @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
     private val dbMessageStore: DBMessageStore

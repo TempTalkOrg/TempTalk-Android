@@ -1,5 +1,7 @@
 package com.difft.android.security;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -29,7 +31,7 @@ public class AppInfo {
             ByteArrayInputStream stream = new ByteArrayInputStream(signature.toByteArray());
             cert = (X509Certificate) cf.generateCertificate(stream);
         } catch (PackageManager.NameNotFoundException | CertificateException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[AppInfo] getSigningCertificate error");
         }
         return cert;
     }
