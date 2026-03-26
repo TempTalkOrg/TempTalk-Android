@@ -9,7 +9,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -27,10 +26,10 @@ import com.difft.android.base.android.permission.PermissionUtil.launchSinglePerm
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.R
 import com.difft.android.base.utils.SecureModeUtil
@@ -47,8 +46,10 @@ import com.difft.android.network.responses.ConversationSetResponseBody
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import io.reactivex.rxjava3.core.Observable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -59,7 +60,6 @@ import org.difft.app.database.wcdb
 import org.difft.app.database.models.GroupModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
@@ -109,6 +109,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     })
 
     @Inject
+    lateinit var groupUtil: GroupUtil
+
+    @Inject
     lateinit var groupRepo: GroupRepo
 
     @Inject
@@ -119,6 +122,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
 
     @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var callDataManager: CallDataManager
 
     private val onAudioPermissionForMessage = registerPermission {
         onAudioPermissionForMessageResult(it)
@@ -222,40 +228,27 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
 
         getGroupInfo(false)
+        getGroupInfo(true)
 
-        Observable.just(Unit)
-            .delay(2000, TimeUnit.MILLISECONDS)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
-                getGroupInfo(true)
-            }, {})
-
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
+        groupUtil.singleGroupsUpdate
+            .onEach {
+                if (!isAdded || view == null) return@onEach
                 if (it.gid == chatViewModel.forWhat.id) {
-                    chatViewModel.setChatUIData(
-                        ChatUIData(null, it)
-                    )
+                    chatViewModel.setChatUIData(ChatUIData(null, it))
                     // Refresh confidential toggle when group members change
                     updateConfidential()
                 }
-            }, {
-                L.w { "[GroupChatFragment] observe singleGroupsUpdate error: ${it.stackTraceToString()}" }
-            })
+            }
+            .catch { L.w { "[GroupChatFragment] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.voiceVisibilityChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
-                if (it) {
-                    binding.clVoiceRecord.visibility = View.VISIBLE
-                } else {
-                    binding.clVoiceRecord.visibility = View.GONE
-                }
-            }, { L.w { "[GroupChatFragment] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } })
+            .onEach {
+                if (!isAdded || view == null) return@onEach
+                binding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
+            }
+            .catch { L.w { "[GroupChatFragment] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         binding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -294,9 +287,8 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
         }
 
         chatViewModel.showOrHideFullInput
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
+            .onEach {
+                if (!isAdded || view == null) return@onEach
                 if (it.first) {
                     binding.includeFullInput.clFullInput.visibility = View.VISIBLE
                     binding.includeFullInput.edittextFullInput.apply {
@@ -308,7 +300,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
                 } else {
                     binding.includeFullInput.clFullInput.visibility = View.GONE
                 }
-            }, { L.w { "[GroupChatFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[GroupChatFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         binding.includeFullInput.ivFullInputClose.setOnClickListener {
             binding.includeFullInput.edittextFullInput.clearFocus()
@@ -363,35 +357,27 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
             binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
             binding.includeFullInput.ivFullInputConfidential.tag = 1
         } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
-                this.setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon))
-            }
+            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
             binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
             binding.includeFullInput.ivFullInputConfidential.tag = 0
         }
     }
 
     private fun getGroupInfo(forceUpdate: Boolean = false) {
-        GroupUtil.getSingleGroupInfo(requireContext(), chatViewModel.forWhat.id, forceUpdate)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
-                if (it.isPresent) {
-                    chatViewModel.setChatUIData(ChatUIData(null, it.get()))
-                } else {
-                    if (!forceUpdate) {
-                        chatViewModel.setChatUIData(
-                            ChatUIData(
-                                null, GroupModel().apply {
-                                    gid = chatViewModel.forWhat.id
-                                }
-                            )
-                        )
-                    }
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = groupUtil.getSingleGroupInfo(chatViewModel.forWhat.id, forceUpdate)
+                if (result != null) {
+                    chatViewModel.setChatUIData(ChatUIData(null, result))
+                } else if (!forceUpdate) {
+                    chatViewModel.setChatUIData(
+                        ChatUIData(null, GroupModel().apply { gid = chatViewModel.forWhat.id })
+                    )
                 }
-            }, {
-                L.w { "[GroupChatFragment] getGroupInfo error: ${it.stackTraceToString()}" }
-            })
+            } catch (e: Exception) {
+                L.w { "[GroupChatFragment] getGroupInfo error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     fun openGroupInfoActivity() {
@@ -444,18 +430,24 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     }
 
     private fun registerCallStatusViewListener() {
-        // Ensure call header fragment is initialized
         ensureCallHeaderFragment()
 
-        // Set initial state
         binding.fragmentContainerViewCall.visibility =
-            if (onGoingCallStateManager.chatHeaderCallVisibility.value) View.VISIBLE else View.GONE
+            if (onGoingCallStateManager.hasOtherCallData(callDataManager.callingList.value))
+                View.VISIBLE else View.GONE
 
-        // Observe state changes
-        onGoingCallStateManager.chatHeaderCallVisibility
+        combine(
+            onGoingCallStateManager.chatHeaderCallVisibility,
+            callDataManager.callingList,
+            onGoingCallStateManager.isInCalling
+        ) { _, callingList, _ ->
+            onGoingCallStateManager.hasOtherCallData(callingList)
+        }
+            .distinctUntilChanged()
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-            .onEach { isVisible ->
-                binding.fragmentContainerViewCall.visibility = if (isVisible) View.VISIBLE else View.GONE
+            .onEach { shouldShow ->
+                binding.fragmentContainerViewCall.visibility =
+                    if (shouldShow) View.VISIBLE else View.GONE
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }

@@ -12,7 +12,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
@@ -388,9 +387,9 @@ class VerifyCodeActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 val result = if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
-                    bindRepo.verifyEmail(basicAuth, account, nonce).await()
+                    bindRepo.verifyEmail(basicAuth, account, nonce)
                 } else {
-                    bindRepo.verifyPhone(basicAuth, account, nonce).await()
+                    bindRepo.verifyPhone(basicAuth, account, nonce)
                 }
                 ComposeDialogManager.dismissWait()
                 if (result.status == 0) {
@@ -413,7 +412,7 @@ class VerifyCodeActivity : BaseActivity() {
             loadingHandleZone()
             lifecycleScope.launch {
                 try {
-                    val result = bindRepo.verifyEmailCode(basicAuth, code, nonce).await()
+                    val result = bindRepo.verifyEmailCode(basicAuth, code, nonce)
                     enableHandleZone()
                     if (result.status == 0) {
                         userManager.update {
@@ -435,7 +434,7 @@ class VerifyCodeActivity : BaseActivity() {
             loadingHandleZone()
             lifecycleScope.launch {
                 try {
-                    val result = bindRepo.verifyPhoneCode(basicAuth, account, code, nonce).await()
+                    val result = bindRepo.verifyPhoneCode(basicAuth, account, code, nonce)
                     enableHandleZone()
                     if (result.status == 0) {
                         userManager.update {

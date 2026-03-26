@@ -37,12 +37,25 @@
         android:textSize="20sp"
         android:textStyle="bold"
         app:layout_constrainedWidth="true"
-        app:layout_constraintEnd_toStartOf="@+id/textview_timer"
+        app:layout_constraintEnd_toStartOf="@+id/imageview_bot_badge"
         app:layout_constraintHorizontal_bias="0"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toEndOf="@id/ib_back"
         app:layout_goneMarginStart="@dimen/chat_header_title_margin_start_no_back"
         tools:text="111113 dwqdqwe qwewe eqwe qwe" />
+
+    <ImageView
+        android:id="@+id/imageview_bot_badge"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="4dp"
+        android:src="@drawable/chat_ic_official_bot_badge"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/textview_nickname"
+        app:layout_constraintEnd_toStartOf="@+id/textview_timer"
+        app:layout_constraintStart_toEndOf="@+id/textview_nickname"
+        app:layout_constraintTop_toTopOf="@id/textview_nickname"
+        tools:visibility="visible" />
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/textview_timer"
@@ -55,7 +68,7 @@
         app:layout_constraintBottom_toBottomOf="@+id/textview_nickname"
         app:layout_constraintEnd_toStartOf="@+id/imageview_add_contact"
         app:layout_constraintHorizontal_bias="0"
-        app:layout_constraintStart_toEndOf="@+id/textview_nickname"
+        app:layout_constraintStart_toEndOf="@+id/imageview_bot_badge"
         app:layout_constraintTop_toTopOf="@+id/textview_nickname"
         tools:text="[7d]"
         tools:visibility="visible" />

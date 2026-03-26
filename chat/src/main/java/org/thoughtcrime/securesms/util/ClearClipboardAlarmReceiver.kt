@@ -40,12 +40,18 @@ class ClearClipboardAlarmReceiver : BroadcastReceiver() {
         }
 
         // Clear the clipboard
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            clipboard.clearPrimaryClip()
-        } else {
-            clipboard.setPrimaryClip(ClipData.newPlainText("", " "))
+        // Wrap in try-catch: some Android 9 (API 28) devices (e.g. vivo) have a system bug
+        // where ClipboardService.setPrimaryClipInternal throws a NullPointerException internally,
+        // which propagates back via Binder IPC and crashes the receiver.
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                clipboard.clearPrimaryClip()
+            } else {
+                clipboard.setPrimaryClip(ClipData.newPlainText("", " "))
+            }
+            L.i { "[$TAG] Clipboard cleared" }
+        } catch (e: Exception) {
+            L.w { "[$TAG] Failed to clear clipboard: ${e.stackTraceToString()}" }
         }
-
-        L.i { "[$TAG] Clipboard cleared" }
     }
 }

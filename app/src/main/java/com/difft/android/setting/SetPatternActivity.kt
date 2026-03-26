@@ -1,9 +1,7 @@
 package com.difft.android.setting
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.View
 import androidx.activity.OnBackPressedCallback
@@ -36,13 +34,8 @@ class SetPatternActivity : BaseActivity() {
     private var firstPattern: List<PatternLockView.Dot>? = null
     private var isConfirmStep = false
 
-    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 禁用横屏，强制竖屏显示
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-
         initView()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {

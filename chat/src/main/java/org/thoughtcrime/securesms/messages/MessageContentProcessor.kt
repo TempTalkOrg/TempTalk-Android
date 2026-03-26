@@ -31,7 +31,6 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
-import difft.android.messageserialization.model.Card
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
@@ -48,7 +47,6 @@ import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
 import difft.android.messageserialization.model.SharedContactPostalAddress
 import difft.android.messageserialization.model.TextMessage
-import kotlinx.coroutines.rx3.await
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.delete
 import org.difft.app.database.getContactorFromAllTable
@@ -147,7 +145,7 @@ class MessageContentProcessor @Inject constructor(
                                 firstReadMessage.readPosition.maxServerTime,
                                 firstReadMessage.readPosition.maxSequenceId
                             )
-                            messageStore.updateMessageReadTime(forWhat.id, firstReadMessage.timestamp).await()
+                            messageStore.updateMessageReadTime(forWhat.id, firstReadMessage.timestamp)
                         }
                     }
                 } else return null
@@ -210,7 +208,6 @@ class MessageContentProcessor @Inject constructor(
                     "isReaction=${message.hasReaction()}, " +
                     "hasQuote=${message.hasQuote()}, " +
                     "hasForward=${message.hasForwardContext()}, " +
-                    "hasCard=${message.hasCard()}, " +
                     "hasScreenShot=${message.hasScreenShot()}, " +
                     "hasBody=${messageBody.isNotEmpty()}, " +
                     "attachmentCount=${message.attachmentsCount}, " +
@@ -221,14 +218,7 @@ class MessageContentProcessor @Inject constructor(
                     "currentVersion=${SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE}"
         }
 
-        // Calculate systemShowTimestamp once for all code paths
-        // For sync messages: prefer sent.serverTimestamp, fallback to envelope.systemShowTimestamp
-        val systemShowTimestamp = if (isSyncMessage) {
-            val serverTs = content.signalServiceContent?.syncMessage?.sent?.serverTimestamp ?: 0L
-            if (serverTs != 0L) serverTs else content.signalServiceEnvelope.systemShowTimestamp
-        } else {
-            content.signalServiceEnvelope.systemShowTimestamp
-        }
+        val systemShowTimestamp = content.signalServiceEnvelope.systemShowTimestamp
 
         // Check protocol version first - if message requires newer version, save as unsupported message
         val requiredVersion = message.requiredProtocolVersion
@@ -371,29 +361,6 @@ class MessageContentProcessor @Inject constructor(
                 asyncMessageJobsManager.needFetchSpecifiedContactors(forwardContactIds.toList())
             }
         }
-        var card: Card? = null
-        if (message.hasCard()) {
-            L.d { "[Message][${tag}] Found card in handle text message" }
-            val extraLatestCard = content.extraLatestCard
-            if (extraLatestCard != null) {
-                L.i { "[Message][${tag}] Found extraLatestCard -> ${extraLatestCard.version} in handle card message" }
-            }
-            val card1 = message.card
-            card = Card(
-                card1.cardId,
-                card1.appId,
-                extraLatestCard?.version ?: card1.version,
-                card1.creator,
-                card1.timestamp,
-                extraLatestCard?.content ?: card1.content,
-                card1.contentType,
-                card1.type,
-                card1.fixedWidth,
-                fromWho.id,
-                content.conversation.id
-            )
-        }
-
         // Handle screenshot
         val screenShot: ScreenShot? = if (message.hasScreenShot()) {
             L.d { "[Message][${tag}] Found screenshot in handle text message" }
@@ -438,7 +405,6 @@ class MessageContentProcessor @Inject constructor(
             // Check for empty message - don't save to database if no valid content
             val isEmptyMessage = TextUtils.isEmpty(messageBody)
                     && forwardContext == null
-                    && card == null
                     && quote == null
                     && attachmentList.isEmpty()
                     && sharedContacts.isEmpty()
@@ -466,7 +432,7 @@ class MessageContentProcessor @Inject constructor(
             }
 
             var receiverIds: String? = null
-            if (isSyncMessage && content.conversation is For.Group) {
+            if (content.senderId == globalServices.myId && content.conversation is For.Group) {
                 val receiverIdList = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.gid.eq(content.conversation.id)).map { it.id } - globalServices.myId
                 receiverIds = globalServices.gson.toJson(receiverIdList)
             }
@@ -492,7 +458,6 @@ class MessageContentProcessor @Inject constructor(
                 quote,
                 forwardContext,
                 null,
-                card,
                 mentions,
                 message.atPersons,
                 null,
@@ -569,7 +534,7 @@ class MessageContentProcessor @Inject constructor(
                             data.operatorInfo?.operatorId?.let { id ->
                                 dbRoomStore.createRoomIfNotExist(For.Account(id))
                                 ContactorUtil.updateContactRequestStatus(id)
-                                ContactorUtil.getContactWithID(context, id).await()
+                                ContactorUtil.getContactWithID(context, id)
                                 ContactorUtil.emitContactsUpdate(listOf(id))
                             }
 
@@ -651,7 +616,6 @@ class MessageContentProcessor @Inject constructor(
         forwardContactIds.add(forward.author)
         val attachments: MutableList<Attachment> = ArrayList()
         val forwards: MutableList<Forward> = ArrayList()
-        var card: Card? = null
         val mentions: MutableList<Mention> = ArrayList()
         if (forward.attachmentsCount > 0) {
             for (attachmentPointer in forward.attachmentsList) {
@@ -672,17 +636,13 @@ class MessageContentProcessor @Inject constructor(
                 forwards.add(createForward(messageId, forward1, forwardContactIds, source, conversationId, forward1.serverTimestamp))
             }
         }
-        if (forward.hasCard()) {
-            val card1 = forward.card
-            card = Card(card1.cardId, card1.appId, card1.version, card1.creator, card1.timestamp, card1.content, card1.contentType, card1.type, card1.fixedWidth, source, conversationId)
-        }
         if (forward.mentionsCount > 0) {
             for (mention in forward.mentionsList) {
                 mentions.add(Mention(mention.start, mention.length, mention.uid, mention.type.number))
             }
         }
 
-        return Forward(forward.id, forward.type, forward.isFromGroup, forward.author, forward.text, attachments, forwards, card, mentions, serverTimestamp)
+        return Forward(forward.id, forward.type, forward.isFromGroup, forward.author, forward.text, attachments, forwards, mentions, serverTimestamp)
     }
 
     private fun createAttachmentFormPointer(

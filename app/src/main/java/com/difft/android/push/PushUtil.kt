@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -165,7 +164,7 @@ class PushUtil @Inject constructor(
 
                 val result = chatHttpClient.httpService.fetchBindPushToken(
                     basicAuth, "fcm_v2", BindPushTokenRequestBody(fcmID)
-                ).await()
+                )
 
                 if (result.status == 0) {
                     L.i { "[Push] 绑定token成功" }

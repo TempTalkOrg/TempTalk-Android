@@ -6,7 +6,6 @@ import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -24,11 +23,13 @@ import com.difft.android.base.android.permission.PermissionUtil.launchSinglePerm
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
@@ -43,12 +44,18 @@ import com.difft.android.network.responses.ConversationSetResponseBody
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.ContactorModel
+import org.difft.app.database.models.DBContactorModel
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
 import javax.inject.Inject
@@ -110,6 +117,9 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
 
     @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var callDataManager: CallDataManager
 
     private val onAudioPermissionForMessage = registerPermission {
         onAudioPermissionForMessageResult(it)
@@ -211,30 +221,26 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
             return
         }
 
-        refreshContact()
+        loadContactInfo()
         fetchContactInfoFromServer()
 
         ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
+            .onEach {
+                if (!isAdded || view == null) return@onEach
                 if (it.contains(chatViewModel.forWhat.id)) {
-                    refreshContact()
+                    loadContactInfo()
                 }
-            }, {
-                L.w { "[ChatFragment] observe contactsUpdate error: ${it.stackTraceToString()}" }
-            })
+            }
+            .catch { L.w { "[ChatFragment] observe contactsUpdate error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.voiceVisibilityChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
-                if (it) {
-                    binding.clVoiceRecord.visibility = View.VISIBLE
-                } else {
-                    binding.clVoiceRecord.visibility = View.GONE
-                }
-            }, { L.w { "[ChatFragment] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } })
+            .onEach {
+                if (!isAdded || view == null) return@onEach
+                binding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
+            }
+            .catch { L.w { "[ChatFragment] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         binding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -273,9 +279,8 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
         }
 
         chatViewModel.showOrHideFullInput
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
+            .onEach {
+                if (!isAdded || view == null) return@onEach
                 if (it.first) {
                     binding.includeFullInput.clFullInput.visibility = View.VISIBLE
                     binding.includeFullInput.edittextFullInput.apply {
@@ -287,7 +292,9 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                 } else {
                     binding.includeFullInput.clFullInput.visibility = View.GONE
                 }
-            }, { L.w { "[ChatFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[ChatFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         binding.includeFullInput.ivFullInputClose.setOnClickListener {
             binding.includeFullInput.edittextFullInput.clearFocus()
@@ -355,40 +362,40 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
             binding.includeFullInput.ivFullInputConfidential.visibility = View.GONE
             return
         }
-        if (conversationSet?.confidentialMode == 1) {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-            binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
-            binding.includeFullInput.ivFullInputConfidential.tag = 1
-        } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
-                this.setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon))
+        viewLifecycleOwner.lifecycleScope.launch {
+            val isFriend = withContext(Dispatchers.IO) {
+                wcdb.contactor.getFirstObject(
+                    DBContactorModel.id.eq(chatViewModel.forWhat.id)
+                ) != null
             }
-            binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
-            binding.includeFullInput.ivFullInputConfidential.tag = 0
+            if (!isAdded || view == null) return@launch
+            if (!isFriend) {
+                binding.includeFullInput.ivFullInputConfidential.visibility = View.GONE
+                return@launch
+            }
+            if (conversationSet?.confidentialMode == 1) {
+                val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
+                binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+                binding.includeFullInput.ivFullInputConfidential.tag = 1
+            } else {
+                val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
+                binding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
+                binding.includeFullInput.ivFullInputConfidential.tag = 0
+            }
         }
     }
 
-    private fun refreshContact() {
-        ContactorUtil.getContactWithID(requireContext(), chatViewModel.forWhat.id)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
-                if (it.isPresent) {
-                    chatViewModel.setChatUIData(
-                        ChatUIData(
-                            it.get(),
-                            null
-                        )
-                    )
-                } else {
-                    chatViewModel.setChatUIData(
-                        ChatUIData(
-                            ContactorModel().apply { id = chatViewModel.forWhat.id },
-                            null
-                        )
-                    )
-                }
-            }) { L.w { "[ChatFragment] refreshContact error: ${it.stackTraceToString()}" } }
+    private fun loadContactInfo() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = ContactorUtil.getContactWithID(requireContext(), chatViewModel.forWhat.id)
+                val contact = if (result.isPresent) result.get()
+                              else ContactorModel().apply { id = chatViewModel.forWhat.id }
+                chatViewModel.setChatUIData(ChatUIData(contact, null))
+            } catch (e: Exception) {
+                L.w { "[ChatFragment] loadContactInfo error: ${e.message}" }
+            }
+        }
     }
 
     /**
@@ -401,7 +408,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
             try {
                 val contacts = ContactorUtil.fetchContactors(
                     listOf(chatViewModel.forWhat.id), requireContext()
-                ).await()
+                )
                 if (!isAdded || view == null) return@launch
                 val serverContact = contacts.firstOrNull() ?: return@launch
                 val currentContact = chatViewModel.chatUIData.value.contact
@@ -409,6 +416,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                     L.i { "[ChatFragment] Contact info changed for ${chatViewModel.forWhat.id}, update UI" }
                     chatViewModel.setChatUIData(ChatUIData(serverContact, null))
                     chatViewModel.refreshContactorInCache(serverContact)
+                    RoomChangeTracker.trackRoom(chatViewModel.forWhat.id, RoomChangeType.CONTACT)
                 } else {
                     L.d { "[ChatFragment] Contact info unchanged for ${chatViewModel.forWhat.id}, skip refresh" }
                 }
@@ -456,18 +464,24 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
     }
 
     private fun registerCallStatusViewListener() {
-        // 确保通话栏 Fragment 初始化，避免状态由 Fragment 决定时无法触发
         ensureCallHeaderFragment()
 
-        // 先设置初始状态，确保页面进入时立即显示正确的可见性
         binding.fragmentContainerViewCall.visibility =
-            if (onGoingCallStateManager.chatHeaderCallVisibility.value) View.VISIBLE else View.GONE
+            if (onGoingCallStateManager.hasOtherCallData(callDataManager.callingList.value))
+                View.VISIBLE else View.GONE
 
-        // 监听后续的状态变化
-        onGoingCallStateManager.chatHeaderCallVisibility
+        combine(
+            onGoingCallStateManager.chatHeaderCallVisibility,
+            callDataManager.callingList,
+            onGoingCallStateManager.isInCalling
+        ) { _, callingList, _ ->
+            onGoingCallStateManager.hasOtherCallData(callingList)
+        }
+            .distinctUntilChanged()
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-            .onEach { isVisible ->
-                binding.fragmentContainerViewCall.visibility = if (isVisible) View.VISIBLE else View.GONE
+            .onEach { shouldShow ->
+                binding.fragmentContainerViewCall.visibility =
+                    if (shouldShow) View.VISIBLE else View.GONE
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }

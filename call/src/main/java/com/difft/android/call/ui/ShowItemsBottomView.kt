@@ -1,5 +1,6 @@
 package com.difft.android.call.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,12 +49,20 @@ import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallStatus
+import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDismiss: () -> Unit, deNoiseCallBack: (Boolean) -> Unit, handleInviteUsersClick: () -> Unit = {}) {
+fun ShowItemsBottomView(
+    viewModel: LCallViewModel,
+    isOneVOneCall: Boolean,
+    onDismiss: () -> Unit,
+    deNoiseCallBack: (Boolean) -> Unit,
+    deNoiseModeCallBack: (AudioModule) -> Unit,
+    handleInviteUsersClick: () -> Unit = {}
+) {
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
     )
@@ -62,6 +71,7 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
     val showToolBarBottomViewEnable by viewModel.callUiController.showToolBarBottomViewEnable.collectAsState(false)
     val isParticipantSharedScreen by viewModel.callUiController.isShareScreening.collectAsState(false)
     val deNoiseEnable by viewModel.deNoiseEnable.collectAsState(true)
+    val deNoiseMode by viewModel.deNoiseMode.collectAsState()
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
@@ -354,14 +364,13 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
 
                 }
 
-                Row(
+                Column(
                     modifier = Modifier
                         .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
-                        .height(79.dp)
+                        .wrapContentHeight()
                         .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
                         .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Row(
                         modifier = Modifier
@@ -405,10 +414,19 @@ fun ShowItemsBottomView(viewModel: LCallViewModel, isOneVOneCall: Boolean, onDis
                             }
                         )
                     }
+
+                    AnimatedVisibility(visible = deNoiseEnable) {
+                        DeNoiseModeSelector(
+                            currentMode = deNoiseMode,
+                            isParticipantSharedScreen = isParticipantSharedScreen,
+                            onModeSelected = { mode ->
+                                viewModel.audioDeviceManager.switchDeNoiseMode(mode)
+                                deNoiseModeCallBack(mode)
+                            }
+                        )
+                    }
                 }
             }
         }
     }
-
-
 }

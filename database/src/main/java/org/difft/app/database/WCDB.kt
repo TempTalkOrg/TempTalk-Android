@@ -12,7 +12,6 @@ import com.tencent.wcdb.core.Table
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import org.difft.app.database.models.DBAttachmentModel
-import org.difft.app.database.models.DBCardModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBDraftModel
 import org.difft.app.database.models.DBFailedMessageModel
@@ -100,10 +99,6 @@ class WCDB @Inject constructor(
     val attachment by lazy {
         db.createTable("attachment", DBAttachmentModel.INSTANCE)
         db.getTable("attachment", DBAttachmentModel.INSTANCE)
-    }
-    val card by lazy {
-        db.createTable("card", DBCardModel.INSTANCE)
-        db.getTable("card", DBCardModel.INSTANCE)
     }
     val contactor by lazy {
         db.createTable("contactor", DBContactorModel.INSTANCE)
@@ -215,7 +210,6 @@ class WCDB @Inject constructor(
             groupMemberContactor,
             group,
             attachment,
-            card,
             forwardContext,
             forward,
             mention,

@@ -1,13 +1,16 @@
 package com.difft.android.base.utils
 
+import android.Manifest
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Environment.MEDIA_MOUNTED
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
+import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.log.lumberjack.L
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -40,6 +43,14 @@ object FileUtil {
     /** Large file threshold for manual download prompt (10MB) */
     const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
 
+    @JvmStatic
+    fun canWriteToMediaStore(): Boolean {
+        return Build.VERSION.SDK_INT > 28 ||
+            PermissionUtil.arePermissionsGranted(
+                application,
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
+    }
 
     // Cache positive file validity results to avoid repeated File.exists() I/O
     // during RecyclerView scrolling. Only caches true; false results are not cached

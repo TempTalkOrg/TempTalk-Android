@@ -1,6 +1,7 @@
 package com.difft.android.app
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -19,10 +20,10 @@ import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallEngine
 import com.difft.android.call.LCallManager
+import com.difft.android.call.service.ForegroundService
 import com.difft.android.call.LIncomingCallActivity
 import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.state.CriticalAlertStateManager
@@ -34,13 +35,14 @@ import com.difft.android.login.PasscodeUtil
 import com.difft.android.login.ScreenLockActivity
 import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
+import com.difft.android.security.SecurityLib
 import com.github.anrwatchdog.ANRWatchDog
 import com.google.android.gms.security.ProviderInstaller
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.difft.android.base.utils.appScope
 import dagger.hilt.android.HiltAndroidApp
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
-import io.reactivex.rxjava3.plugins.RxJavaPlugins
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +83,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     lateinit var environmentHelper: EnvironmentHelper
 
     @Inject
+    lateinit var coordinator: DomainSpeedTestCoordinator
+
+    @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     @Inject
@@ -113,6 +118,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init log", this::initLog)
             .addBlocking("init Logger", this::initializeLogging)
+            .addBlocking("init SecurityCheck") {
+                startTracerPidMonitor()
+                checkDebuggerAndHook()
+            }
             .addBlocking("init ApplicationDependencies") {
                 ApplicationDependencies.init(this, ApplicationDependencyProvider(this))
                 AppForegroundObserver.begin()
@@ -122,7 +131,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("lifecycle-observer") {
                 AppForegroundObserver.addListener(this)
             }
-            .addBlocking("init rxJava plugins", this::initRxJavaPlugins)
             .addBlocking("init notification", this::initNotification)
             .addBlocking("upgradeSecurityProvider", this::upgradeSecurityProvider)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
@@ -130,9 +138,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("installCrashFilter", this::installCrashFilter)
             .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking { initCallEngine() }
+            .addNonBlocking { cleanupStaleCallNotification() }
             .addNonBlocking { monitorMainThreadBlocking() }
             .addNonBlocking { ContactorUtil.init() }
             .addNonBlocking { initGlobalConfigs() }
+            .addNonBlocking { coordinator.initialize() }
             .execute()
 
         L.i { "[AppStartup] application onCreate() took " + (System.currentTimeMillis() - AppStartup.getApplicationStartTime()) + " ms" }
@@ -173,35 +183,15 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun initAppTheme() {
-        launch(Dispatchers.IO) {
-            val theme = userManager.getUserData()?.theme
-            L.i { "[TempTalkApplication] loadUserThemeAsync theme: $theme" }
-
-            withContext(Dispatchers.Main) {
-                when (theme) {
-                    AppCompatDelegate.MODE_NIGHT_YES -> {
-                        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-                    }
-
-                    AppCompatDelegate.MODE_NIGHT_NO -> {
-                        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-                    }
-
-                    else -> {
-                        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-                    }
-                }
+        val theme = userManager.getUserData()?.theme
+        L.i { "[TempTalkApplication] loadUserTheme theme: $theme" }
+        AppCompatDelegate.setDefaultNightMode(
+            when (theme) {
+                AppCompatDelegate.MODE_NIGHT_YES -> AppCompatDelegate.MODE_NIGHT_YES
+                AppCompatDelegate.MODE_NIGHT_NO -> AppCompatDelegate.MODE_NIGHT_NO
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
             }
-        }
-    }
-
-    private fun initRxJavaPlugins() {
-        if (!com.difft.android.BuildConfig.DEBUG) {
-            RxJavaPlugins.setErrorHandler {
-                L.i { ("[RX] rx exception ->  $it") }
-                FirebaseCrashlytics.getInstance().recordException(it)
-            }
-        }
+        )
     }
 
     private fun initLog() {
@@ -222,12 +212,14 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         LCallManager.restoreIncomingCallScreenIfActive()
         globalConfigsManager.onAppStateChanged(isForeground = true)
         messageArchiveManager.get().onAppStateChanged(isForeground = true)
+        coordinator.startPeriodicTest(isForeground = true)
     }
 
     override fun onBackground() {
-        recordLastUseTimeDisposable?.dispose()
+        recordLastUseTimeJob?.cancel()
         globalConfigsManager.onAppStateChanged(isForeground = false)
         messageArchiveManager.get().onAppStateChanged(isForeground = false)
+        coordinator.startPeriodicTest(isForeground = false)
     }
 
     /**
@@ -256,6 +248,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
             override fun onActivityStarted(activity: Activity) {
                 startedActivityCount++
+                AppForegroundObserver.notifyActivityStarted()
                 L.d { "[ScreenLock] onActivityStarted: ${activity::class.simpleName}, count=$startedActivityCount" }
 
                 // 从后台进入前台：计数从 0 变为 1
@@ -305,6 +298,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivityCount--
+                AppForegroundObserver.notifyActivityStopped()
                 L.d { "[ScreenLock] onActivityStopped: ${activity::class.simpleName}, count=$startedActivityCount" }
 
                 // 从前台进入后台：计数从 1 变为 0
@@ -324,18 +318,27 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
 
-    private var recordLastUseTimeDisposable: Disposable? = null
+    private var recordLastUseTimeJob: kotlinx.coroutines.Job? = null
 
     private fun recordLastUseTime() {
-        recordLastUseTimeDisposable = Observable.interval(1, 10, TimeUnit.SECONDS)
-            .compose(RxUtil.getSchedulerComposer())
-            .subscribe({
-                if (PasscodeUtil.needRecordLastUseTime) {
-                    userManager.update {
-                        this.lastUseTime = System.currentTimeMillis()
+        recordLastUseTimeJob?.cancel()
+        recordLastUseTimeJob = appScope.launch {
+            delay(1_000)
+            while (true) {
+                try {
+                    if (PasscodeUtil.needRecordLastUseTime) {
+                        userManager.update {
+                            this.lastUseTime = System.currentTimeMillis()
+                        }
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w { "[TempTalkApplication] recordLastUseTime error: ${e.stackTraceToString()}" }
                 }
-            }, { e -> L.w { "[TempTalkApplication] recordLastUseTime error: ${e.stackTraceToString()}" } })
+                delay(10_000)
+            }
+        }
     }
 
     /**
@@ -389,30 +392,25 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
     }
 
-    private suspend fun showScreenLockIfNeeded() {
-        withContext(Dispatchers.IO) {
-            val userData = userManager.getUserData()
+    private fun showScreenLockIfNeeded() {
+        val userData = userManager.getUserData()
+        val activity = currentResumedActivity?.get()
 
-            withContext(Dispatchers.Main) {
-                val activity = currentResumedActivity?.get()
+        // 如果当前就是锁屏页，不需要重复启动
+        if (activity is ScreenLockActivity) {
+            L.d { "[ScreenLock] Already showing ScreenLockActivity" }
+            return
+        }
 
-                // 如果当前就是锁屏页，不需要重复启动
-                if (activity is ScreenLockActivity) {
-                    L.d { "[ScreenLock] Already showing ScreenLockActivity" }
-                    return@withContext
-                }
-
-                if (userData != null && shouldShowScreenLock(userData)) {
-                    if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
-                        L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
-                        ScreenLockActivity.startActivity(activity)
-                    } else {
-                        L.w { "[ScreenLock] No valid activity to start ScreenLockActivity" }
-                    }
-                } else {
-                    L.d { "[ScreenLock] Lock not needed" }
-                }
+        if (userData != null && shouldShowScreenLock(userData)) {
+            if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+                L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
+                ScreenLockActivity.startActivity(activity)
+            } else {
+                L.w { "[ScreenLock] No valid activity to start ScreenLockActivity" }
             }
+        } else {
+            L.d { "[ScreenLock] Lock not needed" }
         }
     }
 
@@ -502,6 +500,21 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         LCallEngine.init(this, this, environmentHelper)
     }
 
+    /**
+     * On a fresh process start (after native crash or force-stop), no call can be active,
+     * but the system may not have cleaned up the foreground notification from the previous
+     * process. Cancel it proactively to avoid a ghost "call in progress" notification.
+     */
+    private fun cleanupStaleCallNotification() {
+        if (onGoingCallStateManager.isInCalling()) return
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(ForegroundService.DEFAULT_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            L.w { "[AppStartup] Failed to cleanup stale call notification: ${e.message}" }
+        }
+    }
+
     private fun monitorMainThreadBlocking() {
         // 700ms aligns with Google's "frozen frame" threshold in Android Vitals.
         val threshold = 700
@@ -531,10 +544,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun scheduleGrayConfigUpdateCheck() {
-        launch(Dispatchers.IO){
-            userManager.getUserData()?.let {
-                FeatureGrayManager.checkUpdateConfigFromServer(it.lastUseTime)
-            }
+        val userData = userManager.getUserData() ?: return
+        launch(Dispatchers.IO) {
+            FeatureGrayManager.checkUpdateConfigFromServer(userData.lastUseTime)
         }
     }
 
@@ -542,5 +554,22 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         val incomingCallNeedsLock = inComingCallStateManager.isActivityShowing() && inComingCallStateManager.isNeedAppLock()
         val activeCallNeedsLock = onGoingCallStateManager.isInCalling() && onGoingCallStateManager.needAppLock
         return incomingCallNeedsLock || activeCallNeedsLock
+    }
+
+    private fun checkDebuggerAndHook() {
+        if (BuildConfig.DEBUG) return
+        val timestamp = System.currentTimeMillis()
+        val hasDebugger = SecurityLib.checkDebuggerConnected()
+        val hasHook = SecurityLib.checkHookFramework()
+        val consumeTime = System.currentTimeMillis() - timestamp
+        L.i { "[security] security check result: consumeTime=$consumeTime, hasDebugger=$hasDebugger, hasHook=$hasHook" }
+        if (hasDebugger || hasHook) {
+            SecurityLib.terminateAppProcess()
+        }
+    }
+
+    private fun startTracerPidMonitor() {
+        if (BuildConfig.DEBUG) return
+        SecurityLib.startTracerPidMonitor()
     }
 }

@@ -9,7 +9,6 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -21,7 +20,6 @@ import com.difft.android.base.android.permission.PermissionUtil.launchSinglePerm
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.base.widget.ComposeDialogManager
@@ -43,8 +41,8 @@ import com.hi.dhl.binding.viewbind
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import io.reactivex.rxjava3.core.Observable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -55,7 +53,6 @@ import org.difft.app.database.wcdb
 import org.difft.app.database.models.GroupModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.util.ViewUtil
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
@@ -107,6 +104,9 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             it.create(chatViewModel.forWhat)
         }
     })
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
@@ -379,40 +379,25 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
 
         getGroupInfo(false)
+        getGroupInfo(true)
 
-        Observable.just(Unit)
-            .delay(2000, TimeUnit.MILLISECONDS)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this@GroupChatPopupActivity))
-            .subscribe({
-                getGroupInfo(true)
-            }, {})
-
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        groupUtil.singleGroupsUpdate
+            .onEach {
                 if (it.gid == chatViewModel.forWhat.id) {
-                    chatViewModel.setChatUIData(
-                        ChatUIData(null, it)
-                    )
+                    chatViewModel.setChatUIData(ChatUIData(null, it))
                     // Refresh confidential toggle when group members change
                     updateConfidential()
                 }
-            }, {
-                L.w { "[GroupChatPopupActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" }
-            })
+            }
+            .catch { L.w { "[GroupChatPopupActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .launchIn(lifecycleScope)
 
         chatViewModel.voiceVisibilityChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it) {
-                    mBinding.clVoiceRecord.visibility = View.VISIBLE
-                } else {
-                    mBinding.clVoiceRecord.visibility = View.GONE
-                }
-            }, { L.w { "[GroupChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } })
+            .onEach {
+                mBinding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
+            }
+            .catch { L.w { "[GroupChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
+            .launchIn(lifecycleScope)
 
         mBinding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -446,9 +431,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         }
 
         chatViewModel.showOrHideFullInput
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .onEach {
                 if (it.first) {
                     mBinding.includeFullInput.clFullInput.visibility = View.VISIBLE
                     mBinding.includeFullInput.edittextFullInput.apply {
@@ -460,7 +443,9 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                 } else {
                     mBinding.includeFullInput.clFullInput.visibility = View.GONE
                 }
-            }, { L.w { "[GroupChatPopupActivity] observe showOrHideFullInput error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[GroupChatPopupActivity] observe showOrHideFullInput error: ${it.stackTraceToString()}" } }
+            .launchIn(lifecycleScope)
 
         mBinding.includeFullInput.ivFullInputClose.setOnClickListener {
             mBinding.includeFullInput.edittextFullInput.clearFocus()
@@ -514,35 +499,27 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 1
         } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
-                this.setTint(ContextCompat.getColor(this@GroupChatPopupActivity, com.difft.android.base.R.color.icon))
-            }
+            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
             mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 0
         }
     }
 
     private fun getGroupInfo(forceUpdate: Boolean = false) {
-        GroupUtil.getSingleGroupInfo(this, chatViewModel.forWhat.id, forceUpdate)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    chatViewModel.setChatUIData(ChatUIData(null, it.get()))
-                } else {
-                    if (!forceUpdate) {
-                        chatViewModel.setChatUIData(
-                            ChatUIData(
-                                null, GroupModel().apply {
-                                    gid = chatViewModel.forWhat.id
-                                }
-                            )
-                        )
-                    }
+        lifecycleScope.launch {
+            try {
+                val result = groupUtil.getSingleGroupInfo(chatViewModel.forWhat.id, forceUpdate)
+                if (result != null) {
+                    chatViewModel.setChatUIData(ChatUIData(null, result))
+                } else if (!forceUpdate) {
+                    chatViewModel.setChatUIData(
+                        ChatUIData(null, GroupModel().apply { gid = chatViewModel.forWhat.id })
+                    )
                 }
-            }, {
-                L.w { "[GroupChatPopupActivity] getGroupInfo error: ${it.stackTraceToString()}" }
-            })
+            } catch (e: Exception) {
+                L.w { "[GroupChatPopupActivity] getGroupInfo error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     override fun onDestroy() {

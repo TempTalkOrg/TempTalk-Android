@@ -117,13 +117,16 @@ object AudioMessageManager {
         playJob?.cancel()
         playJob = appScope.launch(Dispatchers.IO) {
             try {
-                // 检查是否需要解密文件
-                decryptIfNeeded(filePath, message)
-
-                if (!File(filePath).exists()) {
-                    L.e { "[AudioMessageManager] playOrPauseAudio: file not exists $filePath" }
-                    releasePlayer()
-                    return@launch
+                val encryptFile = File("$filePath.encrypt")
+                val decryptedBytes: ByteArray? = if (encryptFile.exists()) {
+                    FileDecryptionUtil.decryptToBytes(encryptFile, message.attachment?.key)
+                } else {
+                    if (!File(filePath).exists()) {
+                        L.e { "[AudioMessageManager] playOrPauseAudio: file not exists $filePath" }
+                        releasePlayer()
+                        return@launch
+                    }
+                    null
                 }
 
                 withContext(Dispatchers.Main) {
@@ -139,7 +142,7 @@ object AudioMessageManager {
                         }
                         currentPlayingMessage = message
                         currentFilePath = filePath
-                        startPlaying(message, filePath)
+                        startPlaying(message, filePath, decryptedBytes)
                     } else {
                         // 如果是同一个音频，则暂停或恢复播放
                         if (mediaPlayer?.isPlaying == true) {
@@ -157,8 +160,8 @@ object AudioMessageManager {
     }
 
     // 开始播放音频
-    private fun startPlaying(message: TextChatMessage, filePath: String) {
-        if (filePath.isEmpty() || !File(filePath).exists()) {
+    private fun startPlaying(message: TextChatMessage, filePath: String, decryptedBytes: ByteArray? = null) {
+        if (decryptedBytes == null && (filePath.isEmpty() || !File(filePath).exists())) {
             L.e { "[AudioMessageManager] startPlaying: file not exists $filePath" }
             releasePlayer()
             return
@@ -180,7 +183,11 @@ object AudioMessageManager {
             }
             
             mediaPlayer?.apply {
-                setDataSource(filePath) // 设置音频文件的 URL
+                if (decryptedBytes != null) {
+                    setDataSource(ByteArrayMediaDataSource(decryptedBytes))
+                } else {
+                    setDataSource(filePath)
+                }
                 setOnCompletionListener {
                     onPlayComplete()
                 }
@@ -310,18 +317,27 @@ object AudioMessageManager {
 
     // 删除当前播放的文件
     fun deleteCurrentFile(message: TextChatMessage) {
-        val canDeleteOriginFile = message.attachment?.isAudioMessage() == true && message.sendStatus == SendType.Sent.rawValue
-        if (!canDeleteOriginFile) return
+        if (message.attachment?.isAudioMessage() != true) return
         currentFilePath?.let { path ->
-            try {
-                val file = File(path)
-                if (file.exists()) {
-                    file.delete()
-                }
-                L.i { "[AudioMessageManager] delete decrypted audio file success" }
-            } catch (e: Exception) {
-                L.e { "[AudioMessageManager] Failed to delete file: ${e.message}" }
+            deleteDecryptedFile(path)
+        }
+    }
+
+    /**
+     * 删除指定路径的临时解密文件。
+     * 仅当对应的 .encrypt 加密源文件存在时才删除，确保只清理临时解密副本，不影响加密主文件。
+     */
+    fun deleteDecryptedFile(filePath: String) {
+        val encryptFile = File("$filePath.encrypt")
+        if (!encryptFile.exists()) return
+        try {
+            val file = File(filePath)
+            if (file.exists()) {
+                file.delete()
             }
+            L.i { "[AudioMessageManager] delete decrypted audio file success" }
+        } catch (e: Exception) {
+            L.e { "[AudioMessageManager] Failed to delete file: ${e.message}" }
         }
     }
 

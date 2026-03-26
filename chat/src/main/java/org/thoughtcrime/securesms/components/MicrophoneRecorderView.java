@@ -20,7 +20,7 @@ import android.widget.ImageView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.difft.android.base.android.permission.AndroidPermission;
+import com.difft.android.base.android.permission.PermissionUtil;
 import com.difft.android.chat.R;
 
 import org.thoughtcrime.securesms.audio.AudioRecordingHandler;
@@ -103,7 +103,7 @@ public final class MicrophoneRecorderView extends FrameLayout implements View.On
   public boolean onTouch(View v, final MotionEvent event) {
     switch (event.getAction()) {
       case MotionEvent.ACTION_DOWN:
-        if (!AndroidPermission.INSTANCE.havePermission(getContext(), Manifest.permission.RECORD_AUDIO).blockingGet()) {
+        if (!PermissionUtil.INSTANCE.arePermissionsGranted(getContext(), new String[]{Manifest.permission.RECORD_AUDIO})) {
           if (handler != null) handler.onRecordPermissionRequired();
         } else if (state == State.NOT_RUNNING) {
           state = State.RUNNING_HELD;

@@ -37,4 +37,11 @@ dependencies {
     implementation(libs.isoparser)
     implementation(libs.mp4parser.streaming)
     implementation(libs.mp4parser.muxer)
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
 }

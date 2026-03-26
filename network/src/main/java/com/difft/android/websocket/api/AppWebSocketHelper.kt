@@ -1,7 +1,6 @@
 package com.difft.android.websocket.api
 
 import com.difft.android.base.log.lumberjack.L
-import io.reactivex.rxjava3.core.Single
 import com.difft.android.websocket.api.messages.ChatDataMessageFlag
 import com.difft.android.websocket.api.messages.ConversationPreviewWrapper
 import com.difft.android.websocket.api.util.EnvelopDeserializer
@@ -29,14 +28,11 @@ class AppWebSocketHelper
     @param:Named("chat-data")
     val chatDataWebSocketConnection: WebSocketConnection,
 ) {
-    fun sendChatMessage(
+    @Throws(IOException::class)
+    suspend fun sendChatMessage(
         requestMessage: WebSocketRequestMessage,
-    ): Single<WebsocketResponse> {
-        return try {
-            chatDataWebSocketConnection.sendRequestAwaitResponse(requestMessage)
-        } catch (e: IOException) {
-            Single.error(e)
-        }
+    ): WebsocketResponse {
+        return chatDataWebSocketConnection.sendRequestAwaitResponse(requestMessage)
     }
 
     /**

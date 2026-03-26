@@ -51,16 +51,17 @@ object WCDBUpdateService :
         launch {
             updatingRooms()
             updateSavedMessageExpire()
-            deleteOldRecallMessages()
-//            clearInvalidGroupMembers()
+            clearInvalidGroupMembers()
         }
     }
 
     /**
-     * 清理空会话
-     * 条件：
-     * 1. lastActiveTime 为空或0 或 roomId 为空（无效会话）
-     * 2. lastActiveTime 超过配置时间（超时会话，配置为0表示立即删除）
+     * Clean empty rooms
+     * Conditions:
+     * 1. Invalid rooms (roomId is empty)
+     * 2. Empty rooms (lastDisplayContent is empty) that exceed timeout
+     *    - New data: use emptyRoomSince for timeout check
+     *    - Old data (emptyRoomSince is null): fallback to lastActiveTime
      */
     fun cleanEmptyRooms(activeConversationConfig: ActiveConversation) {
         try {
@@ -68,27 +69,82 @@ object WCDBUpdateService :
             val groupTimeoutMillis = activeConversationConfig.group * 1000L
             val otherTimeoutMillis = activeConversationConfig.other * 1000L
 
-            // 条件1：无效会话（lastActiveTime 为空或0，或 roomId 为空）
-            val invalidRoomCondition = DBRoomModel.lastActiveTime.isNull()
-                .or(DBRoomModel.lastActiveTime.eq(0L))
-                .or(DBRoomModel.roomId.isNull())
+            // Condition 1: Invalid rooms (roomId is empty)
+            val invalidRoomCondition = DBRoomModel.roomId.isNull()
                 .or(DBRoomModel.roomId.`is`(""))
 
-            // 条件2：超时的空会话（lastDisplayContent 为空）
+            // Condition 2: Empty content condition (must confirm it's an empty room)
             val emptyContentCondition = DBRoomModel.lastDisplayContent.isNull()
                 .or(DBRoomModel.lastDisplayContent.`is`(""))
-            val expiredGroupCondition = DBRoomModel.roomType.eq(1)
-                .and(emptyContentCondition)
-                .and(DBRoomModel.lastActiveTime.add(groupTimeoutMillis).lt(currentTime))
-            val expiredOtherCondition = DBRoomModel.roomType.eq(0)
-                .and(emptyContentCondition)
-                .and(DBRoomModel.lastActiveTime.add(otherTimeoutMillis).lt(currentTime))
 
-            // 最终条件：排除自己 AND (无效会话 OR 超时群聊 OR 超时单聊)
+            // Condition 3: Expired group rooms (use emptyRoomSince, fallback to lastActiveTime for old data)
+            // New data condition: emptyRoomSince exists and has expired
+            val expiredGroupNewData = DBRoomModel.roomType.eq(1)
+                .and(emptyContentCondition)
+                .and(DBRoomModel.emptyRoomSince.gt(0))
+                .and(DBRoomModel.emptyRoomSince.add(groupTimeoutMillis).lt(currentTime))
+            // Old data condition: emptyRoomSince is null, fallback to lastActiveTime
+            val expiredGroupOldData = DBRoomModel.roomType.eq(1)
+                .and(emptyContentCondition)
+                .and(DBRoomModel.emptyRoomSince.isNull())
+                .and(DBRoomModel.lastActiveTime.gt(0))
+                .and(DBRoomModel.lastActiveTime.add(groupTimeoutMillis).lt(currentTime))
+            val expiredGroupCondition = expiredGroupNewData.or(expiredGroupOldData)
+
+            // Condition 4: Expired other rooms (use emptyRoomSince, fallback to lastActiveTime for old data)
+            // New data condition: emptyRoomSince exists and has expired
+            val expiredOtherNewData = DBRoomModel.roomType.eq(0)
+                .and(emptyContentCondition)
+                .and(DBRoomModel.emptyRoomSince.gt(0))
+                .and(DBRoomModel.emptyRoomSince.add(otherTimeoutMillis).lt(currentTime))
+            // Old data condition: emptyRoomSince is null, fallback to lastActiveTime
+            val expiredOtherOldData = DBRoomModel.roomType.eq(0)
+                .and(emptyContentCondition)
+                .and(DBRoomModel.emptyRoomSince.isNull())
+                .and(DBRoomModel.lastActiveTime.gt(0))
+                .and(DBRoomModel.lastActiveTime.add(otherTimeoutMillis).lt(currentTime))
+            val expiredOtherCondition = expiredOtherNewData.or(expiredOtherOldData)
+
+            // Final condition: exclude self AND (invalid rooms OR expired groups OR expired other)
             val finalCondition = DBRoomModel.roomId.notEq(globalServices.myId)
                 .and(invalidRoomCondition.or(expiredGroupCondition).or(expiredOtherCondition))
 
-            wcdb.room.deleteObjects(finalCondition)
+            // Get rooms to delete first
+            val roomsToDelete = wcdb.room.getAllObjects(finalCondition)
+            if (roomsToDelete.isEmpty()) {
+                L.i { "[WCDBUpdateService] cleanEmptyRooms: no rooms to delete" }
+                return
+            }
+
+            val roomIdsToDelete = roomsToDelete.map { it.roomId }
+            L.i { "[WCDBUpdateService] cleanEmptyRooms: deleting ${roomIdsToDelete.size} rooms: $roomIdsToDelete" }
+
+            // Delete all messages in these rooms (should mostly be archive system messages)
+            // Use MessageModel.delete() to properly clean up related data (attachments, reactions, etc.)
+            var totalDeletedCount = 0
+
+            roomIdsToDelete.forEach { roomId ->
+                val messages = wcdb.message.getAllObjects(DBMessageModel.roomId.eq(roomId))
+
+                // Log warning for non-archive messages (shouldn't exist in empty rooms)
+                val nonArchiveMessages = messages.filterNot { isArchiveExpiredSystemMessage(it) }
+                if (nonArchiveMessages.isNotEmpty()) {
+                    L.w { "[WCDBUpdateService] cleanEmptyRooms: Found ${nonArchiveMessages.size} non-archive messages in empty room $roomId" }
+                    nonArchiveMessages.forEach { message ->
+                        L.w { "[WCDBUpdateService] cleanEmptyRooms: - type=${message.type}, id=${message.id}" }
+                    }
+                }
+
+                // Delete all messages with related data
+                messages.forEach { it.delete() }
+                totalDeletedCount += messages.size
+            }
+            L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted $totalDeletedCount messages with related data" }
+
+            // Delete room records
+            val deletedRooms = wcdb.room.deleteObjects(finalCondition)
+            L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted $deletedRooms rooms" }
+
         } catch (e: Exception) {
             L.e(e) { "[WCDBUpdateService] cleanEmptyRooms error:" }
         }
@@ -150,11 +206,12 @@ object WCDBUpdateService :
                                     )
 
                                     if (previewMessage == null) {
-                                        // 没有消息，只清空 lastDisplayContent，保留 lastActiveTime 用于超时清理
-                                        if (roomObject.lastDisplayContent != "") {
+                                        // No messages, set emptyRoomSince (if not set), keep lastActiveTime unchanged
+                                        val emptyRoomSince = roomObject.emptyRoomSince ?: System.currentTimeMillis()
+                                        if (roomObject.lastDisplayContent != "" || roomObject.emptyRoomSince == null) {
                                             wcdb.room.updateRow(
-                                                arrayOf(Value("")),
-                                                arrayOf(DBRoomModel.lastDisplayContent),
+                                                arrayOf(Value(""), Value(emptyRoomSince)),
+                                                arrayOf(DBRoomModel.lastDisplayContent, DBRoomModel.emptyRoomSince),
                                                 DBRoomModel.roomId.eq(roomId)
                                             )
                                         }
@@ -162,31 +219,43 @@ object WCDBUpdateService :
                                     } else {
                                         val lastActiveTime = previewMessage.systemShowTimestamp
 
-                                        // 检查是否是归档系统消息
+                                        // Check if it's an archive system message
                                         val isArchiveMessage = isArchiveExpiredSystemMessage(previewMessage)
 
                                         if (isArchiveMessage) {
-                                            // 归档系统消息：更新 lastActiveTime，lastDisplayContent 置空
-                                            if (roomObject.lastDisplayContent != "" || roomObject.lastActiveTime != lastActiveTime) {
+                                            // Archive system message: clear lastDisplayContent, set emptyRoomSince, keep lastActiveTime unchanged
+                                            val emptyRoomSince = roomObject.emptyRoomSince ?: System.currentTimeMillis()
+                                            if (roomObject.lastDisplayContent != "" || roomObject.emptyRoomSince == null) {
                                                 wcdb.room.updateRow(
-                                                    arrayOf(Value(""), Value(lastActiveTime)),
-                                                    arrayOf(DBRoomModel.lastDisplayContent, DBRoomModel.lastActiveTime),
+                                                    arrayOf(Value(""), Value(emptyRoomSince)),
+                                                    arrayOf(DBRoomModel.lastDisplayContent, DBRoomModel.emptyRoomSince),
                                                     DBRoomModel.roomId.eq(roomId)
                                                 )
                                             }
                                         } else {
-                                            // 普通消息：更新内容和时间
+                                            // Normal message: update content and time, clear emptyRoomSince
                                             val lastDisplayContent = previewMessage.previewContent()
-                                            if (roomObject.lastDisplayContent != lastDisplayContent || roomObject.lastActiveTime != lastActiveTime) {
+
+                                            // Only update lastActiveTime if:
+                                            // 1. New message time is greater (normal case, avoid time rollback on recall/delete)
+                                            // 2. Or current time is 0 (new room initialization, though covered by case 1)
+                                            val shouldUpdateTime = lastActiveTime > roomObject.lastActiveTime || roomObject.lastActiveTime == 0L
+                                            val finalLastActiveTime = if (shouldUpdateTime) lastActiveTime else roomObject.lastActiveTime
+
+                                            val needsUpdate = roomObject.lastDisplayContent != lastDisplayContent
+                                                || roomObject.lastActiveTime != finalLastActiveTime
+                                                || roomObject.emptyRoomSince != null
+
+                                            if (needsUpdate) {
                                                 wcdb.room.updateRow(
-                                                    arrayOf(Value(lastDisplayContent), Value(lastActiveTime)),
-                                                    arrayOf(DBRoomModel.lastDisplayContent, DBRoomModel.lastActiveTime),
+                                                    arrayOf(Value(lastDisplayContent), Value(finalLastActiveTime), Value()),
+                                                    arrayOf(DBRoomModel.lastDisplayContent, DBRoomModel.lastActiveTime, DBRoomModel.emptyRoomSince),
                                                     DBRoomModel.roomId.eq(roomId)
                                                 )
                                             }
                                         }
 
-                                        // 更新未读状态
+                                        // Update unread status
                                         if (lastActiveTime == 0L) {
                                             roomObject.resetRoomUnreadState()
                                         } else if (roomObject.readPosition < lastActiveTime) {

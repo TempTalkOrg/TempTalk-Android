@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -177,7 +176,7 @@ class CallTimeoutManager @Inject constructor() {
             }
             
             val response = withContext(Dispatchers.IO) {
-                callService.checkCall(token, roomId).await()
+                callService.checkCall(token, roomId)
             }
             
             if (response == null) {

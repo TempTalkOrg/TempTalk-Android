@@ -7,14 +7,13 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
-import com.difft.android.base.fragment.DisposableManageFragment
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsall.ContactsAllFragment
 import com.difft.android.chat.contacts.contactsgroup.GroupsFragment
 import com.difft.android.chat.databinding.ChatFragmentContactsBinding
 import com.difft.android.chat.invite.InviteCodeActivity
 
-class ContactsFragment : DisposableManageFragment() {
+class ContactsFragment : Fragment() {
     private lateinit var binding: ChatFragmentContactsBinding
 
     private var hasInit = false

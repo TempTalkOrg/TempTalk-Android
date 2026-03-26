@@ -306,6 +306,15 @@ public final class PictureSelectionPreviewModel {
     }
 
     /**
+     * @param isShowConfidentialTip Show confidential message tip bar
+     * @return
+     */
+    public PictureSelectionPreviewModel isShowConfidentialTip(boolean isShowConfidentialTip) {
+        selectionConfig.isShowConfidentialTip = isShowConfidentialTip;
+        return this;
+    }
+
+    /**
      * Compatible with Fragment fallback scheme, default to true
      *
      * @param isNewKeyBackMode

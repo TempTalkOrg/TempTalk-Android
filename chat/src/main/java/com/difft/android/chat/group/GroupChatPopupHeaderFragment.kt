@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.chat.databinding.ChatFragmentHeaderGroupPopupBinding
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel

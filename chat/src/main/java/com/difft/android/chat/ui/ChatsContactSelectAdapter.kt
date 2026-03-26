@@ -7,10 +7,12 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
+import androidx.core.view.isVisible
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
+import com.difft.android.chat.contacts.data.isOfficialBotId
 import com.difft.android.chat.databinding.ChatItemSelectChatsContactBinding
 import com.difft.android.chat.group.getAvatarData
 
@@ -56,15 +58,18 @@ class ChatsContactItemViewHolder(val parentView: ViewGroup, val myID: String, pr
             binding.groupAvatar.visibility = View.VISIBLE
             binding.groupAvatar.setAvatar(data.avatarJson?.getAvatarData())
             binding.textviewLabel.text = data.name
+            binding.imageviewBotBadge.isVisible = false
         } else {
             binding.imageviewAvatar.visibility = View.VISIBLE
             if (data.id == myID && !showMeOriginal) {
                 binding.textviewLabel.text = parentView.context.getString(com.difft.android.base.R.string.chat_favorites)
                 binding.imageviewAvatar.showFavorites()
+                binding.imageviewBotBadge.isVisible = false
             } else {
                 binding.textviewLabel.text = data.name
                 val contactAvatar = data.avatar?.getContactAvatarData()
                 binding.imageviewAvatar.setAvatar(contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, data.firstLetters, data.id)
+                binding.imageviewBotBadge.isVisible = data.id.isOfficialBotId()
             }
         }
         binding.textviewDetail.visibility = View.GONE

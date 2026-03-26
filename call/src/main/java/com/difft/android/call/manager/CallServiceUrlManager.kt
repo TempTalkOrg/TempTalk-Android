@@ -10,7 +10,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,7 +51,7 @@ class CallServiceUrlManager @Inject constructor() {
             val token = SecureSharedPrefsUtil.getToken()
             if(token.isEmpty()) return emptyList()
             val response = withContext(Dispatchers.IO) {
-                callHttpService.getServiceUrl(SecureSharedPrefsUtil.getToken()).await()
+                callHttpService.getServiceUrl(token)
             }
             return if (response.status == 0) {
                 val serviceUrls = response.data?.serviceUrls

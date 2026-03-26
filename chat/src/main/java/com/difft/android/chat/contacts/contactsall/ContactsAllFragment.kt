@@ -28,7 +28,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
@@ -85,12 +84,10 @@ class ContactsAllFragment : Fragment() {
         }
 
         ContactorUtil.getContactsStatusUpdate
-            .asFlow()
             .onEach { binding.smartRefreshLayout.finishRefresh() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
         ContactorUtil.contactsUpdate
-            .asFlow()
             .sampleAfterFirst(2000)
             .onEach { initData() }
             .launchIn(viewLifecycleOwner.lifecycleScope)

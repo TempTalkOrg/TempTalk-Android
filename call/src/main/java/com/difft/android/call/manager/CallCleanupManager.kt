@@ -11,7 +11,7 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.state.OnGoingCallStateManager
-import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
+import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 
 /**
  * 统一管理通话 Activity 的资源清理
@@ -42,43 +42,44 @@ class CallCleanupManager(
         ringtoneManager: CallRingtoneManager,
         contactorCacheManager: ContactorCacheManager,
         callControlMessageManager: OnGoingCallStateManager,
-        audioProcessor: DenoisePluginAudioProcessor,
+        audioProcessor: AudioPipelineProcessor,
         viewModel: LCallViewModel,
         backPressedCallback: androidx.activity.OnBackPressedCallback?
     ) {
         L.i { "[Call] CallCleanupManager cleanup start" }
 
-        // 1. 移除生命周期观察者
-        cleanupLifecycleObserver(lifecycleObserver)
+        runCatching { cleanupLifecycleObserver(lifecycleObserver) }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupLifecycleObserver failed" } }
 
-        // 2. 清理 UI 相关资源
-        cleanupUIResources(dialogManager, backPressedCallback)
+        runCatching { cleanupUIResources(dialogManager, backPressedCallback) }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupUIResources failed" } }
 
-        // 3. 清理 Handler 延迟任务
-        cleanupHandler(handler)
+        runCatching { cleanupHandler(handler) }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupHandler failed" } }
 
-        // 4. 释放管理器资源
-        releaseManagers(
-            proximitySensorManager,
-            pictureInPictureManager,
-            callActivityBroadcastReceiver,
-            screenUnlockBroadcastReceiver
-        )
+        runCatching {
+            releaseManagers(
+                proximitySensorManager,
+                pictureInPictureManager,
+                callActivityBroadcastReceiver,
+                screenUnlockBroadcastReceiver
+            )
+        }.onFailure { L.e(it) { "[Call] CallCleanupManager: releaseManagers failed" } }
 
-        // 5. 清理系统资源
-        cleanupSystemResources(vibrationManager, ringtoneManager, contactorCacheManager, callControlMessageManager)
+        runCatching { cleanupSystemResources(vibrationManager, ringtoneManager, contactorCacheManager, callControlMessageManager) }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupSystemResources failed" } }
 
-        // 6. 停止服务
-        stopService(serviceManager)
+        runCatching { stopService(serviceManager) }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: stopService failed" } }
 
-        // 7. 重置状态
-        resetState(onGoingCallStateManager, callDataManager, audioProcessor, viewModel)
+        runCatching { resetState(onGoingCallStateManager, callDataManager, audioProcessor, viewModel) }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: resetState failed" } }
 
-        // 8. 清理监听器
-        cleanupListeners()
+        runCatching { cleanupListeners() }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupListeners failed" } }
 
-        // 9. 发送清理广播
-        sendDeclineCallBroadcast()
+        runCatching { sendDeclineCallBroadcast() }
+            .onFailure { L.e(it) { "[Call] CallCleanupManager: sendDeclineCallBroadcast failed" } }
 
         L.i { "[Call] CallCleanupManager cleanup end" }
     }
@@ -176,7 +177,7 @@ class CallCleanupManager(
     private fun resetState(
         onGoingCallStateManager: OnGoingCallStateManager,
         callDataManager: CallDataManager,
-        audioProcessor: DenoisePluginAudioProcessor,
+        audioProcessor: AudioPipelineProcessor,
         viewModel: LCallViewModel
     ) {
         // 重置状态管理器
@@ -206,19 +207,15 @@ class CallCleanupManager(
      * 发送拒绝通话广播
      */
     private fun sendDeclineCallBroadcast() {
-        try {
-            Intent(LCallActivity.ACTION_IN_CALLING_CONTROL).apply {
-                putExtra(
-                    LCallActivity.EXTRA_CONTROL_TYPE,
-                    CallActionType.DECLINE.type
-                )
-                setPackage(context.packageName)
-                context.sendBroadcast(this)
-            }
-            L.d { "[Call] CallCleanupManager sent decline call broadcast" }
-        } catch (e: IllegalStateException) {
-            L.w(e) { "[Call] CallCleanupManager Failed to send decline broadcast" }
+        Intent(LCallActivity.ACTION_IN_CALLING_CONTROL).apply {
+            putExtra(
+                LCallActivity.EXTRA_CONTROL_TYPE,
+                CallActionType.DECLINE.type
+            )
+            setPackage(context.packageName)
+            context.sendBroadcast(this)
         }
+        L.d { "[Call] CallCleanupManager sent decline call broadcast" }
     }
 }
 

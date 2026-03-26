@@ -14,13 +14,16 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.core.Table
+import com.tencent.wcdb.winq.Column
+import com.tencent.wcdb.winq.Order
+import com.tencent.wcdb.winq.OrderingTerm
+import com.tencent.wcdb.winq.StatementSelect
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
-import difft.android.messageserialization.model.Card
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
@@ -45,10 +48,8 @@ import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.AttachmentModel
-import org.difft.app.database.models.CardModel
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBAttachmentModel
-import org.difft.app.database.models.DBCardModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBForwardContextModel
 import org.difft.app.database.models.DBForwardModel
@@ -114,15 +115,16 @@ fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
     if (fromContactor != null) {
         return fromContactor
     }
-    val fromGroupMember = groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
+    val rows = groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.eq(id))
+    val fromGroupMember = rows.firstOrNull { it.gid == "" } ?: rows.firstOrNull()
     if (fromGroupMember != null) {
-        L.i { "[WCDBExtensions] getContactorFromAllTable id:$id from groupMemberContactor" }
+        L.i { "[WCDBExtensions] getContactorFromAllTable id:$id from groupMemberContactor gid=${fromGroupMember.gid}" }
         return fromGroupMember.convertToContactorModel()
     }
     return null
 }
 
-fun WCDB.getContactorsFromAllTable(ids: List<String>): List<ContactorModel> {
+fun WCDB.getContactorsFromAllTable(ids: List<String>, preferredGid: String? = null): List<ContactorModel> {
     val foundContactors = contactor.getAllObjects(DBContactorModel.id.`in`(ids))
     val otherIds = ids.toList() - foundContactors.map { it.id }.toSet()
 
@@ -130,10 +132,26 @@ fun WCDB.getContactorsFromAllTable(ids: List<String>): List<ContactorModel> {
         L.i { "[WCDBExtensions] getContactorsFromAllTable ids from groupMemberContactor: $otherIds" }
     }
 
-    val othersFromGroupMember =
-        groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.`in`(otherIds))
-            .map { it.convertToContactorModel() }
-    return (foundContactors + othersFromGroupMember).distinctBy { it.id }
+    val rawGroupMemberRows = groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.`in`(otherIds))
+
+    // Deduplicate: when a person has rows in multiple groups, pick by priority:
+    // 1. Row matching preferredGid (current group)
+    // 2. Row with gid="" (contacts API stub)
+    // 3. Any other row
+    val deduplicatedRows = rawGroupMemberRows.groupBy { it.id }.map { (_, rows) ->
+        if (rows.size > 1) {
+            preferredGid?.let { gid -> rows.firstOrNull { it.gid == gid } }
+                ?: rows.firstOrNull { it.gid == "" }
+                ?: rows.first()
+        } else {
+            rows.first()
+        }
+    }
+
+    val othersFromGroupMember = deduplicatedRows.map { it.convertToContactorModel() }
+    val merged = (foundContactors + othersFromGroupMember).distinctBy { it.id }
+
+    return merged
 }
 
 val GroupModel.members: List<GroupMemberContactorModel>
@@ -228,7 +246,6 @@ fun MessageModel.convertToTextMessage(): TextMessage {
         null
     }
 
-    val card: Card? = card()
     val mentions: List<Mention>? = mentions().takeIf { it.isNotEmpty() }
     val reactions: List<Reaction>? = reactions().takeIf { it.isNotEmpty() }
     val forwardContext: ForwardContext? = forwardContext()
@@ -263,7 +280,6 @@ fun MessageModel.convertToTextMessage(): TextMessage {
         attachments = attachments,
         quote = quote,
         forwardContext = forwardContext,
-        card = card,
         mentions = mentions,
         atPersons = atPersons,
         reactions = reactions,
@@ -356,22 +372,6 @@ fun MessageModel.attachment(): Attachment? {
                 amplitudes = convertAmplitudes(it.amplitudes),
             )
         }
-}
-
-fun MessageModel.card(): Card? = cardModelDatabaseId?.let {
-    wcdb.card.getFirstObject(DBCardModel.databaseId.eq(it))?.let { cm ->
-        Card(
-            cardId = cm.cardId,
-            appId = cm.appId,
-            version = cm.version,
-            creator = cm.creator,
-            timestamp = cm.timestamp,
-            content = cm.content,
-            contentType = cm.contentType,
-            type = cm.type,
-            fixedWidth = cm.fixedWidth
-        )
-    }
 }
 
 fun MessageModel.mentions(): List<Mention> {
@@ -480,22 +480,6 @@ fun ForwardModel.attachments(): List<Attachment> {
     }
 }
 
-fun ForwardModel.card(): Card? = cardModelDatabaseId?.let {
-    wcdb.card.getFirstObject(DBCardModel.databaseId.eq(it))?.let { cm ->
-        Card(
-            cardId = cm.cardId,
-            appId = cm.appId,
-            version = cm.version,
-            creator = cm.creator,
-            timestamp = cm.timestamp,
-            content = cm.content,
-            contentType = cm.contentType,
-            type = cm.type,
-            fixedWidth = cm.fixedWidth
-        )
-    }
-}
-
 fun ForwardModel.mentions(): List<Mention> {
     return wcdb.mention.getAllObjects(DBMentionModel.forwardModelDatabaseId.eq(databaseId)).map {
         Mention(
@@ -511,7 +495,6 @@ fun ForwardModel.forwards(): List<Forward> {
     return wcdb.forward.getAllObjects(DBForwardModel.parentForwardModelDatabaseId.eq(databaseId)).map { fm ->
         val fwdAttachments = fm.attachments()
         val fwdForwards = fm.forwards()
-        val fwdCard = fm.card()
         val fwdMentions = fm.mentions()
         Forward(
             id = fm.id,
@@ -521,7 +504,6 @@ fun ForwardModel.forwards(): List<Forward> {
             text = fm.text,
             attachments = fwdAttachments,
             forwards = fwdForwards,
-            card = fwdCard,
             mentions = fwdMentions,
             serverTimestamp = fm.serverTimestamp
         )
@@ -536,7 +518,6 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
         ).map { fm ->
             val fwdAttachments = fm.attachments()
             val fwdForwards = fm.forwards()
-            val fwdCard = fm.card()
             val fwdMentions = fm.mentions()
             Forward(
                 id = fm.id,
@@ -546,7 +527,6 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
                 text = fm.text,
                 attachments = fwdAttachments,
                 forwards = fwdForwards,
-                card = fwdCard,
                 mentions = fwdMentions,
                 serverTimestamp = fm.serverTimestamp
             )
@@ -583,24 +563,6 @@ private fun WCDB.putTextMessage(message: TextMessage, roomReadPosition: Long = 0
 }
 
 fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
-    val cardModelDatabaseId = message.card?.let { card ->
-        val uniqueId = card.uniqueId ?: return@let null
-        val cardModel = CardModel().apply {
-            this.uniqueId = uniqueId
-            cardId = card.cardId ?: ""
-            appId = card.appId ?: ""
-            version = card.version
-            creator = card.creator
-            timestamp = card.timestamp
-            content = card.content
-            contentType = card.contentType
-            type = card.type
-            fixedWidth = card.fixedWidth
-        }
-        this.card.insertObject(cardModel)
-        cardModel.databaseId
-    }
-
     val quoteDatabaseId = message.quote?.let { quote ->
         val quoteModel = QuoteModel().apply {
             id = quote.id
@@ -726,7 +688,6 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         readTime = calculatedReadTime
         this.quoteDatabaseId = quoteDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
-        this.cardModelDatabaseId = cardModelDatabaseId
         this.screenShotJson = message.screenShot?.let { Gson().toJson(it) }
     }
     return messageModel
@@ -766,24 +727,6 @@ fun WCDB.insertForward(
     forwardContextDatabaseId: Long? = null,
     parentForwardModelDatabaseId: Long? = null
 ) {
-    val cardModelDatabaseId = forward.card?.let { card ->
-        val uniqueId = card.uniqueId ?: return@let null
-        val cardModel = CardModel().apply {
-            this.uniqueId = uniqueId
-            cardId = card.cardId ?: ""
-            appId = card.appId ?: ""
-            version = card.version
-            creator = card.creator
-            timestamp = card.timestamp
-            content = card.content
-            contentType = card.contentType
-            type = card.type
-            fixedWidth = card.fixedWidth
-        }
-        this.card.insertObject(cardModel)
-        cardModel.databaseId
-    }
-
     val forwardModel = ForwardModel().apply {
         id = forward.id
         type = forward.type
@@ -791,7 +734,6 @@ fun WCDB.insertForward(
         author = forward.author
         text = forward.text ?: ""
         serverTimestamp = forward.serverTimestamp
-        this.cardModelDatabaseId = cardModelDatabaseId
         this.parentForwardModelDatabaseId = parentForwardModelDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
     }
@@ -819,12 +761,6 @@ fun WCDB.insertForward(
     }
 }
 
-fun deleteOldRecallMessages() {
-    val oldRecallMessages = wcdb.message.getAllObjects(DBMessageModel.type.eq(3))
-    oldRecallMessages.forEach {
-        it.delete()
-    }
-}
 
 fun MessageModel.delete() {
     deleteRelatedDataForMessage()
@@ -859,10 +795,6 @@ fun MessageModel.deleteRelatedDataForMessage() {
             wcdb.quote.deleteObjects(DBQuoteModel.databaseId.eq(qId))
         }
 
-        cardModelDatabaseId?.let {
-            wcdb.card.deleteObjects(DBCardModel.databaseId.eq(it))
-        }
-
         wcdb.translate.deleteObjects(DBTranslateModel.messageId.eq(id))
         wcdb.speechToText.deleteObjects(DBSpeechToTextModel.messageId.eq(id))
 
@@ -884,10 +816,6 @@ private fun ForwardModel.deleteForwardRelatedData() {
         sf.deleteForwardRelatedData()
     }
     wcdb.forward.deleteObjects(DBForwardModel.parentForwardModelDatabaseId.eq(databaseId))
-
-    cardModelDatabaseId?.let { cardId ->
-        wcdb.card.deleteObjects(DBCardModel.databaseId.eq(cardId))
-    }
 
     wcdb.forward.deleteObjects(DBForwardModel.databaseId.eq(databaseId))
 }
@@ -986,7 +914,7 @@ fun RoomModel.updateRoomUnreadState(readPosition: Long = this.readPosition) {
         DBMessageModel.roomId.eq(roomId)
             .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
             .and(DBMessageModel.fromWho.upper().notEq(globalServices.myId.uppercase()))
-            .and(DBMessageModel.type.notEq(2))
+            .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
     )
 
     val unreadMessageNum = unreadMessagesIds.size
@@ -1173,6 +1101,8 @@ fun WCDB.updateGroupMembersReadPosition(gid: String, readPosition: Long) {
 }
 
 fun clearInvalidGroupMembers() {
+    // Delete any groups with non-zero status that may have been left over from previous sessions
+    wcdb.group.deleteObjects(DBGroupModel.status.notEq(0))
     val allGroupIds = wcdb.group.allObjects.map { it.gid }
     if (allGroupIds.isNotEmpty()) {
         wcdb.groupMemberContactor.deleteObjects(
@@ -1180,5 +1110,121 @@ fun clearInvalidGroupMembers() {
                 .and(DBGroupMemberContactorModel.gid.notIn(*allGroupIds.toTypedArray()))
         )
     }
+}
+
+// ─── Message Search ───────────────────────────────────────────────────────────
+
+data class RoomSearchResult(
+    val room: RoomModel,
+    val messageCount: Int,
+    val singleMessage: MessageModel?,
+    val latestTimestamp: Long
+)
+
+data class PaginatedMessageSearchResult(
+    val messages: List<MessageModel>,
+    val hasMore: Boolean,
+    val lastTimestamp: Long?
+)
+
+/**
+ * Groups matching messages by conversation. Uses a single batch room query instead of N
+ * individual room queries, eliminating the N+1 problem.
+ *
+ * @param maxRooms limits how many conversations are returned (useful for preview in SearchActivity)
+ */
+fun WCDB.loadRoomSearchResultsByKeyword(
+    keyword: String,
+    maxRooms: Int? = null
+): List<RoomSearchResult> {
+    val like = "%${keyword.uppercase()}%"
+
+    // Step 1: GROUP BY in DB — only 3 lightweight values per row, no full MessageModel load
+    // SELECT roomId, COUNT(*), MAX(systemShowTimestamp) FROM message
+    //   WHERE UPPER(messageText) LIKE ? AND type NOT IN (2,3,100) AND mode != 1
+    //   GROUP BY roomId ORDER BY MAX(systemShowTimestamp) DESC
+    val colRoomId = Column("roomId")
+    val colCount = Column.all().count()
+    val colMaxTs = DBMessageModel.systemShowTimestamp.max()
+    val statement = StatementSelect()
+        .select(colRoomId, colCount, colMaxTs)
+        .from("message")
+        .where(
+            DBMessageModel.messageText.upper().like(like)
+                .and(DBMessageModel.type.`in`(MessageModel.TYPE_TEXT, MessageModel.TYPE_ATTACHMENT))
+                .and(DBMessageModel.mode.notEq(1))
+        )
+        .groupBy(colRoomId)
+        .orderBy(OrderingTerm(colMaxTs).order(Order.Desc))
+        .apply { if (maxRooms != null) limit(maxRooms.toLong()) }
+
+    val rows = db.getAllRowsFromStatement(statement)
+    if (rows.isEmpty()) return emptyList()
+
+    // rows: List<Value[]>, each row = [roomId, count, maxTs]
+    val roomGroups = rows
+        .map { row -> Triple(row[0].text, row[1].long, row[2].long) }
+
+    val roomIds = roomGroups.map { it.first }
+
+    // Step 2: Batch fetch rooms (1 IN query)
+    val roomMap = room.getAllObjects(DBRoomModel.roomId.`in`(*roomIds.toTypedArray()))
+        .associateBy { it.roomId }
+
+    // Step 3: For rooms with exactly 1 match, fetch that single message for preview
+    val singleMatchRoomIds = roomGroups.filter { it.second == 1L }.map { it.first }
+    val singleMessages = if (singleMatchRoomIds.isNotEmpty()) {
+        message.getAllObjects(
+            DBMessageModel.roomId.`in`(*singleMatchRoomIds.toTypedArray())
+                .and(DBMessageModel.messageText.upper().like(like))
+                .and(DBMessageModel.type.`in`(MessageModel.TYPE_TEXT, MessageModel.TYPE_ATTACHMENT))
+                .and(DBMessageModel.mode.notEq(1))
+        ).associateBy { it.roomId }
+    } else emptyMap()
+
+    return roomGroups.mapNotNull { (roomId, count, latestTimestamp) ->
+        val roomModel = roomMap[roomId] ?: return@mapNotNull null
+        RoomSearchResult(roomModel, count.toInt(), singleMessages[roomId], latestTimestamp)
+    }
+}
+
+/**
+ * Cursor-based paginated search across all conversations.
+ * Pass cursorTimestamp=null for the first page; subsequent pages use lastTimestamp from the
+ * previous result.
+ */
+fun WCDB.loadPaginatedMessagesByKeyword(
+    keyword: String,
+    limit: Int = 20,
+    cursorTimestamp: Long? = null,
+    conversationId: String? = null  // null = search across all conversations
+): PaginatedMessageSearchResult {
+    var baseCondition = DBMessageModel.messageText.upper().like("%${keyword.uppercase()}%")
+        .and(DBMessageModel.type.`in`(MessageModel.TYPE_TEXT, MessageModel.TYPE_ATTACHMENT))
+        .and(DBMessageModel.mode.notEq(1))          // exclude Confidential mode
+
+    if (conversationId != null) {
+        baseCondition = baseCondition.and(DBMessageModel.roomId.eq(conversationId))
+    }
+
+    if (cursorTimestamp != null) {
+        baseCondition = baseCondition.and(DBMessageModel.systemShowTimestamp.lt(cursorTimestamp))
+    }
+
+    // Fetch limit+1 to detect whether more pages exist without an extra count query
+    val fetched = message.getAllObjects(
+        baseCondition,
+        DBMessageModel.systemShowTimestamp.order(Order.Desc),
+        (limit + 1).toLong()
+    )
+
+    val hasMore = fetched.size > limit
+    val resultMessages = if (hasMore) fetched.dropLast(1) else fetched
+
+    return PaginatedMessageSearchResult(
+        messages = resultMessages,
+        hasMore = hasMore,
+        lastTimestamp = resultMessages.lastOrNull()?.systemShowTimestamp
+    )
 }
 

@@ -11,8 +11,10 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.firebase.perf)
+    alias(libs.plugins.roborazzi)
 }
-val appVersionName = "2.1.2"
+
+val appVersionName = "2.1.6"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -150,6 +152,12 @@ android {
 
             buildConfigField("String", "APP_CHANNEL", "\"${this.name}\"")
         }
+
+        create("fdroid") {
+            dimension = flavorDimensionChannel
+
+            buildConfigField("String", "APP_CHANNEL", "\"${this.name}\"")
+        }
     }
 
     signingConfigs {
@@ -202,6 +210,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -247,6 +259,10 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/app"))
 }
 
 // Allow references to generated code
@@ -296,4 +312,22 @@ dependencies {
     // 性能监控
     implementation(libs.anrwatchdog)
     implementation(libs.profileinstaller)
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 }

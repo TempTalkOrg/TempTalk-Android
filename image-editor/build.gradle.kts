@@ -34,4 +34,11 @@ kotlin {
 dependencies {
     implementation(project(":base"))
     implementation(libs.androidx.appcompat)
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
 }

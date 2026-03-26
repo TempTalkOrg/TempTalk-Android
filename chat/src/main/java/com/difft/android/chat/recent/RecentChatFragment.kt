@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -16,13 +17,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
-import com.difft.android.base.fragment.DisposableManageFragment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.smoothScrollToPositionWithHelper
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ChativePopupView
@@ -50,13 +49,13 @@ import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedExcept
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
-import io.reactivex.rxjava3.core.Single
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.rx3.asFlow
+
 import kotlinx.coroutines.withContext
 import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
@@ -73,7 +72,7 @@ import kotlinx.coroutines.launch
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
-class RecentChatFragment : DisposableManageFragment() {
+class RecentChatFragment : Fragment() {
 
     @Inject
     lateinit var userManager: UserManager
@@ -303,11 +302,8 @@ class RecentChatFragment : DisposableManageFragment() {
         sortedList.addAll(meetingRooms.sortedByDescending { it.lastActiveTime })
         // add pinned rooms
         sortedList.addAll(pinnedRooms.sortedByDescending { it.lastActiveTime })
-        // add other rooms (lastDisplayContent 为空的排后面，再按时间倒序)
-        sortedList.addAll(otherRooms.sortedWith(
-            compareBy<RoomViewData> { it.lastDisplayContent.isNullOrEmpty() }
-                .thenByDescending { it.lastActiveTime }
-        ))
+        // add other rooms (sorted by lastActiveTime descending)
+        sortedList.addAll(otherRooms.sortedByDescending { it.lastActiveTime })
         return sortedList to instantCallRoomViewDataMap
     }
 
@@ -367,7 +363,6 @@ class RecentChatFragment : DisposableManageFragment() {
         recentChatViewModel.createNote()
 
         RecentChatUtil.chatDoubleTab
-            .asFlow()
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach {
                 val layoutManager = binding.recyclerViewRecentMessage.layoutManager as? LinearLayoutManager ?: return@onEach
@@ -485,18 +480,21 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun checkDevices() {
-        Single.fromCallable {
-            ApplicationDependencies.getSignalServiceAccountManager().devices
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({}, { e ->
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    ApplicationDependencies.getSignalServiceAccountManager().devices
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 L.w { "[RecentChatFragment] checkDevices error: ${e.stackTraceToString()}" }
                 if (e is AuthorizationFailedException) {
                     L.i { "[Message] AuthorizationFailedException" }
                     logoutManager.doLogoutWithoutRemoveData()
                 }
-            })
+            }
+        }
     }
 
     private var inactiveDeviceDialog: ComposeDialog? = null
@@ -514,21 +512,27 @@ class RecentChatFragment : DisposableManageFragment() {
             cancelable = false,
             showCancel = false,
             onConfirm = {
-                recentChatViewModel.activateDevice()
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({
-                        if (it.status == 0) {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            recentChatViewModel.activateDevice()
+                        }
+                        if (!isAdded || view == null) return@launch
+                        if (result.status == 0) {
                             ToastUtil.show(R.string.activate_device_success)
                             inactiveDeviceDialog?.dismiss()
                             inactiveDeviceDialog = null
                         } else {
-                            it.reason?.let { message -> ToastUtil.show(message) }
+                            result.reason?.let { message -> ToastUtil.show(message) }
                         }
-                    }) {
-                        L.e { "activate Device fail:" + it.stackTraceToString() }
-                        it.message?.let { message -> ToastUtil.show(message) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        if (!isAdded || view == null) return@launch
+                        L.e { "activate Device fail:" + e.stackTraceToString() }
+                        e.message?.let { message -> ToastUtil.show(message) }
                     }
+                }
             }
         )
     }
@@ -589,10 +593,17 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun leaveGroup(group: GroupModel) {
-        groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({}, { L.w { "[RecentChatFragment] leaveGroup error: ${it.stackTraceToString()}" } })
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[RecentChatFragment] leaveGroup error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private fun disbandGroup(group: GroupModel) {
@@ -604,10 +615,17 @@ class RecentChatFragment : DisposableManageFragment() {
             cancelText = getString(R.string.group_leave_cancel),
             cancelable = false,
             onConfirm = {
-                groupRepo.deleteGroup(group.gid)
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { L.w { "[RecentChatFragment] disbandGroup error: ${it.stackTraceToString()}" } })
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            groupRepo.deleteGroup(group.gid)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[RecentChatFragment] disbandGroup error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
         )
     }

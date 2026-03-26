@@ -54,7 +54,7 @@ class MessageContactsCacheUtil {
      *
      * @param ids 需要加载的联系人ID集合
      */
-    suspend fun loadContactors(ids: Set<String>) {
+    suspend fun loadContactors(ids: Set<String>, preferredGid: String? = null) {
         if (ids.isEmpty()) return
 
         // 过滤掉已在缓存中的ID
@@ -63,7 +63,7 @@ class MessageContactsCacheUtil {
 
         // 批量查询数据库
         val contactors = withContext(Dispatchers.IO) {
-            wcdb.getContactorsFromAllTable(missingIds.toList())
+            wcdb.getContactorsFromAllTable(missingIds.toList(), preferredGid)
         }
 
         // 更新缓存

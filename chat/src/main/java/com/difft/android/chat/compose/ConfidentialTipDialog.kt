@@ -15,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -43,10 +42,9 @@ fun ConfidentialTipDialogContent(
     ) {
         // Icon with t_info color
         Image(
-            painter = painterResource(id = R.drawable.chat_btn_confidential_mode),
+            painter = painterResource(id = R.drawable.chat_btn_confidential_mode_enable),
             contentDescription = null,
-            modifier = Modifier.size(32.dp),
-            colorFilter = ColorFilter.tint(colorResource(id = com.difft.android.base.R.color.t_info))
+            modifier = Modifier.size(32.dp)
         )
 
         Spacer(modifier = Modifier.height(8.dp))

@@ -39,8 +39,7 @@ import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitFirstOrNull
+
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupModel
@@ -72,6 +71,9 @@ class GroupSelectMemberActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     val mAdapter: GroupMembersAdapter by lazy {
         object : GroupMembersAdapter(type) {
@@ -241,14 +243,14 @@ class GroupSelectMemberActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    groupRepo.removeMembers(gid, currentSelectedIds.toList()).await()
+                    groupRepo.removeMembers(gid, currentSelectedIds.toList())
                 }
 
                 if (response.status == 0) {
                     // 移除成员成功后，刷新群组信息
                     try {
                         withContext(Dispatchers.IO) {
-                            GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).awaitFirstOrNull()
+                            groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
                         }
                     } catch (e: Exception) {
                         L.e { "[GroupSelectMemberActivity] Failed to refresh group info after removing members: ${e.message}" }
@@ -296,7 +298,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                 lifecycleScope.launch {
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.addMembers(gid, currentSelectedIds.toList()).await()
+                            groupRepo.addMembers(gid, currentSelectedIds.toList())
                         }
 
                         when (response.status) {
@@ -304,7 +306,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                                 // 添加成员成功后，刷新群组信息
                                 try {
                                     withContext(Dispatchers.IO) {
-                                        GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).awaitFirstOrNull()
+                                        groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
                                     }
                                 } catch (e: Exception) {
                                     L.e { "[GroupSelectMemberActivity] Failed to refresh group info after adding members: ${e.message}" }

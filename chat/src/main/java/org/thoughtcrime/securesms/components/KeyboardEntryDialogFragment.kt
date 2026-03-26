@@ -1,6 +1,7 @@
 package org.thoughtcrime.securesms.components
 
 import android.app.Dialog
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -41,11 +42,15 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
       dialog.window?.setDimAmount(0f)
     }
 
-    // Use ADJUST_NOTHING for edge-to-edge compatibility - IME insets handled via WindowInsets API
-    dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-    // Enable edge-to-edge for the dialog window
     dialog.window?.let { window ->
-      WindowCompat.setDecorFitsSystemWindows(window, false)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // API 30+: edge-to-edge mode, handle IME insets manually via WindowInsets API
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+      } else {
+        // API < 30: IME insets not reliably dispatched, use ADJUST_RESIZE for automatic keyboard avoidance
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+      }
     }
 
     return dialog
@@ -59,8 +64,10 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
     return if (view is KeyboardAwareLinearLayout) {
       view.addOnKeyboardShownListener(this)
       view.addOnKeyboardHiddenListener(this)
-      // Setup IME insets listener for edge-to-edge support
-      setupImeInsetsListener(view)
+      // IME insets listener only needed for edge-to-edge mode (API 30+)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        setupImeInsetsListener(view)
+      }
       view
     } else {
       throw IllegalStateException("Expected parent of view hierarchy to be keyboard aware.")

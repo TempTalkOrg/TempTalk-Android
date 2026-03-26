@@ -8,7 +8,6 @@ import com.difft.android.chat.widget.AudioMessageManager
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
-import difft.android.messageserialization.model.Card
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
@@ -42,7 +41,6 @@ open class TextChatMessage : ChatMessage() {
     var attachment: Attachment? = null
     var quote: Quote? = null
     var forwardContext: ForwardContext? = null
-    var card: Card? = null
     var mentions: List<Mention>? = null
     var reactions: List<Reaction>? = null
     var sharedContacts: List<SharedContact>? = null
@@ -65,7 +63,6 @@ open class TextChatMessage : ChatMessage() {
         if (attachment != other.attachment) return false
         if (quote != other.quote) return false
         if (forwardContext != other.forwardContext) return false
-        if (card != other.card) return false
         if (mentions != other.mentions) return false
         if (reactions != other.reactions) return false
         if (sharedContacts != other.sharedContacts) return false
@@ -87,7 +84,6 @@ open class TextChatMessage : ChatMessage() {
         result = 31 * result + (attachment?.hashCode() ?: 0)
         result = 31 * result + (quote?.hashCode() ?: 0)
         result = 31 * result + (forwardContext?.hashCode() ?: 0)
-        result = 31 * result + (card?.hashCode() ?: 0)
         result = 31 * result + (mentions?.hashCode() ?: 0)
         result = 31 * result + (reactions?.hashCode() ?: 0)
         result = 31 * result + (sharedContacts?.hashCode() ?: 0)
@@ -225,12 +221,12 @@ fun TextChatMessage.hasTextContent(): Boolean {
     forwardContext?.forwards?.let { forwards ->
         if (forwards.size == 1) {
             val forward = forwards.firstOrNull()
-            if (!forward?.card?.content.isNullOrEmpty() || !forward?.text.isNullOrEmpty()) {
+            if (!forward?.text.isNullOrEmpty()) {
                 return true
             }
         }
     } ?: run {
-        if (!card?.content.isNullOrEmpty() || !message.isNullOrEmpty()) {
+        if (!message.isNullOrEmpty()) {
             return true
         }
     }
@@ -240,18 +236,14 @@ fun TextChatMessage.hasTextContent(): Boolean {
 
 /**
  * Get copyable text content from message
- * Returns text from forward context (single forward) or message/card content
+ * Returns text from forward context (single forward) or message content
  */
 fun TextChatMessage.getCopyableTextContent(): String? {
     return forwardContext?.forwards?.let { forwards ->
         if (forwards.size == 1) {
-            forwards.firstOrNull()?.let { forward ->
-                forward.card?.content.takeUnless { it.isNullOrEmpty() }
-                    ?: forward.text.takeUnless { it.isNullOrEmpty() }
-            }
+            forwards.firstOrNull()?.text.takeUnless { it.isNullOrEmpty() }
         } else null
-    } ?: card?.content.takeUnless { it.isNullOrEmpty() }
-    ?: message?.toString().takeUnless { it.isNullOrEmpty() }
+    } ?: message?.toString().takeUnless { it.isNullOrEmpty() }
 }
 
 /**
@@ -314,7 +306,7 @@ fun TextChatMessage.buildForwardData(): Pair<String, ForwardContext>? {
             if (forward?.attachments?.isNotEmpty() == true) {
                 ResUtils.getString(R.string.chat_message_attachment)
             } else {
-                forward?.text ?: forward?.card?.content ?: ResUtils.getString(R.string.chat_history)
+                forward?.text ?: ResUtils.getString(R.string.chat_history)
             }
         } else {
             ResUtils.getString(R.string.chat_history)
@@ -325,7 +317,7 @@ fun TextChatMessage.buildForwardData(): Pair<String, ForwardContext>? {
         content = if (isAttachmentMessage()) {
             ResUtils.getString(R.string.chat_message_attachment)
         } else {
-            message?.toString() ?: card?.content ?: ""
+            message?.toString() ?: ""
         }
 
         forwardCtx = ForwardContext(
@@ -341,7 +333,6 @@ fun TextChatMessage.buildForwardData(): Pair<String, ForwardContext>? {
                             listOf(attach.copy(status = AttachmentStatus.LOADING.code))
                         },
                         null,
-                        card,
                         mentions,
                         systemShowTimestamp
                     )

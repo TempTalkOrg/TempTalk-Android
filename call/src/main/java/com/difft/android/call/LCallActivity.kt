@@ -62,7 +62,7 @@ import com.difft.android.call.ui.InviteViewState
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.call.util.ScreenDeviceUtil
 import com.difft.android.network.config.GlobalConfigsManager
-import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
+import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
 import kotlinx.coroutines.Dispatchers
@@ -133,13 +133,19 @@ class LCallActivity : AppCompatActivity() {
         callConfig.muteOtherEnabled
     }
 
-    private val audioProcessor = DenoisePluginAudioProcessor()
+    private val audioProcessor = AudioPipelineProcessor()
 
     private var pictureInPictureManager: PictureInPictureManager? = null
 
     private var proximitySensorManager: ProximitySensorManager? = null
 
     private var screenshotDetector: ScreenshotDetector? = null
+    private var windowFocusLostAt: Long = 0L
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        windowFocusLostAt = if (hasFocus) 0L else System.currentTimeMillis()
+    }
 
     private var callErrorHandler: CallErrorHandler? = null
 
@@ -187,6 +193,16 @@ class LCallActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         L.i { "[Call] LCallActivity: onCreate" }
         super.onCreate(savedInstanceState)
+
+        // After process death (e.g. native crash), the system may restore this Activity from
+        // the separate call task. All in-memory call state (OnGoingCallStateManager, LiveKit Room)
+        // is gone, so continuing would start a ghost ForegroundService with no real call behind it.
+        if (savedInstanceState != null && !onGoingCallStateManager.isInCalling()) {
+            L.w { "[Call] LCallActivity: Restored after process death with no active call, finishing" }
+            finish()
+            return
+        }
+
         // 占位 content，确保 ViewTreeLifecycleOwner 已设置，避免 initializeView 中 CallWaitDialogUtil
         //（ComposeDialogManager 将 ComposeView 加入 content）时出现 ViewTreeLifecycleOwner not found crash
         setContentView(android.widget.FrameLayout(this))
@@ -263,7 +279,6 @@ class LCallActivity : AppCompatActivity() {
             lifecycleScope = lifecycleScope,
             callIntent = callIntent,
             onEndCall = { endCallAndClearResources() },
-            onDismissError = { viewModel.dismissError() }
         )
     }
 
@@ -503,6 +518,7 @@ class LCallActivity : AppCompatActivity() {
         const val EXTRA_CONTROL_TYPE = "EXTRA_CONTROL_TYPE"
         const val EXTRA_PARAM_ROOM_ID = "EXTRA_PARAM_ROOM_ID"
         private const val DEFAULT_FONT_SCALE = 1.0f
+        private const val SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
     }
 
     /**
@@ -597,16 +613,13 @@ class LCallActivity : AppCompatActivity() {
     }
 
     /**
-     * 获取资源对象
-     * 
-     * 重写此方法以适配字体缩放问题。系统字体缩放会导致布局错乱，
-     * 因此强制重置字体缩放为默认值 1.0f。
-     * 
-     * @return 重置字体缩放后的资源对象
+     * 重写 getResources 强制重置 fontScale 为 1.0f，
+     * 避免系统字体缩放导致通话界面布局错乱。
+     * updateConfiguration 已 deprecated 但无等效的 per-access 替代 API。
      */
+    @Suppress("DEPRECATION")
     override fun getResources(): Resources {
         val res = super.getResources()
-        // 适配字体缩放问题，字体缩放会导致布局错乱，此处重置为默认值1.0f
         if (res.configuration.fontScale != DEFAULT_FONT_SCALE) {
             val newConfig = Configuration(res.configuration)
             newConfig.fontScale = DEFAULT_FONT_SCALE
@@ -853,6 +866,11 @@ class LCallActivity : AppCompatActivity() {
         val conversationId = callIntent.conversationId ?: return
         val callType = resolveCurrentCallType(conversationId) ?: return
         if (callType.isInstant() || onGoingCallStateManager.isInPipMode() || isInPictureInPictureMode) {
+            return
+        }
+        val focusLostDuration = if (windowFocusLostAt > 0L) System.currentTimeMillis() - windowFocusLostAt else 0L
+        if (windowFocusLostAt > 0L && focusLostDuration >= SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS) {
+            L.i { "[Call][Screenshot] Skipped: focus lost ${focusLostDuration}ms ago (notification panel open)" }
             return
         }
         callToChatController.sendScreenshotNotification(conversationId, callType)
@@ -1158,16 +1176,16 @@ class LCallActivity : AppCompatActivity() {
      * Android O MR1 及以上版本使用新的 API。
      */
     private fun allowOnLockScreen() {
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        )
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
         }
     }
 

@@ -27,18 +27,20 @@ import io.livekit.android.room.track.VideoCodec
 import io.livekit.android.room.track.VideoPreset169
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import livekit.LivekitTemptalk
-import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
+import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 
 class CallRoomController(
     private val appContext: Context,
     private val scope: CoroutineScope,
     private val callIntent: CallIntent,
     private val audioHandler: AudioSwitchHandler,
-    private val audioProcessor: DenoisePluginAudioProcessor?,
+    private val audioProcessor: AudioPipelineProcessor?,
     private val e2eeEnable: Boolean,
     private val decryptCallMKey: (eKey: String, eMKey: String) -> ByteArray?,
 ) {
@@ -57,8 +59,8 @@ class CallRoomController(
     private val _isNoSpeakSoloTimeout = MutableStateFlow(false)
     val isNoSpeakSoloTimeout = _isNoSpeakSoloTimeout.asStateFlow()
 
-    private val _error = MutableStateFlow<Throwable?>(null)
-    val error = _error.asStateFlow()
+    private val _error = Channel<Throwable>(Channel.BUFFERED)
+    val error = _error.receiveAsFlow()
 
     private val _roomMetadata = MutableStateFlow(RoomMetadata(canPublishAudio = true, canPublishVideo = true))
     val roomMetadata = _roomMetadata.asStateFlow()
@@ -163,15 +165,17 @@ class CallRoomController(
         _roomMetadata.value = metadata
     }
 
-    fun collectError(error: Throwable?) {
-        _error.value = error
+    fun collectError(error: Throwable) {
+        _error.trySend(error)
     }
 
     fun disconnectAndRelease() {
         runCatching { room.disconnect() }
+        runCatching {
+            room.e2eeOptions?.ttEncryptor = null
+            room.e2eeOptions = null
+        }
         runCatching { room.release() }
-        room.e2eeOptions?.ttEncryptor = null
-        room.e2eeOptions = null
     }
 
     fun local(): LocalParticipant = room.localParticipant

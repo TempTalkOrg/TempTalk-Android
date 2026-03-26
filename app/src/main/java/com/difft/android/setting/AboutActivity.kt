@@ -6,9 +6,7 @@ import android.os.Bundle
 import androidx.fragment.app.commit
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 /**
  * Activity container for AboutFragment
@@ -16,11 +14,6 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class AboutActivity : BaseActivity() {
-    @Inject
-    lateinit var updateManager: UpdateManager
-
-    @Inject
-    lateinit var urlManager: UrlManager
 
     companion object {
         fun startActivity(activity: Activity) {

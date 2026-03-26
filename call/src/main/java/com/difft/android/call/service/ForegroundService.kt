@@ -214,9 +214,19 @@ open class ForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         L.d { "[Call] ForegroundService onDestroy" }
+        cancelNotification()
         serviceScope.cancel()
         isCallMsgListenerStarted = false
         isServiceRunning = false
+    }
+
+    private fun cancelNotification() {
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(DEFAULT_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            L.w { "[Call] ForegroundService Failed to cancel notification: ${e.message}" }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -230,7 +240,6 @@ open class ForegroundService : Service() {
             sendBroadcast(createAppTaskEndIntent())
         }
     }
-
 
     private fun addCallControlMessageListener() {
         if(!isCallMsgListenerStarted){

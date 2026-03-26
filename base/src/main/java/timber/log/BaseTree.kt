@@ -3,6 +3,7 @@ package timber.log
 import android.os.Build
 import android.util.Log
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.log.lumberjack.L.replaceUid
 import com.difft.android.base.log.lumberjack.data.StackData
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -170,17 +171,19 @@ abstract class BaseTree : Timber.Tree() {
         // custom: we create a stack data object
         val callStackCorrection = getCallStackCorrection() ?: 0
         val stackDataLocal = getStackTrace()
+        var needReplaceUid = false
 
         val stackData = stackDataLocal?.let {
             stackDataLocal.copy(callStackIndex = stackDataLocal.callStackIndex + callStackCorrection)
         } ?: run {
+            needReplaceUid = true
             t?.let {
                 StackData(t, 0, true)
             } ?: run {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     val frame = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
                         .walk { frames ->
-                            frames.skip(CALL_STACK_INDEX.toLong())
+                            frames.skip(CALL_STACK_INDEX_LIVEKIT.toLong())
                                 .filter { f -> !f.declaringClass.name.startsWith("timber.log") }
                                 .findFirst()
                         }
@@ -191,16 +194,17 @@ abstract class BaseTree : Timber.Tree() {
                     }
                 } else {
                     val t = Throwable()
-                    if (t.stackTrace.size <= CALL_STACK_INDEX) {
+                    if (t.stackTrace.size <= CALL_STACK_INDEX_LIVEKIT) {
                         return
                     }
-                    StackData(t, CALL_STACK_INDEX, true)
+                    StackData(t, CALL_STACK_INDEX_LIVEKIT, true)
                 }
             }
         }
 
         // Consume tag even when message is not loggable so that next message is correctly tagged.
-        @Suppress("NAME_SHADOWING") var message = message
+        @Suppress("NAME_SHADOWING") var message =
+            if (needReplaceUid && message != null) replaceUid(message) else message
         val customTag = super.getTag()
         val prefix = getPrefix(customTag, stackData)
         if (!isLoggable(customTag, priority)) {
@@ -263,6 +267,7 @@ abstract class BaseTree : Timber.Tree() {
 
     companion object {
         internal const val CALL_STACK_INDEX = 4
+        internal const val CALL_STACK_INDEX_LIVEKIT = CALL_STACK_INDEX + 1
     }
 
     private val callStackCorrection = ThreadLocal<Int>()

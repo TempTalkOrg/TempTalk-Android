@@ -158,7 +158,8 @@ data class CallClusterInfo(
 
 @Immutable
 data class DeNoiseConfig(
-    val bluetooth: BluetoothConfig? = null
+    val bluetooth: BluetoothConfig? = null,
+    val mode: String? = null
 )
 
 @Immutable

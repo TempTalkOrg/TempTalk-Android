@@ -14,7 +14,6 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.rx3.awaitFirst
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -89,20 +88,16 @@ object AvatarUtil {
 
     suspend fun fetchAvatar(context: Context, url: String, key: String): ByteArray {
         try {
-            return EntryPointAccessors.fromApplication<EntryPoint>(context)
+            val responseBody = EntryPointAccessors.fromApplication<EntryPoint>(context)
                 .httpClient1()
                 .httpService
                 .getResponseBody(url, emptyMap(), emptyMap())
-                .map { responseBody ->
-                    val bytes = responseBody.bytes()
-                    val secretKey = SecretKeySpec(Base64.decode(key, Base64.DEFAULT), "AESGCM256")
-                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                    val params = GCMParameterSpec(128, bytes, 0, 12)
-                    cipher.init(Cipher.DECRYPT_MODE, secretKey, params)
-                    val decData = cipher.doFinal(bytes, 12, bytes.size - 12)
-                    decData
-                }
-                .awaitFirst()
+            val bytes = responseBody.bytes()
+            val secretKey = SecretKeySpec(Base64.decode(key, Base64.DEFAULT), "AESGCM256")
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            val params = GCMParameterSpec(128, bytes, 0, 12)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, params)
+            return cipher.doFinal(bytes, 12, bytes.size - 12)
         } catch (e: Exception) {
             L.e(e) { "[AvatarUtil] fetchAvatar error:" }
             throw e

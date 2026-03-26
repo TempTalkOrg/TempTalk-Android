@@ -114,7 +114,7 @@ object PermissionUtil {
                 .also { context.startActivity(it) }
         } catch (e: Exception) {
             L.w { "[PermissionUtil] error: ${e.stackTraceToString()}" }
-            L.i { "[AndroidPermission] launchSettings fail:" + e.stackTraceToString() }
+            L.i { "[PermissionUtil] launchSettings fail:" + e.stackTraceToString() }
         }
     }
 

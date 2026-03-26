@@ -10,8 +10,6 @@ import com.difft.android.network.requests.GrayCheckRequestBody
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import io.reactivex.rxjava3.schedulers.Schedulers
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -68,8 +66,6 @@ object FeatureGrayManager {
             val token = SecureSharedPrefsUtil.getToken()
             if (token.isEmpty()) return
             val resp = chatHttpClient.httpService.grayCheck(SecureSharedPrefsUtil.getToken(), GrayCheckRequestBody(sources))
-                .subscribeOn(Schedulers.io())
-                .await()
 
             if (resp.status != 0) {
                 L.e { "[FeatureGrayManager] server returned status=${resp.status}" }

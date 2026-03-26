@@ -37,7 +37,6 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -48,7 +47,7 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.call.util.FullScreenPermissionHelper
-import com.difft.android.call.util.NetUtil
+import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
@@ -82,10 +81,10 @@ import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
 import com.difft.android.setting.UpdateManager
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
+
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
@@ -129,6 +128,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             binding.indicatorviewMe
         )
     }
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     @Inject
     lateinit var updateManager: UpdateManager
@@ -372,7 +374,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private fun syncContactAndGroupInfo() {
         lifecycleScope.launch(Dispatchers.IO) {
             ContactorUtil.fetchAndSaveContactors(false)
-            GroupUtil.syncAllGroupAndAllGroupMembers(this@IndexActivity, forceFetch = false, syncMembers = true)
+            groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = false, syncMembers = true)
         }
     }
 
@@ -380,9 +382,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         L.i { "[UA] ======>" + UserAgentManager.getUserAgent() + "===uid:" + globalServices.myId }
     }
 
-
     private fun initFirebaseCustomKey() {
-        Firebase.crashlytics.setCustomKey("uid", globalServices.myId.formatBase58Id())
+        FirebaseCrashlytics.getInstance().setCustomKey("uid", globalServices.myId.formatBase58Id())
     }
 
     private fun startReceivingMessages() {
@@ -487,31 +488,27 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     /**
      * 校验apk签名
      */
-    @SuppressLint("CheckResult")
     private fun checkSign() {
         if (!BuildConfig.DEBUG) {
-            Single.create {
-                val result = SecurityLib.checkApkSign(this)
-                it.onSuccess(result)
-            }
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe { it ->
-                    if (!it) {
-                        ComposeDialogManager.showMessageDialog(
-                            context = this@IndexActivity,
-                            title = getString(R.string.app_sign_error_title),
-                            message = getString(R.string.app_sign_error_tips),
-                            confirmText = getString(R.string.app_close_application),
-                            cancelText = getString(R.string.app_ignore),
-                            cancelable = false,
-                            onConfirm = {
-                                Process.killProcess(Process.myPid())
-                                exitProcess(0)
-                            }
-                        )
-                    }
+            lifecycleScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    SecurityLib.checkApkSign(this@IndexActivity)
                 }
+                if (!result) {
+                    ComposeDialogManager.showMessageDialog(
+                        context = this@IndexActivity,
+                        title = getString(R.string.app_sign_error_title),
+                        message = getString(R.string.app_sign_error_tips),
+                        confirmText = getString(R.string.app_close_application),
+                        cancelText = getString(R.string.app_ignore),
+                        cancelable = false,
+                        onConfirm = {
+                            Process.killProcess(Process.myPid())
+                            exitProcess(0)
+                        }
+                    )
+                }
+            }
         }
     }
 
@@ -840,14 +837,18 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     private fun setUserProfile() {
-        loginRepo.setProfile()
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    loginRepo.setProfile()
+                }
                 L.i { "setUserProfile success" }
-            }, { error ->
-                L.w { "[IndexActivity] setUserProfile error: ${error.stackTraceToString()}" }
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[IndexActivity] setUserProfile error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     @Inject
@@ -986,7 +987,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             selectChatsUtils.showChatSelectAndSendDialog(
                 this@IndexActivity,
                 "",
-                logFile = file
+                file = file
             )
         }
     }
@@ -1052,7 +1053,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
     private fun fetchCallServiceUrlAndCache() {
         lifecycleScope.launch(Dispatchers.IO) {
-            if (NetUtil.checkNet(this@IndexActivity)) {
+            if (NetworkUtils.isNetworkAvailable(this@IndexActivity)) {
                 LCallManager.fetchCallServiceUrlAndCache()
             }
         }

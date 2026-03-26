@@ -22,7 +22,6 @@ import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.TextMessage
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.MessageModel
@@ -103,7 +102,7 @@ class LocalMessageCreator @Inject constructor(
         sourceDevice: Int
     ) = withContext(Dispatchers.IO) {
         runCatching {
-            val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).await().toInt()
+            val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
             val messageId = generateMessageId(timestamp, fromWho.id, sourceDevice)
             val text = context.getString(R.string.chat_message_critical_alert)
             val textMessage = TextMessage(
@@ -122,7 +121,6 @@ class LocalMessageCreator @Inject constructor(
                 quote = null,
                 forwardContext = null,
                 recall = null,
-                card = null,
                 mode = 0,
                 criticalAlertType = CRITICAL_ALERT_TYPE_ALERT
             ).applyGroupReceiverIds(fromWho, forWhat)
@@ -145,7 +143,7 @@ class LocalMessageCreator @Inject constructor(
      */
     suspend fun createNonFriendLimitMessage(forWhat: For) = withContext(Dispatchers.IO) {
         runCatching {
-            val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).await().toInt()
+            val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
             val timeStamp = System.currentTimeMillis()
             val myID = globalServices.myId
             val messageId = generateMessageId(timeStamp, myID)
@@ -184,7 +182,7 @@ class LocalMessageCreator @Inject constructor(
      */
     suspend fun createOfflineMessage(forWhat: For, actionType: Int) = withContext(Dispatchers.IO) {
         runCatching {
-            val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).await().toInt()
+            val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
             val timeStamp = System.currentTimeMillis()
             val messageId = generateMessageId(timeStamp, forWhat.id)
             val signalNotifyMessage = TTNotifyMessage(
@@ -237,7 +235,7 @@ class LocalMessageCreator @Inject constructor(
         val contactorName = if (operator == globalServices.myId) {
             ResUtils.getString(R.string.you)
         } else {
-            ContactorUtil.getContactWithID(context, operator).await().orElse(null)?.getDisplayNameForUI()
+            ContactorUtil.getContactWithID(context, operator).orElse(null)?.getDisplayNameForUI()
                 ?: forWhat.id.formatBase58Id()
         }
         val messageId = generateMessageId(operateTime, forWhat.id)
@@ -328,7 +326,7 @@ class LocalMessageCreator @Inject constructor(
         inviteeList: List<String> = emptyList(),
         saveToLocal: Boolean = true
     ): TextMessage = withContext(Dispatchers.IO) {
-        val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).await().toInt()
+        val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
 
         val callMessageTime = when (callActionType) {
             CallActionType.INVITE -> timestamp + inviteeList.indexOf(forWhat.id)
@@ -353,7 +351,6 @@ class LocalMessageCreator @Inject constructor(
             quote = null,
             forwardContext = null,
             recall = null,
-            card = null,
             mode = 0
         ).applyGroupReceiverIds(fromWho, forWhat)
 

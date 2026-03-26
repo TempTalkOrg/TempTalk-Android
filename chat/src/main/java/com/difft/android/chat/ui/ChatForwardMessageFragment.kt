@@ -54,10 +54,8 @@ import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.SaveAttachmentTask
-import org.thoughtcrime.securesms.util.StorageUtil
+import org.thoughtcrime.securesms.util.SaveAttachmentUtil
 import util.TimeFormatter
-import util.concurrent.TTExecutors
 import java.io.File
 
 @AndroidEntryPoint
@@ -143,7 +141,7 @@ class ChatForwardMessageFragment : Fragment() {
     private fun handleActionSelected(action: MessageAction.Type, message: TextChatMessage) {
         when (action) {
             MessageAction.Type.SAVE -> {
-                if (StorageUtil.canWriteToMediaStore()) {
+                if (FileUtil.canWriteToMediaStore()) {
                     saveAttachment(message)
                 } else {
                     pendingSaveAttachmentMessage = message
@@ -166,7 +164,6 @@ class ChatForwardMessageFragment : Fragment() {
     private fun shouldShowMenu(data: TextChatMessage): Boolean {
         if (data.isAttachmentMessage()) return true
         if (!data.message.isNullOrEmpty()) return true
-        if (!data.card?.content.isNullOrEmpty()) return true
 
         val forwards = data.forwardContext?.forwards
         if (!forwards.isNullOrEmpty()) {
@@ -174,7 +171,6 @@ class ChatForwardMessageFragment : Fragment() {
                 val forward = forwards.firstOrNull()
                 if (forward?.attachments?.isNotEmpty() == true) return true
                 if (!forward?.text.isNullOrEmpty()) return true
-                if (!forward?.card?.content.isNullOrEmpty()) return true
             }
             return true
         }
@@ -234,16 +230,15 @@ class ChatForwardMessageFragment : Fragment() {
             val progress = data.getAttachmentProgress()
 
             if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
-                val saveAttachment = SaveAttachmentTask.Attachment(
-                    File(attachmentPath).toUri(),
-                    it.contentType,
-                    System.currentTimeMillis(),
-                    it.fileName,
-                    false,
-                    true
+                val attachment = SaveAttachmentUtil.Attachment(
+                    uri = File(attachmentPath).toUri(),
+                    contentType = it.contentType,
+                    date = System.currentTimeMillis(),
+                    fileName = it.fileName
                 )
-
-                SaveAttachmentTask(requireContext()).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    SaveAttachmentUtil.saveWithUI(requireContext(), attachment)
+                }
             } else {
                 L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
                 ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))

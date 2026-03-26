@@ -6,6 +6,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.UrlManager
+import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import com.difft.android.websocket.api.websocket.HealthMonitor
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import com.difft.android.websocket.internal.websocket.WebSocketConnection
@@ -42,6 +43,7 @@ class WebSocketHealthMonitor
     @param:ApplicationContext
     private val context: Context,
     private val urlManager: UrlManager,
+    private val coordinator: DomainSpeedTestCoordinator,
 ) : HealthMonitor, CoroutineScope by appScope {
 
     @Volatile
@@ -258,12 +260,14 @@ class WebSocketHealthMonitor
                 || it is WebSocketConnectionState.UNKNOWN_HOST_FAILED
                 || it is WebSocketConnectionState.INACTIVE_FAILED
             ) {
+                coordinator.onWsFailure()
                 // 任何连接失败都切换 host，下次重连会使用新的 host
                 switchHost(webSocketConnection)
                 L.i { "${webSocketConnection.name} [ws]monitor: start trigger doConnect, webSocketConnectionState: $it" }
                 handleRedoConnect(webSocketConnection)
                 L.i { "${webSocketConnection.name} [ws]monitor: finished trigger doConnect, webSocketConnectionState: $it" }
             } else if (it is WebSocketConnectionState.CONNECTED) {
+                coordinator.onWsConnected()
                 attempts = 0 // reset attempts when connected
             }
         }.launchIn(this)

@@ -12,7 +12,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
@@ -25,9 +24,9 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.setting.repo.SettingRepo
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.util.Util
 import javax.inject.Inject
@@ -128,12 +127,14 @@ class AccountFragment : Fragment() {
             ComposeDialogManager.showWait(requireContext(), "")
             try {
                 withContext(Dispatchers.IO) {
-                    chatHttpClient.httpService.fetchLogout(SecureSharedPrefsUtil.getBasicAuth()).await()
+                    chatHttpClient.httpService.fetchLogout(SecureSharedPrefsUtil.getBasicAuth())
                 }
                 withContext(Dispatchers.Main) {
                     ComposeDialogManager.dismissWait()
                     logoutManager.doLogout()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.e(e) { "request Logout fail:" }
                 withContext(Dispatchers.Main) {
@@ -153,7 +154,7 @@ class AccountFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    settingRepo.getProfile(SecureSharedPrefsUtil.getToken()).await()
+                    settingRepo.getProfile(SecureSharedPrefsUtil.getToken())
                 }
 
                 withContext(Dispatchers.Main) {
@@ -172,6 +173,8 @@ class AccountFragment : Fragment() {
                         result.reason?.let { message -> ToastUtil.show(message) }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     L.w { "[AccountFragment] error: ${e.stackTraceToString()}" }
@@ -186,23 +189,29 @@ class AccountFragment : Fragment() {
         idSwitchRule: Int,
     ) {
         val token = SecureSharedPrefsUtil.getToken()
-        settingRepo.setProfile(token, searchByCustomUid = idSwitchRule)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
-                if (it.status != 0) {
-                    L.e { "[Settings] change id search setting error, status:${it.status} reason:${it.reason}" }
-                    showErrorAndRestoreSwitch(it.reason, switch)
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    settingRepo.setProfile(token, searchByCustomUid = idSwitchRule)
+                }
+                if (!isAdded || view == null) return@launch
+                if (result.status != 0) {
+                    L.e { "[Settings] change id search setting error, status:${result.status} reason:${result.reason}" }
+                    showErrorAndRestoreSwitch(result.reason, switch)
                 } else {
                     // 设置成功后，立即更新 userManager 中的数据，避免下次进入时显示旧状态
                     userManager.update {
                         this.searchByCustomUid = idSwitchRule
                     }
                 }
-            }) {
-                L.e(it) { "[Settings] changeIdSearchSetting error:" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAdded || view == null) return@launch
+                L.e(e) { "[Settings] changeIdSearchSetting error:" }
                 showErrorAndRestoreSwitch(getString(R.string.operation_failed), switch)
             }
+        }
     }
 
     private fun showErrorAndRestoreSwitch(errorMessage: String?, switch: SwitchCompat) {

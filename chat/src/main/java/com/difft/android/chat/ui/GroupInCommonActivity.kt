@@ -13,7 +13,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
 import com.difft.android.base.widget.ChativePopupView
@@ -32,15 +31,22 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.difft.android.base.log.lumberjack.L
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+
 
 @AndroidEntryPoint
 class GroupInCommonActivity : BaseActivity() {
@@ -65,6 +71,9 @@ class GroupInCommonActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     @Inject
     lateinit var wcdb: WCDB
@@ -128,14 +137,11 @@ class GroupInCommonActivity : BaseActivity() {
             alpha(toAlpha)
         }
 
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ group ->
-                mBinding.edittextSearchInput.text = null
-            }, {
-                L.w { "[GroupInCommonActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" }
-            })
+        groupUtil.singleGroupsUpdate
+            .onEach { mBinding.edittextSearchInput.text = null }
+            .catch { L.w { "[GroupInCommonActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .launchIn(lifecycleScope)
 
         searchGroups()
     }
@@ -224,10 +230,17 @@ class GroupInCommonActivity : BaseActivity() {
             cancelText = getString(R.string.group_leave_cancel),
             cancelable = false,
             onConfirm = {
-                groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(myID)))
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { L.w { "[GroupInCommonActivity] leaveGroup error: ${it.stackTraceToString()}" } })
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(myID)))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[GroupInCommonActivity] leaveGroup error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
         )
     }
@@ -241,10 +254,17 @@ class GroupInCommonActivity : BaseActivity() {
             cancelText = getString(R.string.group_leave_cancel),
             cancelable = false,
             onConfirm = {
-                groupRepo.deleteGroup(group.gid)
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { L.w { "[GroupInCommonActivity] disbandGroup error: ${it.stackTraceToString()}" } })
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            groupRepo.deleteGroup(group.gid)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[GroupInCommonActivity] disbandGroup error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
         )
     }

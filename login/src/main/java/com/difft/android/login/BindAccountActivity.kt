@@ -15,7 +15,6 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import com.difft.android.base.utils.dp
 import com.difft.android.login.databinding.ActivityBindAccountBinding
 import com.difft.android.login.repo.BindRepo
@@ -168,7 +167,7 @@ class BindAccountActivity : BaseActivity() {
         lifecycleScope.launch {
             try {
                 if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
-                    val result = bindRepo.verifyEmail(basicAuth, account, nonce).await()
+                    val result = bindRepo.verifyEmail(basicAuth, account, nonce)
                     enableHandleZone()
                     if (result.status == 0) {
                         val bundle = VerifyCodeActivity.createBundle(false, type, account, nonce)
@@ -187,7 +186,7 @@ class BindAccountActivity : BaseActivity() {
                 } else {
                     val countryCode = mBinding.tvPhoneCode.text.toString().trim()
                     val fullAccount = countryCode + account
-                    val result = bindRepo.verifyPhone(basicAuth, fullAccount, nonce).await()
+                    val result = bindRepo.verifyPhone(basicAuth, fullAccount, nonce)
                     enableHandleZone()
                     if (result.status == 0) {
                         val bundle = VerifyCodeActivity.createBundle(false, type, fullAccount, nonce)

@@ -21,6 +21,9 @@ object AppForegroundObserver {
   @Volatile
   private var isForegrounded: Boolean = false
 
+  @Volatile
+  private var startedActivityCount: Int = 0
+
   @MainThread
   @JvmStatic
   fun begin() {
@@ -69,6 +72,19 @@ object AppForegroundObserver {
   fun isForegrounded(): Boolean {
     return isInitialized && isForegrounded
   }
+
+  @JvmStatic
+  fun notifyActivityStarted() {
+    startedActivityCount++
+  }
+
+  @JvmStatic
+  fun notifyActivityStopped() {
+    startedActivityCount--
+  }
+
+  @JvmStatic
+  fun getStartedActivityCount(): Int = startedActivityCount
 
   @MainThread
   private fun onForeground() {

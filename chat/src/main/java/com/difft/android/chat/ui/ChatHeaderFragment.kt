@@ -7,9 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import com.difft.android.base.utils.RxUtil
+import androidx.core.view.isVisible
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
@@ -19,6 +18,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialBotId
 import com.difft.android.chat.databinding.ChatFragmentHeaderBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
@@ -27,6 +27,7 @@ import com.difft.android.chat.ui.ChatActivity.Companion.source
 import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
@@ -67,23 +68,23 @@ class ChatHeaderFragment : CommonHeaderFragment() {
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        ContactorUtil.friendStatusUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            ContactorUtil.friendStatusUpdate.collect {
+                if (!isAdded || view == null) return@collect
                 if (it.first == chatViewModel.forWhat.id) {
                     initView(it.second)
                 }
-            }, { L.w { "[ChatHeaderFragment] observe friendRemoved error: ${it.stackTraceToString()}" } })
+            }
+        }
 
-        ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            ContactorUtil.contactsUpdate.collect {
+                if (!isAdded || view == null) return@collect
                 if (it.contains(chatViewModel.forWhat.id)) {
                     initView(null)
                 }
-            }, { L.w { "[ChatHeaderFragment] observe contactsUpdate error: ${it.stackTraceToString()}" } })
+            }
+        }
 
         chatViewModel.chatUIData.onEach {
             initView(null)
@@ -123,6 +124,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         binding.imageviewAddContact.visibility = View.GONE
         binding.imageviewCreateGroup.visibility = View.GONE
         binding.buttonCall.visibility = View.GONE
+        binding.imageviewBotBadge.isVisible = contact.id.isOfficialBotId()
 
         if (contact.id == globalServices.myId) {
             binding.textviewNickname.text = getString(com.difft.android.base.R.string.chat_favorites)
@@ -172,21 +174,27 @@ class ChatHeaderFragment : CommonHeaderFragment() {
             }
         }
         ComposeDialogManager.showWait(requireActivity(), "")
-        ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source)
+                }
+                if (!isAdded || view == null) return@launch
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
+                if (result.status == 0) {
                     ToastUtil.show(R.string.contact_request_sent)
                     ContactorUtil.sendFriendRequestMessage(viewLifecycleOwner.lifecycleScope, getString(R.string.contact_friend_request), chatViewModel.forWhat)
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    result.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isAdded || view == null) return@launch
                 ComposeDialogManager.dismissWait()
-                it.message?.let { message -> ToastUtil.show(message) }
+                e.message?.let { message -> ToastUtil.show(message) }
             }
+        }
     }
 
     /**

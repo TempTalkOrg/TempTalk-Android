@@ -316,8 +316,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             if (message !is TextChatMessage) return
 
-            // Set container width for precise layout calculation in dual-pane mode
-            (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
+            // Set container width and message ID for layout optimization
+            val width = containerWidth
+            (contentContainer as? ChatMessageContainerView)?.apply {
+                this.containerWidth = width
+                bindMessageId(message.id)
+            }
 
             // Check if this message is currently playing audio and show speed button
             bindVoiceSpeedButton(message)

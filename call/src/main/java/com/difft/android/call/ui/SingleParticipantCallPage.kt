@@ -64,9 +64,8 @@ import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
-import kotlin.collections.contains
 import kotlin.collections.listOf
 
 
@@ -260,8 +259,6 @@ fun SingleParticipantItem(
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
     }
 
-    val contactsUpdate by LCallManager.getContactsUpdateListener().map { Pair(System.currentTimeMillis(), it) }.asFlow().collectAsState(Pair(0L, emptyList()))
-
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -272,15 +269,13 @@ fun SingleParticipantItem(
     }
 
     LaunchedEffect(uid) {
-        coroutineScope.launch {
-            updateNameAndAvatar(uid)
-        }
+        updateNameAndAvatar(uid)
     }
 
-    LaunchedEffect(contactsUpdate) {
-        if(contactsUpdate.second.contains(IdUtil.getUidByIdentity(uid))){
-            coroutineScope.launch {
-                updateNameAndAvatar(uid)
+    LaunchedEffect(uid) {
+        LCallManager.getContactsUpdateListener().collect { updatedIds ->
+            if (updatedIds.contains(IdUtil.getUidByIdentity(uid))) {
+                launch { updateNameAndAvatar(uid) }
             }
         }
     }

@@ -31,6 +31,10 @@ android {
     kapt {
         correctErrorTypes = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 kotlin {
@@ -52,5 +56,14 @@ dependencies {
     implementation(libs.wcdb.annotation)
     kapt(libs.wcdb.compiler)
 
-    // 测试依赖已通过base模块提供
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
 }

@@ -22,9 +22,14 @@
     <string name="contact_name_profile">ID:</string>
     <string name="contact_join_at">注册时间:</string>
     <string name="contact_how_you_met">如何相遇:</string>
+    <string name="contact_info_website">网站:</string>
+    <string name="contact_name_card">个人名片</string>
+    <string name="contact_official_account_label">官方账号</string>
+    <string name="contact_name_label">名字: %s</string>
     <string name="contact_common_groups">共同群:</string>
     <string name="contact_info_title">联系人信息</string>
     <string name="contact_action_message">发消息</string>
+    <string name="contact_action_add_and_message">添加并发消息</string>
     <string name="contact_action_call">语音通话</string>
     <string name="contact_action_share">分享名片</string>
     <string name="contact_met_not_recorded">未记录。</string>
@@ -58,6 +63,7 @@
     <string name="contact_account_exception_tips">此帐号已被禁用，消息无法送达。</string>
     <string name="contact_unregistered_tips">操作被拒绝。此帐号已注销。</string>
     <string name="contact_non_friend_limit_tips">非好友每天最多发3条消息，请等待对方接受请求。</string>
+    <string name="contact_non_friend_text_only">非好友仅支持发送文本消息</string>
     <string name="contact_info">联系人信息</string>
     <string name="contact_bot_cancel">取消</string>
     <string name="contact_operation_denied">操作被拒绝，请联系</string>
@@ -415,7 +421,7 @@
     <string name="invite_add_new_friend">添加新朋友</string>
     <string name="invite_enter_code_to_add">输入邀请码添加朋友</string>
     <string name="invite_enter_hint">输入 4 位邀请码或联系人 ID</string>
-    <string name="invite_button_add_friend">添加</string>
+    <string name="invite_button_add_friend">搜索</string>
     <string name="invite_tv_search_by_uid">通过好友 ID 添加</string>
     <string name="invite_tv_search_by_code">通过好友 邀请码 添加</string>
     <string name="invite_copy_link">复制链接</string>

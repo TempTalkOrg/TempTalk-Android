@@ -21,9 +21,7 @@ import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.viewmodel.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import org.signal.libsignal.protocol.util.KeyHelper
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
 import org.thoughtcrime.securesms.util.Util
@@ -75,7 +73,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         viewModelScope.launch {
             try {
                 // Step 1: 获取 nonce info
-                val nonceInfoResult = loginRepo.getNonceInfo().await()
+                val nonceInfoResult = loginRepo.getNonceInfo()
                 if (nonceInfoResult.status != 0) {
                     L.e { "[login] signUpByNonceCode -> getNonceInfo failed, status=${nonceInfoResult.status}, reason=${nonceInfoResult.reason}" }
                     mSignInLiveData.value = Resource.error(NetworkException(nonceInfoResult.status, nonceInfoResult.reason ?: ""))
@@ -91,7 +89,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                 // Step 2: 生成 nonce code
                 val uuid = nonceData.uuid
                 val solution = PowUtil.generateSolution(uuid ?: "", nonceData.timestamp, nonceData.version, nonceData.difficulty)
-                val nonceCodeResult = loginRepo.generateNonceCode(NonceInfoRequestBody(uuid, solution)).await()
+                val nonceCodeResult = loginRepo.generateNonceCode(NonceInfoRequestBody(uuid, solution))
                 if (nonceCodeResult.status != 0) {
                     L.e { "[login] signUpByNonceCode -> generateNonceCode failed, status=${nonceCodeResult.status}, reason=${nonceCodeResult.reason}" }
                     mSignInLiveData.value = Resource.error(NetworkException(nonceCodeResult.status, nonceCodeResult.reason ?: ""))
@@ -120,7 +118,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
     private suspend fun verifyInvitationCode(invitationCode: String) {
         mInviteCodeLiveData.value = Resource.loading()
         try {
-            val result = loginRepo.verifyInvitationCode(invitationCode).await()
+            val result = loginRepo.verifyInvitationCode(invitationCode)
             if (result.status == 0) {
                 mInviteCodeLiveData.value = Resource.success()
                 val vcode = result.data?.vcode
@@ -184,14 +182,14 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                 val registrationId = getNewRegistrationId()
 
                 // Step 1: Sign in
-                val signInResult = loginRepo.signIn(verificationCode, basicAuth, signalingKey, name, registrationId).await()
+                val signInResult = loginRepo.signIn(verificationCode, basicAuth, signalingKey, name, registrationId)
                 if (signInResult.status != 0) {
                     L.e { "[login] signIn -> signIn API failed, status=${signInResult.status}, reason=${signInResult.reason}" }
                     throw NetworkException(signInResult.status, signInResult.reason ?: "")
                 }
 
                 // Step 2: Register pre keys
-                val preKeyResult = registerPreKeys(basicAuth).await()
+                val preKeyResult = registerPreKeys(basicAuth)
                 if (preKeyResult.status != 0) {
                     L.e { "[login] signIn -> registerPreKeys failed, status=${preKeyResult.status}, reason=${preKeyResult.reason}" }
                     throw NetworkException(preKeyResult.status, preKeyResult.reason ?: "")
@@ -232,7 +230,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         return registrationId
     }
 
-    private fun registerPreKeys(basicAuth: String): Single<BaseResponse<Any>> {
+    private suspend fun registerPreKeys(basicAuth: String): BaseResponse<Any> {
         val identityKeyPair = IdentityKeyUtil.generateIdentityKeyPair()
         encryptionDataManager.updateAciIdentityKey(identityKeyPair)
 
@@ -254,7 +252,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         mVerifyPhoneLiveData.value = Resource.loading()
         viewModelScope.launch {
             try {
-                val result = loginRepo.verifyPhone(phone).await()
+                val result = loginRepo.verifyPhone(phone)
                 if (result.status == 0) {
                     mVerifyPhoneLiveData.value = Resource.success(phone)
                 } else {
@@ -273,7 +271,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         mLoginPhoneCodeLiveData.value = Resource.loading()
         viewModelScope.launch {
             try {
-                val result = loginRepo.verifyPhoneCode(phone, code).await()
+                val result = loginRepo.verifyPhoneCode(phone, code)
                 if (result.status == 0) {
                     mLoginPhoneCodeLiveData.value = Resource.success(result.data)
                     if (result.data?.nextStep == 0) {
@@ -304,7 +302,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         mVerifyEmailLiveData.value = Resource.loading()
         viewModelScope.launch {
             try {
-                val result = loginRepo.verifyEmail(email).await()
+                val result = loginRepo.verifyEmail(email)
                 if (result.status == 0) {
                     mVerifyEmailLiveData.value = Resource.success(email)
                 } else {
@@ -323,7 +321,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         mLoginEmailCodeLiveData.value = Resource.loading()
         viewModelScope.launch {
             try {
-                val result = loginRepo.verifyEmailCode(email, emailCode).await()
+                val result = loginRepo.verifyEmailCode(email, emailCode)
                 if (result.status == 0) {
                     mLoginEmailCodeLiveData.value = Resource.success(result.data)
                     if (result.data?.nextStep == 0) {

@@ -49,8 +49,6 @@ class MeetingInviteContactsAdapter(
     }
 ) {
 
-    private val selectedIds = mutableSetOf<String>()
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ContactViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_meeting_invite_contact, parent, false)
@@ -58,29 +56,7 @@ class MeetingInviteContactsAdapter(
     }
 
     override fun onBindViewHolder(holder: ContactViewHolder, position: Int) {
-        val item = getItem(position)
-        holder.bind(item, selectedIds.contains(item.contact.id))
-    }
-
-    fun updateSelectedIds(newSelectedIds: Set<String>) {
-        val oldSelected = selectedIds.toSet()
-        selectedIds.clear()
-        selectedIds.addAll(newSelectedIds)
-
-        // 通知变化的项
-        val changedPositions = mutableListOf<Int>()
-        for (i in 0 until itemCount) {
-            val item = getItem(i)
-            val wasSelected = oldSelected.contains(item.contact.id)
-            val isSelected = newSelectedIds.contains(item.contact.id)
-            if (wasSelected != isSelected) {
-                changedPositions.add(i)
-            }
-        }
-
-        changedPositions.forEach { position ->
-            notifyItemChanged(position)
-        }
+        holder.bind(getItem(position))
     }
 
     class ContactViewHolder(
@@ -104,7 +80,7 @@ class MeetingInviteContactsAdapter(
 
         private var loadAvatarJob: Job? = null
 
-        fun bind(item: MeetingInviteContactItem, isSelected: Boolean) {
+        fun bind(item: MeetingInviteContactItem) {
             val displayName = item.contact.getDisplayNameForUI()
             textViewName.text = displayName
 
@@ -117,7 +93,7 @@ class MeetingInviteContactsAdapter(
                     itemView.context.getColor(com.difft.android.base.R.color.t_disable)
                 )
             } else {
-                if (isSelected) {
+                if (item.isSelected) {
                     checkbox.visibility = View.GONE
                     checkboxSelected.visibility = View.VISIBLE
                     checkboxSelected.setBackgroundResource(R.drawable.bg_checkbox_selected)

@@ -10,6 +10,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutTranslateBottomSheetContentBinding
 import com.difft.android.chat.translate.TranslateManager
 import com.google.mlkit.nl.translate.TranslateLanguage
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
 import javax.inject.Inject
@@ -119,6 +120,7 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
     private fun startTranslation() {
         translateManager.translateText(
+            scope = viewLifecycleOwner.lifecycleScope,
             text = originalText,
             targetLang = targetLanguage,
             onSuccess = { translatedText ->

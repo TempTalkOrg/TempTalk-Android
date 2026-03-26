@@ -26,6 +26,9 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
         private val TAG = L.tag(MediaSelectionActivity::class.java)
 
         const val MEDIA = "media"
+        const val EXTRA_CONFIDENTIAL_MODE = "confidential_mode"
+        const val EXTRA_SHOW_CONFIDENTIAL_TOGGLE = "show_confidential_toggle"
+        const val EXTRA_CONVERSATION_ID = "conversation_id"
 
         fun startActivity(activity: Context, media: List<LocalMedia>) {
             val intent = Intent(activity, MediaSelectionActivity::class.java).apply {
@@ -41,6 +44,8 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
     }
 
     lateinit var viewModel: MediaSelectionViewModel
+    var conversationId: String = ""
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,8 +56,11 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
         WindowUtil.setStatusBarColor(window, Color.TRANSPARENT)
 
         val initialMedia: List<LocalMedia> = intent.getParcelableArrayListExtraCompat(MEDIA, LocalMedia::class.java) ?: listOf()
+        val confidentialMode = intent.getIntExtra(EXTRA_CONFIDENTIAL_MODE, 0)
+        val showConfidentialToggle = intent.getBooleanExtra(EXTRA_SHOW_CONFIDENTIAL_TOGGLE, false)
+        conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: ""
 
-        val factory = MediaSelectionViewModel.Factory(initialMedia, MediaSelectionRepository(this))
+        val factory = MediaSelectionViewModel.Factory(initialMedia, MediaSelectionRepository(this), confidentialMode, showConfidentialToggle)
         viewModel = ViewModelProvider(this, factory)[MediaSelectionViewModel::class.java]
 
 //        onBackPressedDispatcher.addCallback(OnBackPressed())

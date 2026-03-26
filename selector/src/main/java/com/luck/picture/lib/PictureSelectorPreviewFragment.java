@@ -1158,10 +1158,34 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
         completeSelectView.setVisibility(View.GONE);
         ivShare.setVisibility(selectorConfig.isHidePreviewShare ? View.GONE : View.VISIBLE);
 
+        if (selectorConfig.isShowConfidentialTip) {
+            addConfidentialTipView();
+        }
+
         // Default to fullscreen mode with titlebar hidden
         if (selectorConfig.isPreviewFullScreenMode) {
             initHiddenTitleBar();
         }
+    }
+
+    private void addConfidentialTipView() {
+        View root = getView();
+        if (!(root instanceof ConstraintLayout)) return;
+        ConstraintLayout parent = (ConstraintLayout) root;
+
+        com.difft.android.base.widget.ConfidentialTipView tipView =
+                new com.difft.android.base.widget.ConfidentialTipView(requireContext());
+        tipView.setId(View.generateViewId());
+
+        int bottomMargin = DensityUtil.dip2px(requireContext(), 80);
+        ConstraintLayout.LayoutParams params = new ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                ConstraintLayout.LayoutParams.WRAP_CONTENT);
+        params.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+        params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+        params.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+        params.bottomMargin = bottomMargin;
+        parent.addView(tipView, params);
     }
 
     /**

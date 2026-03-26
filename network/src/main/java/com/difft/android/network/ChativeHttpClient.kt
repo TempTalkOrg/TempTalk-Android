@@ -8,7 +8,6 @@ import okhttp3.OkHttpClient
 import okhttp3.TlsVersion
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import retrofit2.adapter.rxjava3.RxJava3CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import java.util.concurrent.TimeUnit
@@ -66,7 +65,6 @@ class ChativeHttpClient(
         .connectionSpecs(listOf(customConnectionSpec))
         .build()
     private val retrofit: Retrofit = Retrofit.Builder()
-        .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
         .addConverterFactory(ScalarsConverterFactory.create())
         .addConverterFactory(GsonConverterFactory.create(gson))
         .baseUrl(baseUrl)

@@ -66,8 +66,8 @@ import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -309,12 +309,7 @@ fun SmallParticipantViewItem(
     val imageLoader = LocalImageLoaderProvider.localImageLoader()
     var expanded by remember { mutableStateOf(false) }
 
-    val contactsUpdate by LCallManager.getContactsUpdateListener().map {
-        Pair(System.currentTimeMillis(), it)
-    }.asFlow().collectAsState(Pair(0L, emptyList()))
-
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
 
     val contactorCacheManager = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
@@ -338,11 +333,9 @@ fun SmallParticipantViewItem(
         .map { (pub) -> pub }
     val screenSharePub = videoPubs.firstOrNull { pub -> pub.source == Track.Source.SCREEN_SHARE }
 
-    LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            participantId?.let { id ->
-                userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, id)
-            }
+    LaunchedEffect(participantId) {
+        participantId?.let { id ->
+            userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, id)
         }
     }
 
@@ -362,11 +355,13 @@ fun SmallParticipantViewItem(
         }
     }
 
-    LaunchedEffect(contactsUpdate) {
-        if(contactsUpdate.second.contains(IdUtil.getUidByIdentity(participantId))){
-            coroutineScope.launch {
-                participantId?.let {
-                    userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, participantId)
+    LaunchedEffect(participantId) {
+        LCallManager.getContactsUpdateListener().collect { updatedIds ->
+            if (updatedIds.contains(IdUtil.getUidByIdentity(participantId))) {
+                launch {
+                    participantId?.let {
+                        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, participantId)
+                    }
                 }
             }
         }

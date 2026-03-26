@@ -1,6 +1,5 @@
 package com.difft.android.chat.common
 
-import android.annotation.SuppressLint
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SecureSharedPrefsUtil
@@ -9,7 +8,6 @@ import org.difft.app.database.members
 import com.difft.android.chat.group.GroupUtil
 import difft.android.messageserialization.For
 import difft.android.messageserialization.RoomStore
-import com.difft.android.messageserialization.db.store.getOrNull
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.google.gson.Gson
@@ -31,19 +29,18 @@ class ConversationManagerImpl @Inject constructor(
     private val chatHttpClient: ChativeHttpClient,
     private val gson: Gson,
     private val wcdb: WCDB,
+    private val groupUtil: GroupUtil,
 ) : ConversationManager {
 
     override fun hasPublicKeyInfoData(room: For): Boolean {
         return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(room.id))?.publicKeyInfoJson.isNullOrBlank().not()
     }
 
-    override fun updatePublicKeyInfoData(room: For): Boolean {
+    override suspend fun updatePublicKeyInfoData(room: For): Boolean {
         val uids = when (room) {
             is For.Group -> {
-                GroupUtil.getSingleGroupInfo(context, room.id).blockingFirst()
-                    .get().members.map {
-                        it.id
-                    }
+                groupUtil.getSingleGroupInfo(room.id)
+                    ?.members?.map { it.id } ?: emptyList()
             }
 
             is For.Account -> {
@@ -51,7 +48,7 @@ class ConversationManagerImpl @Inject constructor(
             }
         }
         val publicKeys = try {
-            chatHttpClient.httpService.getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(uids)).blockingFirst().data?.keys
+            chatHttpClient.httpService.getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(uids)).data?.keys
         } catch (e: Exception) {
             L.e { "Obtains new publicKeys error forWho ${room.id} ${e.message}" }
             null
@@ -60,20 +57,19 @@ class ConversationManagerImpl @Inject constructor(
             L.w { "Obtains new publicKeys isNullOrEmpty forWho ${room.id}" }
             return false
         } else {
-            roomStore.updatePublicKeyInfo(room, gson.toJson(publicKeys)).blockingAwait()
+            roomStore.updatePublicKeyInfo(room, gson.toJson(publicKeys))
             return true
         }
     }
 
-    @SuppressLint("CheckResult")
-    override fun updateConversationMemberData(room: For) {
+    override suspend fun updateConversationMemberData(room: For) {
         if (room is For.Group) {
-            GroupUtil.fetchAndSaveSingleGroupInfo(context, room.id, true).blockingFirst()
+            groupUtil.fetchAndSaveSingleGroupInfo(room.id, true)
         }
     }
 
-    override fun getPublicKeyInfos(room: For): List<PublicKeyInfo> {
-        val publicKeys = roomStore.getPublicKeyInfo(room).blockingGet().getOrNull()
+    override suspend fun getPublicKeyInfos(room: For): List<PublicKeyInfo> {
+        val publicKeys = roomStore.getPublicKeyInfo(room)
         return if (publicKeys.isNullOrEmpty()) {
             emptyList()
         } else {
@@ -81,10 +77,10 @@ class ConversationManagerImpl @Inject constructor(
         }
     }
 
-    override fun getPublicKeyInfos(ids: List<String>?): List<PublicKeyInfo>? {
+    override suspend fun getPublicKeyInfos(ids: List<String>?): List<PublicKeyInfo>? {
         if (ids.isNullOrEmpty()) return null
         val publicKeys = try {
-            chatHttpClient.httpService.getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(ids)).blockingFirst().data?.keys
+            chatHttpClient.httpService.getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(ids)).data?.keys
         } catch (e: Exception) {
             L.e { "Obtains new publicKeys error: $ids ${e.message}" }
             null

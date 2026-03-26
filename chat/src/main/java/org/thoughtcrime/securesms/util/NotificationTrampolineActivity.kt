@@ -8,6 +8,7 @@ import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.LinkDataEntity
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.ui.ChatActivity
 import dagger.hilt.android.EntryPointAccessors
@@ -53,19 +54,27 @@ class NotificationTrampolineActivity : Activity() {
             return
         }
 
-        val isForegrounded = AppForegroundObserver.isForegrounded()
-        L.i { "[NotificationTrampoline] isForegrounded=$isForegrounded, contactId=$contactId, groupId=$groupId" }
-
-        val mainIntent = createMainActivityIntent(contactId, groupId, isForegrounded)
-        startActivity(mainIntent)
-        finish()
-    }
-
-    private fun createMainActivityIntent(contactId: String?, groupId: String?, isForegrounded: Boolean): Intent {
         val entryPoint = EntryPointAccessors.fromApplication(
             applicationContext,
             NotificationTrampolineEntryPoint::class.java
         )
+        val isInPipMode = entryPoint.onGoingCallStateManager().isInPipMode()
+        val startedActivityCount = AppForegroundObserver.getStartedActivityCount()
+        val isPipOnlyOnDesktop = isInPipMode && startedActivityCount <= 1
+        val isForegrounded = AppForegroundObserver.isForegrounded() && !isPipOnlyOnDesktop
+        L.i { "[NotificationTrampoline] isForegrounded=$isForegrounded, isInPipMode=$isInPipMode, startedActivityCount=$startedActivityCount, contactId=$contactId, groupId=$groupId" }
+
+        val mainIntent = createMainActivityIntent(entryPoint, contactId, groupId, isForegrounded)
+        startActivity(mainIntent)
+        finish()
+    }
+
+    private fun createMainActivityIntent(
+        entryPoint: NotificationTrampolineEntryPoint,
+        contactId: String?,
+        groupId: String?,
+        isForegrounded: Boolean
+    ): Intent {
         val activityProvider = entryPoint.activityProvider()
 
         return Intent(this, activityProvider.getActivityClass(ActivityType.MAIN)).apply {
@@ -91,5 +100,6 @@ class NotificationTrampolineActivity : Activity() {
     @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
     interface NotificationTrampolineEntryPoint {
         fun activityProvider(): ActivityProvider
+        fun onGoingCallStateManager(): OnGoingCallStateManager
     }
 }

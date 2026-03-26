@@ -43,7 +43,6 @@ import com.difft.android.call.handler.CallMessageHandler
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.network.config.WsTokenManager
-import kotlinx.coroutines.rx3.await
 
 @Singleton
 class LChatToCallControllerImpl @Inject constructor(
@@ -121,7 +120,7 @@ class LChatToCallControllerImpl @Inject constructor(
                     mKey = messageEncryptor.generateKey(),
                     createCallMsg = callConfig.createCallMsg,
                     createdAt = System.currentTimeMillis()
-                ).await()
+                )
 
                 val result = startCallInternal(activity, forWhat, callEncryptResult, token, chatRoomName)
                 if (!result) {
@@ -195,7 +194,6 @@ class LChatToCallControllerImpl @Inject constructor(
             .withCallerId(mySelfId)
             .withConversationId(forWhat.id)
             .withStartCallParams(startCallParams)
-            .withAppToken(token)
             .withNeedAppLock(false)
             .withCallWaitDialogShown(true)
 
@@ -207,7 +205,7 @@ class LChatToCallControllerImpl @Inject constructor(
 
         // ✅ 网络请求 + 异常处理
         return try {
-            val response = callService.getServiceUrl(token).await()
+            val response = callService.getServiceUrl(token)
 
             if (response.status == RESPONSE_STATUS_SUCCESS && !response.data?.serviceUrls.isNullOrEmpty()) {
                 val urls = response.data!!.serviceUrls!!

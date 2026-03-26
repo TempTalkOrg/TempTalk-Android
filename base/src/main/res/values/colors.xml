@@ -46,6 +46,7 @@
     <color name="bg.secondary.clicked" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
     <color name="bg.confidential" tools:ignore="ResourceName">@color/gray_200</color>
+    <color name="bg.confidential.area" tools:ignore="ResourceName">#F7FCFF</color>
     <color name="bgpage_primary" tools:ignore="ResourceName">#0B0E11</color>
     <color name="bg5" tools:ignore="ResourceName">#181A20</color>
     <color name="border" tools:ignore="ResourceName">#2B3139</color>

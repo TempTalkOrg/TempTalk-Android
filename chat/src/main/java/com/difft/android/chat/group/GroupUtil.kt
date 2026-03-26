@@ -1,55 +1,58 @@
 package com.difft.android.chat.group
 
-import android.content.Context
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.application
-import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
-import org.difft.app.database.wcdb
 import difft.android.messageserialization.MessageStore
 import com.difft.android.network.group.GroupAvatarData
 import com.difft.android.network.group.GroupAvatarResponse
 import com.difft.android.network.group.GroupRepo
 import com.google.gson.Gson
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subjects.BehaviorSubject
-import io.reactivex.rxjava3.subjects.PublishSubject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitSingle
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+
+import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import com.difft.android.base.utils.Base64
-import java.util.Optional
+import com.difft.android.base.utils.globalServices
 import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Singleton
 
-object GroupUtil {
+@Singleton
+class GroupUtil @Inject constructor(
+    private val groupRepo: GroupRepo,
+    private val messageStore: MessageStore,
+    private val wcdb: WCDB,
+    private val userManager: UserManager
+) {
 
-    private val mSingleGroupUpdateSubject = BehaviorSubject.create<GroupModel>()
+    private val _singleGroupsUpdate = MutableSharedFlow<GroupModel>(replay = 1, extraBufferCapacity = 64)
 
     fun emitSingleGroupUpdate(group: GroupModel) {
-        mSingleGroupUpdateSubject.onNext(group)
+        _singleGroupsUpdate.tryEmit(group)
         RoomChangeTracker.trackRoom(group.gid, RoomChangeType.GROUP)
     }
 
-    val singleGroupsUpdate: Observable<GroupModel> = mSingleGroupUpdateSubject
+    val singleGroupsUpdate: SharedFlow<GroupModel> = _singleGroupsUpdate.asSharedFlow()
 
 
-    private val mGetGroupsStatusSubject = PublishSubject.create<Pair<Boolean, List<String>>>()
+    private val _getGroupsStatusUpdate = MutableSharedFlow<Pair<Boolean, List<String>>>(extraBufferCapacity = 64)
 
     private fun emitGetGroupsStatusUpdate(success: Boolean, ids: List<String>) {
-        mGetGroupsStatusSubject.onNext(success to ids)
+        _getGroupsStatusUpdate.tryEmit(success to ids)
         if (success) {
             ids.forEach {
                 RoomChangeTracker.trackRoom(it, RoomChangeType.GROUP)
@@ -57,58 +60,49 @@ object GroupUtil {
         }
     }
 
-    val getGroupsStatusUpdate: Observable<Pair<Boolean, List<String>>> = mGetGroupsStatusSubject
+    val getGroupsStatusUpdate: SharedFlow<Pair<Boolean, List<String>>> = _getGroupsStatusUpdate.asSharedFlow()
 
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        val groupRepo: GroupRepo
-        val messageStore: MessageStore
-    }
-
-    suspend fun syncAllGroupAndAllGroupMembers(context: Context, forceFetch: Boolean, syncMembers: Boolean) = coroutineScope {
+    suspend fun syncAllGroupAndAllGroupMembers(forceFetch: Boolean, syncMembers: Boolean) = coroutineScope {
         try {
-            if (forceFetch || globalServices.userManager.getUserData()?.syncedGroupAndMembers == false) {
-                val groupRepo = EntryPointAccessors.fromApplication<EntryPoint>(application).groupRepo
-                val groups = groupRepo.getGroups().await()
+            if (forceFetch || userManager.getUserData()?.syncedGroupAndMembers == false) {
+                val groups = groupRepo.getGroups()
                 wcdb.group.deleteObjects()
                 wcdb.group.insertObjects(groups)
 
                 if (syncMembers) {
                     groups.map {
                         async {
-                            fetchAndSaveSingleGroupInfo(context, it.gid).awaitSingle()
+                            fetchAndSaveSingleGroupInfo(it.gid)
                         }
                     }.awaitAll()
                 }
 
-                globalServices.userManager.update {
+                userManager.update {
                     this.syncedGroupAndMembers = true
                 }
                 emitGetGroupsStatusUpdate(true, groups.map { it.gid })
                 L.i { "[GroupUtil] syncAllGroupAndAllGroupMembers success" + groups.size }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             emitGetGroupsStatusUpdate(false, emptyList())
             L.e(e) { "[GroupUtil] syncAllGroupAndAllGroupMembers fail:" }
         }
     }
 
-    private val groupUpdateStatus = ConcurrentHashMap<String, Boolean>()
+    private val groupsInProgress = ConcurrentHashMap.newKeySet<String>()
 
-    fun fetchAndSaveSingleGroupInfo(context: Context, groupID: String, sendUpdateEvent: Boolean = false): Observable<Optional<GroupModel>> {
-        if (groupUpdateStatus[groupID] != true) {
-            groupUpdateStatus[groupID] = true
-        } else {
-            L.i { "[GroupUtil] [Group: $groupID] update group member from server already in progress, ignore this update event" }
-            return Observable.just(Optional.empty())
+    suspend fun fetchAndSaveSingleGroupInfo(groupID: String, sendUpdateEvent: Boolean = false): GroupModel? {
+        if (!groupsInProgress.add(groupID)) {
+            L.i { "[GroupUtil] [Group: $groupID] fetch already in progress, skipping" }
+            return null
         }
 
-        return EntryPointAccessors.fromApplication<EntryPoint>(context)
-            .groupRepo
-            .getGroupInfo(groupID)
-            .toObservable()
-            .concatMap { response ->
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = groupRepo
+                    .getGroupInfo(groupID)
                 val groupInfo = response.data
                 val group = wcdb.group.getFirstObject(
                     DBGroupModel.gid.eq(groupID)
@@ -150,71 +144,75 @@ object GroupUtil {
                     if (!members.isNullOrEmpty()) {
                         wcdb.groupMemberContactor.insertObjects(members)
                     }
+                    wcdb.group.deleteObjects(DBGroupModel.gid.eq(groupID))
+                    wcdb.group.insertObject(group)
+                    L.i { "[GroupUtil] [Group: $groupID] fetch success, members: ${members?.size ?: 0}" }
+                    if (sendUpdateEvent) {
+                        emitSingleGroupUpdate(group)
+                    }
                 } else {
-                    //群失效了，需要删除会话和消息
+                    // Group is invalid: clear members, remove room/messages, delete group record
                     L.i { "[GroupUtil] [Group: $groupID] is invalid" }
-                    val messageStore = EntryPointAccessors.fromApplication<EntryPoint>(application).messageStore
                     messageStore.removeRoomAndMessages(groupID)
-                }
-                wcdb.group.deleteObjects(DBGroupModel.gid.eq(groupID))
-                wcdb.group.insertObject(group)
-                if (sendUpdateEvent) {
+                    wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq(groupID))
+                    L.i { "[GroupUtil] [Group: $groupID] group members cleared" }
+                    wcdb.group.deleteObjects(DBGroupModel.gid.eq(groupID))
+                    // Always emit update so observers (e.g. GroupsFragment) remove the invalid group
                     emitSingleGroupUpdate(group)
                 }
-                groupUpdateStatus[groupID] = false
-                Observable.just(Optional.ofNullable(group))
-            }
-            .onErrorResumeNext { throwable ->
-                L.e(throwable) { "[GroupUtil] fetchAndSaveSingleGroup fail:" }
-                groupUpdateStatus[groupID] = false
-                Observable.just(Optional.empty())
-            }
-    }
 
-    fun getSingleGroupInfo(context: Context, gid: String, forceUpdate: Boolean = false): Observable<Optional<GroupModel>> {
-        return if (forceUpdate) {
-            fetchAndSaveSingleGroupInfo(context, gid)
-        } else {
-            Observable.defer {
-                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid))?.takeIf { it.members.isNotEmpty() }
-                if (group != null) {
-                    Observable.just(Optional.of(group))
-                } else {
-                    fetchAndSaveSingleGroupInfo(context, gid)
-                }
+                groupsInProgress.remove(groupID)
+                group
             }
-                .subscribeOn(Schedulers.io())
+        } catch (e: CancellationException) {
+            groupsInProgress.remove(groupID)
+            throw e
+        } catch (throwable: Throwable) {
+            L.e(throwable) { "[GroupUtil] [Group: $groupID] fetchAndSaveSingleGroup fail: ${throwable.message}" }
+            groupsInProgress.remove(groupID)
+            null
         }
     }
 
-    fun getGroupRole(wcdb: WCDB, group: GroupModel, memberId: String): Int {
+    suspend fun getSingleGroupInfo(gid: String, forceUpdate: Boolean = false): GroupModel? {
+        return if (forceUpdate) {
+            fetchAndSaveSingleGroupInfo(gid)
+        } else {
+            val cached = withContext(Dispatchers.IO) {
+                wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid))?.takeIf { it.members.isNotEmpty() }
+            }
+            cached ?: fetchAndSaveSingleGroupInfo(gid)
+        }
+    }
+
+    private fun getGroupRole(group: GroupModel, memberId: String): Int {
         return wcdb.groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.gid.eq(group.gid).and(DBGroupMemberContactorModel.id.eq(memberId)))?.groupRole ?: GROUP_ROLE_MEMBER
     }
 
-
     fun canSpeak(group: GroupModel, memberId: String): Boolean {
-        val groupRole = getGroupRole(wcdb, group, memberId)
+        val groupRole = getGroupRole(group, memberId)
         return !(groupRole == GROUP_ROLE_MEMBER && group.publishRule != GroupPublishRole.ALL.rawValue)
     }
 
-    fun convert(group: GroupModel): GroupUIData {
-        // Convert the GroupModel to GroupUIData, now including the retrieved members
-        return GroupUIData(
-            gid = group.gid ?: "",
-            name = group.name,
-            messageExpiry = group.messageExpiry,
-            avatar = group.avatar,
-            status = group.status,
-            invitationRule = group.invitationRule,
-            version = group.version,
-            remindCycle = group.remindCycle,
-            anyoneRemove = group.anyoneRemove,
-            rejoin = group.rejoin,
-            publishRule = group.publishRule,
-            linkInviteSwitch = group.linkInviteSwitch ?: false,
-            privateChat = group.privateChat ?: false,
-            members = group.members
-        )
+    companion object {
+        fun convert(group: GroupModel): GroupUIData {
+            return GroupUIData(
+                gid = group.gid ?: "",
+                name = group.name,
+                messageExpiry = group.messageExpiry,
+                avatar = group.avatar,
+                status = group.status,
+                invitationRule = group.invitationRule,
+                version = group.version,
+                remindCycle = group.remindCycle,
+                anyoneRemove = group.anyoneRemove,
+                rejoin = group.rejoin,
+                publishRule = group.publishRule,
+                linkInviteSwitch = group.linkInviteSwitch ?: false,
+                privateChat = group.privateChat ?: false,
+                members = group.members
+            )
+        }
     }
 }
 
@@ -222,7 +220,6 @@ fun String.getAvatarData(): GroupAvatarData? {
     return try {
         Gson().fromJson(this, GroupAvatarResponse::class.java)?.data?.let {
             val avatarData = String(Base64.decode(it))
-//            L.d { "[group] avatar json Data : $avatarData" }
             Gson().fromJson(avatarData, GroupAvatarData::class.java)
         }
     } catch (e: Exception) {

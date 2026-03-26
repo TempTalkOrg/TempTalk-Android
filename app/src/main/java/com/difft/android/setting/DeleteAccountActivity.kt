@@ -9,8 +9,8 @@ import androidx.core.widget.addTextChangedListener
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.R
@@ -20,6 +20,10 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
@@ -74,21 +78,25 @@ class DeleteAccountActivity : BaseActivity() {
                 cancelText = getString(R.string.me_delete_dialog_cancel),
                 onConfirm = {
                     mBinding.btnDone.isLoading = true
-                    chatHttpClient.httpService.fetchDeleteAccount(SecureSharedPrefsUtil.getBasicAuth())
-                        .compose(RxUtil.getSingleSchedulerComposer())
-                        .to(RxUtil.autoDispose(this))
-                        .subscribe({
+                    lifecycleScope.launch {
+                        try {
+                            val result = withContext(Dispatchers.IO) {
+                                chatHttpClient.httpService.fetchDeleteAccount(SecureSharedPrefsUtil.getBasicAuth())
+                            }
                             mBinding.btnDone.isLoading = false
-                            if (it.status == 0) {
+                            if (result.status == 0) {
                                 logoutManager.doLogout()
                             } else {
-                                it.reason?.let { message -> ToastUtil.showLong(message) }
+                                result.reason?.let { message -> ToastUtil.showLong(message) }
                             }
-                        }, {
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
                             mBinding.btnDone.isLoading = false
-                            it.message?.let { message -> ToastUtil.showLong(message) }
-                            L.w { "[DeleteAccountActivity] deleteAccount error: ${it.stackTraceToString()}" }
-                        })
+                            e.message?.let { message -> ToastUtil.showLong(message) }
+                            L.w { "[DeleteAccountActivity] deleteAccount error: ${e.stackTraceToString()}" }
+                        }
+                    }
                 },
                 confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(this, com.difft.android.base.R.color.t_error))
             )

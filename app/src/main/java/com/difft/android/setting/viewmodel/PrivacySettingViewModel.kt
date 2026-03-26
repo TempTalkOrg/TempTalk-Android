@@ -1,17 +1,19 @@
 package com.difft.android.setting.viewmodel
 
-import android.content.Context
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.difft.android.base.utils.RxUtil
+import androidx.lifecycle.viewModelScope
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.NetworkException
 import com.difft.android.network.viewmodel.Resource
 import com.difft.android.setting.data.GetProfileResponse
 import com.difft.android.setting.repo.SettingRepo
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,27 +28,35 @@ class PrivacySettingViewModel @Inject constructor() : ViewModel() {
     private val mSetStatusResultData = MutableLiveData<Resource<BaseResponse<GetProfileResponse>>>()
     internal val setStatusResultData: LiveData<Resource<BaseResponse<GetProfileResponse>>> = mSetStatusResultData
 
-    fun getStatus(context: Context, token: String) {
+    fun getStatus(token: String) {
         mGetStatusResultData.value = Resource.loading()
-        privacySettingRepo.getProfile(token)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(context as LifecycleOwner))
-            .subscribe({
-                mGetStatusResultData.value = Resource.success(it)
-            }) {
-                mGetStatusResultData.value = Resource.error(NetworkException(message = it.message ?: ""))
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    privacySettingRepo.getProfile(token)
+                }
+                mGetStatusResultData.value = Resource.success(result)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                mGetStatusResultData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 
-    fun setStatus(context: Context, token: String, searchByPhone: Int, searchByEmail: Int) {
+    fun setStatus(token: String, searchByPhone: Int, searchByEmail: Int) {
         mSetStatusResultData.value = Resource.loading()
-        privacySettingRepo.setProfile(token, searchByPhone, searchByEmail)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(context as LifecycleOwner))
-            .subscribe({
-                mSetStatusResultData.value = Resource.success(it)
-            }) {
-                mSetStatusResultData.value = Resource.error(NetworkException(message = it.message ?: ""))
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    privacySettingRepo.setProfile(token, searchByPhone, searchByEmail)
+                }
+                mSetStatusResultData.value = Resource.success(result)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                mSetStatusResultData.value = Resource.error(NetworkException(message = e.message ?: ""))
             }
+        }
     }
 }

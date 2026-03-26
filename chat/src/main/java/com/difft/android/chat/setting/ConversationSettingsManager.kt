@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
 import javax.inject.Inject
@@ -155,7 +154,7 @@ class ConversationSettingsManager @Inject constructor(
         val response = httpClient.httpService.fetchGetConversationSet(
             SecureSharedPrefsUtil.getBasicAuth(),
             GetConversationSetRequestBody(conversationIds)
-        ).await()
+        )
 
         if (response.status != 0) {
             L.e { "[ConversationSettingsManager] Server error: ${response.status} - ${response.reason}" }

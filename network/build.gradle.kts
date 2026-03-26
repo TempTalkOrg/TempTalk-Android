@@ -28,6 +28,10 @@ android {
     kapt {
         correctErrorTypes = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
     defaultConfig {
         multiDexEnabled = true
 
@@ -49,11 +53,14 @@ hilt {
 }
 
 fun getVersionFlag(): String {
-    var versionFlag = System.getenv("versionFlag")
-    if(versionFlag.isNullOrEmpty()){
-        versionFlag = "cinnamon"
+    if (properties.contains("versionFlag")) {
+        return properties["versionFlag"].toString()
     }
-    return versionFlag
+    val envValue = System.getenv("versionFlag")
+    if (!envValue.isNullOrEmpty()) {
+        return envValue
+    }
+    return "cinnamon"
 }
 
 dependencies {
@@ -76,7 +83,16 @@ dependencies {
     implementation(libs.bundles.jackson)
     implementation(libs.signal.android)
 
-    // 测试依赖已通过base模块提供
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
 }
 protobuf {
     protoc {

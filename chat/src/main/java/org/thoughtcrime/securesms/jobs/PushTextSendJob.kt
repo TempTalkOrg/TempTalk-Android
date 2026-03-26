@@ -47,6 +47,7 @@ import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioMessage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.RequestBody
 import org.difft.app.database.delete
 import org.difft.app.database.members
@@ -85,6 +86,7 @@ class PushTextSendJob @AssistedInject constructor(
     private val dataMessageCreator: DataMessageCreator,
     private val localMessageCreator: LocalMessageCreator,
     private val messageStore: difft.android.messageserialization.MessageStore,
+    private val groupUtil: GroupUtil,
 ) : PushSendJob(parameters ?: buildParameters(textMessage.forWhat, textMessage.isAttachmentMessage())) {
 
     @dagger.hilt.EntryPoint
@@ -125,7 +127,7 @@ class PushTextSendJob @AssistedInject constructor(
         updateMessage(SendType.Sending.rawValue)
     }
 
-    public override fun onPushSend() {
+    public override suspend fun onPushSend() {
         try {
             // 如果有附件，先上传附件
             if (textMessage.isAttachmentMessage()) {
@@ -397,11 +399,9 @@ class PushTextSendJob @AssistedInject constructor(
                 recipientIds.add(textMessage.forWhat.id)
                 recipientIds.add(globalServices.myId)
             } else {
-                val group = GroupUtil.getSingleGroupInfo(context, textMessage.forWhat.id, false).blockingFirst()
-                if (group.isPresent) {
-                    group.get().members.forEach { member ->
-                        recipientIds.add(member.id)
-                    }
+                val group = runBlocking { groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false) }
+                group?.members?.forEach { member ->
+                    recipientIds.add(member.id)
                 }
             }
 
@@ -483,16 +483,20 @@ class PushTextSendJob @AssistedInject constructor(
                             )
                         ).execute()
                         if (uploadInfoCallResponse.isSuccessful) {
-                            attachment.authorityId = uploadInfoCallResponse.body()?.data?.authorizeId ?: 0
+                            attachment.authorityId = uploadInfoCallResponse.body()?.data?.authorizeId?.takeIf { it != 0L }
+                                ?: throw IOException("uploadInfo response has invalid authorizeId, messageId: ${textMessage.id}")
                         } else {
                             L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} upload attachment fail${uploadInfoCallResponse.message()}" }
                             throw IOException("upload attachment fail" + uploadInfoCallResponse.message())
                         }
                     } else {
+                        if (res.authorizeId == 0L) {
+                            throw IOException("isExist response has invalid authorizeId for existing file, messageId: ${textMessage.id}")
+                        }
                         attachment.digest = FileUtils.decodeDigestHex(res.cipherHash)
                         attachment.authorityId = res.authorizeId
                     }
-                }
+                } ?: throw IOException("isExist response data is null, messageId: ${textMessage.id}")
             } else {
                 L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} upload attachment fail${fileExistResponse.message()}" }
                 throw IOException("check attachment is exist fail" + fileExistResponse.message())
@@ -501,8 +505,10 @@ class PushTextSendJob @AssistedInject constructor(
             attachment.status = AttachmentStatus.SUCCESS.code
             updateAttachment(attachment)
 
-            //语音消息不要删除加密文件
-            if (textMessage.attachments?.firstOrNull()?.isAudioMessage() != true) {
+            if (textMessage.attachments?.firstOrNull()?.isAudioMessage() == true) {
+                // 语音消息：保留 .encrypt 用于回放，删除明文原始文件
+                file.delete()
+            } else {
                 encryptFile.delete()
             }
             FileUtil.emitProgressUpdate(textMessage.id, 100)

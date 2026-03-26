@@ -1,6 +1,7 @@
 package com.difft.android.network
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.base.utils.application
 import com.difft.android.network.config.WsTokenManager
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -204,7 +205,7 @@ class HttpClientInterceptor : Interceptor {
         val urlManager = EntryPointAccessors.fromApplication<EntryPoint>(application).urlManager
         // Record failed host so other hosts are prioritized next time
         urlManager.recordFailedHost(originalHost)
-        val hosts = urlManager.findHostsByOldHost(originalHost)
+        val hosts = urlManager.getAllHostsRanked()
         val attemptedHosts = mutableSetOf<String>()
         for (host in hosts) {
             if (host != originalHost && host !in attemptedHosts) {
@@ -243,7 +244,8 @@ class HttpClientInterceptor : Interceptor {
                         }
 
                         is ResponseResult.NeedsHostRetry -> {
-                            // Current backup host also returned >= 500, continue to next host
+                            // Current backup host also returned >= 500, mark it and continue
+                            urlManager.recordFailedHost(host)
                         }
 
                         is ResponseResult.Failed -> {
@@ -313,7 +315,7 @@ class HttpClientInterceptor : Interceptor {
         recordToFirebase(SpecialResponseTrackingException(type, msg))
     }
 
-    private fun networkStatus(): String = "network=${NetUtil.getNetWorkSummary()}"
+    private fun networkStatus(): String = "network=${NetworkUtils.getNetworkSummary()}"
 
     private fun requestUrl(request: Request?): String = "url=${request?.url?.toString() ?: ""}"
 

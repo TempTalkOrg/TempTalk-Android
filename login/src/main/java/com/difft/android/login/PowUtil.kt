@@ -4,6 +4,9 @@ import com.difft.android.base.log.lumberjack.L
 import java.security.MessageDigest
 import java.security.NoSuchAlgorithmException
 import kotlin.random.Random
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
 
 object PowUtil {
@@ -22,9 +25,6 @@ object PowUtil {
             // 将哈希转换为十六进制字符串
             val hexHash = hash.joinToString("") { String.format("%02x", it) }
 
-            // 打印哈希值供调试使用
-//            println("Hash: $hexHash")
-
             // 检查哈希值的前 difficulty 位是否为 "1"
             hexHash.startsWith("1".repeat(difficulty))
         } catch (e: NoSuchAlgorithmException) {
@@ -33,24 +33,27 @@ object PowUtil {
         }
     }
 
-    // 生成符合难度要求的 solution
-    fun generateSolution(uuid: String, timestamp: Long, version: Int, difficulty: Int): String {
+    // Generate a solution meeting the difficulty requirement (runs on Dispatchers.Default to avoid blocking the main thread)
+    suspend fun generateSolution(uuid: String, timestamp: Long, version: Int, difficulty: Int): String = withContext(Dispatchers.Default) {
         L.i { "[PowUtil] start generate solution, difficulty=$difficulty" }
 
-        var solution: String
+        val randomString = RandomString(30)
         var attempts = 0
         val startTime = System.currentTimeMillis()
+        var result: String? = null
 
-        while (true) {
-            solution = RandomString(30).nextString()  // 生成一个 30 位的随机字符串
-
-            // 验证当前 solution 是否符合 PoW 难度
-            if (verifySolution(uuid, timestamp, version, solution, difficulty)) {
-                L.i { "[PowUtil] Solution found, attempts=$attempts, timeTaken=${System.currentTimeMillis() - startTime}ms" }
-                return solution
+        while (result == null) {
+            val candidate = randomString.nextString()
+            if (verifySolution(uuid, timestamp, version, candidate, difficulty)) {
+                result = candidate
             }
             attempts++
+            // Yield every 1000 iterations to support cooperative cancellation
+            if (attempts % 1000 == 0) yield()
         }
+
+        L.i { "[PowUtil] Solution found, attempts=$attempts, timeTaken=${System.currentTimeMillis() - startTime}ms" }
+        result
     }
 }
 

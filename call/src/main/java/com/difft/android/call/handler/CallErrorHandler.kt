@@ -3,15 +3,18 @@ package com.difft.android.call.handler
 import android.app.Activity
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.R
+import com.difft.android.call.exception.DisconnectException
 import com.difft.android.call.exception.NetworkConnectionPoorException
+import com.difft.android.call.exception.ServerConnectionException
 import com.difft.android.call.exception.StartCallException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.net.SocketTimeoutException
 
 /**
  * 统一管理通话相关的错误处理
@@ -22,106 +25,58 @@ class CallErrorHandler(
     private val lifecycleScope: LifecycleCoroutineScope,
     private val callIntent: CallIntent,
     private val onEndCall: () -> Unit,
-    private val onDismissError: () -> Unit
 ) {
-    /**
-     * 处理错误
-     * @param error 要处理的异常
-     */
+    private var pendingErrorJob: Job? = null
+
     fun handleError(error: Throwable) {
+        pendingErrorJob?.cancel()
+        pendingErrorJob = null
+
         when (error) {
             is CancellationException -> {
-                handleCancellationException(error)
-            }
-
-            is SocketTimeoutException -> {
-                handleSocketTimeoutException(error)
+                L.e { "[Call] CallErrorHandler, CancellationException: $error" }
             }
 
             is NetworkConnectionPoorException -> {
-                handleNetworkConnectionPoorException(error)
+                L.e { "[Call] CallErrorHandler, NetworkConnectionPoorException: ${error.message}" }
+                showToast(activity.getString(R.string.call_myself_network_poor_tip))
             }
 
             is StartCallException -> {
-                handleStartCallException(error)
+                L.e { "[Call] CallErrorHandler, StartCallException: ${error.message}" }
+                val message = error.message ?: if (callIntent.action == CallIntent.Action.START_CALL) {
+                    activity.getString(R.string.call_start_failed_tip)
+                } else {
+                    activity.getString(R.string.call_join_failed_tip)
+                }
+                showToast(message)
+                onEndCall()
+            }
+
+            is ServerConnectionException -> {
+                L.e { "[Call] CallErrorHandler, ServerConnectionException: ${error.message}" }
+                showToast(error.message ?: activity.getString(R.string.call_server_connect_exception_error))
+                onEndCall()
+            }
+
+            is DisconnectException -> {
+                L.e { "[Call] CallErrorHandler, DisconnectException: ${error.message}" }
+                showToast(activity.getString(R.string.call_room_connect_exception_error))
+                onEndCall()
             }
 
             else -> {
-                handleGenericException(error)
+                L.e { "[Call] CallErrorHandler, GenericException: $error" }
+                pendingErrorJob = lifecycleScope.launch {
+                    delay(2000L)
+                    showToast(error.message ?: activity.getString(R.string.call_server_connect_exception_error))
+                    onEndCall()
+                }
             }
         }
     }
 
-    /**
-     * 处理取消异常
-     * 通常发生在协程被取消时，不需要显示错误提示
-     */
-    private fun handleCancellationException(error: CancellationException) {
-        L.e { "[Call] CallErrorHandler, CancellationException: $error" }
-        onDismissError()
-    }
-
-    /**
-     * 处理连接超时异常
-     */
-    private fun handleSocketTimeoutException(error: SocketTimeoutException) {
-        L.e { "[Call] CallErrorHandler, SocketTimeoutException: $error" }
-        showErrorTip(
-            message = activity.getString(R.string.call_connect_timeout_tip),
-            onDismiss = onDismissError
-        )
-    }
-
-    /**
-     * 处理网络连接质量差异常
-     */
-    private fun handleNetworkConnectionPoorException(error: NetworkConnectionPoorException) {
-        L.e { "[Call] CallErrorHandler, NetworkConnectionPoorException: ${error.message}" }
-        val message = error.message ?: activity.getString(R.string.call_connect_exception_error)
-        showErrorTip(
-            message = message,
-            onDismiss = onDismissError
-        )
-    }
-
-    /**
-     * 处理启动/加入通话异常
-     */
-    private fun handleStartCallException(error: StartCallException) {
-        L.e { "[Call] CallErrorHandler, StartCallException: ${error.message}" }
-        val message = error.message ?: if (callIntent.action == CallIntent.Action.START_CALL) {
-            activity.getString(R.string.call_start_failed_tip)
-        } else {
-            activity.getString(R.string.call_join_failed_tip)
-        }
-        showErrorTip(
-            message = message,
-            onDismiss = onEndCall
-        )
-    }
-
-    /**
-     * 处理通用异常
-     * 对于未知异常，延迟显示错误提示，避免在连接过程中频繁弹出
-     */
-    private fun handleGenericException(error: Throwable) {
-        L.e { "[Call] CallErrorHandler, GenericException: $error" }
-        lifecycleScope.launch {
-            delay(2000L) // 延迟2秒显示，避免在连接过程中频繁弹出
-            showErrorTip(
-                message = activity.getString(R.string.call_connect_exception_error),
-                onDismiss = onEndCall
-            )
-        }
-    }
-
-    /**
-     * 显示错误提示
-     * @param message 错误消息
-     * @param onDismiss 关闭时的回调
-     */
-    private fun showErrorTip(message: String, onDismiss: () -> Unit) {
+    private fun showToast(message: String) {
         ToastUtil.show(message)
-        onDismiss()
     }
 }

@@ -21,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBGroupModel
@@ -34,6 +33,9 @@ class GroupsFragment : Fragment() {
 
     @Inject
     lateinit var wcdb: WCDB
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -59,8 +61,7 @@ class GroupsFragment : Fragment() {
         }
 
 
-        GroupUtil.getGroupsStatusUpdate
-            .asFlow()
+        groupUtil.getGroupsStatusUpdate
             .onEach {
                 val groups = withContext(Dispatchers.IO) {
                     wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
@@ -80,8 +81,7 @@ class GroupsFragment : Fragment() {
             submitSortedList(groups)
         }
 
-        GroupUtil.singleGroupsUpdate
-            .asFlow()
+        groupUtil.singleGroupsUpdate
             .onEach { group ->
                 val list = mAdapter.currentList.toMutableList()
                 if (group.status == 0) {
@@ -123,7 +123,7 @@ class GroupsFragment : Fragment() {
 
     private fun syncGroupInfo() {
         lifecycleScope.launch(Dispatchers.IO) {
-            GroupUtil.syncAllGroupAndAllGroupMembers(requireContext(), forceFetch = true, syncMembers = true)
+            groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = true, syncMembers = true)
         }
     }
 

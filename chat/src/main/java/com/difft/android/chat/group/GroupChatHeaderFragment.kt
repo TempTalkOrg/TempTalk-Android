@@ -9,7 +9,6 @@ import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
@@ -28,9 +27,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class GroupChatHeaderFragment : CommonHeaderFragment() {
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     private lateinit var binding: ChatFragmentGroupHeaderBinding
 
@@ -60,26 +63,26 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
         chatViewModel.chatUIData.onEach { chatUIData ->
             val group = chatUIData.group ?: return@onEach
 
-            // 在子线程中查询成员信息
-            val (memberCount, currentUserRole) = withContext(Dispatchers.IO) {
-                val members = wcdb.groupMemberContactor.getAllObjects(
-                    DBGroupMemberContactorModel.gid.eq(group.gid)
-                )
-                val role = members.find { it.id == globalServices.myId }?.groupRole ?: GROUP_ROLE_MEMBER
-                Pair(members.size, role)
-            }
-
             if (!isAdded || view == null) return@onEach
-            if (TextUtils.isEmpty(group.name)) {
-                binding.title.text = getString(R.string.group_unknown_group)
-            } else {
-                binding.title.text = group.name
-            }
-
-            val size = "($memberCount)"
-            binding.textviewGroupMemberCount.text = size
 
             if (group.status == 0) {
+                val (memberCount, currentUserRole) = withContext(Dispatchers.IO) {
+                    val members = wcdb.groupMemberContactor.getAllObjects(
+                        DBGroupMemberContactorModel.gid.eq(group.gid)
+                    )
+                    val role = members.find { it.id == globalServices.myId }?.groupRole ?: GROUP_ROLE_MEMBER
+                    Pair(members.size, role)
+                }
+
+                if (TextUtils.isEmpty(group.name)) {
+                    binding.title.text = getString(R.string.group_unknown_group)
+                } else {
+                    binding.title.text = group.name
+                }
+
+                binding.textviewGroupMemberCount.text = "($memberCount)"
+                binding.textviewGroupMemberCount.visibility = View.VISIBLE
+
                 binding.imageviewAddMember.visibility = View.VISIBLE
                 binding.imageviewAddMember.setOnClickListener {
                     if (currentUserRole < GROUP_ROLE_MEMBER || group.invitationRule == 2) {
@@ -89,28 +92,35 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                     }
                 }
 
+                binding.buttonCall.visibility = View.VISIBLE
                 binding.buttonCall.setOnClickListener {
-                    if (!GroupUtil.canSpeak(group, globalServices.myId)) {
+                    if (!groupUtil.canSpeak(group, globalServices.myId)) {
                         ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
                         return@setOnClickListener
                     }
                     chatViewModel.startCall(requireActivity(), group.name)
                 }
+
+                binding.titleContainerInner.setOnClickListener {
+                    (parentFragment as? GroupChatFragment)?.openGroupInfoActivity()
+                        ?: (activity as? GroupChatContentActivity)?.openGroupInfoActivity()
+                }
             } else {
+                // Group is invalid: keep existing title (avoid flickering to "unknown group"),
+                // hide interactive elements and block navigation to group info
+                if (!TextUtils.isEmpty(group.name)) {
+                    binding.title.text = group.name
+                }
+                binding.textviewGroupMemberCount.visibility = View.GONE
                 binding.imageviewAddMember.visibility = View.GONE
+                binding.buttonCall.visibility = View.GONE
+                binding.textviewTimer.visibility = View.GONE
+                binding.titleContainerInner.setOnClickListener(null)
             }
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         binding.ibBack.setOnClickListener {
             activity?.finish()
-        }
-
-        // 给整个 header 区域添加点击事件，跳转到群组详情页面
-        binding.titleContainerInner.setOnClickListener {
-            // In dual-pane mode, parentFragment is GroupChatFragment
-            // In single-pane mode, activity is GroupChatContentActivity
-            (parentFragment as? GroupChatFragment)?.openGroupInfoActivity()
-                ?: (activity as? GroupChatContentActivity)?.openGroupInfoActivity()
         }
 
         // 统一订阅 conversationSet，处理配置相关的 UI 更新

@@ -17,8 +17,6 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitFirst
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -85,7 +83,6 @@ object GroupAvatarUtil {
                 .chatHttpClient()
                 .httpService
                 .getDownloadUrl(SecureSharedPrefsUtil.getBasicAuth(), groupAvatarData.serverId ?: "")
-                .await()
 
             val location = downloadUrlResponse.location
             if (location.isNullOrEmpty()) {
@@ -98,7 +95,6 @@ object GroupAvatarUtil {
                 .fileClient()
                 .httpService
                 .getResponseBody(location, emptyMap(), emptyMap())
-                .awaitFirst()
 
             val bytes = responseBody.bytes()
 

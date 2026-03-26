@@ -42,6 +42,10 @@ class ContactItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
             binding.selectMark.isVisible = value
         }
 
+    fun setBotBadgeVisible(visible: Boolean) {
+        binding.imageviewBotBadge.isVisible = visible
+    }
+
     fun setAvatarUrl(contactorModel: ContactorModel) {
         binding.avatarView.setAvatar(contactorModel)
     }

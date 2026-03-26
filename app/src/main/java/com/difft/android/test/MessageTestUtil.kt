@@ -55,7 +55,7 @@ class MessageTestUtil @Inject constructor(
                 withContext(Dispatchers.IO) {
                     repeat(count) { index ->
                         val name = testGroupNamePrefix + (startNameNumber + index + 1)
-                        val result = groupRepo.createGroup(CreateGroupReq(name, testMemberIds)).blockingGet()
+                        val result = groupRepo.createGroup(CreateGroupReq(name, testMemberIds))
                         if (result.status == 0) {
                             L.d { "[test] create Test Group success:" + result.data?.gid + "   name:" + name }
                         } else {
@@ -89,9 +89,9 @@ class MessageTestUtil @Inject constructor(
                     testGroups.forEach { group ->
                         val role = group.members.find { member -> member.id == globalServices.myId }?.groupRole
                         val result = if (role == GROUP_ROLE_OWNER) {
-                            groupRepo.deleteGroup(group.gid).blockingGet()
+                            groupRepo.deleteGroup(group.gid)
                         } else {
-                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId))).blockingGet()
+                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
                         }
                         if (result.status == 0) {
                             L.d { "[test] disband or leave Test Group success: ${group.name}" }

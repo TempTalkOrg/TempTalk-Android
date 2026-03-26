@@ -243,7 +243,6 @@ class GlobalConfigsManager @Inject constructor(
                         baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
                         body = ContactsRequestBody(listOf(globalServices.myId))
                     )
-                    .blockingGet()
                     .data?.contacts?.firstOrNull()
 
                 if (contact != null) {

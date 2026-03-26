@@ -7,21 +7,36 @@
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/textview_label"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_marginEnd="16dp"
         android:ellipsize="end"
         android:lines="1"
         android:textColor="@color/t.primary"
         android:textSize="16sp"
         android:textStyle="bold"
+        app:layout_constrainedWidth="true"
         app:layout_constraintBottom_toTopOf="@+id/textview_detail"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/imageview_bot_badge"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toEndOf="@+id/cl_avatar"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_chainStyle="packed"
         tools:text="Design UED" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/imageview_bot_badge"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="4dp"
+        android:src="@drawable/chat_ic_official_bot_badge"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/textview_label"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/textview_label"
+        app:layout_constraintTop_toTopOf="@id/textview_label"
+        tools:visibility="visible" />
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/textview_detail"

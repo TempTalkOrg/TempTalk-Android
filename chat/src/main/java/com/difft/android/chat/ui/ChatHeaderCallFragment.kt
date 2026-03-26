@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
@@ -19,7 +20,9 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.response.RoomState
 import com.difft.android.call.util.IdUtil
+import com.difft.android.call.util.StringUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -27,6 +30,7 @@ import com.difft.android.chat.databinding.ChatFragmentHeaderCallBinding
 import com.difft.android.chat.databinding.ChatFragmentHeaderCallStubBinding
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.group.getAvatarData
+import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,7 +39,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -43,8 +46,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.rx3.asFlow
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -61,6 +62,9 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
 
     @Inject
     lateinit var callDataManager: CallDataManager
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     private val callService by lazy {
         callHttpClient.getService(LCallHttpService::class.java)
@@ -82,7 +86,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         val binding = ChatFragmentHeaderCallStubBinding.inflate(inflater, container, false)
         stubBinding = binding
         return binding.root
@@ -118,18 +122,18 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             // 根据 callData 发起异步请求（自动取消旧请求）
             .flatMapLatest { callData ->
                 if (callData == null || callData.roomId.isEmpty()) {
-                    flowOf(null)
+                    flowOf<Pair<CallData, BaseResponse<RoomState>>?>(null)
                 } else {
                     flow {
                         val result = callService.checkCall(
                             SecureSharedPrefsUtil.getToken(),
                             callData.roomId
-                        ).await()
+                        )
                         emit(callData to result)
                     }
-                        .flowOn(Dispatchers.IO)
                 }
             }
+            .flowOn(Dispatchers.IO)
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             // UI 层处理结果
             .onEach { result ->
@@ -175,7 +179,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         val callerName: String,
         val contact: java.util.Optional<org.difft.app.database.models.ContactorModel>?,
         val groupName: String?,
-        val groupInfo: java.util.Optional<org.difft.app.database.models.GroupModel>?
+        val groupModel: org.difft.app.database.models.GroupModel?
     )
 
     /**
@@ -183,27 +187,25 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
      */
     private suspend fun loadCallDisplayInfo(
         callType: String?,
-        callData: com.difft.android.base.call.CallData,
+        callData: CallData,
         anotherDeviceJoined: Boolean
     ): CallDisplayInfo {
         var callerName = ""
         var contact: java.util.Optional<org.difft.app.database.models.ContactorModel>? = null
         var groupName: String? = null
-        var groupInfo: java.util.Optional<org.difft.app.database.models.GroupModel>? = null
+        var groupModel: org.difft.app.database.models.GroupModel? = null
 
-        when {
-            callType == CallType.GROUP.type && callData.conversation != null -> {
-                groupInfo = GroupUtil.getSingleGroupInfo(application, callData.conversation!!)
-                    .asFlow()
-                    .firstOrNull()
-                groupName = groupInfo?.takeIf { it.isPresent }?.get()?.name
+        when (callType) {
+            CallType.GROUP.type if callData.conversation != null -> {
+                groupModel = groupUtil.getSingleGroupInfo(callData.conversation!!)
+                groupName = groupModel?.name
             }
-            callType == CallType.ONE_ON_ONE.type -> {
+            CallType.ONE_ON_ONE.type -> {
                 val uid = if(anotherDeviceJoined) globalServices.myId else callData.caller.uid
                 uid?.let {
-                    contact = ContactorUtil.getContactWithID(application, uid).await()
-                    callerName = if (contact?.isPresent == true) {
-                        contact!!.get().getDisplayNameForUI()
+                    contact = ContactorUtil.getContactWithID(application, uid)
+                    callerName = if (contact.isPresent) {
+                        contact.get().getDisplayNameForUI()
                     } else {
                         IdUtil.convertToBase58UserName(uid) ?: uid
                     }
@@ -211,7 +213,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             }
         }
 
-        return CallDisplayInfo(callerName, contact, groupName, groupInfo)
+        return CallDisplayInfo(callerName, contact, groupName, groupModel)
     }
 
     /**
@@ -219,36 +221,38 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
      */
     private fun updateCallBarView(
         callType: String?,
-        callData: com.difft.android.base.call.CallData,
+        callData: CallData,
         displayInfo: CallDisplayInfo,
         anotherDeviceJoined: Boolean
     ) {
         val binding = ensureCallBinding()
-        when {
-            callType == CallType.GROUP.type && callData.conversation != null -> {
-                if (displayInfo.groupInfo?.isPresent == true) {
+        when (callType) {
+            CallType.GROUP.type if callData.conversation != null -> {
+                if (displayInfo.groupModel != null) {
                     binding.imageviewGroupAvatar.visibility = View.VISIBLE
-                    binding.imageviewGroupAvatar.setAvatar(displayInfo.groupInfo.get().avatar?.getAvatarData())
+                    binding.imageviewGroupAvatar.setAvatar(displayInfo.groupModel.avatar?.getAvatarData())
                 } else {
                     binding.imageviewGroupAvatar.visibility = View.VISIBLE
                     binding.imageviewAvatar.setAvatar(com.difft.android.base.R.drawable.base_ic_group)
                 }
-                binding.callStatusText.text = displayInfo.groupName 
-                    ?: getString(com.difft.android.call.R.string.call_chat_header_started_call, displayInfo.callerName)
+                val truncatedGroupName = displayInfo.groupName?.let { StringUtil.truncateWithEllipsis(it, 20) }
+                val truncatedCallerName = StringUtil.truncateWithEllipsis(displayInfo.callerName, 10)
+                binding.callStatusText.text = truncatedGroupName
+                    ?: getString(com.difft.android.call.R.string.call_chat_header_started_call, truncatedCallerName)
             }
-            callType == CallType.ONE_ON_ONE.type -> {
+            CallType.ONE_ON_ONE.type -> {
                 val uid = if(anotherDeviceJoined) globalServices.myId else callData.caller.uid
                 uid?.let {
                     if (displayInfo.contact?.isPresent == true) {
                         binding.imageviewAvatar.visibility = View.VISIBLE
-                        binding.imageviewAvatar.setAvatar(displayInfo.contact!!.get())
+                        binding.imageviewAvatar.setAvatar(displayInfo.contact.get())
                     } else {
                         binding.imageviewAvatar.setAvatar(com.difft.android.base.R.drawable.base_ic_avatar_default)
                     }
                     binding.callStatusText.text = if(anotherDeviceJoined) {
                         ResUtils.getString(com.difft.android.call.R.string.call_chat_header_1v1_another_device)
                     } else {
-                        getString(com.difft.android.call.R.string.call_chat_header_1v1_calling, displayInfo.callerName)
+                        getString(com.difft.android.call.R.string.call_chat_header_1v1_calling, StringUtil.truncateWithEllipsis(displayInfo.callerName, 10))
                     }
                 }
             }

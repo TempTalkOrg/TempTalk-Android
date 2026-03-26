@@ -123,9 +123,9 @@ class ContactorCacheManager @Inject constructor() {
      */
     suspend fun getDisplayGroupNameById(id: String?): String? {
         if (id.isNullOrEmpty()) return null
-        val group = callToChatController.getSingleGroupInfo(application, id)
-        if (group.isPresent) {
-            return group.get().name
+        val group = callToChatController.getSingleGroupInfo(id)
+        if (group != null) {
+            return group.name
         } else {
             L.i { "[Call] ContactorCacheManager getDisplayGroupNameById No group name found for id: $id" }
             return null

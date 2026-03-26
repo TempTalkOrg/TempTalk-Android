@@ -1,18 +1,18 @@
 plugins {
-    id("com.google.dagger.hilt.android") version "2.58" apply false
-    id("com.android.application") version "8.13.2" apply false
-    id("com.android.library") version "8.13.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.3.0" apply false
-    id("org.jetbrains.kotlin.kapt") version "2.3.0" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.3.0" apply false
-    id("com.google.gms.google-services") version "4.4.0" apply false
-    id("com.google.firebase.crashlytics") version "2.9.9" apply false
-    id("com.google.firebase.firebase-perf") version "1.4.2" apply false
+    alias(libs.plugins.hilt.android) apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.kapt) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.google.services) apply false
+    alias(libs.plugins.firebase.crashlytics) apply false
+    alias(libs.plugins.firebase.perf) apply false
 
-    // 其他插件
-    id("androidx.navigation.safeargs.kotlin") version "2.9.7" apply false
-    id("com.google.protobuf") version "0.9.6" apply false
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.0" apply false
+    alias(libs.plugins.navigation.safeargs) apply false
+    alias(libs.plugins.protobuf.plugin) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.roborazzi) apply false
 }
 
 // 强制所有子项目使用指定的Kotlin版本
@@ -25,4 +25,48 @@ allprojects {
             }
         }
     }
+}
+
+tasks.register("testAll") {
+    description = "Run unit tests for all modules (single variant per flavored module)"
+    group = "verification"
+    dependsOn(
+        // Non-flavored modules
+        ":base:testDebugUnitTest",
+        ":network:testDebugUnitTest",
+        ":database:testDebugUnitTest",
+        ":chat:testDebugUnitTest",
+        ":video:testDebugUnitTest",
+        ":image-editor:testDebugUnitTest",
+        ":security:testDebugUnitTest",
+        ":call:testDebugUnitTest",
+        ":selector:testDebugUnitTest",
+        // Flavored modules
+        ":app:testTTDevOfficialDebugUnitTest",
+        ":login:testTTDevDebugUnitTest",
+    )
+}
+
+tasks.register("verifyScreenshots") {
+    description = "Verify Roborazzi screenshots against baselines for all Compose modules"
+    group = "verification"
+    dependsOn(
+        ":app:verifyRoborazziTTDevOfficialDebug",
+        ":base:verifyRoborazziDebug",
+        ":chat:verifyRoborazziDebug",
+        ":call:verifyRoborazziDebug",
+        ":login:verifyRoborazziTTDevDebug",
+    )
+}
+
+tasks.register("recordScreenshots") {
+    description = "Record Roborazzi screenshot baselines for all Compose modules"
+    group = "verification"
+    dependsOn(
+        ":app:recordRoborazziTTDevOfficialDebug",
+        ":base:recordRoborazziDebug",
+        ":chat:recordRoborazziDebug",
+        ":call:recordRoborazziDebug",
+        ":login:recordRoborazziTTDevDebug",
+    )
 }

@@ -5,10 +5,11 @@ import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.RxUtil
 import org.difft.app.database.convertToContactorModels
 import org.difft.app.database.members
 import com.difft.android.chat.R
@@ -19,8 +20,13 @@ import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
@@ -30,6 +36,9 @@ class GroupModeratorsManagementActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     private var groupInfo: GroupModel? = null
 
@@ -60,25 +69,23 @@ class GroupModeratorsManagementActivity : BaseActivity() {
 
         if (TextUtils.isEmpty(groupId)) return
 
-        GroupUtil.getSingleGroupInfo(this, groupId, true)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    groupInfo = it.get()
-                    initView(it.get())
+        lifecycleScope.launch {
+            try {
+                val group = groupUtil.getSingleGroupInfo(groupId, true)
+                if (group != null) {
+                    groupInfo = group
+                    initView(group)
                 }
-            }, { L.w { "[GroupModeratorsManagementActivity] getSingleGroupInfo error: ${it.stackTraceToString()}" } })
+            } catch (e: Exception) {
+                L.w { "[GroupModeratorsManagementActivity] getSingleGroupInfo error: ${e.stackTraceToString()}" }
+            }
+        }
 
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.gid == groupId) {
-                    groupInfo = it
-                    initView(it)
-                }
-            }, { L.w { "[GroupModeratorsManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } })
+        groupUtil.singleGroupsUpdate
+            .onEach { if (it.gid == groupId) { groupInfo = it; initView(it) } }
+            .catch { L.w { "[GroupModeratorsManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .launchIn(lifecycleScope)
     }
 
     private var selectedIds: Set<String> = emptySet()
@@ -133,21 +140,25 @@ class GroupModeratorsManagementActivity : BaseActivity() {
 
     private fun changeMemberRole(role: Int) {
         ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
-        groupRepo.changeMemberRole(groupId, selectedIds.first(), ChangeRolepReq(role))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.changeMemberRole(groupId, selectedIds.first(), ChangeRolepReq(role))
+                }
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
+                if (result.status == 0) {
                     ToastUtil.showLong(getString(R.string.operation_successful))
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    result.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }, {
-                L.w { "[GroupModeratorsManagementActivity] changeMemberRole error: ${it.stackTraceToString()}" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[GroupModeratorsManagementActivity] changeMemberRole error: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
-                it.message?.let { message -> ToastUtil.show(message) }
-            })
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 
     private fun showTransferDialog() {
@@ -166,25 +177,29 @@ class GroupModeratorsManagementActivity : BaseActivity() {
 
     private fun transferOwner() {
         ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
-        groupRepo.changeGroupSettings(
-            groupId, ChangeGroupSettingsReq(owner = selectedIds.first())
-        )
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.changeGroupSettings(
+                        groupId, ChangeGroupSettingsReq(owner = selectedIds.first())
+                    )
+                }
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
+                if (result.status == 0) {
                     ToastUtil.showLong(getString(R.string.operation_successful))
                     setResult(RESULT_OK)
                     finish()
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    result.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }, {
-                L.w { "[GroupModeratorsManagementActivity] transferOwner error: ${it.stackTraceToString()}" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[GroupModeratorsManagementActivity] transferOwner error: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
-                it.message?.let { message -> ToastUtil.show(message) }
-            })
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 }
 

@@ -85,11 +85,15 @@ class ReceiptMessageHelper @Inject constructor(
             }
 
             if (mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                // Group confidential: convert to placeholder when any member reads
+                // Group confidential: convert to placeholder only for messages I sent
                 receiptMessage.timestampList?.forEach { timestamp ->
                     val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp)) ?: run {
                         L.i { "[Message] can't find the original group confidential message, message timestamp:${timestamp}" }
                         dbMessageStore.savePendingMessage(signalService.messageId, timestamp, signalService.signalServiceEnvelope.toByteArray())
+                        return@forEach
+                    }
+                    if (originalMessage.fromWho != globalServices.myId) {
+                        L.w { "[Message] skip group confidential placeholder: not my message -> timestamp:${timestamp}, from:${originalMessage.fromWho}, viewer:${signalService.senderId}" }
                         return@forEach
                     }
                     L.i { "[Message] convert group confidential message to placeholder -> timestamp:${timestamp}, viewer:${signalService.senderId}" }
@@ -101,11 +105,15 @@ class ReceiptMessageHelper @Inject constructor(
             }
         } else {
             if (mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                // 1-on-1 confidential: convert to placeholder when recipient reads
+                // 1-on-1 confidential: convert to placeholder only for messages I sent
                 receiptMessage.timestampList?.forEach { timestamp ->
                     val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp)) ?: run {
                         L.i { "[Message] can't find the original confidential message, message timestamp:${timestamp}" }
                         dbMessageStore.savePendingMessage(signalService.messageId, timestamp, signalService.signalServiceEnvelope.toByteArray())
+                        return@forEach
+                    }
+                    if (originalMessage.fromWho != globalServices.myId) {
+                        L.w { "[Message] skip confidential placeholder: not my message -> timestamp:${timestamp}, from:${originalMessage.fromWho}" }
                         return@forEach
                     }
                     L.i { "[Message] convert confidential message to placeholder -> timestamp:${timestamp}" }

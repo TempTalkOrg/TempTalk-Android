@@ -23,7 +23,7 @@ import com.difft.android.network.config.FeatureGrayManager
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import io.reactivex.rxjava3.core.Observable
+import kotlinx.coroutines.flow.Flow
 
 /**
  * 通话管理器
@@ -225,13 +225,7 @@ object LCallManager {
         callMessageManager.removePendingMessage(source, timestamp)
     }
 
-    /**
-     * 获取联系人更新监听器
-     * 返回一个 Observable，用于监听联系人列表的变化
-     * 
-     * @return Observable<List<String>> 联系人ID列表的 Observable
-     */
-    fun getContactsUpdateListener(): Observable<List<String>> {
+    fun getContactsUpdateListener(): Flow<List<String>> {
         return callMessageManager.getContactsUpdateListener()
     }
 

@@ -32,7 +32,6 @@ import com.difft.android.network.group.GroupRepo
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
@@ -114,7 +113,6 @@ class CallMessageHandler @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             try {
                 val response = callService.checkCall(SecureSharedPrefsUtil.getToken(), roomId)
-                    .await()
 
                 if (response.status != RESPONSE_STATUS_SUCCESS || response.data?.userStopped == true) {
                     L.e { "[Call] handleCallMessage, checkCall fail:${response.reason}" }
@@ -635,7 +633,7 @@ class CallMessageHandler @Inject constructor(
      */
     private suspend fun checkUserIsInGroup(userId: String, gid: String): Boolean {
         return try {
-            val resp = groupRepo.getGroupInfo(gid).await()
+            val resp = groupRepo.getGroupInfo(gid)
 
             val members = resp.data?.members.orEmpty()
             members.any { it.uid == userId }
@@ -650,12 +648,7 @@ class CallMessageHandler @Inject constructor(
      */
     private suspend fun getGroupNameSafely(conversationId: String): String? {
         return try {
-            val groupInfoOptional = callToChatController.getSingleGroupInfo(application, conversationId)
-            if (groupInfoOptional.isPresent) {
-                groupInfoOptional.get().name
-            } else {
-                null
-            }
+            callToChatController.getSingleGroupInfo(conversationId)?.name
         } catch (e: Exception) {
             L.e { "[Call] CallMessageHandler getGroupNameSafely error: ${e.stackTraceToString()}" }
             null

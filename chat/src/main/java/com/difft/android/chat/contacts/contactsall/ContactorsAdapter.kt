@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.ListAdapter
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.R
 import com.difft.android.chat.contacts.data.getSortLetter
+import com.difft.android.chat.contacts.data.isOfficialBotId
 import org.difft.app.database.models.ContactorModel
 
 abstract class ContactorsAdapter(private val myID: String) : ListAdapter<ContactorModel, ContactItemViewHolder>(
@@ -28,9 +29,11 @@ abstract class ContactorsAdapter(private val myID: String) : ListAdapter<Contact
         if (data.id == myID) {
             holder.showFavorites()
             holder.name = holder.itemView.context.getString(R.string.chat_favorites)
+            holder.setBotBadgeVisible(false)
         } else {
             holder.setAvatarUrl(data)
             holder.name = data.getDisplayNameForUI()
+            holder.setBotBadgeVisible(data.id.isOfficialBotId())
         }
         holder.content = null
 //        val contactorID = data.id

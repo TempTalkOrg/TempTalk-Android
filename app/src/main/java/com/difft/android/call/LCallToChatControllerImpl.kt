@@ -3,7 +3,6 @@ package com.difft.android.call
 import android.content.Context
 import android.content.Intent
 import androidx.constraintlayout.widget.ConstraintLayout
-import autodispose2.autoDispose
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.call.Args
 import com.difft.android.base.call.CallActionType
@@ -25,7 +24,6 @@ import com.difft.android.base.user.defaultBarrageTexts
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.MD5Utils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.appScope
@@ -51,9 +49,7 @@ import difft.android.messageserialization.model.TextMessage
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.subjects.CompletableSubject
-import kotlinx.coroutines.rx3.await
+import kotlinx.coroutines.flow.Flow
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
 import util.concurrent.TTExecutors
@@ -72,6 +68,7 @@ import java.util.Optional
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.network.config.WsTokenManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -105,9 +102,8 @@ class LCallToChatControllerImpl @Inject constructor(
     private val callDataManagerLazy: Lazy<CallDataManager>,
     private val contactorCacheManager: ContactorCacheManager,
     private val globalConfigsManager: GlobalConfigsManager,
+    private val groupUtil: GroupUtil,
     ) : LCallToChatController {
-
-    private val autoDisposeCompletable = CompletableSubject.create()
 
     private val callService by lazy {
         httpClient.getService(LCallHttpService::class.java)
@@ -189,7 +185,6 @@ class LCallToChatControllerImpl @Inject constructor(
                     .withCallerId(mySelfId)
                     .withConversationId(conversationId)
                     .withStartCallParams(startCallParams)
-                    .withAppToken(SecureSharedPrefsUtil.getToken())
                     .withNeedAppLock(isNeedAppLock)
                     .withCallWaitDialogShown(true)
 
@@ -204,9 +199,9 @@ class LCallToChatControllerImpl @Inject constructor(
 
                 // 无缓存，发起网络请求
                 runCatching {
-                    callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
-                        .compose(RxUtil.getSingleSchedulerComposer())
-                        .await()  // ✅ 用扩展函数 await() 将 Rx 转协程挂起，避免嵌套回调
+                    withContext(Dispatchers.IO) {
+                        callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
+                    }
                 }.onSuccess { response ->
                     if (response.status == 0 && !response.data?.serviceUrls.isNullOrEmpty()) {
                         val urls = response.data!!.serviceUrls!!
@@ -218,10 +213,13 @@ class LCallToChatControllerImpl @Inject constructor(
                         onComplete(false)
                     }
                 }.onFailure { e ->
+                    if (e is CancellationException) throw e
                     L.e(e) { "[Call] joinCall getCallServerUrl error:" }
                     withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
                     onComplete(false)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.e(e) { "[Call] joinCall unexpected error:" }
                 withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
@@ -239,41 +237,35 @@ class LCallToChatControllerImpl @Inject constructor(
             callerId.let { For.Account(it) }
         }
 
-        callMessageCreator.createCallMessage(
-            forWhat,
-            callType,
-            callRole,
-            CallActionType.REJECT,
-            conversationId,
-            null,
-            listOf(roomId),
-            null,
-            mySelfId,
-            null
-        ).concatMap { callEncryptResult ->
-            val body = ControlMessageRequestBody(
-                roomId = roomId,
-                System.currentTimeMillis(),
-                cipherMessages = callEncryptResult.cipherMessages,
-                detailMessageType = if (callType == CallType.ONE_ON_ONE) DetailMessageType.CallEnd.value else DetailMessageType.Unknown.value
-            )
-            callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .doFinally { onComplete() }
-            .autoDispose(autoDisposeCompletable)
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { data ->
-                        L.d { "[Call] rejectCall, request success, response data:$data" }
-                    }
-                } else {
-                    L.e { "[Call] rejectCall, response status fail, reason:${it.reason}" }
+        appScope.launch {
+            try {
+                val callEncryptResult = withContext(Dispatchers.IO) {
+                    callMessageCreator.createCallMessage(
+                        forWhat, callType, callRole, CallActionType.REJECT,
+                        conversationId, null, listOf(roomId), null, mySelfId, null
+                    )
                 }
-            }, {
-                L.e { "[Call] rejectCall, request fail, error:${it.message}" }
-            })
-
+                val body = ControlMessageRequestBody(
+                    roomId = roomId, System.currentTimeMillis(),
+                    cipherMessages = callEncryptResult.cipherMessages,
+                    detailMessageType = if (callType == CallType.ONE_ON_ONE) DetailMessageType.CallEnd.value else DetailMessageType.Unknown.value
+                )
+                val result = withContext(Dispatchers.IO) {
+                    callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
+                }
+                if (result.status == 0) {
+                    result.data?.let { data -> L.d { "[Call] rejectCall, request success, response data:$data" } }
+                } else {
+                    L.e { "[Call] rejectCall, response status fail, reason:${result.reason}" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[Call] rejectCall, request fail, error:${e.message}" }
+            } finally {
+                onComplete()
+            }
+        }
     }
 
     override fun cancelCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit) {
@@ -285,41 +277,35 @@ class LCallToChatControllerImpl @Inject constructor(
         }
         L.d { "[Call] cancelCall, params mySelfId:$mySelfId roomId:$roomId callerId:$callerId type:$type conversationId:$conversationId" }
 
-        callMessageCreator.createCallMessage(
-            forWhat,
-            callType,
-            callRole,
-            CallActionType.CANCEL,
-            conversationId,
-            null,
-            listOf(roomId),
-            null,
-            mySelfId,
-            null
-        ).concatMap { callEncryptResult ->
-            val body = ControlMessageRequestBody(
-                roomId = roomId,
-                System.currentTimeMillis(),
-                cipherMessages = callEncryptResult.cipherMessages,
-                detailMessageType = if (callType == CallType.ONE_ON_ONE) DetailMessageType.CallEnd.value else DetailMessageType.Unknown.value
-            )
-            callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .doFinally { onComplete() }
-            .autoDispose(autoDisposeCompletable)
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { data ->
-                        L.d { "[Call] cancelCall, request success, response data:$data" }
-                    }
-                } else {
-                    L.e { "[Call] cancelCall, response status fail, reason:${it.reason}" }
+        appScope.launch {
+            try {
+                val callEncryptResult = withContext(Dispatchers.IO) {
+                    callMessageCreator.createCallMessage(
+                        forWhat, callType, callRole, CallActionType.CANCEL,
+                        conversationId, null, listOf(roomId), null, mySelfId, null
+                    )
                 }
-            }, {
-                L.e { "[Call] cancelCall, request fail, error:${it.message}" }
-            })
-
+                val body = ControlMessageRequestBody(
+                    roomId = roomId, System.currentTimeMillis(),
+                    cipherMessages = callEncryptResult.cipherMessages,
+                    detailMessageType = if (callType == CallType.ONE_ON_ONE) DetailMessageType.CallEnd.value else DetailMessageType.Unknown.value
+                )
+                val result = withContext(Dispatchers.IO) {
+                    callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
+                }
+                if (result.status == 0) {
+                    result.data?.let { data -> L.d { "[Call] cancelCall, request success, response data:$data" } }
+                } else {
+                    L.e { "[Call] cancelCall, response status fail, reason:${result.reason}" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[Call] cancelCall, request fail, error:${e.message}" }
+            } finally {
+                onComplete()
+            }
+        }
     }
 
     override fun hangUpCall(
@@ -347,83 +333,70 @@ class LCallToChatControllerImpl @Inject constructor(
         }
 
         L.d { "[Call] hangUpCall, params mySelfId:$mySelfId roomId:$roomId callerId:$callerId type:$type conversationId:$conversationId" }
-        callMessageCreator.createCallMessage(
-            forWhat,
-            callType,
-            callRole,
-            CallActionType.HANGUP,
-            conversationId,
-            null,
-            listOf(roomId),
-            null,
-            callerId,
-            null,
-            callUidList,
-        ).concatMap { callEncryptResult ->
-            val body = ControlMessageRequestBody(
-                roomId = roomId,
-                System.currentTimeMillis(),
-                cipherMessages = callEncryptResult.cipherMessages,
-                detailMessageType = if (callType == CallType.ONE_ON_ONE) DetailMessageType.CallEnd.value else DetailMessageType.GroupCallEnd.value
-            )
-            callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .doFinally { onComplete() }
-            .autoDispose(autoDisposeCompletable)
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { data ->
-                        L.d { "[Call] hangUpCall, request success, response data:$data" }
-                    }
-                } else {
-                    L.e { "[Call] hangUpCall, response status fail, reason:${it.reason}" }
+        appScope.launch {
+            try {
+                val callEncryptResult = withContext(Dispatchers.IO) {
+                    callMessageCreator.createCallMessage(
+                        forWhat, callType, callRole, CallActionType.HANGUP,
+                        conversationId, null, listOf(roomId), null, callerId, null, callUidList,
+                    )
                 }
-            }, {
-                L.e { "[Call] hangUpCall, request fail, error:${it.message}" }
-            })
-
+                val body = ControlMessageRequestBody(
+                    roomId = roomId, System.currentTimeMillis(),
+                    cipherMessages = callEncryptResult.cipherMessages,
+                    detailMessageType = if (callType == CallType.ONE_ON_ONE) DetailMessageType.CallEnd.value else DetailMessageType.GroupCallEnd.value
+                )
+                val result = withContext(Dispatchers.IO) {
+                    callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
+                }
+                if (result.status == 0) {
+                    result.data?.let { data -> L.d { "[Call] hangUpCall, request success, response data:$data" } }
+                } else {
+                    L.e { "[Call] hangUpCall, response status fail, reason:${result.reason}" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[Call] hangUpCall, request fail, error:${e.message}" }
+            } finally {
+                onComplete()
+            }
+        }
     }
 
     override fun syncJoinedMessage(receiverId: String, callRole: CallRole?, callerId: String, type: String, roomId: String, conversationId: String?, mKey: ByteArray?) {
         val forWhat = For.Account(receiverId)
         val callType = CallType.fromString(type) ?: CallType.ONE_ON_ONE
-        callMessageCreator.createCallMessage(
-            forWhat,
-            callType,
-            callRole,
-            CallActionType.JOINED,
-            conversationId,
-            null,
-            listOf(roomId),
-            null,
-            callerId,
-            mKey
-        ).concatMap { callEncryptResult ->
-            val body = ControlMessageRequestBody(
-                roomId = roomId,
-                System.currentTimeMillis(),
-                cipherMessages = callEncryptResult.cipherMessages,
-            )
-            callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .autoDispose(autoDisposeCompletable)
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { data ->
-                        L.d { "[Call] syncJoinedMessage, request success, response data:$data" }
-                    }
-                } else {
-                    L.e { "[Call] syncJoinedMessage, response status fail, reason:${it.reason}" }
+        appScope.launch {
+            try {
+                val callEncryptResult = withContext(Dispatchers.IO) {
+                    callMessageCreator.createCallMessage(
+                        forWhat, callType, callRole, CallActionType.JOINED,
+                        conversationId, null, listOf(roomId), null, callerId, mKey
+                    )
                 }
-            }, {
-                L.e { "[Call] syncJoinedMessage, request fail, error:${it.message}" }
-            })
+                val body = ControlMessageRequestBody(
+                    roomId = roomId, System.currentTimeMillis(),
+                    cipherMessages = callEncryptResult.cipherMessages,
+                )
+                val result = withContext(Dispatchers.IO) {
+                    callService.controlMessages(SecureSharedPrefsUtil.getToken(), body)
+                }
+                if (result.status == 0) {
+                    result.data?.let { data -> L.d { "[Call] syncJoinedMessage, request success, response data:$data" } }
+                } else {
+                    L.e { "[Call] syncJoinedMessage, response status fail, reason:${result.reason}" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[Call] syncJoinedMessage, request fail, error:${e.message}" }
+            }
+        }
     }
 
     override suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel> {
-        return ContactorUtil.getContactWithID(context, id).await()
+        return ContactorUtil.getContactWithID(context, id)
     }
 
     override fun getDisplayName(context: Context, id: String): String? {
@@ -432,7 +405,7 @@ class LCallToChatControllerImpl @Inject constructor(
             userId = userId.split(".")[0]
         }
         var displayName: String? = null
-        val contactor = ContactorUtil.getContactWithID(context, userId).blockingGet()
+        val contactor = kotlinx.coroutines.runBlocking { ContactorUtil.getContactWithID(context, userId) }
         if (contactor.isPresent) {
             displayName = contactor.get().getDisplayNameForUI()
         }
@@ -479,8 +452,8 @@ class LCallToChatControllerImpl @Inject constructor(
         return mySelfId
     }
 
-    override suspend fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel> {
-        return GroupUtil.getSingleGroupInfo(context, conversationId).firstOrError().await()
+    override suspend fun getSingleGroupInfo(conversationId: String): GroupModel? {
+        return groupUtil.getSingleGroupInfo(conversationId)
     }
 
     override fun cancelNotificationById(notificationId: Int) {
@@ -560,7 +533,7 @@ class LCallToChatControllerImpl @Inject constructor(
                 }
                 val timeStamp = System.currentTimeMillis()
                 val messageId = "${timeStamp}${mySelfId.replace("+", "")}${DEFAULT_DEVICE_ID}"
-                val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).await().toInt()
+                val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
                 val screenShot = ScreenShot(
                     RealSource(mySelfId, DEFAULT_DEVICE_ID, timeStamp, timeStamp)
                 )
@@ -581,7 +554,6 @@ class LCallToChatControllerImpl @Inject constructor(
                     0,
                     0,
                     screenshotText,
-                    null,
                     null,
                     null,
                     null,
@@ -637,7 +609,9 @@ class LCallToChatControllerImpl @Inject constructor(
             return null
         }
 
-        val publicKeyInfos: List<PublicKeyInfo>? = conversationManager.getPublicKeyInfos(listOf(userId))
+        val publicKeyInfos: List<PublicKeyInfo>? = kotlinx.coroutines.runBlocking {
+            conversationManager.getPublicKeyInfos(listOf(userId))
+        }
         if (publicKeyInfos.isNullOrEmpty()) {
             L.e { "[Call] geTheirPublicKey Error: $userId get public key is null" }
             return null
@@ -688,16 +662,12 @@ class LCallToChatControllerImpl @Inject constructor(
         return inComingCallStateManager.getCurrentRoomId() == roomId || isNotificationShowing(roomId.hashCode())
     }
 
-    /**
-     * Returns an Observable that emits updates when contacts change
-     * @return Observable that emits a list of contact IDs that were updated
-     */
-    override fun getContactsUpdateListener(): Observable<List<String>> {
-        return ContactorUtil.contactsUpdate.hide()
+    override fun getContactsUpdateListener(): Flow<List<String>> {
+        return ContactorUtil.contactsUpdate
     }
 
-    override fun getGroupsUpdateListener(): Observable<GroupModel> {
-        return GroupUtil.singleGroupsUpdate.hide()
+    override fun getGroupsUpdateListener(): Flow<GroupModel> {
+        return groupUtil.singleGroupsUpdate
     }
 
     override fun startForegroundService(
@@ -948,14 +918,15 @@ class LCallToChatControllerImpl @Inject constructor(
                     mKey,
                     createCallMsg = callConfig.createCallMsg,
                     createdAt = createdAt,
-                ).await()
+                )
 
                 // 创建请求体并发送邀请
                 val requestBody = createInviteCallRequest(roomId, callEncryptResult)
                 val response = callService.inviteCall(SecureSharedPrefsUtil.getToken(), requestBody)
-                    .await()
 
                 handleInviteCallResponse(response, inviteMembers, type, createdAt, callback)
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 handleInviteCallError(error)
                 callback(InviteRequestState.FAILED)

@@ -13,11 +13,10 @@ import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.mapToMessageId
-import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.launch
 import org.difft.app.database.delete
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.DBSpeechToTextModel
@@ -28,6 +27,7 @@ import org.difft.app.database.models.SpeechToTextModel
 import org.difft.app.database.models.TranslateModel
 import org.difft.app.database.putMessageIfNotExists
 import org.difft.app.database.wcdb
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,9 +42,17 @@ constructor(
         L.d { "[Message] putWhenNonExist size:${messages.size}" }
         val startTime = System.currentTimeMillis()
         try {
-            messages.forEach {
-                val room = dbRoomStore.createRoomIfNotExist(it.forWhat)
-                wcdb.putMessageIfNotExists(it, room.readPosition)
+            messages.forEach { message ->
+                if (!processingMessageIds.add(message.id)) {
+                    L.i { "[Message] putWhenNonExist: ${message.id} already processing, skipping" }
+                    return@forEach
+                }
+                try {
+                    val room = dbRoomStore.createRoomIfNotExist(message.forWhat)
+                    wcdb.putMessageIfNotExists(message, room.readPosition)
+                } finally {
+                    processingMessageIds.remove(message.id)
+                }
             }
             // 只在入库成功后发送变更通知
             messages.groupBy { it.forWhat.id }.forEach { (roomId, _) ->
@@ -60,6 +68,10 @@ constructor(
             FirebaseCrashlytics.getInstance().recordException(Exception("[putMessageException] ${e.stackTraceToString()}"))
             throw e
         }
+    }
+
+    companion object {
+        private val processingMessageIds = ConcurrentHashMap.newKeySet<String>()
     }
 
     override fun deleteMessage(messageIds: List<String>) {
@@ -157,92 +169,80 @@ constructor(
     // ----------------------------------------------------
     // updateMessageTranslateData
     // ----------------------------------------------------
-    override fun updateMessageTranslateData(
+    override suspend fun updateMessageTranslateData(
         conversationId: String,
         messageId: String,
         translateData: TranslateData
-    ): Completable {
-        return Single.fromCallable {
-            wcdb.message.getAllObjects(
-                DBMessageModel.roomId.eq(conversationId)
-                    .and(DBMessageModel.id.eq(messageId))
+    ) {
+        val models = wcdb.message.getAllObjects(
+            DBMessageModel.roomId.eq(conversationId)
+                .and(DBMessageModel.id.eq(messageId))
+        )
+        if (models.isNotEmpty()) {
+            val oldMessage = models[0]
+            val oldTranslateData = wcdb.translate.getFirstObject(
+                DBTranslateModel.messageId.eq(oldMessage.id)
             )
-        }.concatMapCompletable { models ->
-            if (models.isNotEmpty()) {
-                val oldMessage = models[0]
-                val oldTranslateData = wcdb.translate.getFirstObject(
-                    DBTranslateModel.messageId.eq(oldMessage.id)
+            if (oldTranslateData != null) {
+                oldTranslateData.translateStatus = translateData.translateStatus.status
+                oldTranslateData.translatedContentCN = translateData.translatedContentCN
+                oldTranslateData.translatedContentEN = translateData.translatedContentEN
+                wcdb.translate.updateObject(
+                    oldTranslateData,
+                    arrayOf(
+                        DBTranslateModel.translateStatus,
+                        DBTranslateModel.translatedContentCN,
+                        DBTranslateModel.translatedContentEN
+                    ),
+                    DBTranslateModel.databaseId.eq(oldTranslateData.databaseId)
                 )
-                if (oldTranslateData != null) {
-                    oldTranslateData.translateStatus = translateData.translateStatus.status
-                    oldTranslateData.translatedContentCN = translateData.translatedContentCN
-                    oldTranslateData.translatedContentEN = translateData.translatedContentEN
-                    // partial update existing translate row
-                    wcdb.translate.updateObject(
-                        oldTranslateData,
-                        arrayOf(
-                            DBTranslateModel.translateStatus,
-                            DBTranslateModel.translatedContentCN,
-                            DBTranslateModel.translatedContentEN
-                        ),
-                        DBTranslateModel.databaseId.eq(oldTranslateData.databaseId)
-                    )
-                } else {
-                    // Insert brand new row
-                    TranslateModel().apply {
-                        this.messageId = oldMessage.id
-                        this.translateStatus = translateData.translateStatus.status
-                        this.translatedContentCN = translateData.translatedContentCN
-                        this.translatedContentEN = translateData.translatedContentEN
-                    }.also {
-                        wcdb.translate.insertObject(it)
-                    }
+            } else {
+                TranslateModel().apply {
+                    this.messageId = oldMessage.id
+                    this.translateStatus = translateData.translateStatus.status
+                    this.translatedContentCN = translateData.translatedContentCN
+                    this.translatedContentEN = translateData.translatedContentEN
+                }.also {
+                    wcdb.translate.insertObject(it)
                 }
             }
-            Completable.complete()
         }
     }
 
-    override fun updateMessageSpeechToTextData(
+    override suspend fun updateMessageSpeechToTextData(
         conversationId: String,
         messageId: String,
         speechToTextData: SpeechToTextData
-    ): Completable {
-        return Single.fromCallable {
-            wcdb.message.getAllObjects(
-                DBMessageModel.roomId.eq(conversationId)
-                    .and(DBMessageModel.id.eq(messageId))
+    ) {
+        val models = wcdb.message.getAllObjects(
+            DBMessageModel.roomId.eq(conversationId)
+                .and(DBMessageModel.id.eq(messageId))
+        )
+        if (models.isNotEmpty()) {
+            val oldMessage = models[0]
+            val oldSpeechToTextData = wcdb.speechToText.getFirstObject(
+                DBSpeechToTextModel.messageId.eq(oldMessage.id)
             )
-        }.concatMapCompletable { models ->
-            if (models.isNotEmpty()) {
-                val oldMessage = models[0]
-                val oldSpeechToTextData = wcdb.speechToText.getFirstObject(
-                    DBSpeechToTextModel.messageId.eq(oldMessage.id)
+            if (oldSpeechToTextData != null) {
+                oldSpeechToTextData.convertStatus = speechToTextData.convertStatus.status
+                oldSpeechToTextData.speechToTextContent = speechToTextData.speechToTextContent
+                wcdb.speechToText.updateObject(
+                    oldSpeechToTextData,
+                    arrayOf(
+                        DBSpeechToTextModel.convertStatus,
+                        DBSpeechToTextModel.speechToTextContent,
+                    ),
+                    DBSpeechToTextModel.databaseId.eq(oldSpeechToTextData.databaseId)
                 )
-                if (oldSpeechToTextData != null) {
-                    oldSpeechToTextData.convertStatus = speechToTextData.convertStatus.status
-                    oldSpeechToTextData.speechToTextContent = speechToTextData.speechToTextContent
-                    // partial update existing speechToTex row
-                    wcdb.speechToText.updateObject(
-                        oldSpeechToTextData,
-                        arrayOf(
-                            DBSpeechToTextModel.convertStatus,
-                            DBSpeechToTextModel.speechToTextContent,
-                        ),
-                        DBSpeechToTextModel.databaseId.eq(oldSpeechToTextData.databaseId)
-                    )
-                } else {
-                    // Insert brand new row
-                    SpeechToTextModel().apply {
-                        this.messageId = oldMessage.id
-                        this.convertStatus = speechToTextData.convertStatus.status
-                        this.speechToTextContent = speechToTextData.speechToTextContent
-                    }.also {
-                        wcdb.speechToText.insertObject(it)
-                    }
+            } else {
+                SpeechToTextModel().apply {
+                    this.messageId = oldMessage.id
+                    this.convertStatus = speechToTextData.convertStatus.status
+                    this.speechToTextContent = speechToTextData.speechToTextContent
+                }.also {
+                    wcdb.speechToText.insertObject(it)
                 }
             }
-            Completable.complete()
         }
     }
 
@@ -257,24 +257,22 @@ constructor(
         return wcdb.message.getValue(
             DBMessageModel.databaseId.count(),
             DBMessageModel.roomId.eq(forWhat.id)
-                .and(DBMessageModel.type.notIn(2, 3))
+                .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER, MessageModel.TYPE_UNSUPPORTED))
         )?.int ?: 0
     }
 
-    override fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long): Completable {
-        return Completable.fromAction {
-            val expression = DBMessageModel.roomId.eq(conversationId)
-                .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
-                .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
-            val list = wcdb.message.getAllObjects(expression)
-            L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp} size:${list.size}" }
-            if (list.isNotEmpty()) {
-                wcdb.message.updateValue(
-                    readMaxTimestamp,
-                    DBMessageModel.readTime,
-                    expression
-                )
-            }
+    override suspend fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long) {
+        val expression = DBMessageModel.roomId.eq(conversationId)
+            .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
+            .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
+        val list = wcdb.message.getAllObjects(expression)
+        L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp} size:${list.size}" }
+        if (list.isNotEmpty()) {
+            wcdb.message.updateValue(
+                readMaxTimestamp,
+                DBMessageModel.readTime,
+                expression
+            )
         }
     }
 

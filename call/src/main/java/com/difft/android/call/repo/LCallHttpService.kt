@@ -9,7 +9,6 @@ import com.difft.android.base.call.InviteCallResponseData
 import com.difft.android.base.call.ServiceUrlData
 import com.difft.android.call.response.RoomState
 import com.difft.android.network.BaseResponse
-import io.reactivex.rxjava3.core.Single
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -19,36 +18,36 @@ import retrofit2.http.Query
 interface LCallHttpService {
 
     @POST("v3/call/controlmessages")
-    fun controlMessages(
+    suspend fun controlMessages(
         @Header("Authorization") authorization: String,
         @Body request: ControlMessageRequestBody
-    ): Single<BaseResponse<ControlMessageResponseData>>
+    ): BaseResponse<ControlMessageResponseData>
 
     @GET("v3/call")
-    fun getCallingList(
+    suspend fun getCallingList(
         @Header("Authorization") authorization: String,
-    ): Single<BaseResponse<CallListResponseData>>
+    ): BaseResponse<CallListResponseData>
 
     @GET("v3/call/check")
-    fun checkCall(
+    suspend fun checkCall(
         @Header("Authorization") authorization: String,
         @Query("roomId") roomId: String?
-    ): Single<BaseResponse<RoomState>>
+    ): BaseResponse<RoomState>
 
     @POST("v3/call/invite")
-    fun inviteCall(
+    suspend fun inviteCall(
         @Header("Authorization") authorization: String,
         @Body request: InviteCallRequestBody
-    ): Single<BaseResponse<InviteCallResponseData>>
+    ): BaseResponse<InviteCallResponseData>
 
     @GET("v3/call/serviceurl")
-    fun getServiceUrl(
+    suspend fun getServiceUrl(
         @Header("Authorization") authorization: String,
-    ): Single<BaseResponse<ServiceUrlData>>
+    ): BaseResponse<ServiceUrlData>
 
     @POST("v3/call/feedback")
-    fun callFeedback(
+    suspend fun callFeedback(
         @Header("Authorization") authorization: String,
         @Body request: CallFeedbackRequestBody
-    ): Single<BaseResponse<Unit>>
+    ): BaseResponse<Unit>
 }

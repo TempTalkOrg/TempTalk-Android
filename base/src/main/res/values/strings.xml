@@ -2,6 +2,7 @@
     <string name="language_chinese" translatable="false">中文</string>
     <string name="language_english" translatable="false">English</string>
     <string name="chat_message_confidential_message">[Message]</string>
+    <string name="confidential_preview_tip">Read once, then gone</string>
     <string name="chat_message_attachment">[Attachment]</string>
     <string name="chat_message_image">[Image]</string>
     <string name="chat_message_video">[Video]</string>

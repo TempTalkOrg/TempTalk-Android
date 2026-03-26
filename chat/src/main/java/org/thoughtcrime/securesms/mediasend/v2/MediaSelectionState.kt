@@ -18,7 +18,9 @@ data class MediaSelectionState(
     val isPreUploadEnabled: Boolean = false,
     val isMeteredConnection: Boolean = false,
     val editorStateMap: Map<Uri, Any> = mapOf(),
-    val suppressEmptyError: Boolean = true
+    val suppressEmptyError: Boolean = true,
+    val confidentialMode: Int = 0,
+    val showConfidentialToggle: Boolean = false
 ) {
 
     val isVideoTrimmingVisible: Boolean = focusedMedia != null && MediaUtil.isVideoType(focusedMedia.mimeType) && MediaConstraints.isVideoTranscodeAvailable()

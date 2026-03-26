@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -43,7 +42,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import javax.inject.Inject
@@ -92,8 +90,6 @@ class CriticalAlertActivity: ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         L.i { "[CriticalAlert] onCreate" }
-
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         // 覆盖系统栏
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -340,7 +336,6 @@ class CriticalAlertActivity: ComponentActivity() {
                 } else {
                     // 2. 如果当前未进行通话，则调用 getCallingList 方法获取最新的会议列表
                     val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
-                        .await()
 
                     if (response.status != 0) {
                         L.e { "[CriticalAlert] getCallingList failed with status: ${response.status}" }
@@ -484,7 +479,7 @@ class CriticalAlertActivity: ComponentActivity() {
      */
     private suspend fun checkUserIsInGroup(userId: String, gid: String): Boolean {
         return try {
-            val resp = groupRepo.getGroupInfo(gid).await()
+            val resp = groupRepo.getGroupInfo(gid)
 
             val members = resp.data?.members.orEmpty()
             members.any { it.uid == userId }

@@ -45,7 +45,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.noSmoothScrollToBottom
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.appScope
@@ -102,9 +101,7 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.rx3.asFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -120,14 +117,12 @@ import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.components.reaction.ReactionEmojisAdapter
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.SaveAttachmentTask
+import org.thoughtcrime.securesms.util.SaveAttachmentUtil
 import org.thoughtcrime.securesms.util.ServiceUtil
-import org.thoughtcrime.securesms.util.StorageUtil
 import org.thoughtcrime.securesms.util.ThemeUtil
 import org.thoughtcrime.securesms.util.viewFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import util.TimeFormatter
-import util.concurrent.TTExecutors
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
@@ -153,7 +148,7 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private var isFriend = false
-    private var mScrollToPosition = -1
+    private var needsCallHeaderScrollCompensation = false
 
     private lateinit var binding: ChatFragmentMessageListBinding
 
@@ -263,9 +258,7 @@ class ChatMessageListFragment : Fragment() {
                         }
                     }
                 } else {
-                    if (data.isConfidential() && (!TextUtils.isEmpty(data.card?.content) || !TextUtils.isEmpty(
-                            data.message
-                        ))
+                    if (data.isConfidential() && !TextUtils.isEmpty(data.message)
                     ) {
                         showConfidentialViewTipIfNeeded(data) {
                             showConfidentialTextDialog(data)
@@ -437,7 +430,7 @@ class ChatMessageListFragment : Fragment() {
             "tt_loading_light.json"
         }
 
-        registerCallStatusViewListener()
+        setupCallHeaderScrollCompensation()
 
         binding.lottieViewLoading.setAnimation(loadingAnimFile)
         binding.lottieViewLoading.playAnimation()
@@ -628,36 +621,36 @@ class ChatMessageListFragment : Fragment() {
 
         registerKeyboardVisibilityListener()
 
-        chatViewModel.chatActionsShow
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.chatActionsShow.collect {
+                if (!isAdded || view == null) return@collect
                 scrollToBottom()
-            }, { L.w { "[ChatMessageListFragment] observe chatActionsShow error: ${it.stackTraceToString()}" } })
+            }
+        }
 
         binding.clToBottom.setOnClickListener {
             scrollToBottom()
         }
 
-        chatViewModel.translateEvent
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ (messageId, translateData) ->
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.translateEvent.collect { (messageId, translateData) ->
+                if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
                     it.translateData = translateData
                     chatMessageAdapter.notifyItemChanged(chatMessageAdapter.currentList.indexOf(it))
                 }
-            }, { L.w { "[ChatMessageListFragment] observe translateEvent error: ${it.stackTraceToString()}" } })
+            }
+        }
 
-        chatViewModel.speechToTextEvent
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ (messageId, speechToTextData) ->
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.speechToTextEvent.collect { (messageId, speechToTextData) ->
+                if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
                     it.speechToTextData = speechToTextData
                     chatMessageAdapter.notifyItemChanged(chatMessageAdapter.currentList.indexOf(it))
                 }
-            }, { L.w { "[ChatMessageListFragment] observe speechToTextEvent error: ${it.stackTraceToString()}" } })
+            }
+        }
 
         setAudioObservers()
 
@@ -714,7 +707,6 @@ class ChatMessageListFragment : Fragment() {
             }
 
             ContactorUtil.contactsUpdate
-                .asFlow()
                 .onEach {
                     if (it.contains(chatViewModel.forWhat.id)) {
                         withContext(Dispatchers.IO) {
@@ -823,12 +815,7 @@ class ChatMessageListFragment : Fragment() {
         }
 
         if (isFirstShow) {
-            mScrollToPosition = when (scrollAction) {
-                is ScrollAction.ToPosition -> scrollAction.position
-                is ScrollAction.ToBottom -> list.size - 1
-                is ScrollAction.ToMessage -> list.indexOfFirst { it.timeStamp == scrollAction.messageTimeStamp }
-                null -> -1
-            }
+            needsCallHeaderScrollCompensation = scrollAction !is ScrollAction.ToMessage
             binding.recyclerViewMessage.post {
                 doAfterFirstRender()
             }
@@ -1206,7 +1193,7 @@ class ChatMessageListFragment : Fragment() {
 
         for (i in firstVisible..lastVisible) {
             val message = chatMessageAdapter.currentList.getOrNull(i) ?: continue
-            if (message is ConfidentialPlaceholderChatMessage && message.isMine) {
+            if (message is ConfidentialPlaceholderChatMessage) {
                 chatViewModel.markConfidentialPlaceholderAsSeen(message.timeStamp)
             }
         }
@@ -1395,7 +1382,7 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onSave(message: TextChatMessage) {
-            if (StorageUtil.canWriteToMediaStore()) {
+            if (FileUtil.canWriteToMediaStore()) {
                 saveAttachment(message)
             } else {
                 pendingSaveAttachmentMessage = message
@@ -1575,16 +1562,15 @@ class ChatMessageListFragment : Fragment() {
             val progress = data.getAttachmentProgress()
 
             if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
-                val saveAttachment = SaveAttachmentTask.Attachment(
-                    File(attachmentPath).toUri(),
-                    it.contentType,
-                    System.currentTimeMillis(),
-                    it.fileName,
-                    false,
-                    true
+                val attachment = SaveAttachmentUtil.Attachment(
+                    uri = File(attachmentPath).toUri(),
+                    contentType = it.contentType,
+                    date = System.currentTimeMillis(),
+                    fileName = it.fileName
                 )
-
-                SaveAttachmentTask(requireContext()).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    SaveAttachmentUtil.saveWithUI(requireContext(), attachment)
+                }
             } else {
                 L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
                 ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
@@ -1691,34 +1677,43 @@ class ChatMessageListFragment : Fragment() {
         if (!message.isMine && message.isConfidential()) {
             chatViewModel.sendConfidentialViewReceipt(message)
         }
+        val isConfidential = message.isConfidential()
         lifecycleScope.launch {
             val mediaListInfo = withContext(Dispatchers.IO) {
                 val mediaList = arrayListOf<LocalMedia>()
-                chatMessageAdapter.currentList.forEach { message ->
-                    if (message !is TextChatMessage) return@forEach
 
-                    //消息附件
-                    message.attachment?.takeIf { it.isImage() || it.isVideo() }?.let { attachment ->
-                        val path = FileUtil.getMessageAttachmentFilePath(message.id) + (attachment.fileName ?: return@let)
-                        if (FileUtil.isFileValid(path)) {
-                            mediaList.add(LocalMedia.generateLocalMedia(context, path))
+                if (isConfidential) {
+                    // Confidential: only show the current message, no swiping
+                    mediaList.add(LocalMedia.generateLocalMedia(context, filePath))
+                } else {
+                    chatMessageAdapter.currentList.forEach { msg ->
+                        if (msg !is TextChatMessage) return@forEach
+                        // Filter out confidential messages from normal preview
+                        if (msg.isConfidential()) return@forEach
+
+                        //消息附件
+                        msg.attachment?.takeIf { it.isImage() || it.isVideo() }?.let { attachment ->
+                            val path = FileUtil.getMessageAttachmentFilePath(msg.id) + (attachment.fileName ?: return@let)
+                            if (FileUtil.isFileValid(path)) {
+                                mediaList.add(LocalMedia.generateLocalMedia(context, path))
+                            }
+                            return@forEach
                         }
-                        return@forEach
-                    }
 
-                    //单条转发消息附件
-                    val forward = message.forwardContext?.forwards?.singleOrNull() ?: return@forEach
-                    val forwardAttachment = forward.attachments?.firstOrNull()
-                    if (forwardAttachment?.isImage() == true || forwardAttachment?.isVideo() == true) {
-                        val forwardMessage = generateMessageFromForward(forward) as? TextChatMessage ?: return@forEach
-                        val path = FileUtil.getMessageAttachmentFilePath(forwardMessage.id) + (forwardMessage.attachment?.fileName ?: return@forEach)
-                        if (FileUtil.isFileValid(path)) {
-                            mediaList.add(LocalMedia.generateLocalMedia(context, path))
+                        //单条转发消息附件
+                        val forward = msg.forwardContext?.forwards?.singleOrNull() ?: return@forEach
+                        val forwardAttachment = forward.attachments?.firstOrNull()
+                        if (forwardAttachment?.isImage() == true || forwardAttachment?.isVideo() == true) {
+                            val forwardMessage = generateMessageFromForward(forward) as? TextChatMessage ?: return@forEach
+                            val path = FileUtil.getMessageAttachmentFilePath(forwardMessage.id) + (forwardMessage.attachment?.fileName ?: return@forEach)
+                            if (FileUtil.isFileValid(path)) {
+                                mediaList.add(LocalMedia.generateLocalMedia(context, path))
+                            }
                         }
                     }
                 }
 
-                val position = mediaList.indexOfFirst { it.path == filePath }
+                val position = if (isConfidential) 0 else mediaList.indexOfFirst { it.path == filePath }
                 mediaList to position
             }
 
@@ -1733,6 +1728,7 @@ class ChatMessageListFragment : Fragment() {
                 .isHidePreviewDownload(false)
                 .isAutoVideoPlay(true)
                 .isVideoPauseResumePlay(true)
+                .isShowConfidentialTip(isConfidential)
                 .setVideoPlayerEngine(ExoVideoPlayerEngine())
                 .setAttachViewLifecycle(object : IBridgeViewLifecycle {
                     override fun onViewCreated(fragment: Fragment?, view: View?, savedInstanceState: Bundle?) {}
@@ -1761,27 +1757,33 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun gotoDetailPage(rootView: View, message: TextChatMessage) {
-        Single.fromCallable {
-            val view = rootView.findViewById<ChatMessageContainerView>(R.id.contentContainer)
-            val bitmap = createBitmap(view.width, view.height)
-            bitmap.eraseColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1))
-            val canvas = Canvas(bitmap)
-            view.draw(canvas)
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val view = rootView.findViewById<ChatMessageContainerView>(R.id.contentContainer)
+                    val bitmap = createBitmap(view.width, view.height)
+                    bitmap.eraseColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1))
+                    val canvas = Canvas(bitmap)
+                    view.draw(canvas)
 
-            val byteArrayOutputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 50, byteArrayOutputStream)
-            val byteArray = byteArrayOutputStream.toByteArray()
-            val compressedBitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
-            byteArrayOutputStream.close()
-            MessageDetailBitmapHolder.setBitmap(compressedBitmap)
-        }.compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this@ChatMessageListFragment))
-            .subscribe({
+                    val byteArrayOutputStream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 50, byteArrayOutputStream)
+                    val byteArray = byteArrayOutputStream.toByteArray()
+                    val compressedBitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
+                    byteArrayOutputStream.close()
+                    MessageDetailBitmapHolder.setBitmap(compressedBitmap)
+                }
+                if (!isAdded || view == null) return@launch
                 MessageDetailActivity.startActivity(
                     requireActivity(),
                     message.id
                 )
-            }, { L.w { "[ChatMessageListFragment] showMessageDetail error: ${it.stackTraceToString()}" } })
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[ChatMessageListFragment] showMessageDetail error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private var isLoadingTop = false
@@ -1985,21 +1987,52 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
-    private fun registerCallStatusViewListener() {
-        onGoingCallStateManager.chatHeaderCallVisibility
-            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-            .distinctUntilChanged()
-            .onEach { isVisible ->
-                if (!isVisible) return@onEach
-                val targetPos = mScrollToPosition
-                if (targetPos == -1) return@onEach
-                mScrollToPosition = -1
-                binding.recyclerViewMessage.post {
-                    if (!isAdded || view == null || !this::binding.isInitialized) return@post
-                    scrollTo(targetPos)
+    /**
+     * Compensates scroll position when the call header bar appears during initial load.
+     *
+     * Listens for actual RecyclerView height decreases rather than relying on
+     * [OnGoingCallStateManager.chatHeaderCallVisibility] state transitions, which avoids:
+     * - Race conditions between async state changes and message loading
+     * - Page flicker caused by resetting global visibility state
+     *
+     * Triggers compensation only when ALL conditions are met:
+     * 1. RecyclerView height decreased (call header appeared and took space)
+     * 2. First render scroll has completed ([needsCallHeaderScrollCompensation] = true)
+     * 3. Call header is confirmed visible ([chatHeaderCallVisibility] = true)
+     *
+     * Uses [noSmoothScrollToBottom] to anchor the last message at the viewport bottom.
+     * Skipped for [ScrollAction.ToMessage] since the user explicitly jumped to a
+     * specific message and expects it to stay anchored.
+     */
+    private fun setupCallHeaderScrollCompensation() {
+        var lastKnownHeight = 0
+        binding.recyclerViewMessage.addOnLayoutChangeListener(
+            object : View.OnLayoutChangeListener {
+                override fun onLayoutChange(
+                    v: View, left: Int, top: Int, right: Int, bottom: Int,
+                    oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int
+                ) {
+                    val newHeight = bottom - top
+                    if (newHeight <= 0) return
+
+                    val heightDecreased = lastKnownHeight > 0 && newHeight < lastKnownHeight
+                    lastKnownHeight = newHeight
+
+                    if (!heightDecreased) return
+                    if (!needsCallHeaderScrollCompensation) return
+                    if (!onGoingCallStateManager.chatHeaderCallVisibility.value) return
+
+                    needsCallHeaderScrollCompensation = false
+                    v.removeOnLayoutChangeListener(this)
+
+                    v.post {
+                        if (!isAdded || view == null || !this@ChatMessageListFragment::binding.isInitialized) return@post
+                        if ((binding.recyclerViewMessage.adapter?.itemCount ?: 0) == 0) return@post
+                        binding.recyclerViewMessage.noSmoothScrollToBottom()
+                    }
                 }
             }
-            .launchIn(viewLifecycleOwner.lifecycleScope)
+        )
     }
 
     /**

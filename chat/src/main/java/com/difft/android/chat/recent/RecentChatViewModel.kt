@@ -11,13 +11,12 @@ import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sampleAfterFirst
-import com.difft.android.base.viewmodel.DisposableManageViewModel
+import androidx.lifecycle.ViewModel
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
@@ -34,7 +33,6 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.requests.ConversationSetRequestBody
 import dagger.hilt.android.lifecycle.HiltViewModel
 import difft.android.messageserialization.For
-import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -48,8 +46,8 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
@@ -73,8 +71,9 @@ class RecentChatViewModel @Inject constructor(
     private val appIconBadgeManager: AppIconBadgeManager,
     private val messageNotificationUtil: MessageNotificationUtil,
     private val callDataManagerLazy: Lazy<CallDataManager>,
-    private val contactorCacheManager: ContactorCacheManager
-) : DisposableManageViewModel() {
+    private val contactorCacheManager: ContactorCacheManager,
+    private val groupUtil: GroupUtil
+) : ViewModel() {
 
     private val language by lazy {
         LanguageUtils.getLanguage(application)
@@ -179,6 +178,8 @@ class RecentChatViewModel @Inject constructor(
             try {
                 dbRoomStore.createRoomIfNotExist(For.Account(globalServices.myId))
                 RoomChangeTracker.trackRoom(globalServices.myId, RoomChangeType.REFRESH)
+            } catch (e: CancellationException) {
+                throw e
             } catch (error: Exception) {
                 L.e { "createNote error: ${error.stackTraceToString()}" }
             }
@@ -190,7 +191,7 @@ class RecentChatViewModel @Inject constructor(
         L.d { "[Call] RecentChatViewModel retrieveCallingList" }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val response = callService.getCallingList(SecureSharedPrefsUtil.getToken()).await()
+                val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
                 if(response.status == 0) {
                     L.d { "[Call] RecentChatViewModel retrieve calling list from server: ${response.status}, ${response.data?.calls}" }
                     val joinAbleCalls = response.data?.calls
@@ -207,11 +208,9 @@ class RecentChatViewModel @Inject constructor(
 
                                     CallType.GROUP.type -> {
                                         call.conversation?.let { conversation ->
-                                            val groupOptional = GroupUtil.getSingleGroupInfo(application, conversation)
-                                                .firstOrError()
-                                                .await()
-                                            if (groupOptional.isPresent) {
-                                                call.callName = groupOptional.get().name
+                                            val group = groupUtil.getSingleGroupInfo(conversation)
+                                            if (group != null) {
+                                                call.callName = group.name
                                             } else {
                                                 call.type = CallType.INSTANT.type
                                                 call.conversation = null
@@ -255,21 +254,23 @@ class RecentChatViewModel @Inject constructor(
             For.Account(channelId)
         }
 
-        dbRoomStore.updatePinnedTime(
-            forWhat, if (isPinnedItem) {
-                System.currentTimeMillis()
-            } else {
-                null
-            }
-        ).subscribe(
-            {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    dbRoomStore.updatePinnedTime(
+                        forWhat, if (isPinnedItem) {
+                            System.currentTimeMillis()
+                        } else {
+                            null
+                        }
+                    )
+                }
                 L.i { "Successfully pin item $isPinnedItem $channelId" }
-            },
-            { error ->
-                L.i { "Error updating pin item $isPinnedItem $channelId $error" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.i { "Error updating pin item $isPinnedItem $channelId $e" }
             }
-        ).also {
-            manageDisposable(it)
         }
     }
 
@@ -292,31 +293,32 @@ class RecentChatViewModel @Inject constructor(
         context: Context,
         setting: ConversationSetRequestBody
     ) {
-        manageDisposable(
-            context
-                .getEntryPoint()
-                .getHttpClient()
-                .httpService
-                .fetchConversationSet(
-                    SecureSharedPrefsUtil.getBasicAuth(),
-                    setting
-                )
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .subscribe({
-                    if (it.status == 0) {
-//                        saveMuteStatus(setting.conversation, it.data?.muteStatus ?: 0)
-                    } else {
-                        it.reason?.let { message -> ToastUtil.show(message) }
-                    }
-                }) {
-                    it.message?.let { message -> ToastUtil.show(message) }
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    context
+                        .getEntryPoint()
+                        .getHttpClient()
+                        .httpService
+                        .fetchConversationSet(
+                            SecureSharedPrefsUtil.getBasicAuth(),
+                            setting
+                        )
                 }
-
-        )
+                if (result.status == 0) {
+//                    saveMuteStatus(setting.conversation, it.data?.muteStatus ?: 0)
+                } else {
+                    result.reason?.let { message -> ToastUtil.show(message) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 
-    //激活设备
-    fun activateDevice(): Single<BaseResponse<Any>> {
+    suspend fun activateDevice(): BaseResponse<Any> {
         return chatHttpClient.getService(HttpService::class.java)
             .activateDevice(SecureSharedPrefsUtil.getBasicAuth())
     }

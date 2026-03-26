@@ -43,8 +43,7 @@ fun ScreenSharingView(
         room.localParticipant.deviceRotation = 90
         onDispose {
             showSystemBars(activity.window)
-            // 仅在非宽屏设备上强制竖屏，宽屏设备允许自由旋转
-            if (!WindowSizeClassUtil.shouldUseDualPaneLayout(activity) && (activity.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)) {
+            if (!WindowSizeClassUtil.shouldUseDualPaneLayout(activity)) {
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             } else {
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

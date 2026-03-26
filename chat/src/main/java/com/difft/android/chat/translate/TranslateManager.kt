@@ -54,12 +54,13 @@ class TranslateManager @Inject constructor(
      * **使用Lingua 进行本地语言识别**
      */
     fun translateText(
+        scope: CoroutineScope,
         text: String,
         targetLang: String,
         onSuccess: (String) -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch(Dispatchers.IO) {
             if (languageDetector == null) {
                 try {
                     languageProfiles = LanguageProfileReader().readAllBuiltIn()

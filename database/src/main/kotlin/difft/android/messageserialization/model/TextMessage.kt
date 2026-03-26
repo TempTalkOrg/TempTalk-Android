@@ -19,7 +19,6 @@ open class TextMessage(
     var quote: Quote? = null,
     var forwardContext: ForwardContext? = null,
     var recall: Recall? = null,
-    var card: Card? = null,
     var mentions: List<Mention>? = null,
     var atPersons: String? = null,
     var reactions: List<Reaction>? = null,

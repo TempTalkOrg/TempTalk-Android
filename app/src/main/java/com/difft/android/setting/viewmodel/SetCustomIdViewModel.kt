@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import javax.inject.Inject
 
 
@@ -37,7 +36,7 @@ class SetCustomIdViewModel@Inject constructor() : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val token = SecureSharedPrefsUtil.getToken()
-                val response = settingRepo.setProfile(token = token, customUid = customUid).await()
+                val response = settingRepo.setProfile(token = token, customUid = customUid)
                 if (response.status != 0) {
                     L.e {"[Settings] submitCustomUid status:${response.status}, reason:${response.reason} "}
                     when (response.status) {

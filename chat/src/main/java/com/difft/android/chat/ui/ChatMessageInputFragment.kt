@@ -2,10 +2,10 @@ package com.difft.android.chat.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
-import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.Spanned
@@ -17,47 +17,43 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.fragment.app.Fragment
 import androidx.core.text.getSpans
 import androidx.core.view.isVisible
 import androidx.core.widget.doOnTextChanged
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import autodispose2.androidx.lifecycle.autoDispose
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
+import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
-import com.difft.android.base.fragment.DisposableManageFragment
+import com.difft.android.base.common.ScreenshotDetector
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.CopiedFileResult
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
+import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
-import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
-import com.difft.android.base.common.ScreenshotDetector
-import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.CombineForwardBar
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
+import com.difft.android.chat.presend.FilePreSendActivity
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isBotId
@@ -112,17 +108,14 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
-import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
 import org.difft.app.database.convertToContactorModels
@@ -134,7 +127,6 @@ import org.difft.app.database.members
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBMessageModel
-import org.difft.app.database.models.MessageModel
 import org.difft.app.database.sharedContacts
 import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
@@ -151,11 +143,11 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 @AndroidEntryPoint
-class ChatMessageInputFragment : DisposableManageFragment() {
+class ChatMessageInputFragment : Fragment() {
 
     // Use parent fragment as ViewModel owner when nested (in ChatFragment/GroupChatFragment),
     // otherwise use activity (when directly in Activity).
@@ -192,6 +184,9 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     private var currentDraft = Draft()   // hold in-memory copy
 
     @Inject
+    lateinit var groupUtil: GroupUtil
+
+    @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
 
     @Inject
@@ -219,9 +214,13 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     private var inputLayoutAttachListener: View.OnAttachStateChangeListener? = null
     private var updateConfidentialJob: Job? = null
     private var lastInputContentLength = 0
+    private var lastInputHeight = 0
 
     /** Cached flag: whether to hide confidential toggle (group member limit or bot chat) */
     private var shouldHideConfidential = false
+
+    /** Whether confidential button is currently collapsed to the right side */
+    private var isConfidentialCollapsed = false
 
     private val onPicturePermissionForMessage = registerPermission {
         onPicturePermissionForMessageResult(it)
@@ -231,6 +230,11 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         const val OVERSIZED_TEXT_THRESHOLD = 4096  // 4KB - when to convert text to file
         const val OVERSIZED_TEXT_BODY_LENGTH = 2048  // 2KB - truncated text in message body
         const val MAX_TEXT_FILE_SIZE = 10 * 1024 * 1024  // 10MB - maximum text file size
+
+        // If focus was lost more than this before the screenshot callback, the notification
+        // panel was likely open. The callback has ~944ms system delay (Pixel Android 14+),
+        // so 2000ms safely covers ROM variation while staying below the notification-panel minimum.
+        private const val SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
     }
 
     /**
@@ -281,20 +285,19 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            ContactorUtil.contactsUpdate.collect {
+                if (!isAdded || view == null) return@collect
                 if (it.contains(chatViewModel.forWhat.id)) {
                     updateViewByFriendCheck()
                 }
-            }, { L.w { "[ChatMessageInputFragment] observe friendRemoved error: ${it.stackTraceToString()}" } })
+            }
+        }
 
-        chatViewModel.messageQuoted
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                val message = it as? TextChatMessage ?: return@subscribe
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.messageQuoted.collect {
+                if (!isAdded || view == null) return@collect
+                val message = it as? TextChatMessage ?: return@collect
                 val text = createQuoteContent(message)
 
                 quote = Quote(it.timeStamp, it.authorId, text, null)
@@ -314,91 +317,94 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     .showSoftInput(binding.edittextInput, InputMethodManager.SHOW_IMPLICIT)
                 currentDraft = currentDraft.copy(quote = quote)
                 draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
-            }, {})
+            }
+        }
 
-        chatViewModel.messageForward
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                val messageToForward = it.first as? TextChatMessage ?: return@subscribe
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.messageForward.collect {
+                if (!isAdded || view == null) return@collect
+                val messageToForward = it.first as? TextChatMessage ?: return@collect
                 val saveToNote = it.second
-                Single.fromCallable {
-                    wcdb.message.getFirstObject(DBMessageModel.id.eq(messageToForward.id))?.let { listOf(it) }.orEmpty()
-                }
-                    .compose(RxUtil.getSingleSchedulerComposer<List<MessageModel>>())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({ messages: List<MessageModel>? ->
-                        if (!messages.isNullOrEmpty()) {
-                            val message = messages.first()
-                            val sharedContactList = message.sharedContacts()
-                            if (message.type == 0 || message.type == 1) {
-                                val content: String?
-                                if (sharedContactList.isNotEmpty()) {
-                                    content = ResUtils.getString(R.string.chat_contact_card)
+                try {
+                    val messages = withContext(Dispatchers.IO) {
+                        wcdb.message.getFirstObject(DBMessageModel.id.eq(messageToForward.id))?.let { listOf(it) }.orEmpty()
+                    }
+                    if (!isAdded || view == null) return@collect
+                    if (messages.isNotEmpty()) {
+                        val message = messages.first()
+                        val sharedContactList = message.sharedContacts()
+                        if (message.type == 0 || message.type == 1) {
+                            val content: String?
+                            if (sharedContactList.isNotEmpty()) {
+                                content = ResUtils.getString(R.string.chat_contact_card)
 
-                                    val sharedContactId = sharedContactList.getOrNull(0)?.phone?.getOrNull(0)?.value
-                                    val sharedContactName = sharedContactList.getOrNull(0)?.name?.displayName
-                                    forwardContext = ForwardContext(emptyList(), false, sharedContactId, sharedContactName)
-                                } else if (message.forwardContextDatabaseId != null) {
-                                    content = ResUtils.getString(R.string.chat_history)
-                                    forwardContext = message.forwardContext()
-                                    forwardContext?.forwards?.forEach { forward ->
-                                        changeAttachmentStatus(forward)
-                                    }
+                                val sharedContactId = sharedContactList.getOrNull(0)?.phone?.getOrNull(0)?.value
+                                val sharedContactName = sharedContactList.getOrNull(0)?.name?.displayName
+                                forwardContext = ForwardContext(emptyList(), false, sharedContactId, sharedContactName)
+                            } else if (message.forwardContextDatabaseId != null) {
+                                content = ResUtils.getString(R.string.chat_history)
+                                forwardContext = message.forwardContext()
+                                forwardContext?.forwards?.forEach { forward ->
+                                    changeAttachmentStatus(forward)
+                                }
+                            } else {
+                                content = if (messageToForward.isAttachmentMessage()) {
+                                    ResUtils.getString(R.string.chat_message_attachment)
                                 } else {
-                                    content = if (messageToForward.isAttachmentMessage()) {
-                                        ResUtils.getString(R.string.chat_message_attachment)
-                                    } else {
-                                        messageToForward.message.toString()
-                                    }
-                                    forwardContext = ForwardContext(mutableListOf<Forward>().apply {
-                                        this.add(
-                                            Forward(
-                                                messageToForward.timeStamp,
-                                                0,
-                                                isGroup,
-                                                messageToForward.authorId,
-                                                message.messageText,
-                                                messageToForward.attachment?.let { attach ->
-                                                    attach.status = AttachmentStatus.LOADING.code
-                                                    listOf(attach)
-                                                },
-                                                null,
-                                                messageToForward.card,
-                                                messageToForward.mentions,
-                                                messageToForward.systemShowTimestamp
-                                            )
+                                    messageToForward.message.toString()
+                                }
+                                forwardContext = ForwardContext(mutableListOf<Forward>().apply {
+                                    this.add(
+                                        Forward(
+                                            messageToForward.timeStamp,
+                                            0,
+                                            isGroup,
+                                            messageToForward.authorId,
+                                            message.messageText,
+                                            messageToForward.attachment?.let { attach ->
+                                                attach.status = AttachmentStatus.LOADING.code
+                                                listOf(attach)
+                                            },
+                                            null,
+                                            messageToForward.mentions,
+                                            messageToForward.systemShowTimestamp
                                         )
-                                    }, isGroup)
-                                }
-
-                                if (saveToNote) {
-                                    selectChatsUtils.saveToNotes(
-                                        requireActivity(),
-                                        content,
-                                        forwardContext
                                     )
-                                } else {
-                                    selectChatsUtils.showChatSelectAndSendDialog(
-                                        requireActivity(),
-                                        content,
-                                        null,
-                                        null,
-                                        forwardContext?.let { listOf(it) },
-                                    )
-                                }
-                                forwardContext = null
+                                }, isGroup)
                             }
-                        }
-                    }) { error: Throwable -> L.w { "[ChatMessageInputFragment] forward message error: ${error.stackTraceToString()}" } }
-            }, { L.w { "[ChatMessageInputFragment] observe messageQuoted error: ${it.stackTraceToString()}" } })
 
-        chatViewModel.messageRecall
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+                            if (saveToNote) {
+                                selectChatsUtils.saveToNotes(
+                                    requireActivity(),
+                                    content,
+                                    forwardContext
+                                )
+                            } else {
+                                selectChatsUtils.showChatSelectAndSendDialog(
+                                    requireActivity(),
+                                    content,
+                                    null,
+                                    null,
+                                    forwardContext?.let { listOf(it) },
+                                )
+                            }
+                            forwardContext = null
+                        }
+                    }
+                } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w { "[ChatMessageInputFragment] forward message error: ${e.stackTraceToString()}" }
+                }
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.messageRecall.collect {
+                if (!isAdded || view == null) return@collect
                 showRecallDialog(it)
-            }, {})
+            }
+        }
 
         // Subscribe to batch recall messages using coroutines
         viewLifecycleOwner.lifecycleScope.launch {
@@ -407,22 +413,22 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
         }
 
-        chatViewModel.messageEmojiReaction
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.messageEmojiReaction.collect {
+                if (!isAdded || view == null) return@collect
                 sendEmojiReaction(it)
                 if (!it.remove && it.actionFrom == EmojiReactionFrom.EMOJI_DIALOG) {
                     globalConfigsManager.updateMostUseEmoji(it.emoji)
                 }
-            }, {})
+            }
+        }
 
-        chatViewModel.messageResend
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ message ->
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.messageResend.collect { message ->
+                if (!isAdded || view == null) return@collect
                 resendMessage(message.id)
-            }, {})
+            }
+        }
 
         // Collect text size changes at Fragment level using StateFlow
         viewLifecycleOwner.lifecycleScope.launch {
@@ -433,35 +439,9 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             }
         }
 
-        SendMessageUtils.sendMessage
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.contactId == chatViewModel.forWhat.id) {
-                    if (it.isPrefill) {
-                        binding.edittextInput.requestFocus()
-                        binding.edittextInput.setText(it.text)
-                        binding.edittextInput.setSelection(binding.edittextInput.text?.length ?: 0)
-
-                        if (it.isForSpooky && !it.mentions.isNullOrEmpty()) {
-                            mentionsSelectedContacts.addAll(it.mentions)
-                            Observable.timer(500, TimeUnit.MILLISECONDS)
-                                .compose(RxUtil.getSchedulerComposer())
-                                .to(RxUtil.autoDispose(this))
-                                .subscribe({
-                                    updateMentions(false)
-                                }, { e -> L.w { "[ChatMessageInputFragment] updateMentions delay error: ${e.stackTraceToString()}" } })
-                        }
-                    } else {
-                        sendTextPush(it.text)
-                    }
-                }
-            }, { L.w { "[ChatMessageInputFragment] observe messageSend error: ${it.stackTraceToString()}" } })
-
-        chatViewModel.confidentialViewReceipt
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.confidentialViewReceipt.collect {
+                if (!isAdded || view == null) return@collect
                 val readPosition = ReadPosition(
                     chatViewModel.forWhat.id.takeIf { chatViewModel.forWhat is For.Group },
                     it.timeStamp,
@@ -472,7 +452,8 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 ApplicationDependencies.getJobManager().add(
                     pushReadReceiptSendJobFactory.create(it.authorId, chatViewModel.forWhat, listOf(it.timeStamp), readPosition, 1)
                 )
-            }, { e -> L.w { "[ChatMessageInputFragment] observe confidentialViewReceipt error: ${e.stackTraceToString()}" } })
+            }
+        }
 
         chatViewModel.selectMessagesState.onEach {
             binding.combineForward.isVisible = it.editModel
@@ -513,29 +494,27 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         registerKeyboardVisibilityListener()
 
         chatViewModel.listClick
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .onEach {
                 binding.llChatActions.visibility = View.GONE
 
                 binding.buttonMoreActions.visibility = View.VISIBLE
                 binding.buttonMoreActionsClose.visibility = View.GONE
 
                 updateSubmitButtonView()
-            }, { e -> L.w { "[ChatMessageInputFragment] observe recordState error: ${e.stackTraceToString()}" } })
+            }
+            .catch { e -> L.w { "[ChatMessageInputFragment] observe recordState error: ${e.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.voiceMessageSend
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ path ->
+            .onEach { path ->
                 val mimeType = MediaUtil.getMimeType(requireContext(), path.toUri()) ?: ""
                 prepareSendAttachmentPush(path.toUri(), mimeType, isAudioMessage = true)
-            }, { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.showOrHideFullInput
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .onEach {
                 if (!it.first) {
                     binding.edittextInput.apply {
                         requestFocus()
@@ -544,30 +523,26 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         ViewUtil.focusAndShowKeyboard(this)
                     }
                 }
-            }, { L.w { "[ChatMessageInputFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[ChatMessageInputFragment] observe showOrHideFullInput error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
         loadDraftOneTime(chatViewModel.forWhat.id)
 
         chatViewModel.avatarLongClicked
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contact ->
+            .onEach { contact ->
                 mentionsSelectedContacts.add(contact)
                 insertTextToEdittext("@${contact.getDisplayNameWithoutRemarkForUI()} ")
                 updateMentions(false)
                 ViewUtil.focusAndShowKeyboard(binding.edittextInput)
-            }, { L.w { "[ChatMessageInputFragment] observe selectedMention error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[ChatMessageInputFragment] observe selectedMention error: ${it.stackTraceToString()}" } }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
     private fun updateInputViewSize(isLarger: Boolean? = null) {
-        val message: String = binding.edittextInput.text.toString().trim()
-        if (message.isEmpty()) {
-            binding.edittextInput.textSize = 12f
-        } else {
-            // Use provided value, otherwise get current value directly
-            val textSizeLarger = isLarger ?: TextSizeUtil.isLarger
-            binding.edittextInput.textSize = if (textSizeLarger) 21f else 16f
-        }
+        val textSizeLarger = isLarger ?: TextSizeUtil.isLarger
+        binding.edittextInput.textSize = if (textSizeLarger) 21f else 16f
     }
 
     private var isVoiceMode: Boolean = false
@@ -578,6 +553,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             binding.clRightActions.visibility = View.GONE
             binding.buttonVoice.visibility = View.GONE
             binding.buttonKeyboard.visibility = View.GONE
+            binding.buttonMedia.visibility = View.GONE
             if (!TextUtils.isEmpty(message)) {
                 binding.clRightActions.visibility = View.VISIBLE
                 binding.buttonSubmit.visibility = View.VISIBLE
@@ -605,6 +581,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 }
             }
         }
+        updateInputContentGoneMargin()
+    }
+
+    private fun updateInputContentGoneMargin() {
+        val params = binding.clInputContent.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        val needExtraMargin = !isGroup && !isFriend
+        params.goneStartMargin = if (needExtraMargin) (12 * resources.displayMetrics.density).toInt() else 0
+        binding.clInputContent.layoutParams = params
     }
 
     private fun initView() {
@@ -691,16 +675,15 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         binding.edittextInput.setOnClickListener {
             binding.llChatActions.visibility = View.GONE
             //防止闪烁
-            Observable.timer(100, TimeUnit.MILLISECONDS)
-                .compose(RxUtil.getSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    binding.edittextInput.apply {
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                    }
-                    ViewUtil.focusAndShowKeyboard(binding.edittextInput)
-                }, { e -> L.w { "[ChatMessageInputFragment] enableFocusWithDelay error: ${e.stackTraceToString()}" } })
+            viewLifecycleOwner.lifecycleScope.launch {
+                delay(100)
+                if (!isAdded || view == null) return@launch
+                binding.edittextInput.apply {
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                }
+                ViewUtil.focusAndShowKeyboard(binding.edittextInput)
+            }
         }
 
         binding.buttonMedia.setOnClickListener {
@@ -731,7 +714,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     // 从数据库重新查询联系人信息，避免泄漏备注名
                     val displayName = withContext(Dispatchers.IO) {
                         try {
-                            val response = ContactorUtil.getContactWithID(requireContext(), contact.id).await()
+                            val response = ContactorUtil.getContactWithID(requireContext(), contact.id)
                             if (response.isPresent) {
                                 response.get().getDisplayNameWithoutRemarkForUI()
                             } else {
@@ -755,7 +738,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         binding.buttonSubmit.setOnClickListener {
             if (isGroup) { //判断是否仅协调人可发言
                 val group = chatUIData?.group
-                if (group != null && !GroupUtil.canSpeak(group, globalServices.myId)) {
+                if (group != null && !groupUtil.canSpeak(group, globalServices.myId)) {
                     ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
                     return@setOnClickListener
                 }
@@ -824,20 +807,19 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         binding.buttonMoreActions.setOnClickListener {
             ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
 
-            Observable.timer(100, TimeUnit.MILLISECONDS)
-                .compose(RxUtil.getSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    binding.llChatActions.visibility = View.VISIBLE
+            viewLifecycleOwner.lifecycleScope.launch {
+                delay(100)
+                if (!isAdded || view == null) return@launch
+                binding.llChatActions.visibility = View.VISIBLE
 
-                    binding.buttonMoreActions.visibility = View.GONE
-                    binding.buttonMoreActionsClose.visibility = View.VISIBLE
-                    chatViewModel.setVoiceVisibility(false)
-                    chatViewModel.showChatActions()
+                binding.buttonMoreActions.visibility = View.GONE
+                binding.buttonMoreActionsClose.visibility = View.VISIBLE
+                chatViewModel.setVoiceVisibility(false)
+                chatViewModel.showChatActions()
 
-                    isVoiceMode = false
-                    updateSubmitButtonView()
-                }, { e -> L.w { "[ChatMessageInputFragment] exitVoiceMode delay error: ${e.stackTraceToString()}" } })
+                isVoiceMode = false
+                updateSubmitButtonView()
+            }
         }
 
         binding.buttonMoreActionsClose.setOnClickListener {
@@ -853,20 +835,19 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         binding.buttonVoice.setOnClickListener {
             ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
 
-            Observable.timer(100, TimeUnit.MILLISECONDS)
-                .compose(RxUtil.getSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    isVoiceMode = true
-                    updateSubmitButtonView()
+            viewLifecycleOwner.lifecycleScope.launch {
+                delay(100)
+                if (!isAdded || view == null) return@launch
+                isVoiceMode = true
+                updateSubmitButtonView()
 
-                    chatViewModel.setVoiceVisibility(true)
+                chatViewModel.setVoiceVisibility(true)
 
-                    binding.llChatActions.visibility = View.GONE
+                binding.llChatActions.visibility = View.GONE
 
-                    binding.buttonMoreActions.visibility = View.VISIBLE
-                    binding.buttonMoreActionsClose.visibility = View.GONE
-                }, { e -> L.w { "[ChatMessageInputFragment] showSticker delay error: ${e.stackTraceToString()}" } })
+                binding.buttonMoreActions.visibility = View.VISIBLE
+                binding.buttonMoreActionsClose.visibility = View.GONE
+            }
         }
 
         binding.buttonKeyboard.setOnClickListener {
@@ -910,22 +891,33 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             if (!isAdded || view == null) return@OnGlobalLayoutListener
             val currentLength = binding.edittextInput.text?.length ?: 0
             if (currentLength != lastInputContentLength) {
-                chatViewModel.emitInputHeightChanged()
                 lastInputContentLength = currentLength
-                //防止edittextInput行数变化抖动
+                val currentHeight = binding.edittextInput.height
+                val prevHeight = lastInputHeight
+                if (prevHeight == 0) {
+                    // 首次获取高度，仅记录，不触发滚动
+                    lastInputHeight = currentHeight
+                } else if (currentHeight != prevHeight) {
+                    lastInputHeight = currentHeight
+                    chatViewModel.emitInputHeightChanged()
+                }
+                // Hysteresis: collapse at >3 lines, expand at ≤2 lines, no change at 3 lines
                 updateConfidentialJob?.cancel()
                 updateConfidentialJob = viewLifecycleOwner.lifecycleScope.launch {
                     delay(200)
-                    // If confidential is hidden (group limit or bot), keep both icons hidden
+                    if (!isAdded || view == null) return@launch
+                    val lineCount = binding.edittextInput.lineCount
                     if (shouldHideConfidential) {
                         binding.ivConfidential.visibility = View.GONE
                         binding.ivConfidentialRight.visibility = View.GONE
-                        binding.ivFullInputOpen.visibility = if (binding.edittextInput.lineCount > 3) View.VISIBLE else View.GONE
-                    } else if (binding.edittextInput.lineCount > 3) {
+                        binding.ivFullInputOpen.visibility = if (lineCount > 3) View.VISIBLE else View.GONE
+                    } else if (!isConfidentialCollapsed && lineCount > 3) {
+                        isConfidentialCollapsed = true
                         binding.ivConfidential.visibility = View.GONE
                         binding.ivConfidentialRight.visibility = View.VISIBLE
                         binding.ivFullInputOpen.visibility = View.VISIBLE
-                    } else {
+                    } else if (isConfidentialCollapsed && lineCount <= 2) {
+                        isConfidentialCollapsed = false
                         binding.ivConfidential.visibility = View.VISIBLE
                         binding.ivConfidentialRight.visibility = View.GONE
                         binding.ivFullInputOpen.visibility = View.GONE
@@ -986,7 +978,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 //            binding.buttonNewCall.setOnClickListener {
 //                if (chatViewModel.forWhat is For.Group) {
 //                    val group = chatUIData?.group ?: return@setOnClickListener
-//                    if (!GroupUtil.canSpeak(group, globalServices.myId)) {
+//                    if (!groupUtil.canSpeak(group, globalServices.myId)) {
 //                        ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
 //                        return@setOnClickListener
 //                    }
@@ -1112,6 +1104,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     if (!isAdded || view == null) return@withContext
                     updateSubmitButtonView()
                     updateBottomView()
+                    updateConfidential()
                     if (!isFriend) {
                         checkAndUpdateFriendRequestStatus()
                     }
@@ -1140,6 +1133,9 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             if (list.isNotEmpty()) {
                 val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
                     putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, ArrayList(list))
+                    putExtra(MediaSelectionActivity.EXTRA_CONFIDENTIAL_MODE, chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0)
+                    putExtra(MediaSelectionActivity.EXTRA_SHOW_CONFIDENTIAL_TOGGLE, !shouldHideConfidential)
+                    putExtra(MediaSelectionActivity.EXTRA_CONVERSATION_ID, chatViewModel.forWhat.id)
                 }
                 mediaSelectActivityLauncher.launch(intent)
             }
@@ -1158,25 +1154,25 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 val sendResult = MediaSendActivityResult.fromData(intent)
                 val list = sendResult.media
                 val body = sendResult.body
-                Observable.interval(0, 300, TimeUnit.MILLISECONDS)
-                    .compose(RxUtil.getSchedulerComposer())
-                    .takeUntil { number -> number >= list.size - 1 }
-                    .doOnNext { index ->
-                        val media = list[index.toInt()]
-                        // Use original filename, fallback to extracting from original path (not realPath which may be UUID)
-                        val fileName = media.fileName.takeIf { !it.isNullOrEmpty() }
-                            ?: FileUtils.getFileName(media.path)
-                        prepareSendAttachmentPush(media.realPath.toUri(), media.mimeType, fileName)
-                    }
-                    .ignoreElements()
-                    .delay(500, TimeUnit.MILLISECONDS)
-                    .andThen(Completable.fromAction {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        list.forEachIndexed { index, media ->
+                            // Use original filename, fallback to extracting from original path (not realPath which may be UUID)
+                            val fileName = media.fileName.takeIf { !it.isNullOrEmpty() }
+                                ?: FileUtils.getFileName(media.path)
+                            prepareSendAttachmentPush(media.realPath.toUri(), media.mimeType, fileName)
+                            if (index < list.size - 1) delay(300)
+                        }
+                        delay(500)
                         if (body.isNotEmpty()) {
                             sendTextPush(body)
                         }
-                    })
-                    .autoDispose(this@ChatMessageInputFragment, Lifecycle.Event.ON_DESTROY)
-                    .subscribe({}, { error -> L.w { "[ChatMessageInputFragment] sendEditedMessage error: ${error.stackTraceToString()}" } })
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[ChatMessageInputFragment] sendEditedMessage error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
         }
     }
@@ -1225,10 +1221,52 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 }
                 val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
                     putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, arrayListOf(localMedia))
+                    putExtra(MediaSelectionActivity.EXTRA_CONFIDENTIAL_MODE, chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0)
+                    putExtra(MediaSelectionActivity.EXTRA_SHOW_CONFIDENTIAL_TOGGLE, !shouldHideConfidential)
+                    putExtra(MediaSelectionActivity.EXTRA_CONVERSATION_ID, chatViewModel.forWhat.id)
                 }
                 mediaSelectActivityLauncher.launch(intent)
             } else {
-                prepareSendAttachmentPush(path.toUri(), mimeType ?: "", originalFileName)
+                val filePreSendIntent = FilePreSendActivity.createIntent(
+                    context = requireContext(),
+                    filePath = path,
+                    fileName = originalFileName ?: "",
+                    mimeType = mimeType ?: "",
+                    fileSize = fileSize,
+                    confidentialMode = chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0,
+                    showConfidentialToggle = !shouldHideConfidential,
+                    conversationId = chatViewModel.forWhat.id
+                )
+                filePreSendLauncher.launch(filePreSendIntent)
+            }
+        }
+    }
+
+
+    private val filePreSendLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (!isAdded || view == null) return@registerForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.let { intent ->
+                val filePath = intent.getStringExtra(FilePreSendActivity.RESULT_FILE_PATH) ?: return@let
+                val fileName = intent.getStringExtra(FilePreSendActivity.RESULT_FILE_NAME) ?: ""
+                val mimeType = intent.getStringExtra(FilePreSendActivity.RESULT_MIME_TYPE) ?: ""
+                val body = intent.getStringExtra(FilePreSendActivity.RESULT_BODY) ?: ""
+
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        prepareSendAttachmentPush(filePath.toUri(), mimeType, fileName)
+                        if (body.isNotEmpty()) {
+                            delay(500)
+                            sendTextPush(body)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[ChatMessageInputFragment] filePreSend error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
         }
     }
@@ -1350,10 +1388,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 || (preLetter.isLetterOrDigit().not() && preLetter.isWhitespace().not())
 
         if (canShow && mentionsSearchKeyStartPos != -1) {
-//            DBContactsStore.queryContactWithName(key)
-//                .compose(RxUtil.getSingleSchedulerComposer())
-//                .to(RxUtil.autoDispose(this))
-//                .subscribe({ contactsOther ->
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
 
                 val contacts = mutableListOf<ContactsAtAdapter.Item>()
@@ -1384,7 +1418,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     }
                 }
             }
-//                }, { L.w { it.stackTraceToString() } })
         } else {
             binding.llAt.visibility = View.GONE
             contactsAtAdapter.submitList(emptyList())
@@ -1430,8 +1463,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 binding.clFriends.visibility = View.GONE
 
                 binding.clLeftActions.visibility = View.VISIBLE
-                // Bot conversations should not show confidential button
-                binding.ivConfidential.visibility = if (chatViewModel.forWhat.id.isBotId()) View.GONE else View.VISIBLE
             } else {
                 val isReceivedFriendRequest = ContactorUtil.hasContactRequest(chatViewModel.forWhat.id)
 
@@ -1456,7 +1487,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 }
 
                 binding.clLeftActions.visibility = View.GONE
-                binding.ivConfidential.visibility = View.GONE
             }
 //            }
 
@@ -1475,19 +1505,20 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     lateinit var chatHttpClient: ChativeHttpClient
 
     private fun checkAndUpdateFriendRequestStatus() {
-        chatHttpClient.httpService
-            .fetchShareConversationConfig(
-                SecureSharedPrefsUtil.getToken(),
-                GetConversationShareRequestBody(
-                    listOf(messageArchiveManager.conversationParams(chatViewModel.forWhat.id)),
-                    true
-                )
-            )
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.conversations?.firstOrNull()?.let { config ->
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    chatHttpClient.httpService
+                        .fetchShareConversationConfig(
+                            SecureSharedPrefsUtil.getToken(),
+                            GetConversationShareRequestBody(
+                                listOf(messageArchiveManager.conversationParams(chatViewModel.forWhat.id)),
+                                true
+                            )
+                        )
+                }
+                if (response.status == 0) {
+                    response.data?.conversations?.firstOrNull()?.let { config ->
                         if (config.askedVersion > 0) {
                             ContactorUtil.updateContactRequestStatus(chatViewModel.forWhat.id)
                             updateBottomView()
@@ -1496,8 +1527,12 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         }
                     }
                 }
-            }, { L.w { "[ChatMessageInputFragment] checkIsFriendExist error: ${it.stackTraceToString()}" } })
-
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[ChatMessageInputFragment] checkIsFriendExist error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
 
@@ -1514,7 +1549,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                     updateConfidentialUI(hideConfidential)
                 }
             }
-        } else if (chatViewModel.forWhat.id.isBotId()) {
+        } else if (chatViewModel.forWhat.id.isBotId() || !isFriend) {
             updateConfidentialUI(true)
         } else {
             updateConfidentialUI(false)
@@ -1531,29 +1566,65 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             binding.ivConfidentialRight.visibility = View.GONE
             binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
             binding.vConfidentialLine.visibility = View.GONE
+            applyConfidentialAreaStyle(false)
         } else {
-            // Show appropriate icon based on input line count
-            val showRightIcon = binding.edittextInput.lineCount > 3
-            binding.ivConfidential.visibility = if (showRightIcon) View.GONE else View.VISIBLE
-            binding.ivConfidentialRight.visibility = if (showRightIcon) View.VISIBLE else View.GONE
+            // Show appropriate icon based on input line count (same hysteresis as listener)
+            val lineCount = binding.edittextInput.lineCount
+            if (lineCount > 3) isConfidentialCollapsed = true
+            else if (lineCount <= 2) isConfidentialCollapsed = false
+            // lineCount == 3: keep current state
+            binding.ivConfidential.visibility = if (isConfidentialCollapsed) View.GONE else View.VISIBLE
+            binding.ivConfidentialRight.visibility = if (isConfidentialCollapsed) View.VISIBLE else View.GONE
 
-            listOf(binding.ivConfidential, binding.ivConfidentialRight).forEach { view ->
-                if (chatSettingViewModel.currentConversationSet?.confidentialMode == 1) {
-                    val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
-                    view.setImageDrawable(drawable)
-                    view.tag = 1
-                    binding.edittextInput.hint = getString(R.string.chat_message_input_hint_confidential)
-                    binding.vConfidentialLine.visibility = View.VISIBLE
-                } else {
-                    val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
-                        this.setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon))
-                    }
-                    view.setImageDrawable(drawable)
-                    view.tag = 0
-                    binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
-                    binding.vConfidentialLine.visibility = View.GONE
+            val isConfidentialOn = chatSettingViewModel.currentConversationSet?.confidentialMode == 1
+            val drawable = if (isConfidentialOn) {
+                ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_enable)
+            } else {
+                ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
+                    setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon))
                 }
             }
+            listOf(binding.ivConfidential, binding.ivConfidentialRight).forEach { view ->
+                view.setImageDrawable(drawable)
+                view.tag = if (isConfidentialOn) 1 else 0
+            }
+            if (isConfidentialOn) {
+                binding.edittextInput.hint = getString(R.string.chat_message_input_hint_confidential)
+                binding.vConfidentialLine.visibility = View.VISIBLE
+                applyConfidentialAreaStyle(true)
+            } else {
+                binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
+                binding.vConfidentialLine.visibility = View.GONE
+                applyConfidentialAreaStyle(false)
+            }
+        }
+    }
+
+    private fun applyConfidentialAreaStyle(isConfidential: Boolean) {
+        if (isConfidential) {
+            val overlayColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg_confidential_area)
+            // Apply blue overlay to the entire input area and root
+            binding.root.setBackgroundColor(overlayColor)
+            binding.clInput.setBackgroundColor(overlayColor)
+            binding.llChatActions.setBackgroundColor(overlayColor)
+            // Input field: bg1 with line border
+            binding.clInputContent.setBackgroundResource(R.drawable.chat_msg_input_bg_confidential)
+            // Action icon containers: bg1 background (no border)
+            binding.clContact.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential)
+            binding.clAttachment.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential)
+            binding.clAtImage.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential)
+        } else {
+            val bg1Color = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1)
+            // Restore normal backgrounds
+            binding.root.setBackgroundColor(bg1Color)
+            binding.clInput.background = null
+            binding.llChatActions.background = null
+            // Input field: normal bg2 background
+            binding.clInputContent.setBackgroundResource(R.drawable.chat_msg_input_field_bg)
+            // Action icon containers: normal bg2 background
+            binding.clContact.setBackgroundResource(R.drawable.chat_msg_input_bg)
+            binding.clAttachment.setBackgroundResource(R.drawable.chat_msg_input_bg)
+            binding.clAtImage.setBackgroundResource(R.drawable.chat_msg_input_bg)
         }
     }
 
@@ -1592,13 +1663,13 @@ class ChatMessageInputFragment : DisposableManageFragment() {
      */
     private fun batchRecallMessages(messageIds: Set<String>) {
         ComposeDialogManager.showWait(requireActivity(), cancelable = false)
-        
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 // Track pending message IDs
                 val pendingIds = messageIds.toMutableSet()
                 var hasFailure = false
-                
+
                 // Start listening for recall results before submitting jobs
                 val resultJob = launch {
                     RecallResultTracker.recallResults.collect { result ->
@@ -1611,27 +1682,27 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         }
                     }
                 }
-                
+
                 // Submit all recall jobs
                 messageIds.forEach { messageId ->
                     submitRecallJob(messageId)
                 }
-                
+
                 // Wait for all results with timeout (30 seconds max)
                 val timeoutMs = 30_000L
                 val startTime = System.currentTimeMillis()
                 while (pendingIds.isNotEmpty() && (System.currentTimeMillis() - startTime) < timeoutMs) {
                     delay(100)
                 }
-                
+
                 // Cancel the collector job
                 resultJob.cancel()
-                
+
                 // Show failure toast if any recall failed or timed out
                 if (hasFailure || pendingIds.isNotEmpty()) {
                     ToastUtil.show(R.string.operation_failed)
                 }
-                
+
                 // Close selection mode after batch recall
                 chatViewModel.selectModel(false)
             } catch (e: Exception) {
@@ -1806,7 +1877,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 quote,
                 forwardContext,
                 recall,
-                null,
                 mentions.toMutableList(),
                 atPersonsString,
                 reactions.toMutableList(),
@@ -1853,12 +1923,13 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         if (showLoading) {
             ComposeDialogManager.showWait(requireActivity(), "")
         }
-        ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source, action)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source, action)
+                }
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
+                if (response.status == 0) {
                     if (action == "accept") {
                         isFriend = true
                         updateSubmitButtonView()
@@ -1866,12 +1937,15 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         ContactorUtil.emitFriendStatusUpdate(chatViewModel.forWhat.id, true)
                     }
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    response.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
-                it.message?.let { message -> ToastUtil.show(message) }
+                e.message?.let { message -> ToastUtil.show(message) }
             }
+        }
     }
 
 
@@ -1900,11 +1974,11 @@ class ChatMessageInputFragment : DisposableManageFragment() {
         val fileName = originalFileName ?: FileUtils.getFileName(attachmentUri.path)
         val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
 
-        Single.fromCallable { FileUtils.copy(attachmentUri.path, filePath) }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this@ChatMessageInputFragment))
-            .subscribe({
-//                MyBlobProvider.getInstance().delete(attachmentUri)
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    FileUtils.copy(attachmentUri.path, filePath)
+                }
                 FileUtil.deleteTempFile(FileUtils.getFileName(attachmentUri.path))
                 sendTextPush(
                     timeStamp = timeStamp,
@@ -1916,7 +1990,12 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         isAudioMessage = isAudioMessage
                     )
                 )
-            }, { L.w { "[ChatMessageInputFragment] prepareSendAttachmentPush error: ${it.stackTraceToString()}" } })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[ChatMessageInputFragment] prepareSendAttachmentPush error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private fun sendEmojiReaction(emojiReactionEvent: EmojiReactionEvent) {
@@ -1968,7 +2047,6 @@ class ChatMessageInputFragment : DisposableManageFragment() {
             null,
             null,
             null,
-            null,
             mutableListOf(reaction),
             null,
             null,
@@ -1978,7 +2056,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
 
     private fun recallMessage(messageID: String) {
         ComposeDialogManager.showWait(requireActivity(), cancelable = false)
-        
+
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 // Start listening for recall result before submitting job
@@ -1994,7 +2072,7 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                         }
                     }
                 }
-                
+
                 val originMessage = withContext(Dispatchers.IO) {
                     wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))
                 }
@@ -2046,14 +2124,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 while (!resultReceived && (System.currentTimeMillis() - startTime) < timeoutMs) {
                     delay(100)
                 }
-                
+
                 resultJob.cancel()
-                
+
                 // If timeout without receiving result, dismiss loading
                 if (!resultReceived) {
                     ComposeDialogManager.dismissWait()
                 }
-                
+
                 resetData()
             } catch (e: Exception) {
                 L.e { "Recall message failed: ${e.stackTraceToString()}" }
@@ -2065,16 +2143,20 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }
 
     private fun resendMessage(messageID: String) {
-        Single.fromCallable {
-            wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))?.convertToTextMessage()?.let { listOf(it) }.orEmpty()
-        }
-            .compose(RxUtil.getSingleSchedulerComposer<List<TextMessage>>())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ messages: List<TextMessage>? ->
-                messages?.firstOrNull()?.let {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val message = withContext(Dispatchers.IO) {
+                    wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))?.convertToTextMessage()
+                }
+                message?.let {
                     ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, it))
                 }
-            }) { error: Throwable -> L.w { "[ChatMessageInputFragment] sendTextPush error: ${error.stackTraceToString()}" } }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[ChatMessageInputFragment] sendTextPush error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private fun createPictureSelector() {
@@ -2142,6 +2224,10 @@ class ChatMessageInputFragment : DisposableManageFragment() {
     }
 
     private fun handleFilePaste(uri: Uri, mimeType: String) {
+        if (!isGroup && !isFriend) {
+            ToastUtil.show(R.string.contact_non_friend_text_only)
+            return
+        }
         // Handle file paste - similar to fileActivityLauncher callback
         viewLifecycleOwner.lifecycleScope.launch {
             // 优先判断文件大小是否超过200MB
@@ -2175,10 +2261,23 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 }
                 val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
                     putParcelableArrayListExtra(MediaSelectionActivity.MEDIA, arrayListOf(localMedia))
+                    putExtra(MediaSelectionActivity.EXTRA_CONFIDENTIAL_MODE, chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0)
+                    putExtra(MediaSelectionActivity.EXTRA_SHOW_CONFIDENTIAL_TOGGLE, !shouldHideConfidential)
+                    putExtra(MediaSelectionActivity.EXTRA_CONVERSATION_ID, chatViewModel.forWhat.id)
                 }
                 mediaSelectActivityLauncher.launch(intent)
             } else {
-                prepareSendAttachmentPush(path.toUri(), mimeType, originalFileName)
+                val filePreSendIntent = FilePreSendActivity.createIntent(
+                    context = requireContext(),
+                    filePath = path,
+                    fileName = originalFileName ?: "",
+                    mimeType = mimeType,
+                    fileSize = fileSize,
+                    confidentialMode = chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0,
+                    showConfidentialToggle = !shouldHideConfidential,
+                    conversationId = chatViewModel.forWhat.id
+                )
+                filePreSendLauncher.launch(filePreSendIntent)
             }
         }
     }
@@ -2209,8 +2308,14 @@ class ChatMessageInputFragment : DisposableManageFragment() {
                 activity = requireActivity(),
                 coroutineScope = viewLifecycleOwner.lifecycleScope,
                 onScreenshotDetected = {
-                    L.i { "[ChatMessageInputFragment][Screenshot] Screenshot detected, sending notification" }
-                    sendScreenshotNotification()
+                    val focusLostAt = (requireActivity() as? BaseActivity)?.windowFocusLostAt ?: 0L
+                    val focusLostDuration = if (focusLostAt > 0L) System.currentTimeMillis() - focusLostAt else 0L
+                    if (focusLostAt > 0L && focusLostDuration >= SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS) {
+                        L.i { "[ChatMessageInputFragment][Screenshot] Skipped: focus lost ${focusLostDuration}ms ago (notification panel open)" }
+                    } else {
+                        L.i { "[ChatMessageInputFragment][Screenshot] Screenshot detected, sending notification" }
+                        sendScreenshotNotification()
+                    }
                 }
             )
         }

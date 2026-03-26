@@ -27,6 +27,7 @@
     <color name="bg.secondary.clicked" tools:ignore="ResourceName">@color/bg3</color>
     <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
     <color name="bg.confidential" tools:ignore="ResourceName">#5E6673</color>
+    <color name="bg.confidential.area" tools:ignore="ResourceName">#131F2E</color>
 
     <!--Background Color-->
     <color name="bg1" tools:ignore="ResourceName">#181A20</color>

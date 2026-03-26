@@ -9,7 +9,6 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
@@ -21,7 +20,8 @@ import com.difft.android.base.android.permission.PermissionUtil.launchSinglePerm
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialog
@@ -48,11 +48,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.models.ContactorModel
@@ -400,30 +400,24 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             return
         }
 
-        refreshContact()
+        loadContactInfo()
         fetchContactInfoFromServer()
 
         ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .onEach {
                 if (it.contains(chatViewModel.forWhat.id)) {
-                    refreshContact()
+                    loadContactInfo()
                 }
-            }, {
-                L.w { "[ChatPopupActivity] observe contactsUpdate error: ${it.stackTraceToString()}" }
-            })
+            }
+            .catch { L.w { "[ChatPopupActivity] observe contactsUpdate error: ${it.stackTraceToString()}" } }
+            .launchIn(lifecycleScope)
 
         chatViewModel.voiceVisibilityChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it) {
-                    mBinding.clVoiceRecord.visibility = View.VISIBLE
-                } else {
-                    mBinding.clVoiceRecord.visibility = View.GONE
-                }
-            }, { L.w { "[ChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } })
+            .onEach {
+                mBinding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
+            }
+            .catch { L.w { "[ChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
+            .launchIn(lifecycleScope)
 
         mBinding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -462,9 +456,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         }
 
         chatViewModel.showOrHideFullInput
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+            .onEach {
                 if (it.first) {
                     mBinding.includeFullInput.clFullInput.visibility = View.VISIBLE
                     mBinding.includeFullInput.edittextFullInput.apply {
@@ -476,7 +468,9 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                 } else {
                     mBinding.includeFullInput.clFullInput.visibility = View.GONE
                 }
-            }, { L.w { "[ChatPopupActivity] observe showOrHideFullInput error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[ChatPopupActivity] observe showOrHideFullInput error: ${it.stackTraceToString()}" } }
+            .launchIn(lifecycleScope)
 
         mBinding.includeFullInput.ivFullInputClose.setOnClickListener {
             mBinding.includeFullInput.edittextFullInput.clearFocus()
@@ -576,9 +570,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 1
         } else {
-            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable).apply {
-                this.setTint(ContextCompat.getColor(this@ChatPopupActivity, com.difft.android.base.R.color.icon))
-            }
+            val drawable = ResUtils.getDrawable(R.drawable.chat_btn_confidential_mode_disable)
             mBinding.includeFullInput.ivFullInputConfidential.setImageDrawable(drawable)
             mBinding.includeFullInput.ivFullInputConfidential.tag = 0
         }
@@ -603,27 +595,17 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         SendMessageUtils.removeFromCurrentChat(chatViewModel.forWhat.id)
     }
 
-    private fun refreshContact() {
-        ContactorUtil.getContactWithID(this, chatViewModel.forWhat.id)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    chatViewModel.setChatUIData(
-                        ChatUIData(
-                            it.get(),
-                            null
-                        )
-                    )
-                } else {
-                    chatViewModel.setChatUIData(
-                        ChatUIData(
-                            ContactorModel().apply { id = chatViewModel.forWhat.id },
-                            null
-                        )
-                    )
-                }
-            }) { L.w { "[ChatPopupActivity] refreshContact error: ${it.stackTraceToString()}" } }
+    private fun loadContactInfo() {
+        lifecycleScope.launch {
+            try {
+                val result = ContactorUtil.getContactWithID(this@ChatPopupActivity, chatViewModel.forWhat.id)
+                val contact = if (result.isPresent) result.get()
+                              else ContactorModel().apply { id = chatViewModel.forWhat.id }
+                chatViewModel.setChatUIData(ChatUIData(contact, null))
+            } catch (e: Exception) {
+                L.w { "[ChatPopupActivity] loadContactInfo error: ${e.message}" }
+            }
+        }
     }
 
     /**
@@ -636,7 +618,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             try {
                 val contacts = ContactorUtil.fetchContactors(
                     listOf(chatViewModel.forWhat.id), this@ChatPopupActivity
-                ).await()
+                )
                 if (isFinishing) return@launch
                 val serverContact = contacts.firstOrNull() ?: return@launch
                 val currentContact = chatViewModel.chatUIData.value.contact
@@ -644,6 +626,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                     L.i { "[ChatPopupActivity] Contact info changed for ${chatViewModel.forWhat.id}, update UI" }
                     chatViewModel.setChatUIData(ChatUIData(serverContact, null))
                     chatViewModel.refreshContactorInCache(serverContact)
+                    RoomChangeTracker.trackRoom(chatViewModel.forWhat.id, RoomChangeType.CONTACT)
                 } else {
                     L.d { "[ChatPopupActivity] Contact info unchanged for ${chatViewModel.forWhat.id}, skip refresh" }
                 }

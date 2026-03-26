@@ -7,26 +7,33 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.core.widget.addTextChangedListener
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ActivitySearchMessageBinding
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.ui.ChatActivity
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.subjects.PublishSubject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
-import org.difft.app.database.models.DBMessageModel
-import java.util.concurrent.TimeUnit
+import org.difft.app.database.loadPaginatedMessagesByKeyword
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class SearchMessageActivity : BaseActivity() {
 
     companion object {
+        private const val PAGE_SIZE = 20
+        private const val LOAD_MORE_THRESHOLD = 5
+
         fun startActivity(activity: Activity, conversationId: String, isGroup: Boolean, key: String?) {
             val intent = Intent(activity, SearchMessageActivity::class.java)
             intent.putExtra("conversationId", conversationId)
@@ -50,16 +57,33 @@ class SearchMessageActivity : BaseActivity() {
 
     private var key: String = ""
 
-    private val searchSubject = PublishSubject.create<String>()
+    // Pagination state
+    private var paginationCursor: Long? = null
+    private var hasMoreMessages = false
+    private var isLoadingMore = false
+    private val accumulatedMessageData = mutableListOf<SearchChatHistoryViewData>()
+
+    private var searchJob: Job? = null
 
     private val mSearchChatHistoryAdapter: SearchChatHistoryAdapter by lazy {
-        object : SearchChatHistoryAdapter(true) {
+        object : SearchChatHistoryAdapter(isForMessageSearch = true) {
             override fun onItemClicked(data: SearchChatHistoryViewData, position: Int) {
                 if (isGroup) {
                     GroupChatContentActivity.startActivity(this@SearchMessageActivity, conversationId, jumpMessageTimeStamp = data.messageTimeStamp)
                 } else {
                     ChatActivity.startActivity(this@SearchMessageActivity, conversationId, jumpMessageTimeStamp = data.messageTimeStamp)
                 }
+            }
+        }
+    }
+
+    private val paginationScrollListener = object : RecyclerView.OnScrollListener() {
+        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+            val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+            val lastVisible = layoutManager.findLastVisibleItemPosition()
+            val total = layoutManager.itemCount
+            if (!isLoadingMore && hasMoreMessages && lastVisible >= total - LOAD_MORE_THRESHOLD) {
+                loadPage(isInitialLoad = false)
             }
         }
     }
@@ -77,28 +101,26 @@ class SearchMessageActivity : BaseActivity() {
         mBinding.ibBack.setOnClickListener { finish() }
 
         mBinding.edittextSearchInput.addTextChangedListener {
-            searchSubject.onNext(it.toString().trim())
-        }
-
-        searchSubject
-            .debounce(300, TimeUnit.MILLISECONDS)//防止频繁触发搜索
-            .distinctUntilChanged()
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                key = it
+            val text = it.toString().trim()
+            searchJob?.cancel()
+            searchJob = lifecycleScope.launch {
+                delay(300)
+                if (text == key) return@launch
+                key = text
                 resetButtonClear()
                 if (key.isNotEmpty()) {
-                    search()
+                    loadPage(isInitialLoad = true)
                 } else {
                     showNoResults(getString(R.string.search_messages_default_tips))
                 }
-            }, { L.w { "[SearchMessageActivity] search debounce error: ${it.stackTraceToString()}" } })
+            }
+        }
 
         mBinding.recyclerviewChatHistory.apply {
-            this.layoutManager = LinearLayoutManager(this@SearchMessageActivity)
+            layoutManager = LinearLayoutManager(this@SearchMessageActivity)
             itemAnimator = null
-            this.adapter = mSearchChatHistoryAdapter
+            adapter = mSearchChatHistoryAdapter
+            addOnScrollListener(paginationScrollListener)
         }
 
         mBinding.buttonClear.setOnClickListener {
@@ -107,35 +129,49 @@ class SearchMessageActivity : BaseActivity() {
 
         mBinding.edittextSearchInput.setText(key)
         mBinding.edittextSearchInput.setSelection(key.length)
+
+        if (key.isNotEmpty()) {
+            loadPage(isInitialLoad = true)
+        }
     }
 
-    private fun search() {
-        Single.fromCallable {
-            wcdb.message.getAllObjects(
-                DBMessageModel.roomId.eq(conversationId).and(
-                    DBMessageModel.messageText.upper().like("%${key.uppercase()}%")
-                        .and(DBMessageModel.type.notEq(2))
-                        .and(DBMessageModel.mode.notEq(1)) // Exclude confidential messages
-                )
-            )
-        }
-            .concatMap { result ->
-                SearchUtils.createSearchChatHistoryViewDataList(result)
-            }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isNullOrEmpty()) {
+    private fun loadPage(isInitialLoad: Boolean) {
+        if (isLoadingMore && !isInitialLoad) return
+        isLoadingMore = true
+
+        lifecycleScope.launch {
+            try {
+                val (result, viewData) = withContext(Dispatchers.IO) {
+                    val result = wcdb.loadPaginatedMessagesByKeyword(
+                        keyword = key,
+                        limit = PAGE_SIZE,
+                        cursorTimestamp = if (isInitialLoad) null else paginationCursor,
+                        conversationId = conversationId
+                    )
+                    val viewData = SearchUtils.createSearchChatHistoryViewDataList(result.messages)
+                    result to viewData
+                }
+                paginationCursor = result.lastTimestamp
+                hasMoreMessages = result.hasMore
+                if (isInitialLoad) accumulatedMessageData.clear()
+                accumulatedMessageData.addAll(viewData)
+                val list = accumulatedMessageData.toList()
+                if (list.isEmpty()) {
                     showNoResults(getString(R.string.search_no_results_found))
                 } else {
                     mBinding.recyclerviewChatHistory.visibility = View.VISIBLE
-                    mSearchChatHistoryAdapter.submitList(it)
                     mBinding.tvTips.visibility = View.GONE
+                    mSearchChatHistoryAdapter.updateWithSearchKey(key, list)
                 }
-            }, {
-                showNoResults(getString(R.string.search_no_results_found))
-                L.w { "[SearchMessageActivity] search error: ${it.stackTraceToString()}" }
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isInitialLoad) showNoResults(getString(R.string.search_no_results_found))
+                L.w { "[SearchMessageActivity] loadPage error: ${e.stackTraceToString()}" }
+            } finally {
+                isLoadingMore = false
+            }
+        }
     }
 
     private fun resetButtonClear() {
@@ -148,7 +184,7 @@ class SearchMessageActivity : BaseActivity() {
 
     private fun showNoResults(tipContent: String) {
         mBinding.recyclerviewChatHistory.visibility = View.GONE
-        mSearchChatHistoryAdapter.submitList(emptyList())
+        mSearchChatHistoryAdapter.updateWithSearchKey("", emptyList())
         mBinding.tvTips.visibility = View.VISIBLE
         mBinding.tvTips.text = tipContent
     }

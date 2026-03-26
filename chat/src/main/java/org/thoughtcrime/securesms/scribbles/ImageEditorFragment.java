@@ -38,7 +38,6 @@ import kotlin.Unit;
 import com.difft.android.base.widget.ComposeDialog;
 
 import util.FontUtil;
-import util.concurrent.TTExecutors;
 import util.concurrent.SimpleTask;
 
 import org.signal.imageeditor.core.Bounds;
@@ -63,8 +62,8 @@ import org.thoughtcrime.securesms.mms.SentMediaQuality;
 import org.thoughtcrime.securesms.providers.MyBlobProvider;
 import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.ParcelUtil;
-import org.thoughtcrime.securesms.util.SaveAttachmentTask;
-import org.thoughtcrime.securesms.util.StorageUtil;
+import org.thoughtcrime.securesms.util.SaveAttachmentUtil;
+import com.difft.android.base.utils.FileUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.ThrottledDebouncer;
 import org.thoughtcrime.securesms.util.ViewUtil;
@@ -640,8 +639,8 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
     @Override
     public void onSave() {
-        SaveAttachmentTask.showWarningDialog(requireContext(), () -> {
-            if (StorageUtil.canWriteToMediaStore()) {
+        SaveAttachmentUtil.showWarningDialog(requireContext(), () -> {
+            if (FileUtil.canWriteToMediaStore()) {
                 performSaveToDisk();
             }
             return Unit.INSTANCE;
@@ -803,9 +802,11 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
                 return;
             }
 
-            SaveAttachmentTask saveTask = new SaveAttachmentTask(requireContext());
-            SaveAttachmentTask.Attachment attachment = new SaveAttachmentTask.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null, true, true);
-            saveTask.executeOnExecutor(TTExecutors.BOUNDED, attachment);
+            SaveAttachmentUtil.saveWithUIFromJava(
+                    requireContext(),
+                    getViewLifecycleOwner(),
+                    new SaveAttachmentUtil.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null, true, true)
+            );
         });
     }
 

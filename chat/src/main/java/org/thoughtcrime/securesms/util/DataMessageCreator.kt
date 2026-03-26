@@ -26,7 +26,6 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Attach
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.DataMessage.Contact
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.DataMessage.Mention
 import org.whispersystems.signalservice.internal.push.attachmentPointer
-import org.whispersystems.signalservice.internal.push.card
 import org.whispersystems.signalservice.internal.push.dataMessage
 import org.whispersystems.signalservice.internal.push.rapidFile
 import org.whispersystems.signalservice.internal.push.realSource
@@ -71,20 +70,6 @@ class DataMessageCreator @Inject constructor(
                         serverTimestamp = realSource.serverTimestamp
                     }
                 }
-            }
-        }
-
-        val card: SignalServiceProtos.Card? = textMessage.card?.let {
-            card {
-                it.appId?.let { appId = it }
-                it.cardId?.let { cardId = it }
-                version = it.version
-                it.creator?.let { creator = it }
-                timestamp = it.timestamp
-                it.content?.let { content = it }
-                contentType = it.contentType
-                type = it.type
-                fixedWidth = it.fixedWidth
             }
         }
 
@@ -188,7 +173,6 @@ class DataMessageCreator @Inject constructor(
             quote?.let(::quote::set)
             forwardContext?.let(::forwardContext::set)
             recall?.let(::recall::set)
-            card?.let(::card::set)
             textMessage.atPersons?.let(::atPersons::set)
             mentions.let { this.mentions.addAll(it) }
             textMessage.expiresInSeconds.let(::expireTimer::set)
@@ -227,9 +211,6 @@ class DataMessageCreator @Inject constructor(
         }
         if (!textMessage.reactions.isNullOrEmpty()) {
             version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.REACTION_VALUE)
-        }
-        if (textMessage.card != null) {
-            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CARD_VALUE)
         }
         if (textMessage.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
             version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CONFIDE_VALUE)

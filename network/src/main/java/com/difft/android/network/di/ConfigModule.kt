@@ -7,7 +7,6 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.reactivex.rxjava3.core.Single
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -15,12 +14,6 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object ConfigModule {
 
-    @Singleton
-    @Named("UserAgent")
-    @Provides
-    fun provideUserAgent(): Single<String> {
-        return Single.fromCallable { UserAgentManager.getUserAgent() }
-    }
     @Singleton
     @Named("UserAgent")
     @Provides

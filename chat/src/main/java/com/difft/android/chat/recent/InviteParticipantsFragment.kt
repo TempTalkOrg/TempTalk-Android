@@ -312,7 +312,7 @@ class InviteParticipantsFragment : Fragment() {
                 override fun onRemoveAttendanceClicked(attendee: GroupMemberModel) {
                     viewModel.removeAttendee(attendee)
                 }
-            }, true)
+            }, true, viewLifecycleOwner.lifecycleScope)
         binding.attendeeRecyclerView.layoutManager =
             LinearLayoutManager(requireContext())
         binding.attendeeRecyclerView.adapter = attendeeAdapter

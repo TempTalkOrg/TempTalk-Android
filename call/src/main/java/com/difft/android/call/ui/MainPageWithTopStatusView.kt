@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,7 +73,6 @@ fun MainPageWithTopStatusView(
     callIntent: CallIntent,
     windowZoomOutAction: () -> Unit
 ) {
-    val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val windowZoomOutPainter = painterResource(id = R.drawable.chat_ic_window_zoom_out)
     val loadingPainter = painterResource(id = R.drawable.ant_design_loading_outlined)
@@ -99,7 +97,7 @@ fun MainPageWithTopStatusView(
         screenSharingUser?.let {
             it.identity?.value?.let { identityId ->
                 screenShareUserName = withContext(Dispatchers.IO) {
-                    "${contactorCacheManager.getDisplayNameById(identityId)}"
+                    contactorCacheManager.getDisplayNameById(identityId)
                 }
             }
         }
@@ -142,28 +140,25 @@ fun MainPageWithTopStatusView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(62.dp)
-                    .background(
-                        if (!isUserSharingScreen)
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Transparent),
+                    .then(
+                        if (isUserSharingScreen)
+                            Modifier.background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.4f),
+                                        Color.Transparent
+                                    ),
+                                )
                             )
-                        else
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.4f),
-                                    Color.Transparent
-                                ),
-                            ),
+                        else Modifier
                     )
             ){
                 val controlSize = 26.dp
-                val controlPadding = if (!isLandscape) 16.dp else 4.dp
-                val rowStartPadding = if (!isLandscape) 0.dp else 14.dp
-                val rowTopPadding = if (!isLandscape) 8.dp else 8.dp
+                val controlPadding = if (!isLandscape) 16.dp else 18.dp
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = rowStartPadding, end = 14.dp, top = rowTopPadding),
+                        .padding(top = 8.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 )
@@ -201,7 +196,6 @@ fun MainPageWithTopStatusView(
                             }
                         }
 
-
                         Column(
                             modifier = Modifier.constrainAs(textView){
                                 centerHorizontallyTo(parent)
@@ -210,19 +204,15 @@ fun MainPageWithTopStatusView(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ){
                             if(callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED) {
-                                if(isUserSharingScreen){
-                                    screenSharingUser?.let { participant ->
-                                        participant.identity?.value?.let { identityId ->
-                                            screenShareUserName?.let{ it->
-                                                Text(
-                                                    text = "${StringUtil.truncateWithEllipsis(it, 14)}${ResUtils.getString(R.string.call_screen_sharing_title)} $callDuration",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                                    color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
+                                if(isUserSharingScreen && screenSharingUser?.identity?.value != null){
+                                    screenShareUserName?.let { name ->
+                                        Text(
+                                            text = "${StringUtil.truncateWithEllipsis(name, 14)}${ResUtils.getString(R.string.call_screen_sharing_title)} $callDuration",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                            color = colorResource(id = com.difft.android.base.R.color.t_white),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }else if(!isOneVOneCall) {
                                     Text(
@@ -235,36 +225,30 @@ fun MainPageWithTopStatusView(
                                 }
                                 if(!isUserSharingScreen){
                                     Row(
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
-                                        verticalAlignment = Alignment.Top,
-                                    ) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ){
-                                            Text(
-                                                text = callDuration,
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-                                                color = colorResource(id = com.difft.android.base.R.color.t_white),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ){
+                                        Text(
+                                            text = callDuration,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                                            color = colorResource(id = com.difft.android.base.R.color.t_white),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        if(countDownEnabled) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 8.dp)
+                                                    .width(1.dp)
+                                                    .height(10.dp)
+                                                    .background(color = dividerColor)
                                             )
 
-                                            if(countDownEnabled) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .padding(0.dp)
-                                                        .width(1.dp)
-                                                        .height(10.dp)
-                                                        .background(color = dividerColor) // 设置竖线的背景颜色
-                                                )
-
-                                                CountDownTimerView(
-                                                    modifier = Modifier,
-                                                    viewModel = viewModel,
-                                                    callConfig = callConfig
-                                                )
-                                            }
+                                            CountDownTimerView(
+                                                modifier = Modifier,
+                                                viewModel = viewModel,
+                                                callConfig = callConfig
+                                            )
                                         }
                                     }
                                 }

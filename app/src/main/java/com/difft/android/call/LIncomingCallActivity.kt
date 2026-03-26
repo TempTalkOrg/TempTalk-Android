@@ -33,7 +33,10 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.WindowSizeClassUtil
-import com.difft.android.base.utils.RxUtil
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.databinding.CallActivityIncomingCallBinding
@@ -224,22 +227,27 @@ class LIncomingCallActivity : BaseActivity() {
 
 
     private fun initUI() {
-        ContactorUtil.getContactWithID(this@LIncomingCallActivity, callIntent.callerId)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this@LIncomingCallActivity)).subscribe({
-                if (it.isPresent) {
-                    val contactor = it.get()
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    ContactorUtil.getContactWithID(this@LIncomingCallActivity, callIntent.callerId)
+                }
+                if (result.isPresent) {
+                    val contactor = result.get()
                     binding.callerName.text = contactor.getDisplayNameForUI()
                     binding.callerAvatar.setAvatar(contactor)
                 } else {
                     binding.callerName.text = callIntent.callerId
                     binding.callerAvatar.setAvatar(null, null, ContactorUtil.getFirstLetter(callIntent.callerId), callIntent.callerId)
                 }
-            }, { error ->
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 L.e { "[Call] LIncomingCallActivity initUI: Failed to get contact with id: ${callIntent.callerId}" }
                 binding.callerName.text = callIntent.callerId
                 binding.callerAvatar.setAvatar(null, null, ContactorUtil.getFirstLetter(callIntent.callerId), callIntent.callerId)
-            })
+            }
+        }
 
         val roomName = StringUtil.truncateWithEllipsis(callIntent.roomName, 25)
 
@@ -499,6 +507,8 @@ class LIncomingCallActivity : BaseActivity() {
                 }
                 false
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.e(e) { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease failed." }
             runOnUiThread {

@@ -15,7 +15,6 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ResUtils.getString
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
@@ -26,17 +25,17 @@ import com.difft.android.setting.data.CheckUpdateResponse
 import com.difft.android.setting.repo.SettingRepo
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import util.ScreenLockUtil
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
-import io.reactivex.rxjava3.core.Observable
 
 class UpdateManager @Inject constructor(
     private val settingRepo: SettingRepo,
@@ -55,38 +54,32 @@ class UpdateManager @Inject constructor(
         if (isFromSetting) {
             ComposeDialogManager.showWait(context, "")
         }
-        if (environmentHelper.isInsiderChannel()) { //内部版本通过配置文件检查更新，有新版本自动进行下载更新
-            globalConfigHttpClient.httpService.getAppVersionConfigs(urlManager.appVersionConfigUrl)
-                .compose(RxUtil.getSchedulerComposer())
-                .to(RxUtil.autoDispose(context))
-                .subscribe({
-                    L.d { "[UpdateManager] get App Version Configs success:$it" }
+        context.lifecycleScope.launch {
+            try {
+                if (environmentHelper.isInsiderChannel()) {
+                    val configs = withContext(Dispatchers.IO) {
+                        globalConfigHttpClient.httpService.getAppVersionConfigs(urlManager.appVersionConfigUrl)
+                    }
+                    L.d { "[UpdateManager] get App Version Configs success:$configs" }
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()
                     }
-                    if (it.versionCode > PackageUtil.getAppVersionCode()) {
-                        appInnerToInstall(context, it.url, it.hash)
+                    if (configs.versionCode > PackageUtil.getAppVersionCode()) {
+                        appInnerToInstall(context, configs.url, configs.hash)
                     } else {
                         if (isFromSetting) {
                             showLatestDialog(context)
                         }
                     }
-                }, {
-                    L.e { "[UpdateManager] get App Version Configs error:" + it.stackTraceToString() }
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        settingRepo.checkUpdate(SecureSharedPrefsUtil.getToken(), PackageUtil.getAppVersionName() ?: "")
+                    }
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()
                     }
-                })
-        } else {
-            settingRepo.checkUpdate(SecureSharedPrefsUtil.getToken(), PackageUtil.getAppVersionName() ?: "")
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(context))
-                .subscribe({
-                    if (isFromSetting) {
-                        ComposeDialogManager.dismissWait()
-                    }
-                    if (it.status == 0) {
-                        it.data?.let { response ->
+                    if (result.status == 0) {
+                        result.data?.let { response ->
                             if (response.update) {
                                 if (response.force) {
                                     showForceUpdateDialog(context, response)
@@ -99,15 +92,17 @@ class UpdateManager @Inject constructor(
                                 }
                             }
                         }
-
-                    }
-                }) {
-                    L.w { "[UpdateManager] checkUpdate error: ${it.stackTraceToString()}" }
-                    if (isFromSetting) {
-                        ComposeDialogManager.dismissWait()
-                        it.message?.let { message -> ToastUtil.show(message) }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[UpdateManager] checkUpdate error: ${e.stackTraceToString()}" }
+                if (isFromSetting) {
+                    ComposeDialogManager.dismissWait()
+                    e.message?.let { message -> ToastUtil.show(message) }
+                }
+            }
         }
         userManager.update {
             this.lastCheckUpdateTime = System.currentTimeMillis()
@@ -115,12 +110,10 @@ class UpdateManager @Inject constructor(
     }
 
     private fun showLatestDialog(context: FragmentActivity) {
-        Observable.timer(500, TimeUnit.MILLISECONDS)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(context))
-            .subscribe({
-                ToastUtil.showLong(ResUtils.getString(R.string.settings_version_is_latest))
-            }, { L.w { "[UpdateManager] showLatestDialog error: ${it.stackTraceToString()}" } })
+        context.lifecycleScope.launch {
+            delay(500)
+            ToastUtil.showLong(ResUtils.getString(R.string.settings_version_is_latest))
+        }
     }
 
     private fun showUpdateDialog(context: Context, response: CheckUpdateResponse) {
@@ -294,13 +287,9 @@ class UpdateManager @Inject constructor(
                             startDownloadService(context, url, apkHash, filePath, isForce)
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (error: Exception) {
-                    // 正确处理 CancellationException，不要触发下载服务
-                    if (error is CancellationException) {
-                        L.i { "UpdateManager upgradeApk verify cancelled" }
-                        throw error // 重新抛出，让协程取消语义正确传播
-                    }
-                    
                     L.e { "UpdateManager upgradeApk verify error: ${error.message}" }
                     // If verification fails, download the APK
                     withContext(Dispatchers.Main) {

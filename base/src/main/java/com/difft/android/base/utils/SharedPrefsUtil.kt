@@ -18,6 +18,7 @@ object SharedPrefsUtil {
     const val SP_KEY_LANGUAGE = "SP_KEY_LANGUAGE"
     const val SP_NEW_CONFIG = "SP_NEW_CONFIG"
     const val SP_UNREAD_MSG_NUM= "SP_BYC_DOMAINS_TIME"
+    const val SP_DENOISE_MODE = "SP_DENOISE_MODE"
 
     private val sharedPreferences by lazy {
         application.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)

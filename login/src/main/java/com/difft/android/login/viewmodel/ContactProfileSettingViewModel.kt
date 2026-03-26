@@ -23,7 +23,6 @@ import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import okhttp3.RequestBody
 import org.difft.app.database.models.ContactorModel
@@ -69,7 +68,7 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
                     val result = httpClient.httpService.fetchSetProfile(
                         basicAuth,
                         ProfileRequestBody(avatar = null, name = name)
-                    ).await()
+                    )
 
                     if (result.status == 0) {
                         contactor?.let {
@@ -88,7 +87,7 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
                     val keyStr = Util.getSecret(32)
 
                     // Step 1: 获取头像上传信息
-                    val attachmentResponse = httpClient.httpService.fetchAvatarAttachmentInfo(basicAuth).await()
+                    val attachmentResponse = httpClient.httpService.fetchAvatarAttachmentInfo(basicAuth)
                     if (attachmentResponse.status != 0) {
                         mSetProfileResultData.value = Resource.error(NetworkException(attachmentResponse.status, attachmentResponse.reason ?: ""))
                         return@launch
@@ -106,11 +105,11 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
                     noHeaderClient.httpService.fetchUploadAvatar(
                         attachmentResponse.location ?: "",
                         RequestBody.create(null, encrypt)
-                    ).await()
+                    )
 
                     // Step 3: 设置 profile
                     val avatar = Gson().toJson(AvatarRequestBody("AESGCM256", keyStr, attachmentResponse.id.toString()))
-                    val profileResult = httpClient.httpService.fetchSetProfile(basicAuth, ProfileRequestBody(avatar, name)).await()
+                    val profileResult = httpClient.httpService.fetchSetProfile(basicAuth, ProfileRequestBody(avatar, name))
 
                     if (profileResult.status == 0) {
                         contactor?.let {

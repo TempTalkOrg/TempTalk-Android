@@ -13,13 +13,11 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import org.difft.app.database.models.DBAttachmentModel
 import util.FileUtils
-import util.concurrent.TTExecutors
 import org.thoughtcrime.securesms.jobmanager.Data
 import org.thoughtcrime.securesms.jobmanager.Job
 import org.thoughtcrime.securesms.util.FileDecryptionUtil
 import org.thoughtcrime.securesms.util.MediaUtil
-import org.thoughtcrime.securesms.util.SaveAttachmentTask
-import org.thoughtcrime.securesms.util.StorageUtil
+import org.thoughtcrime.securesms.util.SaveAttachmentUtil
 import com.difft.android.base.utils.Base64
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
@@ -116,6 +114,7 @@ class DownloadAttachmentJob private constructor(
 
             // Check response status code
             val responseStatus = response.body()?.status
+                ?: throw Exception("[DownloadAttachmentJob] download response body is null, messageId: $messageId")
             when (responseStatus) {
                 0 -> {
                     // OK, continue with download
@@ -183,7 +182,7 @@ class DownloadAttachmentJob private constructor(
                             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                                 encryptOutputStream.write(buffer, 0, bytesRead)
                                 totalBytesRead += bytesRead
-                                val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt()
+                                val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt().coerceAtMost(99)
                                 val currentTime = System.currentTimeMillis()
                                 // Update every 50ms or when progress changes by >=5%
                                 if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
@@ -230,8 +229,13 @@ class DownloadAttachmentJob private constructor(
                     }
                 }
                 // 解密后删除加密文件
-                FileDecryptionUtil.decryptFile(encryptFile, realFile, fileKey)
-                encryptFile.delete()
+                try {
+                    FileDecryptionUtil.decryptFile(encryptFile, realFile, fileKey)
+                    encryptFile.delete()
+                } catch (e: Exception) {
+                    realFile.delete()
+                    throw e
+                }
             }
 
             // Auto save to photos if enabled
@@ -242,18 +246,19 @@ class DownloadAttachmentJob private constructor(
             // 4. Global saveToPhotos setting
             if (autoSave) {
                 L.i { "[DownloadAttachmentJob] auto save to photos: $filePath" }
-                if (StorageUtil.canWriteToMediaStore()) {
+                if (FileUtil.canWriteToMediaStore()) {
                     if (File(filePath).exists()) {
                         val fileUri = File(filePath).toUri()
-                        val saveAttachment = SaveAttachmentTask.Attachment(
-                            fileUri,
-                            MediaUtil.getMimeType(context, fileUri) ?: "",
-                            System.currentTimeMillis(),
-                            FileUtils.getFileName(filePath),
-                            false,
-                            false
+                        val attachment = SaveAttachmentUtil.Attachment(
+                            uri = fileUri,
+                            contentType = MediaUtil.getMimeType(context, fileUri) ?: "",
+                            date = System.currentTimeMillis(),
+                            fileName = FileUtils.getFileName(filePath),
+                            shouldShowToast = false
                         )
-                        SaveAttachmentTask(context).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
+                        kotlinx.coroutines.runBlocking {
+                            SaveAttachmentUtil.saveAttachment(context, attachment)
+                        }
                     }
                 } else {
                     L.w { "[DownloadAttachmentJob] cannot write to media store, auto save skipped: $filePath" }

@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.R
 import com.difft.android.chat.databinding.SearchItemMessageBinding
+import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.group.getAvatarData
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
@@ -17,13 +18,23 @@ import org.difft.app.database.models.GroupModel
 abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean = false) : ListAdapter<SearchChatHistoryViewData, SearchChatHistoryViewHolder>(
     object : DiffUtil.ItemCallback<SearchChatHistoryViewData>() {
         override fun areItemsTheSame(oldItem: SearchChatHistoryViewData, newItem: SearchChatHistoryViewData): Boolean {
-            return oldItem.conversationId == newItem.conversationId
+            // Use conversationId + messageTimeStamp as composite key so that multiple messages
+            // from the same conversation are treated as distinct items in message-search mode.
+            return oldItem.conversationId == newItem.conversationId &&
+                    oldItem.messageTimeStamp == newItem.messageTimeStamp
         }
 
         override fun areContentsTheSame(oldItem: SearchChatHistoryViewData, newItem: SearchChatHistoryViewData): Boolean {
             return oldItem == newItem
         }
     }) {
+
+    private var searchKey: String = ""
+
+    fun updateWithSearchKey(key: String, data: List<SearchChatHistoryViewData>) {
+        searchKey = key
+        submitList(data)
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SearchChatHistoryViewHolder {
         return SearchChatHistoryViewHolder(parent, isForMessageSearch)
@@ -33,8 +44,7 @@ abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean 
 
     override fun onBindViewHolder(holder: SearchChatHistoryViewHolder, position: Int) {
         val data = getItem(position)
-
-        holder.bind(data) { onItemClicked(data, position) }
+        holder.bind(data, searchKey) { onItemClicked(data, position) }
     }
 }
 
@@ -45,9 +55,13 @@ class SearchChatHistoryViewHolder(container: ViewGroup, private val isForMessage
 
     private val binding = SearchItemMessageBinding.bind(itemView)
 
-    fun bind(data: SearchChatHistoryViewData, onItemClick: () -> Unit) {
+    fun bind(data: SearchChatHistoryViewData, searchKey: String, onItemClick: () -> Unit) {
         binding.tvName.text = data.label
-        binding.tvDetail.text = data.detail
+        if (isForMessageSearch || data.onlyOneResult) {
+            binding.tvDetail.setHighLightText(data.detail?.toString(), searchKey)
+        } else {
+            binding.tvDetail.text = data.detail
+        }
 
         binding.imageviewAvatar.visibility = View.GONE
         binding.groupAvatar.visibility = View.GONE

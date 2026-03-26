@@ -12,10 +12,9 @@ import com.google.protobuf.InvalidProtocolBufferException
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subjects.SingleSubject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -198,7 +197,7 @@ class WebSocketConnection @AssistedInject constructor(
     }
 
     @Throws(IOException::class)
-    fun sendRequestAwaitResponse(request: WebSocketRequestMessage): Single<WebsocketResponse> {
+    suspend fun sendRequestAwaitResponse(request: WebSocketRequestMessage): WebsocketResponse {
         L.d { "$name sendMessageRequest() requestId=${request.requestId}, path=${request.path}, verb=${request.verb}" }
         if (webSocketConnectionState.value != WebSocketConnectionState.CONNECTED) {
             throw IOException("$name No connected connection!")
@@ -209,17 +208,21 @@ class WebSocketConnection @AssistedInject constructor(
             this.request = request
         }
 
-        val single = SingleSubject.create<WebsocketResponse>()
+        val deferred = CompletableDeferred<WebsocketResponse>()
 
-        outgoingRequests[request.requestId] = OutgoingRequest(single)
+        outgoingRequests[request.requestId] = OutgoingRequest(deferred)
 
-        if (currentWebsocket?.send(ByteString.of(*message.toByteArray())) != true) {
-            throw IOException("$name Write failed!")
+        try {
+            if (currentWebsocket?.send(ByteString.of(*message.toByteArray())) != true) {
+                throw IOException("$name Write failed!")
+            }
+
+            return withTimeout(10_000) {
+                deferred.await()
+            }
+        } finally {
+            outgoingRequests.remove(request.requestId)
         }
-
-        return single.subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .timeout(10, TimeUnit.SECONDS, Schedulers.io())
     }
 
     @Throws(IOException::class)
@@ -237,25 +240,6 @@ class WebSocketConnection @AssistedInject constructor(
         }
     }
 
-    @Throws(IOException::class)
-    fun sendRequestAwaitResponse(json: String): Single<WebsocketResponse> {
-        L.d { "$name sendMessageRequest() jsonLength=${json.length}" }
-        if (webSocketConnectionState.value != WebSocketConnectionState.CONNECTED) {
-            throw IOException("$name No connected connection!")
-        }
-        val single = SingleSubject.create<WebsocketResponse>()
-        if (currentWebsocket?.send(json) != true) {
-            L.e { "$name sendRequest string failed..." }
-            throw IOException("$name Write failed!")
-        }
-        if ("ping" == json) {
-            L.e { "$name sendRequest string failed..." }
-        }
-
-        return single.subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .timeout(10, TimeUnit.SECONDS, Schedulers.io())
-    }
 
     @Throws(IOException::class)
     fun sendRequest(json: String) {
@@ -419,13 +403,15 @@ class WebSocketConnection @AssistedInject constructor(
         keepAliveSender.sendKeepAliveFrom(this)
     }
 
-    private class OutgoingRequest(private val responseSingle: SingleSubject<WebsocketResponse>) {
+    private class OutgoingRequest(private val deferred: CompletableDeferred<WebsocketResponse>) {
         fun onSuccess(response: WebsocketResponse) {
-            responseSingle.onSuccess(response)
+            deferred.complete(response)
         }
 
         fun onError(throwable: Throwable?) {
-            throwable?.let { L.e(it) { "[WebSocketConnection] OutgoingRequest error" } }
+            val error = throwable ?: IOException("[WebSocketConnection] OutgoingRequest failed with no error")
+            L.e(error) { "[WebSocketConnection] OutgoingRequest error" }
+            deferred.completeExceptionally(error)
         }
     }
 

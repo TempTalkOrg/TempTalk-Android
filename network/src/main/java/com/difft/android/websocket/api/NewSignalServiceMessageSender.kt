@@ -69,7 +69,7 @@ class NewSignalServiceMessageSender @Inject constructor(
      * @throws org.signal.libsignal.protocol.UntrustedIdentityException
      * @throws IOException
      */
-    fun sendDataMessage(
+    suspend fun sendDataMessage(
         recipient: For,
         room: For,
         message: SignalServiceProtos.DataMessage,
@@ -111,7 +111,7 @@ class NewSignalServiceMessageSender @Inject constructor(
      * Generate syncContent: encrypt sync message content with own public key.
      * This content is sent with v4 API, server distributes it to other devices.
      */
-    private fun generateSyncContent(
+    private suspend fun generateSyncContent(
         content: Content,
         room: For,
         recipientId: String,
@@ -203,7 +203,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         }
     }
 
-    private fun sendMessage(
+    private suspend fun sendMessage(
         recipient: For,
         room: For,
         timestamp: Long,
@@ -234,14 +234,14 @@ class NewSignalServiceMessageSender @Inject constructor(
                             messagingService.sendToGroup(
                                 newOutgoingMessage,
                                 recipient.id,
-                            ).blockingGet()
+                            )
                         ).resultOrThrow
                     } else {
                         ServiceResponseProcessor.DefaultProcessor(
                             messagingService.send(
                                 newOutgoingMessage,
                                 recipient.id,
-                            ).blockingGet()
+                            )
                         ).resultOrThrow
                     }
                     if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
@@ -325,7 +325,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         throw IOException("Failed to resolve conflicts after $RETRY_COUNT attempts!")
     }
 
-    private fun createNewOutgoingPushMessage(
+    private suspend fun createNewOutgoingPushMessage(
         recipient: For,
         room: For,
         content: Content,
@@ -397,7 +397,7 @@ class NewSignalServiceMessageSender @Inject constructor(
             else if (content.dataMessage.contactCount > 0) DetailMessageType.Contact
             else if (content.dataMessage.hasRecall()) DetailMessageType.Recall
             else if (content.dataMessage.hasReaction()) DetailMessageType.Reaction
-            else if (content.dataMessage.hasCard()) DetailMessageType.Card
+            else if (content.dataMessage.hasScreenShot()) DetailMessageType.Screenshot
             else if (content.dataMessage.messageMode == SignalServiceProtos.Mode.CONFIDENTIAL) DetailMessageType.Confidential
             else DetailMessageType.Unknown
         } else DetailMessageType.Unknown
@@ -527,7 +527,7 @@ class NewSignalServiceMessageSender @Inject constructor(
      * @param sendReceiptToSender Whether to send read receipt to the message sender
      * @param sendSyncToSelf Whether to send sync message to self's other devices
      */
-    fun sendReceipt(
+    suspend fun sendReceipt(
         recipient: For,
         room: For,
         message: ReceiptMessage,
@@ -591,7 +591,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         return ((highValue shl 4 or lowValue) and 0xFF).toByte()
     }
 
-    fun sendClientNotifyMessage(
+    suspend fun sendClientNotifyMessage(
         recipient: For,
         room: For,
         message: SignalServiceProtos.NotifyMessage

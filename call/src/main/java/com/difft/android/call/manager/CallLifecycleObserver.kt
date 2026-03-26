@@ -58,9 +58,7 @@ class CallLifecycleObserver(
      */
     private suspend fun observeErrorState() {
         viewModel.error.collect { error ->
-            error?.let {
-                callErrorHandler?.handleError(it)
-            }
+            callErrorHandler?.handleError(error)
         }
     }
 

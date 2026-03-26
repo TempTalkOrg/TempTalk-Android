@@ -10,7 +10,10 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
@@ -28,7 +31,7 @@ import com.difft.android.call.handler.InviteCallHandler
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.room.Room
-import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
+import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 
 /**
  * 通话内容主入口组件
@@ -43,7 +46,7 @@ import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
  * @param conversationId 会话 ID
  * @param autoHideTimeout 自动隐藏超时时间
  * @param muteOtherEnabled 是否允许静音其他人
- * @param audioProcessor 音频处理器
+ * @param audioProcessor 音频降噪处理器
  * @param onScreenClick 屏幕点击回调
  * @param onCallTypeChanged 通话类型变化回调
  * @param onInviteUsersClick 邀请用户点击回调
@@ -65,7 +68,7 @@ fun CallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: DenoisePluginAudioProcessor,
+    audioProcessor: AudioPipelineProcessor,
     onScreenClick: () -> Unit,
     onCallTypeChanged: (String) -> Unit,
     onInviteUsersClick: () -> Unit,
@@ -139,7 +142,7 @@ private fun CallContentContainer(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: DenoisePluginAudioProcessor,
+    audioProcessor: AudioPipelineProcessor,
     onScreenClick: () -> Unit,
     onInviteUsersClick: () -> Unit,
     onWindowZoomOutClick: () -> Unit,
@@ -150,6 +153,16 @@ private fun CallContentContainer(
     ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial)
+                        if (viewModel.callUiController.isShareScreening.value) {
+                            viewModel.callUiController.notifyScreenShareInteraction()
+                        }
+                    }
+                }
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -236,7 +249,7 @@ private fun OneOnOneCallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: DenoisePluginAudioProcessor,
+    audioProcessor: AudioPipelineProcessor,
     onInviteUsersClick: () -> Unit,
     onInviteViewAction: (InviteViewState) -> Unit,
     onWindowZoomOutClick: () -> Unit,
@@ -292,7 +305,7 @@ private fun MultiParticipantCallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: DenoisePluginAudioProcessor,
+    audioProcessor: AudioPipelineProcessor,
     onInviteUsersClick: () -> Unit,
     onInviteViewAction: (InviteViewState) -> Unit,
     onWindowZoomOutClick: () -> Unit,
@@ -372,7 +385,7 @@ private fun CommonCallOverlays(
     callRole: CallRole,
     conversationId: String?,
     muteOtherEnabled: Boolean,
-    audioProcessor: DenoisePluginAudioProcessor,
+    audioProcessor: AudioPipelineProcessor,
     onInviteUsersClick: () -> Unit,
     onWindowZoomOutClick: () -> Unit,
     onExitClick: (CallExitParams, CallEndType?) -> Unit
@@ -397,7 +410,13 @@ private fun CommonCallOverlays(
         viewModel,
         isOneVOneCall = isOneVOneCall,
         onDismiss = { viewModel.callUiController.setShowToolBarBottomViewEnable(false) },
-        deNoiseCallBack = { enable -> audioProcessor.setEnabled(enable) },
+        deNoiseCallBack = { enable ->
+            audioProcessor.setEnabled(enable)
+            if (enable) {
+                audioProcessor.setModule(viewModel.deNoiseMode.value)
+            }
+        },
+        deNoiseModeCallBack = { mode -> audioProcessor.setModule(mode) },
         handleInviteUsersClick = onInviteUsersClick
     )
     ShowParticipantsListView(
@@ -433,6 +452,22 @@ private fun RenderTopAndBottomOverlays(
     val showTopStatusViewEnabled by viewModel.callUiController.showTopStatusViewEnabled.collectAsState(true)
     val showBottomToolBarViewEnabled by viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
+
+    // 屏幕分享模式下，控制栏展示后 5 秒无操作自动隐藏
+    LaunchedEffect(isUserSharingScreen, showTopStatusViewEnabled) {
+        if (isUserSharingScreen && showTopStatusViewEnabled) {
+            viewModel.callUiController.notifyScreenShareInteraction()
+            while (true) {
+                delay(1_000L)
+                val elapsed = System.currentTimeMillis() - viewModel.callUiController.screenShareLastInteractionTime
+                if (elapsed >= 5_000L) {
+                    viewModel.callUiController.setShowTopStatusViewEnabled(false)
+                    viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
+                    break
+                }
+            }
+        }
+    }
 
     // 顶部悬浮控件布局逻辑
     MainPageWithTopStatusView(

@@ -61,8 +61,8 @@ import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
 import kotlin.collections.contains
 
 
@@ -185,8 +185,6 @@ fun MultiParticipantItem(
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
     }
 
-    val contactsUpdate by LCallManager.getContactsUpdateListener().map { Pair(System.currentTimeMillis(), it) }.asFlow().collectAsState(Pair(0L, emptyList()))
-
     val videoTrackMap by participant::videoTrackPublications.flow.collectAsState(initial = emptyList())
     val videoPubs = videoTrackMap.filter { (pub) -> pub.subscribed }
         .map { (pub) -> pub }
@@ -202,11 +200,8 @@ fun MultiParticipantItem(
 
     var expanded by remember { mutableStateOf(false) }
 
-    val showTopStatusViewEnabled by viewModel.callUiController.showTopStatusViewEnabled.collectAsState(true)
-    val showBottomToolBarViewEnabled by viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
-
     fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
-        setExpanded(false) // 关闭菜单
+        setExpanded(false)
         when(index){
             MUTE_ACTION_INDEX -> onClickMute()
             else -> {}
@@ -218,8 +213,12 @@ fun MultiParticipantItem(
     }
 
     fun handleClickScreen() {
-        viewModel.callUiController.setShowTopStatusViewEnabled(!showTopStatusViewEnabled)
-        viewModel.callUiController.setShowBottomToolBarViewEnabled(!showBottomToolBarViewEnabled)
+        viewModel.callUiController.setShowTopStatusViewEnabled(
+            !viewModel.callUiController.showTopStatusViewEnabled.value
+        )
+        viewModel.callUiController.setShowBottomToolBarViewEnabled(
+            !viewModel.callUiController.showBottomToolBarViewEnabled.value
+        )
     }
 
     // monitor video muted state
@@ -232,15 +231,13 @@ fun MultiParticipantItem(
     }
 
     LaunchedEffect(uid) {
-        coroutineScope.launch {
-            updateNameAndAvatar(uid)
-        }
+        updateNameAndAvatar(uid)
     }
 
-    LaunchedEffect(contactsUpdate) {
-        if(contactsUpdate.second.contains(IdUtil.getUidByIdentity(uid))){
-            coroutineScope.launch {
-                updateNameAndAvatar(uid)
+    LaunchedEffect(uid) {
+        LCallManager.getContactsUpdateListener().collect { updatedIds ->
+            if (updatedIds.contains(IdUtil.getUidByIdentity(uid))) {
+                launch { updateNameAndAvatar(uid) }
             }
         }
     }

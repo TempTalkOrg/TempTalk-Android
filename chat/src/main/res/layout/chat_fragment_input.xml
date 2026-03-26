@@ -126,8 +126,9 @@
         <View
             android:id="@+id/v_confidential_line"
             android:layout_width="match_parent"
-            android:layout_height="0.5dp"
-            android:background="@color/primary"
+            android:layout_height="1dp"
+            android:background="@drawable/chat_confidential_dashed_line"
+            android:layerType="software"
             android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent" />
 
@@ -207,11 +208,12 @@
                 android:id="@+id/cl_input_content"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:background="@drawable/chat_msg_input_bg"
+                android:background="@drawable/chat_msg_input_field_bg"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/cl_right_actions"
                 app:layout_constraintStart_toEndOf="@+id/button_media"
-                app:layout_goneMarginEnd="12dp">
+                app:layout_goneMarginEnd="12dp"
+                app:layout_goneMarginStart="12dp">
 
                 <com.difft.android.chat.widget.PasteAwareEditText
                     android:id="@+id/edittext_input"
@@ -313,6 +315,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="0.5dp"
                 android:background="@color/divider"
+                android:visibility="gone"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <!--            <LinearLayout-->

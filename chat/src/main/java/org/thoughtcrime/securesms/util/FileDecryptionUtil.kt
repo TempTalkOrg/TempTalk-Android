@@ -1,6 +1,7 @@
 package org.thoughtcrime.securesms.util
 
 import com.difft.android.base.log.lumberjack.L
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -115,5 +116,97 @@ object FileDecryptionUtil {
         } finally {
             encryptInputStream.close()
         }
+    }
+
+    /**
+     * 解密加密文件并返回 ByteArray（不写磁盘）
+     * @param encryptedFile 加密的源文件
+     * @param fileKey 加密密钥（64字节 - 32字节用于AES，32字节用于HMAC）
+     */
+    fun decryptToBytes(encryptedFile: File, fileKey: ByteArray?): ByteArray {
+        if (!encryptedFile.exists()) {
+            throw IOException("encrypted File is not exist: ${encryptedFile.absolutePath}")
+        }
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw IllegalArgumentException("fileKey is null or empty")
+        }
+
+        val buffer = ByteArray(BUFFER_SIZE)
+        val encryptInputStream = FileInputStream(encryptedFile)
+        val outputStream = ByteArrayOutputStream()
+        try {
+            val iv = ByteArray(IV_SIZE)
+            encryptInputStream.read(iv)
+
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            val aesKeySpec = SecretKeySpec(fileKey, 0, 32, "AES")
+            val ivParameterSpec = IvParameterSpec(iv)
+            cipher.init(Cipher.DECRYPT_MODE, aesKeySpec, ivParameterSpec)
+
+            val mac = Mac.getInstance("HmacSHA256")
+            val macKeySpec = SecretKeySpec(fileKey, 32, 32, "HmacSHA256")
+            mac.init(macKeySpec)
+
+            val cipherInputStream = CipherInputStream(encryptInputStream, cipher)
+
+            try {
+                var totalBytesRead1: Long = 0
+                val remainingBytes = encryptedFile.length() - MAC_SIZE - IV_SIZE
+                var bytesRead: Int
+
+                while (remainingBytes - totalBytesRead1 > 512) {
+                    bytesRead = cipherInputStream.read(buffer)
+                    if (bytesRead == -1) break
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalBytesRead1 += bytesRead
+                }
+
+                val skipBytes = encryptInputStream.available() - MAC_SIZE
+                var totalBytesRead2 = 0L
+                while (totalBytesRead2 < skipBytes) {
+                    bytesRead = encryptInputStream.read(buffer)
+                    if (bytesRead == -1) break
+                    val bytesToRead2 = buffer.size.toLong().coerceAtMost(skipBytes - totalBytesRead2)
+                    val bytes = cipher.doFinal(buffer, 0, bytesToRead2.toInt())
+                    outputStream.write(bytes)
+                    totalBytesRead2 += bytesToRead2
+                }
+            } finally {
+                encryptInputStream.close()
+                cipherInputStream.close()
+            }
+
+            // 计算MAC
+            val encryptInputStream3 = FileInputStream(encryptedFile)
+            encryptInputStream3.use {
+                val skipBytes3 = encryptedFile.length() - MAC_SIZE
+                var totalBytesRead3 = 0L
+                var bytesRead: Int
+                while (totalBytesRead3 < skipBytes3) {
+                    bytesRead = it.read(buffer)
+                    if (bytesRead == -1) break
+                    val bytesToRead3 = buffer.size.toLong().coerceAtMost(skipBytes3 - totalBytesRead3)
+                    mac.update(buffer, 0, bytesToRead3.toInt())
+                    totalBytesRead3 += bytesToRead3
+                }
+            }
+
+            // 读取并验证 Mac
+            val macDigest = mac.doFinal()
+            val encryptInputStream2 = FileInputStream(encryptedFile)
+            encryptInputStream2.use {
+                it.skip(encryptedFile.length() - MAC_SIZE)
+                val macFromStream = ByteArray(macDigest.size)
+                it.read(macFromStream)
+                if (!macDigest.contentEquals(macFromStream)) {
+                    L.w { "[FileDecryptionUtil] MAC验证失败，文件可能已被篡改" }
+                    throw Exception("MAC验证失败，文件可能已被篡改")
+                }
+            }
+        } finally {
+            encryptInputStream.close()
+        }
+
+        return outputStream.toByteArray()
     }
 } 

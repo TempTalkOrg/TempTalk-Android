@@ -15,7 +15,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.awaitFirst
 import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import java.io.File
@@ -68,7 +67,6 @@ class AppUpgradeService : Service() {
                 // 直接链式调用 awaitFirst().use，确保 ResponseBody 生命周期在获取作用域内，自动管理资源
                 withContext(Dispatchers.IO) {
                     httpClient.httpService.getResponseBody(url, emptyMap(), emptyMap())
-                        .awaitFirst()
                         .use { responseBody ->
                             saveResponseToFile(responseBody, filepath)
                         }

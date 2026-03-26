@@ -9,8 +9,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
+import org.difft.app.database.loadRoomSearchResultsByKeyword
 import org.difft.app.database.search
 import org.difft.app.database.searchByNameAndGroupMembers
 import org.difft.app.database.wcdb
@@ -30,18 +30,16 @@ import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.databinding.ActivitySearchBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.subjects.BehaviorSubject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -60,7 +58,7 @@ class SearchActivity : BaseActivity() {
     @Inject
     lateinit var inviteUtils: InviteUtils
 
-    private val searchSubject = BehaviorSubject.createDefault("")
+    private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,28 +70,24 @@ class SearchActivity : BaseActivity() {
         mBinding.ibBack.setOnClickListener { finish() }
 
         mBinding.edittextSearchInput.addTextChangedListener {
-            searchSubject.onNext(it.toString())
-        }
-
-        searchSubject
-            .debounce(300, TimeUnit.MILLISECONDS)//防止频繁触发搜索
-            .distinctUntilChanged()
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                key = it.toString().trim()
-
+            val text = it.toString()
+            searchJob?.cancel()
+            searchJob = lifecycleScope.launch {
+                delay(300)
+                val trimmed = text.trim()
+                if (trimmed == key) return@launch
+                key = trimmed
                 mRecentAdapter.setOrUpdateSearchKey(key)
                 mContactsAdapter.setOrUpdateSearchKey(key)
                 mGroupsAdapter.setOrUpdateSearchKey(key)
-
                 resetButtonClear()
                 if (key.isNotEmpty()) {
                     searchWithCoroutines()
                 } else {
                     showNoResults(getString(R.string.search_messages_default_tips))
                 }
-            }, { L.w { "[SearchActivity] initView searchSubject error: ${it.stackTraceToString()}" } })
+            }
+        }
 
 
         mBinding.buttonClear.setOnClickListener {
@@ -140,7 +134,7 @@ class SearchActivity : BaseActivity() {
         mBinding.llContacts.visibility = View.GONE
         mGroupsAdapter.submitList(emptyList())
         mBinding.llGroups.visibility = View.GONE
-        mSearchChatHistoryAdapter.submitList(emptyList())
+        mSearchChatHistoryAdapter.updateWithSearchKey("", emptyList())
         mBinding.llChatHistory.visibility = View.GONE
 
         mBinding.tvTips.visibility = View.VISIBLE
@@ -303,22 +297,8 @@ class SearchActivity : BaseActivity() {
 
     private suspend fun searchChatHistory(): List<SearchChatHistoryViewData> = withContext(Dispatchers.IO) {
         try {
-            val result = wcdb.message.getAllObjects(
-                DBMessageModel.messageText.upper().like("%${key.uppercase()}%")
-                    .and(DBMessageModel.type.notEq(2))
-                    .and(DBMessageModel.mode.notEq(1)) // Exclude confidential messages
-            ).groupBy { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(it.roomId)) }
-
-            val topFourEntries = if (result.size > 4) {
-                result.entries.take(5).associate { it.key to it.value }
-            } else {
-                result
-            }
-
-            SearchUtils.createSearchChatHistoryViewDataList(
-                this@SearchActivity,
-                topFourEntries.filter { it.key != null }.map { it.key!! to it.value }.toMap()
-            ).await()
+            val results = wcdb.loadRoomSearchResultsByKeyword(key, maxRooms = 5)
+            SearchUtils.createSearchChatHistoryViewDataList(this@SearchActivity, results)
         } catch (e: Exception) {
             L.w { "[search] search messages error: ${e.stackTraceToString()}" }
             emptyList()
@@ -386,13 +366,13 @@ class SearchActivity : BaseActivity() {
         } else {
             mBinding.llChatHistory.visibility = View.VISIBLE
             if (result.chatHistory.size > 4) {
-                mSearchChatHistoryAdapter.submitList(result.chatHistory.subList(0, 4))
+                mSearchChatHistoryAdapter.updateWithSearchKey(key, result.chatHistory.subList(0, 4))
                 mBinding.clSearchChatHistoryMore.root.visibility = View.VISIBLE
                 mBinding.clSearchChatHistoryMore.root.setOnClickListener {
                     SearchMoreActivity.startActivity(this, SearchMoreActivity.SEARCH_TYPE_MESSAGE, key)
                 }
             } else {
-                mSearchChatHistoryAdapter.submitList(result.chatHistory)
+                mSearchChatHistoryAdapter.updateWithSearchKey(key, result.chatHistory)
                 mBinding.clSearchChatHistoryMore.root.visibility = View.GONE
             }
         }

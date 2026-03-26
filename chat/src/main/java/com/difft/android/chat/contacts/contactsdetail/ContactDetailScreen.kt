@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -35,7 +36,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.ui.theme.DifftTheme
@@ -51,13 +51,15 @@ data class ContactDetailUiState(
     val isFriend: Boolean = true,
     val isSelf: Boolean = false,
     val isBot: Boolean = false,
+    val isOfficialBot: Boolean = false,
     val displayName: String = "",
     val originalName: String? = null,
     val hasRemark: Boolean = false,
     val userId: String = "",
     val joinedAt: String? = null,
     val sourceDescribe: String? = null,
-    val commonGroupsCount: Int = 0
+    val commonGroupsCount: Int = 0,
+    val website: String? = null
 )
 
 /**
@@ -90,6 +92,7 @@ fun ContactDetailScreen(
     onAddFriendClick: () -> Unit,
     onCommonGroupsClick: () -> Unit,
     onCopyUserId: () -> Unit,
+    onWebsiteClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Popup mode: calculate minimum height (40% of screen height) to avoid looking too short
@@ -120,8 +123,10 @@ fun ContactDetailScreen(
             isPopupMode = isPopupMode,
             showBackButton = showBackButton,
             showMoreButton = uiState.isFriend && !uiState.isSelf,
+            showEditButton = !uiState.isSelf,
             onCloseClick = onCloseClick,
-            onMoreClick = onMoreClick
+            onMoreClick = onMoreClick,
+            onEditClick = onEditClick
         )
 
         Spacer(modifier = Modifier.height(DifftTheme.spacing.stackMedium))
@@ -132,9 +137,8 @@ fun ContactDetailScreen(
             displayName = uiState.displayName,
             originalName = uiState.originalName,
             hasRemark = uiState.hasRemark,
-            showEditButton = uiState.isFriend || !uiState.isSelf,
+            isOfficialBot = uiState.isOfficialBot,
             onAvatarClick = onAvatarClick,
-            onEditClick = onEditClick,
             modifier = Modifier.padding(horizontal = DifftTheme.spacing.insetLarge)
         )
 
@@ -161,8 +165,12 @@ fun ContactDetailScreen(
             sourceDescribe = uiState.sourceDescribe,
             commonGroupsCount = uiState.commonGroupsCount,
             isSelf = uiState.isSelf,
+            isBot = uiState.isBot,
+            isOfficialBot = uiState.isOfficialBot,
+            website = uiState.website,
             onCommonGroupsClick = onCommonGroupsClick,
             onCopyUserId = onCopyUserId,
+            onWebsiteClick = onWebsiteClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
@@ -183,8 +191,10 @@ private fun TopBar(
     isPopupMode: Boolean,
     showBackButton: Boolean,
     showMoreButton: Boolean,
+    showEditButton: Boolean,
     onCloseClick: () -> Unit,
-    onMoreClick: () -> Unit
+    onMoreClick: () -> Unit,
+    onEditClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -201,27 +211,46 @@ private fun TopBar(
                 ),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(DifftTheme.spacing.iconMedium)
-                    .clickable { onCloseClick() },
+                    .clickable { onCloseClick() }
+                    .padding(10.dp)
+                    .size(DifftTheme.spacing.iconMedium),
                 tint = DifftTheme.colors.textPrimary
             )
         } else {
             // Placeholder when back button is hidden
-            Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium))
+            Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium + 20.dp))
         }
 
-        // More button
-        if (showMoreButton) {
-            Icon(
-                painter = painterResource(id = R.drawable.chat_message_action_more),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(DifftTheme.spacing.iconMedium)
-                    .clickable { onMoreClick() },
-                tint = DifftTheme.colors.textPrimary
-            )
-        } else {
-            Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium))
+        // Right side: edit + more buttons
+        // Each icon uses padding(10.dp) to form a 44dp square touch target;
+        // adjacent icons naturally share their padding gaps without extra spacedBy.
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (showEditButton) {
+                Icon(
+                    painter = painterResource(id = R.drawable.chat_contact_detail_ic_edit),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .clickable { onEditClick() }
+                        .padding(10.dp)
+                        .size(DifftTheme.spacing.iconMedium),
+                    tint = DifftTheme.colors.textPrimary
+                )
+            }
+            if (showMoreButton) {
+                Icon(
+                    painter = painterResource(id = R.drawable.chat_message_action_more),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .clickable { onMoreClick() }
+                        .padding(10.dp)
+                        .size(DifftTheme.spacing.iconMedium),
+                    tint = DifftTheme.colors.textPrimary
+                )
+            } else if (!showEditButton) {
+                Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium + 20.dp))
+            }
         }
     }
 }
@@ -232,9 +261,8 @@ private fun AvatarNameSection(
     displayName: String,
     originalName: String?,
     hasRemark: Boolean,
-    showEditButton: Boolean,
+    isOfficialBot: Boolean,
     onAvatarClick: () -> Unit,
-    onEditClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -285,30 +313,44 @@ private fun AvatarNameSection(
                     modifier = Modifier.weight(1f, fill = false)
                 )
 
-                if (showEditButton) {
-                    Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineSmall))
+                if (isOfficialBot) {
+                    Spacer(modifier = Modifier.width(4.dp))
                     Icon(
-                        painter = painterResource(id = R.drawable.chat_contact_detail_ic_edit),
+                        painter = painterResource(id = R.drawable.chat_ic_official_bot_badge),
                         contentDescription = null,
-                        modifier = Modifier
-                            .size(DifftTheme.spacing.iconXSmall)
-                            .clickable { onEditClick() },
-                        tint = DifftTheme.colors.textTertiary
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.Unspecified
                     )
                 }
             }
 
-            // Original name if has remark
-            if (hasRemark && !originalName.isNullOrEmpty()) {
+            // Subtitle line:
+            // Bot + remark: "Official Account・Name: xxx"
+            // Bot without remark: "Official Account"
+            // Normal + remark: "Name: xxx"
+            val subtitle = when {
+                isOfficialBot && hasRemark && !originalName.isNullOrEmpty() -> {
+                    stringResource(R.string.contact_official_account_label) +
+                            "・" +
+                            stringResource(R.string.contact_name_label, originalName)
+                }
+                isOfficialBot -> stringResource(R.string.contact_official_account_label)
+                hasRemark && !originalName.isNullOrEmpty() -> {
+                    stringResource(R.string.contact_name_label, originalName)
+                }
+                else -> null
+            }
+
+            if (subtitle != null) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = originalName,
+                    text = subtitle,
                     style = TextStyle(
                         fontWeight = FontWeight.Normal,
-                        fontSize = 16.sp
+                        fontSize = 14.sp
                     ),
-                    color = DifftTheme.colors.textSecondary,
-                    maxLines = 2,
+                    color = DifftTheme.colors.textTertiary,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -373,10 +415,10 @@ private fun ActionButtonsSection(
             }
 
             else -> {
-                // Non-friend: show message and add friend (each takes 50%)
+                // Non-friend: show "Add & Message" and "Add Contact" buttons (each takes 50%)
                 ActionButton(
                     iconRes = R.drawable.chat_contact_detail_ic_message,
-                    label = stringResource(R.string.contact_action_message),
+                    label = stringResource(R.string.contact_action_add_and_message),
                     onClick = onMessageClick,
                     modifier = Modifier.weight(1f)
                 )
@@ -429,8 +471,12 @@ private fun ContactInfoSection(
     sourceDescribe: String?,
     commonGroupsCount: Int,
     isSelf: Boolean,
+    isBot: Boolean,
+    isOfficialBot: Boolean,
+    website: String?,
     onCommonGroupsClick: () -> Unit,
     onCopyUserId: () -> Unit,
+    onWebsiteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -475,14 +521,25 @@ private fun ContactInfoSection(
             )
         }
 
-        // Common groups
-        if (!isSelf) {
+        // Common groups (hidden for bots)
+        if (!isSelf && !isBot) {
             Spacer(modifier = Modifier.height(16.dp))
             ContactInfoRow(
                 label = stringResource(R.string.chat_group_in_common),
                 value = commonGroupsCount.toString(),
                 showArrow = commonGroupsCount > 0,
                 onClick = if (commonGroupsCount > 0) onCommonGroupsClick else null
+            )
+        }
+
+        // Website (only for official bot)
+        if (isOfficialBot && !website.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            ContactInfoRow(
+                label = stringResource(R.string.contact_info_website),
+                value = website,
+                isLink = true,
+                onClick = onWebsiteClick
             )
         }
     }
@@ -494,6 +551,7 @@ private fun ContactInfoRow(
     label: String,
     value: String,
     showArrow: Boolean = false,
+    isLink: Boolean = false,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null
 ) {
@@ -513,7 +571,7 @@ private fun ContactInfoRow(
         Text(
             text = value,
             style = DifftTheme.typography.infoLabel,
-            color = DifftTheme.colors.textSecondary,
+            color = if (isLink) DifftTheme.colors.primary else DifftTheme.colors.textSecondary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier

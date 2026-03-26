@@ -47,7 +47,6 @@ import com.difft.android.chat.setting.archive.MessageArchiveManager
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
-import difft.android.messageserialization.model.Card
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.SharedContact
@@ -74,8 +73,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitFirst
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
 import org.difft.app.database.models.ContactorModel
@@ -102,7 +99,8 @@ data class ChatsContact(
 )
 
 class SelectChatsUtils @Inject constructor(
-    private val globalConfigsManager: GlobalConfigsManager
+    private val globalConfigsManager: GlobalConfigsManager,
+    private val groupUtil: GroupUtil
 ) {
 
     @Inject
@@ -154,21 +152,24 @@ class SelectChatsUtils @Inject constructor(
     }
 
     var searchKey: String = ""
+    var excludeNonFriendRooms: Boolean = false
 
     fun showChatSelectAndSendDialog(
         context: Activity,
         content: String,
         title: String? = null,
-        logFile: File? = null,
+        file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
-        card: Card? = null,
     ) {
-        val fragment = ChatSelectBottomSheetFragment.newInstance(isContactOnly = false)
+        val fragment = ChatSelectBottomSheetFragment.newInstance(
+            isContactOnly = false,
+            excludeNonFriendRooms = file != null
+        )
         fragment.onSelected = onSelected@{ data ->
             if (data == null) return@onSelected
             if (data.isGroup) {
                 val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.id))
-                if (group != null && !GroupUtil.canSpeak(group, globalServices.myId)) {
+                if (group != null && !groupUtil.canSpeak(group, globalServices.myId)) {
                     ToastUtil.show(context.getString(R.string.group_only_moderators_can_speak_tip))
                     return@onSelected
                 }
@@ -178,9 +179,8 @@ class SelectChatsUtils @Inject constructor(
                 data,
                 content,
                 title,
-                logFile,
+                file,
                 forwardContexts,
-                card,
                 scope = fragment.lifecycleScope,
                 onDismiss = { fragment.dismiss() }
             )
@@ -255,7 +255,15 @@ class SelectChatsUtils @Inject constructor(
                 emptyList()
             }
 
-            val sortedRooms = rooms.sortedWith(compareByDescending<RoomModel> { it.pinnedTime ?: 0L }
+            val filteredRooms = if (excludeNonFriendRooms) {
+                val friendIds = wcdb.contactor.allObjects.map { it.id }.toSet()
+                rooms.filter { room -> room.roomType == 1 || room.roomId in friendIds }
+                    .also { L.i { "[SelectChatsUtils] excluded ${rooms.size - it.size} non-friend rooms" } }
+            } else {
+                rooms
+            }
+
+            val sortedRooms = filteredRooms.sortedWith(compareByDescending<RoomModel> { it.pinnedTime ?: 0L }
                 .thenByDescending { it.lastActiveTime })
 
             _roomsFlow.value = sortedRooms
@@ -305,7 +313,6 @@ class SelectChatsUtils @Inject constructor(
         title: String? = null,
         file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
-        card: Card? = null,
         scope: CoroutineScope,
         onDismiss: () -> Unit
     ) {
@@ -353,7 +360,7 @@ class SelectChatsUtils @Inject constructor(
                 } else if (forwardContexts != null && forwardContexts.isEmpty().not()) {
                     sendTasks.add {
                         val forWhat = if (chatsContact.isGroup) For.Group(chatsContact.id) else For.Account(chatsContact.id)
-                        val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
+                        val time = messageArchiveManager.getMessageArchiveTime(forWhat)
                         val response = getConversationConfigs(context, listOf(forWhat.id))
                         var mode = response.data?.conversations?.find { body -> body.conversation == forWhat.id }?.confidentialMode ?: 0
                         // Check group member limit or bot: force mode to 0
@@ -370,7 +377,7 @@ class SelectChatsUtils @Inject constructor(
                     }
                 } else {
                     sendTasks.add {
-                        sendTextPush(context, content, chatsContact.id, chatsContact.isGroup, card = card)
+                        sendTextPush(context, content, chatsContact.id, chatsContact.isGroup)
                     }
                 }
 
@@ -531,11 +538,11 @@ class SelectChatsUtils @Inject constructor(
         try {
             val recipientIds = mutableListOf<String>()
             if (isGroup) {
-                val group = GroupUtil.getSingleGroupInfo(activity, accountID, false).awaitFirst()
-                if (group.isPresent) {
-                    group.get().members.forEach { member ->
-                        recipientIds.add(member.id)
-                    }
+                val group = groupUtil.getSingleGroupInfo(accountID, false)
+                group?.members?.forEach { member ->
+                    recipientIds.add(member.id)
+                }
+                if (group != null) {
                     recipientIds.add(globalServices.myId)
                 }
                 requestPermission(
@@ -681,7 +688,6 @@ class SelectChatsUtils @Inject constructor(
         forwardContext: ForwardContext? = null,
         sharedContactId: String? = null,
         sharedContactName: String? = null,
-        card: Card? = null,
         archiveTime: Int? = null,
         confidentialMode: Int? = null
     ) {
@@ -716,8 +722,7 @@ class SelectChatsUtils @Inject constructor(
                 mode,
                 content,
                 forwardContext = finalForwardContext,
-                sharedContact = sharedContacts,
-                card = card
+                sharedContact = sharedContacts
             )
             L.i { "[Message] forward message success:" + textMessage.id }
             ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
@@ -727,7 +732,7 @@ class SelectChatsUtils @Inject constructor(
             sendMessage(archiveTime, confidentialMode)
         } else {
             try {
-                val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
+                val time = messageArchiveManager.getMessageArchiveTime(forWhat)
                 val response = getConversationConfigs(activity, listOf(accountID))
                 var mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
                 // Check group member limit or bot: force mode to 0
@@ -784,7 +789,7 @@ class SelectChatsUtils @Inject constructor(
                 AttachmentStatus.LOADING.code
             )
 
-            val time = messageArchiveManager.getMessageArchiveTime(forWhat).await()
+            val time = messageArchiveManager.getMessageArchiveTime(forWhat)
             val response = getConversationConfigs(context, listOf(accountID))
             var mode = response.data?.conversations?.find { body -> body.conversation == accountID }?.confidentialMode ?: 0
             // Check group member limit or bot: force mode to 0
@@ -828,7 +833,6 @@ class SelectChatsUtils @Inject constructor(
         return try {
             activity.getEntryPoint().getHttpClient().httpService
                 .fetchGetConversationSet(SecureSharedPrefsUtil.getBasicAuth(), GetConversationSetRequestBody(conversations))
-                .await()
         } catch (e: Exception) {
             L.e { "[SelectChatsUtils] getConversationConfigs error: ${e.stackTraceToString()}" }
             throw e
@@ -846,16 +850,19 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
     lateinit var selectChatsUtils: SelectChatsUtils
 
     private val isContactOnly: Boolean by lazy { arguments?.getBoolean(ARG_IS_CONTACT_ONLY) ?: false }
+    private val excludeNonFriendRooms: Boolean by lazy { arguments?.getBoolean(ARG_EXCLUDE_NON_FRIEND_ROOMS) ?: false }
 
     var onSelected: ((ChatsContact?) -> Unit)? = null
 
     companion object {
         private const val ARG_IS_CONTACT_ONLY = "arg_is_contact_only"
+        private const val ARG_EXCLUDE_NON_FRIEND_ROOMS = "arg_exclude_non_friend_rooms"
 
-        fun newInstance(isContactOnly: Boolean): ChatSelectBottomSheetFragment {
+        fun newInstance(isContactOnly: Boolean, excludeNonFriendRooms: Boolean = false): ChatSelectBottomSheetFragment {
             return ChatSelectBottomSheetFragment().apply {
                 arguments = Bundle().apply {
                     putBoolean(ARG_IS_CONTACT_ONLY, isContactOnly)
+                    putBoolean(ARG_EXCLUDE_NON_FRIEND_ROOMS, excludeNonFriendRooms)
                 }
             }
         }
@@ -868,6 +875,8 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
     override fun isFullScreen(): Boolean = true
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
+        selectChatsUtils.excludeNonFriendRooms = excludeNonFriendRooms
+
         if (isContactOnly) {
             view.findViewById<TextView>(R.id.title).text = getString(R.string.select_contact)
         }
@@ -914,11 +923,12 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
             if (isContactOnly) {
                 selectChatsUtils._contactsFlow.collect { contacts ->
                     val contactsList = contacts.sortedByPinyin().map { contact ->
+                        val displayName = contact.getDisplayNameForUI()
                         ChatsContact(
                             contact.id,
-                            contact.getDisplayNameForUI(),
+                            displayName,
                             contact.avatar,
-                            contact.getDisplayNameForUI().getFirstLetter(),
+                            displayName.getFirstLetter(),
                             false,
                             SelectChatsUtils.ITEM_TYPE_CONTACT,
                             null
@@ -983,11 +993,12 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
                         }
 
                     val contactsList = contacts.sortedByPinyin().map { contact ->
+                        val displayName = contact.getDisplayNameForUI()
                         ChatsContact(
                             contact.id,
-                            contact.getDisplayNameForUI(),
+                            displayName,
                             contact.avatar,
-                            contact.getDisplayNameForUI().getFirstLetter(),
+                            displayName.getFirstLetter(),
                             false,
                             SelectChatsUtils.ITEM_TYPE_CONTACT,
                             null

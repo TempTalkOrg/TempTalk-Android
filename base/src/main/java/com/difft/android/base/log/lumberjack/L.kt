@@ -264,7 +264,7 @@ object L {
     /**
      * 日志UID脱敏
      */
-    private fun replaceUid(message: String): String {
+    fun replaceUid(message: String): String {
         // 定义正则表达式
         val regex = """(\+|ios|android|web|mac)(\d{7,12})(\d{3})""".toRegex()
         // 使用正则表达式查找匹配的部分

@@ -5,10 +5,6 @@ import com.difft.android.call.data.CancelHandRtmMessage
 import com.difft.android.call.data.CountDownTimerData
 import com.difft.android.call.data.EndCallRtmMessage
 import com.difft.android.call.data.HandsUpData
-import com.difft.android.call.data.RTM_MESSAGE_KEY_SENDTIMESTAMP
-import com.difft.android.call.data.RTM_MESSAGE_KEY_TEXT
-import com.difft.android.call.data.RTM_MESSAGE_KEY_TOPIC
-import com.difft.android.call.data.RTM_MESSAGE_KEY_TYPE
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CHAT
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN
@@ -22,7 +18,6 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
 import com.difft.android.call.data.RaiseHandRtmMessage
 import com.difft.android.call.data.RtmDataPacket
 import com.difft.android.call.data.RtmMessage
-import com.google.gson.Gson
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
@@ -31,9 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.json.JSONObject
 import java.util.UUID
 
 class RtmMessageHandler(
@@ -42,7 +35,7 @@ class RtmMessageHandler(
     private val encryptor: (plain: ByteArray, timestamp: Long) -> String?,
     private val decryptor: (participant: Participant, cipher: ByteArray) -> RtmMessage?,
 ) {
-    private val gson = Gson()
+    private val json = Json { ignoreUnknownKeys = true }
 
     /**
      * Sends a chat message as a barrage (scrolling message) to the RTM channel.
@@ -50,13 +43,14 @@ class RtmMessageHandler(
     fun sendChatBarrage(text: String, type: Int, onComplete: (Boolean) -> Unit = {}) {
         if (text.isEmpty()) return
         val timestamp = System.currentTimeMillis()
-        val json = JSONObject()
-            .put(RTM_MESSAGE_KEY_TEXT, text)
-            .put(RTM_MESSAGE_KEY_TOPIC, RTM_MESSAGE_TOPIC_CHAT)
-            .put(RTM_MESSAGE_KEY_TYPE, type)
-            .put(RTM_MESSAGE_KEY_SENDTIMESTAMP, timestamp)
-            .toString()
-        send(topic = RTM_MESSAGE_TOPIC_CHAT, payload = json, timestamp = timestamp, encrypt = true, onComplete = onComplete)
+        val msg = RtmMessage(
+            text = text,
+            topic = RTM_MESSAGE_TOPIC_CHAT,
+            type = type,
+            sendTimestamp = timestamp
+        )
+        val payload = json.encodeToString(msg)
+        send(topic = RTM_MESSAGE_TOPIC_CHAT, payload = payload, timestamp = timestamp, encrypt = true, onComplete = onComplete)
     }
 
     /**
@@ -71,8 +65,8 @@ class RtmMessageHandler(
             identities = identities,
             sendTimestamp = timestamp
         )
-        val json = Json.Default.encodeToString(RtmMessage.serializer(), msg)
-        send(topic = RTM_MESSAGE_TOPIC_MUTE, payload = json, timestamp = timestamp, encrypt = true, onComplete = {}, identities = identities)
+        val payload = json.encodeToString(RtmMessage.serializer(), msg)
+        send(topic = RTM_MESSAGE_TOPIC_MUTE, payload = payload, timestamp = timestamp, encrypt = true, onComplete = {}, identities = identities)
     }
 
     /**
@@ -109,17 +103,29 @@ class RtmMessageHandler(
                 }
             }
             RTM_MESSAGE_TOPIC_SET_COUNTDOWN, RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN, RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN, RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN -> {
-                val packet = try { gson.fromJson(String(event.data, Charsets.UTF_8), RtmDataPacket::class.java) } catch (e: Exception) { null }
+                val packet = try { json.decodeFromString<RtmDataPacket>(String(event.data, Charsets.UTF_8)) } catch (e: Exception) {
+                    L.e { "[Call] handleDataReceived decode countdown rtm message failed, error = ${e.message}" }
+                    null
+                }
                 packet?.payload?.let { payload ->
-                    val data = try { gson.fromJson(payload, CountDownTimerData::class.java) } catch (e: Exception) { null }
+                    val data = try { json.decodeFromString<CountDownTimerData>(payload) } catch (e: Exception) {
+                        L.e { "[Call] handleDataReceived decode countdown data failed, error = ${e.message}" }
+                        null
+                    }
                     if (data != null) onCountDown(data, topic)
                 }
             }
 
             RTM_MESSAGE_TOPIC_RAISE_HANDS_UP, RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP -> {
-                val packet = try { gson.fromJson(String(event.data, Charsets.UTF_8), RtmDataPacket::class.java) } catch (e: Exception) { null }
+                val packet = try { json.decodeFromString<RtmDataPacket>(String(event.data, Charsets.UTF_8)) } catch (e: Exception) {
+                    L.e { "[Call] handleDataReceived decode hands up rtm message failed, error = ${e.message}" }
+                    null
+                }
                 packet?.payload?.let { payload ->
-                    val data = try { gson.fromJson(payload, HandsUpData::class.java) } catch (e: Exception) { null }
+                    val data = try { json.decodeFromString<HandsUpData>(payload) } catch (e: Exception) {
+                        L.e { "[Call] handleDataReceived decode hands up data failed, error = ${e.message}" }
+                        null
+                    }
                     if (data != null) onHandsUp(data, topic)
                 }
             }
@@ -132,13 +138,13 @@ class RtmMessageHandler(
      */
     fun sendEndCall(onComplete: (Boolean) -> Unit) {
         val timestamp = System.currentTimeMillis()
-        val json = gson.toJson(
+        val payload = json.encodeToString(
             EndCallRtmMessage(
                 topic = RTM_MESSAGE_TOPIC_END_CALL,
                 sendTimestamp = timestamp
             )
         )
-        send(topic = RTM_MESSAGE_TOPIC_END_CALL, payload = json, timestamp = timestamp, encrypt = true, onComplete = onComplete)
+        send(topic = RTM_MESSAGE_TOPIC_END_CALL, payload = payload, timestamp = timestamp, encrypt = true, onComplete = onComplete)
     }
 
     /**
@@ -154,8 +160,8 @@ class RtmMessageHandler(
                 sendTimestamp = timestamp,
                 identities = identities,
             )
-            val json = Json.Default.encodeToString(rtmMessage)
-            send(topic = RTM_MESSAGE_TOPIC_RESUME_CALL, payload = json, timestamp = timestamp, encrypt = true, onComplete = {}, identities = identities)
+            val payload = json.encodeToString(rtmMessage)
+            send(topic = RTM_MESSAGE_TOPIC_RESUME_CALL, payload = payload, timestamp = timestamp, encrypt = true, onComplete = {}, identities = identities)
         }
     }
 
@@ -164,34 +170,21 @@ class RtmMessageHandler(
      */
     fun sendRaiseHandsRtmMessage(enabled: Boolean, participant: Participant, onComplete: (Boolean) -> Unit) {
         val topic = if (enabled) RTM_MESSAGE_TOPIC_RAISE_HANDS_UP else RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP
-        // 发送 RTM
         val identities = listOfNotNull(participant.identity?.value)
         val timestamp = System.currentTimeMillis()
-        val json = if (enabled)
-            gson.toJson(
-                RtmDataPacket(
-                    payload = gson.toJson(RaiseHandRtmMessage(topic = topic)),
-                    signature = "",
-                    sendTimestamp = timestamp,
-                    uuid = UUID.randomUUID().toString()
-                )
-            )
+        val innerPayload = if (enabled)
+            json.encodeToString(RaiseHandRtmMessage(topic = topic))
         else
-            gson.toJson(
-                RtmDataPacket(
-                    payload = gson.toJson(
-                        CancelHandRtmMessage(
-                            topic = topic,
-                            hands = identities
-                        )
-                    ),
-                    signature = "",
-                    sendTimestamp = timestamp,
-                    uuid = UUID.randomUUID().toString()
-                )
+            json.encodeToString(CancelHandRtmMessage(topic = topic, hands = identities))
+        val payload = json.encodeToString(
+            RtmDataPacket(
+                payload = innerPayload,
+                signature = "",
+                sendTimestamp = timestamp,
+                uuid = UUID.randomUUID().toString()
             )
-
-        send(topic = topic, payload = json, timestamp = timestamp, encrypt = false, onComplete = onComplete)
+        )
+        send(topic = topic, payload = payload, timestamp = timestamp, encrypt = false, onComplete = onComplete)
     }
 
     /**
@@ -202,7 +195,7 @@ class RtmMessageHandler(
             val success = try {
                 val data = if (encrypt) encryptor(payload.toByteArray(Charsets.UTF_8), timestamp) else payload
                 if (data == null) {
-                    L.i { "[Call] rtm encryptor result is null" };
+                    L.i { "[Call] rtm encryptor result is null" }
                     withContext(Dispatchers.Main) {
                         onComplete(false)
                     }
@@ -212,7 +205,12 @@ class RtmMessageHandler(
                     identities = identities,
                     topic = topic,
                 )
-                true
+                if (result.isSuccess) {
+                    true
+                } else {
+                    L.e { "[Call] RtmMessageHandler send failed, error = ${result.exceptionOrNull()?.message}" }
+                    false
+                }
             } catch (e: Exception) {
                 L.e { "[Call] RtmMessageHandler send error = ${e.message}" }
                 false

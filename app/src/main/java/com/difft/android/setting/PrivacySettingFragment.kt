@@ -11,7 +11,6 @@ import com.difft.android.R
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -20,7 +19,12 @@ import com.difft.android.login.data.RenewIdentityKeyRequestBody
 import com.difft.android.login.repo.LoginRepo
 import com.difft.android.websocket.internal.util.JsonUtil
 import com.difft.android.base.utils.Base64
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.util.KeyHelper
 import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
@@ -124,12 +128,14 @@ class PrivacySettingFragment : Fragment() {
         val oldSignByteArray = currentIdentityKeyPair.privateKey.calculateSignature(newSignByteArray)
 
         val requestBody = RenewIdentityKeyRequestBody(Base64.encodeBytesWithoutPadding(newIdentityKeyPair.publicKey.serialize()), registrationId, Base64.encodeBytesWithoutPadding(newSignByteArray), Base64.encodeBytesWithoutPadding(oldSignByteArray))
-        loginRepo.renewIdentityKey(SecureSharedPrefsUtil.getBasicAuth(), JsonUtil.toJson(requestBody))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(viewLifecycleOwner))
-            .subscribe({
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    loginRepo.renewIdentityKey(SecureSharedPrefsUtil.getBasicAuth(), JsonUtil.toJson(requestBody))
+                }
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
+                if (!isAdded || view == null) return@launch
+                if (result.status == 0) {
                     val currentTimeMillis = System.currentTimeMillis()
 
                     // 存储旧ACI身份密钥和时间到UserManager
@@ -151,25 +157,28 @@ class PrivacySettingFragment : Fragment() {
                     }
                     ToastUtil.show(com.difft.android.chat.R.string.operation_successful)
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    result.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }, {
-                L.w { "[PrivacySettingFragment] renewIdentityKey error: ${it.stackTraceToString()}" }
-                if (it is HttpException) {
-                    when (it.code()) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ComposeDialogManager.dismissWait()
+                if (!isAdded || view == null) return@launch
+                L.w { "[PrivacySettingFragment] renewIdentityKey error: ${e.stackTraceToString()}" }
+                if (e is HttpException) {
+                    when (e.code()) {
                         413 -> {
                             ToastUtil.show(R.string.settings_new_key_times_limit_tips)
                         }
-
                         else -> {
-                            it.message?.let { message -> ToastUtil.show(message) }
+                            e.message?.let { message -> ToastUtil.show(message) }
                         }
                     }
                 } else {
-                    it.message?.let { message -> ToastUtil.show(message) }
+                    e.message?.let { message -> ToastUtil.show(message) }
                 }
-                ComposeDialogManager.dismissWait()
-            })
+            }
+        }
     }
 
     override fun onDestroyView() {

@@ -12,7 +12,8 @@ import util.getParcelableExtraCompat
 @Parcelize
 class MediaSendActivityResult(
     val media: List<LocalMedia> = emptyList(),
-    val body: String
+    val body: String,
+    val confidentialMode: Int = 0
 ) : Parcelable {
 
     companion object {

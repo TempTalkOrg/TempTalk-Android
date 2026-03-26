@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.kapt)
     id("kotlin-parcelize")
     id("org.jetbrains.kotlin.plugin.serialization")
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -43,6 +44,13 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/call"))
 }
 
 kotlin {
@@ -63,7 +71,24 @@ dependencies {
 
     // Compose Debug
     debugImplementation(libs.bundles.compose.debug)
-    // 测试依赖已通过base模块提供
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 
     // Call specific dependencies
     implementation(libs.accompanist.systemuicontroller)

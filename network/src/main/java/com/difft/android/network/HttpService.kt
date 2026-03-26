@@ -26,8 +26,6 @@ import com.difft.android.network.responses.PendingMessageResponse
 import com.difft.android.network.responses.SpeechToTextResponse
 import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import com.difft.android.websocket.api.messages.GetPublicKeysResp
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.core.Single
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.http.Body
@@ -46,24 +44,24 @@ import retrofit2.http.Url
 interface HttpService {
 
     @GET
-    fun getResponseBody(
+    suspend fun getResponseBody(
         @Url url: String,
         @HeaderMap headers: Map<String, String>,
         @QueryMap params: Map<String, String>
-    ): Observable<ResponseBody>
+    ): ResponseBody
 
     @POST("v1/directory/contacts")
-    fun fetchContactors(
+    suspend fun fetchContactors(
         @Query("properties") properties: String = "all",
         @Header("Authorization") baseAuth: String,
         @Body body: ContactsRequestBody,
-    ): Single<BaseResponse<ContactsDataResponse>>
+    ): BaseResponse<ContactsDataResponse>
 
     @POST("v1/directory/contacts")
-    fun fetchAllContactors(
+    suspend fun fetchAllContactors(
         @Query("properties") properties: String = "all",
         @Header("Authorization") baseAuth: String,
-    ): Single<BaseResponse<ContactsDataResponse>>
+    ): BaseResponse<ContactsDataResponse>
 
     @PUT("v1/authorize/token")
     suspend fun fetchAuthToken(
@@ -71,86 +69,80 @@ interface HttpService {
     ): BaseResponse<AuthToken>
 
     @POST("v3/friend/ask")
-    fun fetchAddContactor(
+    suspend fun fetchAddContactor(
         @Header("Authorization") token: String,
         @Body body: AddContactorRequestBody
-    ): Single<BaseResponse<AddContactorResponse>>
-
-    @PUT("v3/friend/ask/{askId}/agree")
-    fun fetchAgreeContactRequest(
-        @Path("askId") askId: Int,
-        @Header("Authorization") token: String
-    ): Single<BaseResponse<String>>
+    ): BaseResponse<AddContactorResponse>
 
     @DELETE("v3/friend/{uid}")
-    fun fetchDeleteContact(
+    suspend fun fetchDeleteContact(
         @Path("uid") uid: String,
         @Header("Authorization") token: String
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @GET("v1/profile/avatar/attachment")
-    fun fetchAvatarAttachmentInfo(
+    suspend fun fetchAvatarAttachmentInfo(
         @Header("Authorization") baseAuth: String
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @PUT
-    fun fetchUploadAvatar(
+    suspend fun fetchUploadAvatar(
         @Url url: String,
         @Body file: RequestBody
-    ): Single<ResponseBody>
+    ): ResponseBody
 
     @PUT("v1/profile")
-    fun fetchSetProfile(
+    suspend fun fetchSetProfile(
         @Header("Authorization") baseAuth: String,
         @Body profileRequestBody: ProfileRequestBody
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @PUT("v1/accounts/androidnotify")
-    fun fetchBindPushToken(
+    suspend fun fetchBindPushToken(
         @Header("Authorization") baseAuth: String,
         @Query("type") type: String,
         @Body bindPushTokenRequestBody: BindPushTokenRequestBody
-    ): Single<BaseResponse<String>>
+    ): BaseResponse<String>
 
     @POST("v1/conversation/set")
-    fun fetchConversationSet(
+    suspend fun fetchConversationSet(
         @Header("Authorization") baseAuth: String,
         @Body conversationSetRequestBody: ConversationSetRequestBody
-    ): Single<BaseResponse<ConversationSetResponseBody>>
+    ): BaseResponse<ConversationSetResponseBody>
 
     @POST("v1/conversation/get")
-    fun fetchGetConversationSet(
+    suspend fun fetchGetConversationSet(
         @Header("Authorization") baseAuth: String,
         @Body getConversationSetRequestBody: GetConversationSetRequestBody
-    ): Single<BaseResponse<GetConversationSetResponseBody>>
+    ): BaseResponse<GetConversationSetResponseBody>
 
     @POST("v1/conversationconfig/share")
-    fun fetchShareConversationConfig(
+    suspend fun fetchShareConversationConfig(
         @Header("Authorization")
         authorization: String,
         @Body
         req: GetConversationShareRequestBody
-    ): Single<BaseResponse<GetConversationShareResponse>>
+    ): BaseResponse<GetConversationShareResponse>
 
     @PUT("v1/conversationconfig/share/{conversation}")
-    fun updateConversationConfig(
+    suspend fun updateConversationConfig(
         @Header("Authorization")
         authorization: String,
         @Path(value = "conversation", encoded = false)
         conversations: String,
         @Body
         conversationShareRequestBody: ConversationShareRequestBody
-    ): Single<BaseResponse<ConversationShareResponse>>
+    ): BaseResponse<ConversationShareResponse>
 
     @PUT("v1/accounts/logout")
-    fun fetchLogout(
+    suspend fun fetchLogout(
         @Header("Authorization") baseAuth: String
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @DELETE("v1/accounts")
-    fun fetchDeleteAccount(
+    suspend fun fetchDeleteAccount(
         @Header("Authorization") baseAuth: String
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @GET
     suspend fun getNewGlobalConfigs(
@@ -158,54 +150,54 @@ interface HttpService {
     ): NewGlobalConfig
 
     @GET
-    fun getAppVersionConfigs(
+    suspend fun getAppVersionConfigs(
         @Url url: String
-    ): Observable<AppVersionResponse>
+    ): AppVersionResponse
 
     @GET("/v1/attachments/{attachmentId}")
-    fun getDownloadUrl(
+    suspend fun getDownloadUrl(
         @Header("Authorization") baseAuth: String,
         @Path(value = "attachmentId")
         conversations: String,
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @GET("/v1/attachments")
-    fun fetchAttachmentInfo(
+    suspend fun fetchAttachmentInfo(
         @Header("Authorization") baseAuth: String
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @PUT("/v1/accounts/activate")
-    fun activateDevice(
+    suspend fun activateDevice(
         @Header("Authorization") baseAuth: String
-    ): Single<BaseResponse<Any>>
+    ): BaseResponse<Any>
 
     @DELETE("/v1/messages/{source}/{timestamp}")
-    fun removePendingMessage(@Header("Authorization") baseAuth: String, @Path("source") source: String, @Path("timestamp") timestamp: String): Single<BaseResponse<Any>>
+    suspend fun removePendingMessage(@Header("Authorization") baseAuth: String, @Path("source") source: String, @Path("timestamp") timestamp: String): BaseResponse<Any>
 
     @GET("/v1/messages")
     suspend fun getPendingMessage(@Header("Authorization") baseAuth: String): PendingMessageResponse
 
     @POST("/speech2text/whisperX/transcribe")
-    fun voiceToText(
+    suspend fun voiceToText(
         @Header("Authorization") token: String,
         @Body body: SpeechToTextRequestBody
-    ): Single<BaseResponse<SpeechToTextResponse>>
+    ): BaseResponse<SpeechToTextResponse>
 
     @POST("v3/keys/identity/bulk")
-    fun getPublicKeys(
+    suspend fun getPublicKeys(
         @Header("Authorization") authorization: String,
         @Body req: GetPublicKeysReq
-    ): Observable<BaseResponse<GetPublicKeysResp>>
+    ): BaseResponse<GetPublicKeysResp>
 
     @POST("/chat/v3/messages/criticalAlertNew")
-    fun sendCriticalAlertNew(
+    suspend fun sendCriticalAlertNew(
         @Header("Authorization") baseAuth: String,
         @Body req: CriticalAlertRequestBodyNew
-    ): Single<BaseResponse<CriticalAlertResponse>>
+    ): BaseResponse<CriticalAlertResponse>
 
     @POST("/grayCheck/v1/grayCheck")
-    fun grayCheck(
+    suspend fun grayCheck(
         @Header("Authorization") token: String,
         @Body req: GrayCheckRequestBody
-    ): Single<BaseResponse<List<GrayConfigData>?>>
+    ): BaseResponse<List<GrayConfigData>?>
 }

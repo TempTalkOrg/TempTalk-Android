@@ -6,12 +6,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.luck.picture.lib.entity.LocalMedia
-import io.reactivex.rxjava3.core.Maybe
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.subjects.BehaviorSubject
-import io.reactivex.rxjava3.subjects.PublishSubject
-import io.reactivex.rxjava3.subjects.Subject
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.v2.videos.VideoTrimData
@@ -30,24 +28,31 @@ import kotlin.time.Duration.Companion.seconds
  */
 class MediaSelectionViewModel(
     initialMedia: List<LocalMedia>,
-    private val repository: MediaSelectionRepository
+    private val repository: MediaSelectionRepository,
+    initialConfidentialMode: Int = 0,
+    showConfidentialToggle: Boolean = false
 ) : ViewModel() {
 
     private val TAG = L.tag(MediaSelectionViewModel::class.java)
 
-    private val selectedMediaSubject: Subject<List<LocalMedia>> = BehaviorSubject.create()
+    private val selectedMediaSubject = MutableSharedFlow<List<LocalMedia>>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    private val store: Store<MediaSelectionState> = Store(MediaSelectionState())
+    private val store: Store<MediaSelectionState> = Store(
+        MediaSelectionState(
+            confidentialMode = initialConfidentialMode,
+            showConfidentialToggle = showConfidentialToggle
+        )
+    )
 
     val state: LiveData<MediaSelectionState> = store.stateLiveData
 
-    private val internalHudCommands = PublishSubject.create<HudCommand>()
-    val hudCommands: Observable<HudCommand> = internalHudCommands
+    private val internalHudCommands = MutableSharedFlow<HudCommand>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val hudCommands: SharedFlow<HudCommand> = internalHudCommands
 
-    val mediaErrors: BehaviorSubject<MediaValidator.FilterError> = BehaviorSubject.createDefault(MediaValidator.FilterError.None)
+    val mediaErrors = MutableStateFlow<MediaValidator.FilterError>(MediaValidator.FilterError.None)
 
     fun sendCommand(hudCommand: HudCommand) {
-        internalHudCommands.onNext(hudCommand)
+        internalHudCommands.tryEmit(hudCommand)
     }
 
     fun setTouchEnabled(isEnabled: Boolean) {
@@ -101,7 +106,7 @@ class MediaSelectionViewModel(
             )
         }
 
-        selectedMediaSubject.onNext(newSelectionList)
+        selectedMediaSubject.tryEmit(newSelectionList)
     }
 
 
@@ -170,15 +175,15 @@ class MediaSelectionViewModel(
         }
 
         if (newMediaList.isEmpty() && !store.state.suppressEmptyError) {
-            mediaErrors.onNext(MediaValidator.FilterError.NoItems())
+            mediaErrors.value = MediaValidator.FilterError.NoItems()
         }
 
-        selectedMediaSubject.onNext(newMediaList)
+        selectedMediaSubject.tryEmit(newMediaList)
         repository.deleteBlobs(listOf(media))
     }
 
     fun clearMediaErrors() {
-        mediaErrors.onNext(MediaValidator.FilterError.None)
+        mediaErrors.value = MediaValidator.FilterError.None
     }
 
     fun kick() {
@@ -200,6 +205,10 @@ class MediaSelectionViewModel(
 
     fun setMessage(text: CharSequence?) {
         store.update { it.copy(message = text) }
+    }
+
+    fun setConfidentialMode(mode: Int) {
+        store.update { it.copy(confidentialMode = mode) }
     }
 
     fun onEditVideoDuration(context: Context, totalDurationUs: Long, startTimeUs: Long, endTimeUs: Long, touchEnabled: Boolean) {
@@ -250,20 +259,19 @@ class MediaSelectionViewModel(
         }
     }
 
-    fun send(
+    suspend fun send(
         scheduledDate: Long? = null
-    ): Maybe<MediaSendActivityResult> = send(scheduledDate ?: -1)
+    ): MediaSendActivityResult = send()
 
-    fun send(): Maybe<MediaSendActivityResult> {
+    suspend fun send(): MediaSendActivityResult {
         return repository.send(
             selectedMedia = store.state.selectedMedia,
             stateMap = store.state.editorStateMap,
             quality = store.state.quality,
             message = store.state.message,
+            confidentialMode = store.state.confidentialMode,
         )
     }
-
-    private val disposables = CompositeDisposable()
 
     private var lastMediaDrag: Pair<Int, Int> = Pair(0, 0)
 
@@ -272,11 +280,6 @@ class MediaSelectionViewModel(
             addMedia(initialMedia)
         }
     }
-
-    override fun onCleared() {
-        disposables.clear()
-    }
-
 
     companion object {
         private const val STATE_PREFIX = "selection.view.model"
@@ -301,10 +304,12 @@ class MediaSelectionViewModel(
 
     class Factory(
         private val initialMedia: List<LocalMedia>,
-        private val repository: MediaSelectionRepository
+        private val repository: MediaSelectionRepository,
+        private val initialConfidentialMode: Int = 0,
+        private val showConfidentialToggle: Boolean = false
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return requireNotNull(modelClass.cast(MediaSelectionViewModel(initialMedia, repository)))
+            return requireNotNull(modelClass.cast(MediaSelectionViewModel(initialMedia, repository, initialConfidentialMode, showConfidentialToggle)))
         }
     }
 }

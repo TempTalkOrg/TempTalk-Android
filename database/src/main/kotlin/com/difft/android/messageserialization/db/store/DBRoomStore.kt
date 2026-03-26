@@ -20,13 +20,11 @@ import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Column
-import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Maybe
-import io.reactivex.rxjava3.core.Single
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
 import java.util.Optional
@@ -69,11 +67,12 @@ class DBRoomStore @Inject constructor(
                         }
                     }
                 }
-                //备忘录
+                // Saved Messages (备忘录)
                 if (forWhat.id == globalServices.myId) {
                     this.lastActiveTime = System.currentTimeMillis()
                     this.pinnedTime = System.currentTimeMillis()
                     this.roomName = ResUtils.getString(R.string.chat_favorites)
+                    this.emptyRoomSince = null  // Saved Messages is not an empty room
                 }
                 try {
                     wcdb.room.insertObject(this)
@@ -86,14 +85,13 @@ class DBRoomStore @Inject constructor(
         return room
     }
 
-    private fun findRoom(forWhat: For): Maybe<RoomModel> = findRoom(forWhat.id)
+    private fun findRoom(forWhat: For): RoomModel? = findRoom(forWhat.id)
 
-    private fun findRoom(id: String): Maybe<RoomModel> =
-        Maybe.fromCallable { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(id)) }
+    private fun findRoom(id: String): RoomModel? =
+        wcdb.room.getFirstObject(DBRoomModel.roomId.eq(id))
 
-    override fun updateMessageExpiry(forWhat: For, messageExpiry: Long, messageClearAnchor: Long) = Completable.fromAction {
+    override suspend fun updateMessageExpiry(forWhat: For, messageExpiry: Long, messageClearAnchor: Long) {
         L.i { "[DBRoomStore] updateMessageExpiry " + forWhat.id + " messageExpiry: $messageExpiry, messageClearAnchor: $messageClearAnchor" }
-//        wcdb.room.updateValue(messageExpiry, DBRoomModel.messageExpiry, DBRoomModel.roomId.eq(forWhat.id))
         wcdb.room.updateRow(
             arrayOf(Value(messageExpiry), Value(messageClearAnchor)),
             arrayOf(DBRoomModel.messageExpiry, DBRoomModel.messageClearAnchor),
@@ -104,43 +102,27 @@ class DBRoomStore @Inject constructor(
         RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
-    override fun getMessageExpiry(forWhat: For): Single<Optional<Long>> {
-        return findRoom(forWhat)
-            .map { roomModel ->
-                Optional.ofNullable(roomModel.messageExpiry)
-            }
-            .switchIfEmpty(Single.just(Optional.empty()))
+    override suspend fun getMessageExpiry(forWhat: For): Optional<Long> {
+        return findRoom(forWhat)?.let { Optional.ofNullable(it.messageExpiry) } ?: Optional.empty()
     }
 
-    override fun updateMuteStatus(forWhat: For, muteStatus: Int?): Completable =
-        Completable.fromAction {
-            wcdb.room.updateValue(
-                muteStatus ?: 0,
-                DBRoomModel.muteStatus,
-                DBRoomModel.roomId.eq(forWhat.id)
-            )
-
-            // ✅ 通知UI刷新
-            RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
-        }
-
-    fun updateMuteStatus(id: String, muteStatus: Int?): Completable = Completable.fromAction {
-        L.i { "[DBRoomStore] updateMuteStatus  id:${id} muteStatus: $muteStatus" }
-        wcdb.room.updateValue(muteStatus ?: 0, DBRoomModel.muteStatus, DBRoomModel.roomId.eq(id))
+    override suspend fun updateMuteStatus(forWhat: For, muteStatus: Int?) {
+        wcdb.room.updateValue(
+            muteStatus ?: 0,
+            DBRoomModel.muteStatus,
+            DBRoomModel.roomId.eq(forWhat.id)
+        )
 
         // ✅ 通知UI刷新
-        RoomChangeTracker.trackRoom(id, RoomChangeType.REFRESH)
+        RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
-    override fun getMuteStatus(forWhat: For): Single<Optional<Int>> {
-        return findRoom(forWhat)
-            .map { roomModel ->
-                Optional.ofNullable(roomModel.muteStatus)
-            }
-            .switchIfEmpty(Single.just(Optional.empty()))
+
+    override suspend fun getMuteStatus(forWhat: For): Optional<Int> {
+        return findRoom(forWhat)?.let { Optional.ofNullable(it.muteStatus) } ?: Optional.empty()
     }
 
-    override fun updatePinnedTime(forWhat: For, pinnedTime: Long?): Completable = Completable.fromAction {
+    override suspend fun updatePinnedTime(forWhat: For, pinnedTime: Long?) {
         L.i { "[DBRoomStore] updatePinnedTime  id:${forWhat.id} pinnedTime: $pinnedTime" }
         wcdb.room.updateValue(
             Value(pinnedTime),
@@ -152,20 +134,12 @@ class DBRoomStore @Inject constructor(
         RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
-    override fun getPinnedTime(forWhat: For): Single<Optional<Long>> {
-        return findRoom(forWhat)
-            .map { roomModel ->
-                Optional.ofNullable(roomModel.pinnedTime)
-            }
-            .switchIfEmpty(Single.just(Optional.empty()))
+    override suspend fun getPinnedTime(forWhat: For): Optional<Long> {
+        return findRoom(forWhat)?.let { Optional.ofNullable(it.pinnedTime) } ?: Optional.empty()
     }
 
-    override fun getPublicKeyInfo(forWhat: For): Single<Optional<String>> {
-        return findRoom(forWhat)
-            .map { roomModel ->
-                Optional.ofNullable(roomModel.publicKeyInfoJson)
-            }
-            .switchIfEmpty(Single.just(Optional.empty()))
+    override suspend fun getPublicKeyInfo(forWhat: For): String? {
+        return findRoom(forWhat)?.publicKeyInfoJson
     }
 
     fun getConfidentialMode(roomId: String): Int {
@@ -309,7 +283,7 @@ class DBRoomStore @Inject constructor(
         updateCriticalAlertType(roomId, difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE)
     }
 
-    override fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?): Completable = Completable.fromAction {
+    override suspend fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?) {
         L.i { "[DBRoomStore] updatePublicKeyInfo  id:${forWhat.id} publicKeyInfo: ${publicKeyInfo?.length}" }
         wcdb.room.updateValue(
             publicKeyInfo,
@@ -318,12 +292,8 @@ class DBRoomStore @Inject constructor(
         )
     }
 
-    override fun getMessageReadPosition(forWhat: For): Single<Long> {
-        return findRoom(forWhat)
-            .map { roomModel ->
-                roomModel.readPosition
-            }
-            .switchIfEmpty(Single.just(0))
+    override suspend fun getMessageReadPosition(forWhat: For): Long {
+        return findRoom(forWhat)?.readPosition ?: 0
     }
 
     private val updatingReadPositions = ConcurrentHashMap<String, Long>()
@@ -358,44 +328,41 @@ class DBRoomStore @Inject constructor(
     }
 
 
-    override fun getUnreadMessageInfo(room: For): Single<UnreadMessageInfo> {
-        return getMessageReadPosition(room)
-            .concatMap { readPosition ->
-                L.d { "[Message] get unread info readPosition:$readPosition" }
-                val unreadMessages = wcdb.message.getAllObjects(
-                    DBMessageModel.roomId.eq(room.id)
-                        .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
-                        .and(DBMessageModel.fromWho.notEq(myID))
-                        .and(DBMessageModel.type.notEq(2))
-                )
-                if (room is For.Group) {
-                    val mentionsList = unreadMessages.filter { message ->
-                        message.mentions()
-                            .find { mention -> mention.uid == myID } != null || message.mentions()
-                            .find { mention -> mention.uid == MENTIONS_ALL_ID } != null
-                    }
-                    val mentionType = if (mentionsList.find { message ->
-                            message.mentions().find { mention -> mention.uid == myID } != null
-                        } != null) {
-                        MENTIONS_TYPE_ME
-                    } else if (mentionsList.find { message ->
-                            message.mentions()
-                                .find { mention -> mention.uid == MENTIONS_ALL_ID } != null
-                        } != null) {
-                        MENTIONS_TYPE_ALL
-                    } else {
-                        MENTIONS_TYPE_NONE
-                    }
-                    Single.just(
-                        UnreadMessageInfo(
-                            unreadMessages.size,
-                            mentionType,
-                            mentionsList.size,
-                            mentionsList.map { messageModel -> messageModel.timeStamp }
-                        ))
-                } else {
-                    Single.just(UnreadMessageInfo(unreadMessages.size))
-                }
+    override suspend fun getUnreadMessageInfo(room: For): UnreadMessageInfo {
+        val readPosition = getMessageReadPosition(room)
+        L.d { "[Message] get unread info readPosition:$readPosition" }
+        val unreadMessages = wcdb.message.getAllObjects(
+            DBMessageModel.roomId.eq(room.id)
+                .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
+                .and(DBMessageModel.fromWho.notEq(myID))
+                .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
+        )
+        return if (room is For.Group) {
+            val mentionsList = unreadMessages.filter { message ->
+                message.mentions()
+                    .find { mention -> mention.uid == myID } != null || message.mentions()
+                    .find { mention -> mention.uid == MENTIONS_ALL_ID } != null
             }
+            val mentionType = if (mentionsList.find { message ->
+                    message.mentions().find { mention -> mention.uid == myID } != null
+                } != null) {
+                MENTIONS_TYPE_ME
+            } else if (mentionsList.find { message ->
+                    message.mentions()
+                        .find { mention -> mention.uid == MENTIONS_ALL_ID } != null
+                } != null) {
+                MENTIONS_TYPE_ALL
+            } else {
+                MENTIONS_TYPE_NONE
+            }
+            UnreadMessageInfo(
+                unreadMessages.size,
+                mentionType,
+                mentionsList.size,
+                mentionsList.map { messageModel -> messageModel.timeStamp }
+            )
+        } else {
+            UnreadMessageInfo(unreadMessages.size)
+        }
     }
 }

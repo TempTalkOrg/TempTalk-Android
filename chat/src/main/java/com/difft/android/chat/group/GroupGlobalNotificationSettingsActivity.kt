@@ -55,7 +55,6 @@ import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
@@ -118,7 +117,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             httpClient.httpService.fetchSetProfile(
                                 baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
                                 profileRequestBody = profileRequestBody
-                            ).await()
+                            )
                         }
 
                         ComposeDialogManager.dismissWait()

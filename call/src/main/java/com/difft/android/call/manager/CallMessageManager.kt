@@ -14,10 +14,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
-import io.reactivex.rxjava3.core.Observable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -100,7 +99,7 @@ class CallMessageManager @Inject constructor(
                     SecureSharedPrefsUtil.getBasicAuth(),
                     source,
                     timestamp
-                ).await()
+                )
 
                 if (result.isSuccess()) {
                     L.i { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp success" }
@@ -113,13 +112,7 @@ class CallMessageManager @Inject constructor(
         }
     }
 
-    /**
-     * 获取联系人更新监听器
-     * 返回一个 Observable，用于监听联系人列表的变化
-     * 
-     * @return Observable<List<String>> 联系人ID列表的 Observable
-     */
-    fun getContactsUpdateListener(): Observable<List<String>> {
+    fun getContactsUpdateListener(): Flow<List<String>> {
         return callToChatController.getContactsUpdateListener()
     }
 }

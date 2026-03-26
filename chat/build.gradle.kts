@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
     id("androidx.navigation.safeargs.kotlin")
 }
@@ -42,12 +43,20 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/chat"))
 }
 
 dependencies {
@@ -64,7 +73,23 @@ dependencies {
     kapt(libs.hilt.compiler)
     kapt(libs.kotlin.metadata.jvm)
 
-    // 测试依赖已通过base模块提供
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 
     // WorkManager dependencies
     implementation(libs.bundles.androidx.work)
@@ -90,7 +115,6 @@ dependencies {
     implementation(libs.circle.imageview)
     implementation(libs.zxing)
     implementation(libs.legacy.support.v4)
-    implementation(libs.lifecycle.reactivestreams.ktx)
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)

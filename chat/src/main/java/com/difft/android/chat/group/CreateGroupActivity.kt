@@ -17,7 +17,7 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.RxUtil
+import kotlin.coroutines.cancellation.CancellationException
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.getContactorsFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -58,7 +58,7 @@ import com.luck.picture.lib.interfaces.OnResultCallbackListener
 import com.luck.picture.lib.language.LanguageConfig
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,33 +114,36 @@ class CreateGroupActivity : BaseActivity() {
         val list = selectedMap.mapNotNull { it.key }
         ComposeDialogManager.showWait(this@CreateGroupActivity, "")
         mAvatarFilePath?.let { path ->
-            httpClient.httpService
-                .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
-                .flatMap { response ->
-                    if (response.status != 0) {
-                        return@flatMap Single.error<String>(NetworkException(response.status, response.reason ?: ""))
-                    }
+            lifecycleScope.launch {
+                try {
+                    val avatarJson = withContext(Dispatchers.IO) {
+                        val response = httpClient.httpService
+                            .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
+                        if (response.status != 0) {
+                            throw NetworkException(response.status, response.reason ?: "")
+                        }
 
-                    val data = FileUtil.readFile(File(path))
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Failed to read avatar file"))
+                        val data = FileUtil.readFile(File(path))
+                            ?: throw NetworkException(message = "Failed to read avatar file")
 
-                    val encryptResult = GroupAvatarUtil.encryptGroupAvatar(data)
+                        val encryptResult = GroupAvatarUtil.encryptGroupAvatar(data)
 
-                    val encryptionKey = encryptResult["encryptionKey"] as? String
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Missing encryption key"))
+                        val encryptionKey = encryptResult["encryptionKey"] as? String
+                            ?: throw NetworkException(message = "Missing encryption key")
 
-                    val digest = encryptResult["digest"] as? String
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Missing digest"))
+                        val digest = encryptResult["digest"] as? String
+                            ?: throw NetworkException(message = "Missing digest")
 
-                    val encryptedData = encryptResult["encryptedData"] as? ByteArray
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Missing encrypted data"))
+                        val encryptedData = encryptResult["encryptedData"] as? ByteArray
+                            ?: throw NetworkException(message = "Missing encrypted data")
 
-                    val requestBody = RequestBody.create(null, encryptedData)
+                        val requestBody = RequestBody.create(null, encryptedData)
 
-                    noHeaderClient.httpService.fetchUploadAvatar(
-                        response.location.orEmpty(),
-                        requestBody
-                    ).map {
+                        noHeaderClient.httpService.fetchUploadAvatar(
+                            response.location.orEmpty(),
+                            requestBody
+                        )
+
                         val groupAvatarData = GroupAvatarData(
                             0,
                             data.size.toString(),
@@ -155,16 +158,15 @@ class CreateGroupActivity : BaseActivity() {
                         )
                         Gson().toJson(GroupAvatarResponse(groupAvatarDataString))
                     }
-                }
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({ response ->
-                    val request = CreateGroupReq(groupName, list, response)
+                    val request = CreateGroupReq(groupName, list, avatarJson)
                     createGroup(request)
-                }) {
-                    L.e { "[${TAG}]create group avatar error:${it.stackTraceToString()}" }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.e { "[${TAG}]create group avatar error:${e.stackTraceToString()}" }
                     ToastUtil.show(R.string.chat_net_error)
                 }
+            }
         } ?: run {
             val request = CreateGroupReq(groupName, list)
             createGroup(request)
@@ -172,28 +174,32 @@ class CreateGroupActivity : BaseActivity() {
     }
 
     private fun createGroup(request: CreateGroupReq) {
-        groupRepo.createGroup(request)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.createGroup(request)
+                }
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
-                    it.data?.gid?.let { it1 ->
-                        GroupChatContentActivity.startActivity(this, it1)
+                if (result.status == 0) {
+                    result.data?.gid?.let { gid ->
+                        GroupChatContentActivity.startActivity(this@CreateGroupActivity, gid)
                     }
                     setResult(RESULT_OK)
                     finish()
-                } else if (it.status == 10125) {
-                    it.data?.strangers?.let { strangers ->
+                } else if (result.status == 10125) {
+                    result.data?.strangers?.let { strangers ->
                         val content = strangers.map { s -> s.name }.joinToString(separator = ", ")
                         ToastUtil.show(getString(R.string.group_not_your_friend))
                     }
                 }
-            }, { error ->
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
-                L.e { "[${TAG}]createGeneralGroup - error=${error.stackTraceToString()}" }
+                L.e { "[${TAG}]createGeneralGroup - error=${e.stackTraceToString()}" }
                 ToastUtil.show(R.string.chat_net_error)
-            })
+            }
+        }
     }
 
     private val onPicturePermissionForAvatar = registerPermission {
@@ -224,10 +230,11 @@ class CreateGroupActivity : BaseActivity() {
             createGeneralGroup(groupName)
         }
 
-        Single.fromCallable { wcdb.getContactorsFromAllTable(selectedIds + globalServices.myId) }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contacts ->
+        lifecycleScope.launch {
+            try {
+                val contacts = withContext(Dispatchers.IO) {
+                    wcdb.getContactorsFromAllTable(selectedIds + globalServices.myId)
+                }
                 contacts.forEach {
                     selectedMap[it.id] = it.getDisplayNameWithoutRemarkForUI()
                 }
@@ -244,7 +251,12 @@ class CreateGroupActivity : BaseActivity() {
                 }
 
                 searchContacts("")
-            }, { error -> L.w { "[CreateGroupActivity] loadContacts error: ${error.stackTraceToString()}" } })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[CreateGroupActivity] loadContacts error: ${e.stackTraceToString()}" }
+            }
+        }
 
         binding.edittextSearchInput.addTextChangedListener {
             val etContent = binding.edittextSearchInput.text.toString().trim()
@@ -336,14 +348,18 @@ class CreateGroupActivity : BaseActivity() {
     }
 
     private fun searchContacts(key: String) {
-        Single.fromCallable {
-            wcdb.contactor.search(key)
+        lifecycleScope.launch {
+            try {
+                val results = withContext(Dispatchers.IO) {
+                    wcdb.contactor.search(key)
+                }
+                refreshContactsList(results)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[CreateGroupActivity] searchContacts error: ${e.stackTraceToString()}" }
+            }
         }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                refreshContactsList(it)
-            }, { L.w { "[CreateGroupActivity] searchContacts error: ${it.stackTraceToString()}" } })
     }
 
 

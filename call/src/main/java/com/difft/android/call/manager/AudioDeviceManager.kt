@@ -3,7 +3,9 @@ package com.difft.android.call.manager
 import android.content.Context
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.call.BuildConfig
+import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.audio.AudioSwitchHandler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +18,9 @@ class AudioDeviceManager(
 ) {
     private val _deNoiseEnable = MutableStateFlow(true)
     val deNoiseEnable = _deNoiseEnable.asStateFlow()
+
+    private val _deNoiseMode = MutableStateFlow(AudioModule.RNNOISE)
+    val deNoiseMode: StateFlow<AudioModule> = _deNoiseMode.asStateFlow()
 
     val audioHandler by lazy {
         AudioSwitchHandler(context).apply {
@@ -73,5 +78,32 @@ class AudioDeviceManager(
      */
     fun switchDeNoiseEnable(enabled: Boolean) {
         _deNoiseEnable.value = enabled
+    }
+
+    fun switchDeNoiseMode(mode: AudioModule) {
+        if (_deNoiseMode.value == mode) return
+        _deNoiseMode.value = mode
+        SharedPrefsUtil.putString(SharedPrefsUtil.SP_DENOISE_MODE, mode.toConfigMode())
+    }
+
+    fun initDeNoiseMode(mode: AudioModule) {
+        _deNoiseMode.value = mode
+    }
+
+    companion object {
+        private const val CONFIG_MODE_STANDARD = "standard"
+        private const val CONFIG_MODE_ENHANCED = "enhanced"
+
+        fun resolveDeNoiseMode(configMode: String?): AudioModule =
+            when (configMode) {
+                CONFIG_MODE_ENHANCED -> AudioModule.DEEP_FILTER_NET
+                else -> AudioModule.RNNOISE
+            }
+
+        fun AudioModule.toConfigMode(): String =
+            when (this) {
+                AudioModule.DEEP_FILTER_NET -> CONFIG_MODE_ENHANCED
+                else -> CONFIG_MODE_STANDARD
+            }
     }
 }

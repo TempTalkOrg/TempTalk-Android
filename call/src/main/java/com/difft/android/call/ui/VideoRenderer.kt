@@ -36,13 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
 import androidx.lifecycle.Lifecycle
@@ -109,17 +107,14 @@ fun VideoRenderer(
 
     var dismissPlaceHolderView by remember { mutableStateOf(false) }
 
-    val configuration = LocalConfiguration.current // 获取当前配置
-    val screenWidth = configuration.screenWidthDp.dp.value // 获取屏幕宽度（dp）
-    val screenHeight = configuration.screenHeightDp.dp.value // 获取屏幕高度（dp）
-
-    val videoSinkVisibility = remember(room, videoTrack) { ComposeVisibility() }
+    val videoSinkVisibility = remember(room, videoTrack) {
+        if (sourceType == Track.Source.SCREEN_SHARE) ScreenShareVisibility() else ComposeVisibility()
+    }
     var boundVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var view by remember { mutableStateOf<Any?>(null) }
 
 
     var scaleFactor by remember { mutableFloatStateOf(1f) }
-    var anchor by remember { mutableStateOf(Offset.Zero) } // 缩放锚点
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
@@ -234,23 +229,16 @@ fun VideoRenderer(
             return
         }
 
-        // 使用协程上下文来执行耗时操作
         coroutineScope.launch {
-            // 确保在主线程执行 cleanupVideoTrack，因为 removeRenderer 可能涉及 UI 操作
             withContext(Dispatchers.Main) {
-                // 再次检查状态，防止在异步操作期间 Activity 被销毁
                 if (isReleased || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
                     cleanupAllResourcesSync()
+                    return@withContext
+                }
+                if (boundVideoTrack == videoTrack) {
                     return@withContext
                 }
                 cleanupVideoTrack()
-            }
-            withContext(Dispatchers.Main) {
-                // 再次检查状态，防止在异步操作期间 Activity 被销毁
-                if (isReleased || lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
-                    cleanupAllResourcesSync()
-                    return@withContext
-                }
                 boundVideoTrack = videoTrack
                 if (videoTrack != null) {
                     (view as? VideoSink)?.let { sink ->
@@ -261,7 +249,6 @@ fun VideoRenderer(
                                 videoTrack.addRenderer(sink)
                             }
                         } catch (e: Exception) {
-                            // 忽略添加 renderer 时的异常（可能 view 已释放）
                             L.w { "[VideoRenderer] addRenderer failed: ${e.stackTraceToString()}" }
                         }
                     }
@@ -375,43 +362,30 @@ fun VideoRenderer(
 
                         val maxScale = 10f
 
-                        detectTransformGestures { centroid, pan, zoom, rotation ->
-                            zoom.let { zoomFactor ->
-                                // 更新缩放比例，但限制在合理范围内
-                                scaleFactor *= zoomFactor
-                                scaleFactor = scaleFactor.coerceIn(1.0f, maxScale)
-                                // 记录缩放锚点（这里以手势的中心点为锚点）
-                                anchor = centroid
-                            }
-                            pan.let { panAmount ->
-                                // 根据缩放比例调整拖拽量
-                                val scaledPanX = panAmount.x
-                                val scaledPanY = panAmount.y
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scaleFactor = (scaleFactor * zoom).coerceIn(1.0f, maxScale)
 
-                                // 更新拖拽偏移量前，先计算新的边界位置
-                                var newOffsetX = offsetX + scaledPanX
-                                var newOffsetY = offsetY + scaledPanY
+                            if (scaleFactor <= 1f) {
+                                offsetX = 0f
+                                offsetY = 0f
+                            } else {
+                                offsetX += pan.x
+                                offsetY += pan.y
 
-                                // 结合缩放比例计算新的边界
-                                val offsetXLimit = (screenWidth * scaleFactor - screenWidth)/2f
-                                val offsetYLimit = (screenHeight * scaleFactor - screenHeight)/2f
+                                val offsetXLimit = (size.width * scaleFactor - size.width) / 2f
+                                val offsetYLimit = (size.height * scaleFactor - size.height) / 2f
 
-                                newOffsetX = newOffsetX.coerceIn(-offsetXLimit, offsetXLimit)
-                                newOffsetY = newOffsetY.coerceIn(-offsetYLimit, offsetYLimit)
-                                // 更新拖拽偏移量
-                                offsetX = newOffsetX
-                                offsetY = newOffsetY
-
+                                offsetX = offsetX.coerceIn(-offsetXLimit, offsetXLimit)
+                                offsetY = offsetY.coerceIn(-offsetYLimit, offsetYLimit)
                             }
                         }
                     }
                 }
                 .graphicsLayer {
-                    // 应用缩放和平移变换
-                    this.scaleX = scaleFactor
-                    this.scaleY = scaleFactor
-                    this.translationX = offsetX.dp.toPx()
-                    this.translationY = offsetY.dp.toPx()
+                    scaleX = scaleFactor
+                    scaleY = scaleFactor
+                    translationX = offsetX
+                    translationY = offsetY
                 }
         )
 

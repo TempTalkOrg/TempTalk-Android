@@ -45,7 +45,7 @@ import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ConversationNavigationCallback
-import com.difft.android.chat.ui.ChatActivity
+import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.databinding.MeFragmentBinding
 import com.difft.android.login.ContactProfileSettingActivity
 import com.difft.android.login.ContactProfileSettingFragment
@@ -76,8 +76,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import javax.inject.Inject
@@ -178,10 +176,9 @@ class MeFragment : Fragment() {
             val botId = getString(com.difft.android.chat.R.string.official_bot_id)
             val navigationCallback = activity as? ConversationNavigationCallback
             if (navigationCallback?.isDualPaneMode == true) {
-                // Dual-pane mode: open chat in detail pane
-                navigationCallback.onOneOnOneConversationSelected(botId)
+                navigationCallback.onContactDetailSelected(botId)
             } else {
-                ChatActivity.startActivity(requireActivity(), botId)
+                ContactDetailActivity.startActivity(requireContext(), botId)
             }
         }
 
@@ -233,7 +230,7 @@ class MeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    ContactorUtil.getContactWithID(requireContext(), globalServices.myId).await()
+                    ContactorUtil.getContactWithID(requireContext(), globalServices.myId)
                 }
                 if (!isAdded || view == null) return@launch
                 if (result.isPresent) {
@@ -249,7 +246,6 @@ class MeFragment : Fragment() {
 
     private fun observeContactsUpdate() {
         ContactorUtil.contactsUpdate
-            .asFlow()
             .onEach { updatedIds ->
                 if (updatedIds.contains(globalServices.myId)) {
                     initData()

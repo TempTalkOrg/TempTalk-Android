@@ -8,12 +8,12 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
-import autodispose2.androidx.lifecycle.autoDispose
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.GlobalNotificationType
-import com.difft.android.base.utils.RxUtil
+import androidx.lifecycle.flowWithLifecycle
+import kotlinx.coroutines.flow.catch
 import org.difft.app.database.convertToContactorModels
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
@@ -43,13 +43,13 @@ import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
@@ -66,10 +66,14 @@ class GroupInfoActivity : BaseActivity() {
     private var role = GROUP_ROLE_MEMBER
     private var selfGroupInfo: GroupMemberContactorModel? = null
     private var groupInfo: GroupModel? = null
+    private var isMemberListExpanded = false
 
     private val groupId: String by lazy {
         intent.getStringExtra(KEY_GROUP_ID) ?: ""
     }
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     @Inject
     lateinit var inviteUtils: InviteUtils
@@ -135,10 +139,8 @@ class GroupInfoActivity : BaseActivity() {
         }
 
 
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
+        groupUtil.singleGroupsUpdate
+            .onEach {
                 if (it.gid == groupId) {
                     groupInfo = it
                     selfGroupInfo = groupInfo?.members?.find { member -> member.id == globalServices.myId }
@@ -147,32 +149,34 @@ class GroupInfoActivity : BaseActivity() {
                     }
                     initView()
                 }
-            }, { L.w { "[GroupInfoActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } })
+            }
+            .catch { L.w { "[GroupInfoActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .launchIn(lifecycleScope)
 
-        ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                setMembersView()
-            }, { L.w { "[GroupInfoActivity] observe contactsUpdate error: ${it.stackTraceToString()}" } })
+        lifecycleScope.launch {
+            ContactorUtil.contactsUpdate.collect {
+                updateMemberList(isMemberListExpanded)
+            }
+        }
 
         getGroupInfo()
     }
 
     private fun getGroupInfo() {
-        GroupUtil.getSingleGroupInfo(this, groupId)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    groupInfo = it.get()
-                    selfGroupInfo = groupInfo?.members?.find { member -> member.id == globalServices.myId }
-                    selfGroupInfo?.let { info ->
-                        role = info.groupRole ?: GROUP_ROLE_MEMBER
-                    }
+        lifecycleScope.launch {
+            try {
+                val group = groupUtil.getSingleGroupInfo(groupId)
+                if (group != null) {
+                    groupInfo = group
+                    selfGroupInfo = group.members?.find { it.id == globalServices.myId }
+                    selfGroupInfo?.let { role = it.groupRole ?: GROUP_ROLE_MEMBER }
                     initView()
                 }
-            }, { L.w { "[GroupInfoActivity] getGroupInfo error: ${it.stackTraceToString()}" } })
+            } catch (e: Exception) {
+                L.w { "[GroupInfoActivity] getGroupInfo error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private fun initView() {
@@ -241,22 +245,18 @@ class GroupInfoActivity : BaseActivity() {
         if ((groupInfo?.members?.size ?: 0) > defaultDisplaySize) {
             binding.relViewAll.visibility = View.VISIBLE
             binding.relViewAll.setOnClickListener {
-//            gotoMembersActivity()
-                if (binding.tvViewAll.isVisible) {
-                    binding.tvViewAll.visibility = View.GONE
-                    binding.tvCollapse.visibility = View.VISIBLE
-                    updateMemberList(true)
-                } else {
-                    binding.tvViewAll.visibility = View.VISIBLE
-                    binding.tvCollapse.visibility = View.GONE
-                    updateMemberList(false)
-                }
+                isMemberListExpanded = !isMemberListExpanded
+                binding.tvViewAll.isVisible = !isMemberListExpanded
+                binding.tvCollapse.isVisible = isMemberListExpanded
+                updateMemberList(isMemberListExpanded)
             }
         } else {
             binding.relViewAll.visibility = View.GONE
         }
 
-        updateMemberList(false)
+        binding.tvViewAll.isVisible = !isMemberListExpanded
+        binding.tvCollapse.isVisible = isMemberListExpanded
+        updateMemberList(isMemberListExpanded)
     }
 
     private fun updateMemberList(showAll: Boolean = false) {
@@ -369,17 +369,21 @@ class GroupInfoActivity : BaseActivity() {
                     confirmText = getString(R.string.group_disband_disband),
                     cancelText = getString(R.string.group_leave_cancel),
                     onConfirm = {
-                        groupRepo.deleteGroup(groupId)
-                            .compose(RxUtil.getSingleSchedulerComposer())
-                            .to(RxUtil.autoDispose(this))
-                            .subscribe({
-                                if (it.status == 0) {
+                        lifecycleScope.launch {
+                            try {
+                                val result = withContext(Dispatchers.IO) {
+                                    groupRepo.deleteGroup(groupId)
+                                }
+                                if (result.status == 0) {
                                     finish()
                                 }
-                            }, {
-                                L.w { "[GroupInfoActivity] deleteGroup error: ${it.stackTraceToString()}" }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                L.w { "[GroupInfoActivity] deleteGroup error: ${e.stackTraceToString()}" }
                                 ToastUtil.showLong(R.string.chat_net_error)
-                            })
+                            }
+                        }
                     }
                 )
             }
@@ -394,20 +398,25 @@ class GroupInfoActivity : BaseActivity() {
                     confirmText = getString(R.string.group_leave_leave),
                     cancelText = getString(R.string.group_leave_cancel),
                     onConfirm = {
-                        groupRepo.leaveGroup(
-                            groupId,
-                            AddOrRemoveMembersReq(mutableListOf(globalServices.myId))
-                        ).compose(RxUtil.getSingleSchedulerComposer())
-                            .to(RxUtil.autoDispose(this))
-                            .subscribe({
-                                L.i { "response leave group it.status=${it.status}" }
-                                if (it.status == 0) {
+                        lifecycleScope.launch {
+                            try {
+                                val result = withContext(Dispatchers.IO) {
+                                    groupRepo.leaveGroup(
+                                        groupId,
+                                        AddOrRemoveMembersReq(mutableListOf(globalServices.myId))
+                                    )
+                                }
+                                L.i { "response leave group it.status=${result.status}" }
+                                if (result.status == 0) {
                                     finish()
                                 }
-                            }, {
-                                L.i { "leave group error it=${it.message}" }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                L.i { "leave group error it=${e.message}" }
                                 ToastUtil.showLong(R.string.chat_net_error)
-                            })
+                            }
+                        }
                     }
                 )
             }
@@ -423,17 +432,24 @@ class GroupInfoActivity : BaseActivity() {
     }
 
     private fun pinChattingRoom(isPinned: Boolean) {
-        dbRoomStore.updatePinnedTime(
-            For.Group(groupId),
-            if (isPinned) System.currentTimeMillis() else null
-        )
-            .compose(RxUtil.getCompletableTransformer())
-            .autoDispose(this, Lifecycle.Event.ON_DESTROY)
-            .subscribe({}, { L.w { "[GroupInfoActivity] pinChattingRoom error: ${it.stackTraceToString()}" } })
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    dbRoomStore.updatePinnedTime(
+                        For.Group(groupId),
+                        if (isPinned) System.currentTimeMillis() else null
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[GroupInfoActivity] pinChattingRoom error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private suspend fun isPined(): Boolean {
-        return dbRoomStore.getPinnedTime(For.Group(groupId)).await().isPresent
+        return dbRoomStore.getPinnedTime(For.Group(groupId)).isPresent
     }
 
     /**

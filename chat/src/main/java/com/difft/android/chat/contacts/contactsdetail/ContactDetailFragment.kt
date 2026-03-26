@@ -33,6 +33,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialBotId
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatInputFocusable
@@ -52,6 +53,8 @@ import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import org.thoughtcrime.securesms.util.Util
 import android.content.Context
+import com.difft.android.base.utils.openExternalBrowser
+import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.ForwardContext
@@ -60,8 +63,6 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.convertToContactorModel
 import org.difft.app.database.getCommonGroupsCount
@@ -92,6 +93,9 @@ class ContactDetailFragment : Fragment() {
 
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
+
+    @Inject
+    lateinit var urlManager: UrlManager
 
     private val callDataManager: CallDataManager by lazy {
         callDataManagerLazy.get()
@@ -194,7 +198,8 @@ class ContactDetailFragment : Fragment() {
                         onShareClick = ::shareContact,
                         onAddFriendClick = ::requestAddFriend,
                         onCommonGroupsClick = ::handleCommonGroupsClick,
-                        onCopyUserId = ::handleCopyUserId
+                        onCopyUserId = ::handleCopyUserId,
+                        onWebsiteClick = ::handleWebsiteClick
                     )
                 }
             }
@@ -228,7 +233,9 @@ class ContactDetailFragment : Fragment() {
                 } else {
                     isFriend = false
                     withContext(Dispatchers.IO) {
-                        java.util.Optional.ofNullable(wcdb.groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(contactId))?.convertToContactorModel())
+                        val rows = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.eq(contactId))
+                        val selected = rows.firstOrNull { it.gid == "" } ?: rows.firstOrNull()
+                        java.util.Optional.ofNullable(selected?.convertToContactorModel())
                     }
                 }
 
@@ -246,7 +253,7 @@ class ContactDetailFragment : Fragment() {
     private fun getContactorInfoFromServer() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val contacts = ContactorUtil.fetchContactors(listOf(contactId), requireContext()).await()
+                val contacts = ContactorUtil.fetchContactors(listOf(contactId), requireContext())
                 if (!isAdded || view == null) return@launch
                 contacts.firstOrNull()?.let { serverContact ->
                     checkAndNotifyIfNeeded(serverContact)
@@ -310,7 +317,6 @@ class ContactDetailFragment : Fragment() {
 
     private fun observeContactsUpdate() {
         ContactorUtil.contactsUpdate
-            .asFlow()
             .filter { it.contains(contactId) }
             .onEach {
                 if (skipNextUpdate) {
@@ -407,14 +413,19 @@ class ContactDetailFragment : Fragment() {
     }
 
     private fun handleMessageClick() {
+        if (!isFriend) {
+            requestAddFriend(onSuccess = ::navigateToChat)
+        } else {
+            navigateToChat()
+        }
+    }
+
+    private fun navigateToChat() {
         val navigationCallback = activity as? ConversationNavigationCallback
         if (isPopupMode) {
-            // Dismiss the popup first
             (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
-            // Check if currently in the same chat and focus input if so
             val focusable = activity as? ChatInputFocusable
             if (focusable?.focusCurrentChatInputIfMatches(contactId) != true) {
-                // Not in the same chat, open chat popup
                 ChatPopupActivity.startActivity(
                     requireContext(),
                     contactId,
@@ -423,10 +434,8 @@ class ContactDetailFragment : Fragment() {
                 )
             }
         } else if (navigationCallback?.isDualPaneMode == true) {
-            // Dual-pane mode: open chat in detail pane
             navigationCallback.onOneOnOneConversationSelected(contactId)
         } else {
-            // Activity mode: open full chat activity
             ChatActivity.startActivity(
                 requireContext(),
                 contactId,
@@ -447,6 +456,11 @@ class ContactDetailFragment : Fragment() {
         if (userId.isNotEmpty()) {
             Util.copyToClipboard(requireContext(), userId)
         }
+    }
+
+    private fun handleWebsiteClick() {
+        val website = uiState.website ?: return
+        requireContext().openExternalBrowser(website)
     }
 
     private fun shareContact() {
@@ -474,6 +488,7 @@ class ContactDetailFragment : Fragment() {
 
         val isSelf = globalServices.myId == contactId
         val isBot = contactor.id.isBotId()
+        val isOfficialBot = contactor.id.isOfficialBotId()
         val hasRemark = !TextUtils.isEmpty(contactor.remark)
 
         val displayName = if (hasRemark) {
@@ -482,11 +497,7 @@ class ContactDetailFragment : Fragment() {
             contactor.getDisplayNameForUI()
         }
 
-        val originalName = if (hasRemark) {
-            contactor.name ?: contactor.publicName ?: contactor.id
-        } else {
-            null
-        }
+        val originalName = if (hasRemark) contactor.getDisplayNameWithoutRemarkForUI() else null
 
         // Build userId display value (prefer customUid)
         val userId = if (contactor.customUid.isNullOrEmpty() && customId.isNullOrEmpty()) {
@@ -500,17 +511,19 @@ class ContactDetailFragment : Fragment() {
             isFriend = isFriend,
             isSelf = isSelf,
             isBot = isBot,
+            isOfficialBot = isOfficialBot,
             displayName = displayName,
             originalName = originalName,
             hasRemark = hasRemark,
             userId = userId,
             joinedAt = contactor.joinedAt,
             sourceDescribe = if (!isSelf) contactor.sourceDescribe else null,
-            commonGroupsCount = commonGroupsCount
+            commonGroupsCount = commonGroupsCount,
+            website = if (isOfficialBot) urlManager.installationGuideUrl else null
         )
     }
 
-    private fun requestAddFriend() {
+    private fun requestAddFriend(onSuccess: (() -> Unit)? = null) {
         ComposeDialogManager.showWait(requireActivity(), "")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -520,7 +533,7 @@ class ContactDetailFragment : Fragment() {
                     contactId,
                     sourceType,
                     source
-                ).await()
+                )
 
                 if (!isAdded || view == null) return@launch
                 if (response.status == 0) {
@@ -530,7 +543,11 @@ class ContactDetailFragment : Fragment() {
                         For.Account(contactId)
                     )
                     ComposeDialogManager.dismissWait()
-                    ToastUtil.show(R.string.contact_request_sent)
+                    if (onSuccess != null) {
+                        onSuccess()
+                    } else {
+                        ToastUtil.show(R.string.contact_request_sent)
+                    }
                 } else {
                     ComposeDialogManager.dismissWait()
                     response.reason?.let { ToastUtil.show(it) }

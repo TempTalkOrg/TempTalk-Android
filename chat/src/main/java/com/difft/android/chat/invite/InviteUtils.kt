@@ -16,12 +16,10 @@ import androidx.appcompat.widget.AppCompatTextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import cn.bingoogolapple.qrcode.zxing.QRCodeEncoder
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ChativeButton
@@ -43,15 +41,11 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.rx3.await
 import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.shareText
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 class InviteUtils @Inject constructor() {
@@ -65,16 +59,16 @@ class InviteUtils @Inject constructor() {
     @Inject
     lateinit var groupRepo: GroupRepo
 
-    fun showInviteDialog(context: Activity) {
+    fun showInviteDialog(context: FragmentActivity) {
         val fragment = InviteBottomSheetFragment()
-        fragment.show((context as FragmentActivity).supportFragmentManager, "InviteDialog")
+        fragment.show(context.supportFragmentManager, "InviteDialog")
     }
 
     private val maxAutoRefreshTimes = 3 //自动刷新最大次数
     private var currentAutoRefreshTimes = 0 //当前自动刷新次数
 
     fun getInviteCode(
-        context: Activity,
+        context: FragmentActivity,
         regenerate: Int,
         short: Int,
         imageViewQR: AppCompatImageView?,
@@ -89,15 +83,16 @@ class InviteUtils @Inject constructor() {
             return
         }
         ComposeDialogManager.showWait(context, "")
-        inviteRepo.getInviteCode(regenerate, short)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(context as LifecycleOwner))
-            .subscribe({
+        context.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    inviteRepo.getInviteCode(regenerate, short)
+                }
                 ComposeDialogManager.dismissWait()
-                if (it.status == 0) {
+                if (result.status == 0) {
                     currentAutoRefreshTimes++
 
-                    it.data?.inviteLink?.let { url ->
+                    result.data?.inviteLink?.let { url ->
                         imageViewQR?.setImageBitmap(createQRBitmap(context, url))
 
                         val content = context.getString(R.string.invite_tips, url)
@@ -111,7 +106,7 @@ class InviteUtils @Inject constructor() {
                         }
                     }
 
-                    it.data?.randomCode?.let { code ->
+                    result.data?.randomCode?.let { code ->
                         tvCode ?: return@let
                         tvCode.text = code
 
@@ -124,20 +119,24 @@ class InviteUtils @Inject constructor() {
                     }
 
                     startCountdown(
-                        (it.data?.randomCodeExpiration?.toLong() ?: 0) * 1000,
-                        (it.data?.randomCodeTTL?.toLong() ?: 0) * 1000,
+                        context,
+                        (result.data?.randomCodeExpiration?.toLong() ?: 0) * 1000,
+                        (result.data?.randomCodeTTL?.toLong() ?: 0) * 1000,
                         progressBar
                     ) {
                         getInviteCode(context, 0, 0, imageViewQR, clShare, clCopy, tvCode, progressBar, tvError)
                     }
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    result.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }, {
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
-                L.e { "getInviteCode error: ${it.stackTraceToString()}" }
+                L.e { "getInviteCode error: ${e.stackTraceToString()}" }
                 ToastUtil.show(context.getString(R.string.chat_net_error))
-            })
+            }
+        }
     }
 
     private var scaleXAnimator: ObjectAnimator? = null
@@ -174,7 +173,7 @@ class InviteUtils @Inject constructor() {
         }
     }
 
-    private var countdownDispose: Disposable? = null
+    private var countdownJob: kotlinx.coroutines.Job? = null
 
     /**
      * 启动倒计时
@@ -182,36 +181,33 @@ class InviteUtils @Inject constructor() {
      * @param remainingTime 剩余时间（毫秒）
      */
     private fun startCountdown(
+        activity: FragmentActivity,
         maxTime: Long,
         remainingTime: Long,
         progressBar: LinearProgressBar?,
         onCountdownComplete: (() -> Unit)?
     ) {
-        if (countdownDispose?.isDisposed == false) {
-            countdownDispose?.dispose()
-        }
+        countdownJob?.cancel()
 
         val interval = 100L // 每100ms更新一次
         val maxProgress = 100
 
-        countdownDispose = Observable.interval(0, interval, TimeUnit.MILLISECONDS)
-            .takeWhile { elapsed -> elapsed * interval <= remainingTime }
-            .map { elapsed ->
+        countdownJob = activity.lifecycleScope.launch {
+            // 初始化进度条为当前剩余时间的百分比
+            progressBar?.setProgress((remainingTime.toFloat() / maxTime * maxProgress))
+
+            var elapsed = 0L
+            while (elapsed * interval <= remainingTime) {
                 val currentTime = remainingTime - elapsed * interval
-                (currentTime.toFloat() / maxTime * maxProgress)
+                val progress = (currentTime.toFloat() / maxTime * maxProgress)
+                progressBar?.setProgress(progress)
+                elapsed++
+                kotlinx.coroutines.delay(interval)
             }
-            .doOnSubscribe {
-                // 初始化进度条为当前剩余时间的百分比
-                progressBar?.setProgress((remainingTime.toFloat() / maxTime * maxProgress))
-            }
-            .compose(RxUtil.getSchedulerComposer())
-            .doOnComplete {
-                // 倒计时结束时执行任务
-                onCountdownComplete?.invoke()
-            }
-            .subscribe { remainingProgress ->
-                progressBar?.setProgress(remainingProgress)
-            }
+
+            // 倒计时结束时执行任务
+            onCountdownComplete?.invoke()
+        }
     }
 
     private fun createQRBitmap(context: Activity, url: String): Bitmap? {
@@ -220,25 +216,29 @@ class InviteUtils @Inject constructor() {
         return bitmap
     }
 
-    fun queryByInviteCode(activity: Activity, inviteCode: String, needFinish: Boolean = false) {
-        inviteRepo.queryByInviteCode(inviteCode)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.uid?.let { uid ->
+    fun queryByInviteCode(activity: FragmentActivity, inviteCode: String, needFinish: Boolean = false) {
+        activity.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    inviteRepo.queryByInviteCode(inviteCode)
+                }
+                if (result.status == 0) {
+                    result.data?.uid?.let { uid ->
                         ContactDetailActivity.startActivity(activity, uid)
                         if (needFinish) {
                             activity.finish()
                         }
                     }
                 } else {
-                    showErrorAndFinish(it.reason ?: "", activity, needFinish)
+                    showErrorAndFinish(result.reason ?: "", activity, needFinish)
                 }
-            }, {
-                L.e { "queryByInviteCode error: ${it.stackTraceToString()}" }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "queryByInviteCode error: ${e.stackTraceToString()}" }
                 showErrorAndFinish(activity.getString(R.string.chat_net_error), activity, needFinish)
-            })
+            }
+        }
     }
 
     private fun showErrorAndFinish(tips: String, activity: Activity, needFinish: Boolean = false) {
@@ -249,24 +249,22 @@ class InviteUtils @Inject constructor() {
     }
 
     fun showGroupInviteDialog(
-        context: Activity,
+        context: FragmentActivity,
         myName: String = "",
         groupName: String = "",
         groupAvatar: String? = null,
         inviteCode: String = "",
     ) {
         val fragment = GroupInviteBottomSheetFragment.newInstance(myName, groupName, groupAvatar, inviteCode)
-        fragment.show((context as FragmentActivity).supportFragmentManager, "GroupInviteDialog")
+        fragment.show(context.supportFragmentManager, "GroupInviteDialog")
     }
 
     /**
      * 邀请对话框关闭时的清理工作
      */
     fun onInviteDialogDismiss() {
-        if (countdownDispose?.isDisposed == false) {
-            countdownDispose?.dispose()
-        }
-        countdownDispose = null
+        countdownJob?.cancel()
+        countdownJob = null
         cancelCodeTextAnimation()
         currentAutoRefreshTimes = 0
     }
@@ -297,55 +295,63 @@ class InviteUtils @Inject constructor() {
     }
 
 
-    fun getGroupInfoByInviteCode(activity: Activity, inviteCode: String) {
-        groupRepo.getGroupInfoByInviteCode(inviteCode)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { it1 -> showJoinGroupDialog(activity, it1, inviteCode) }
-                } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+    fun getGroupInfoByInviteCode(activity: FragmentActivity, inviteCode: String) {
+        activity.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.getGroupInfoByInviteCode(inviteCode)
                 }
-            }, {
-                L.e { "getGroupInfoByInviteCode error: ${it.stackTraceToString()}" }
+                if (result.status == 0) {
+                    result.data?.let { data -> showJoinGroupDialog(activity, data, inviteCode) }
+                } else {
+                    result.reason?.let { message -> ToastUtil.show(message) }
+                }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "getGroupInfoByInviteCode error: ${e.stackTraceToString()}" }
                 ToastUtil.show(activity.getString(R.string.chat_net_error))
-            })
+            }
+        }
     }
 
-    private fun showJoinGroupDialog(activity: Activity, data: GroupInfoByInviteCodeResp, inviteCode: String) {
+    private fun showJoinGroupDialog(activity: FragmentActivity, data: GroupInfoByInviteCodeResp, inviteCode: String) {
         val fragment = JoinGroupBottomSheetFragment.newInstance(data, inviteCode)
-        fragment.show((activity as FragmentActivity).supportFragmentManager, "JoinGroupDialog")
+        fragment.show(activity.supportFragmentManager, "JoinGroupDialog")
     }
 
-    fun joinGroupByInviteCode(inviteCode: String, activity: Activity, needFinish: Boolean = false) {
-        groupRepo.joinGroupByInviteCodeResp(inviteCode)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { it1 ->
-                        GroupChatContentActivity.startActivity(activity, it1.gid)
+    fun joinGroupByInviteCode(inviteCode: String, activity: FragmentActivity, needFinish: Boolean = false) {
+        activity.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.joinGroupByInviteCodeResp(inviteCode)
+                }
+                if (result.status == 0) {
+                    result.data?.let { data ->
+                        GroupChatContentActivity.startActivity(activity, data.gid)
                         if (needFinish) {
                             activity.finish()
                         }
                     }
                 } else {
-                    val message = when (it.status) {
+                    val message = when (result.status) {
                         10120 -> activity.getString(R.string.invite_invalid_invite_Code)
                         10121 -> activity.getString(R.string.invite_link_invitation_is_disabled)
                         10122 -> activity.getString(R.string.invite_only_moderators)
                         10123 -> activity.getString(R.string.invite_group_has_been_disbanded)
                         10124 -> activity.getString(R.string.invite_group_is_invalid)
-                        else -> it.reason
+                        else -> result.reason
                     }
 
                     showErrorAndFinish(message ?: "", activity, needFinish)
                 }
-            }, {
-                L.w { "[InviteUtils] joinGroupByInviteCode error: ${it.stackTraceToString()}" }
-                showErrorAndFinish(it.message ?: "", activity, needFinish)
-            })
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[InviteUtils] joinGroupByInviteCode error: ${e.stackTraceToString()}" }
+                showErrorAndFinish(e.message ?: "", activity, needFinish)
+            }
+        }
     }
 
 
@@ -438,7 +444,7 @@ class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
 
         lifecycleScope.launch {
             val myInfo = withContext(Dispatchers.IO) {
-                ContactorUtil.getContactWithID(requireContext(), globalServices.myId).await()
+                ContactorUtil.getContactWithID(requireContext(), globalServices.myId)
             }
 
             myInfo.ifPresent { contact ->

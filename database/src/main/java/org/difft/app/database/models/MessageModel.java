@@ -89,9 +89,6 @@ public class MessageModel {
     public Long forwardContextDatabaseId;
 
     @WCDBField
-    public Long cardModelDatabaseId;
-
-    @WCDBField
     public int playStatus;//是否已经播放过，默认已播放，1未播放
 
     @WCDBField
@@ -119,11 +116,11 @@ public class MessageModel {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof MessageModel that)) return false;
-        return timeStamp == that.timeStamp && systemShowTimestamp == that.systemShowTimestamp && receivedTimeStamp == that.receivedTimeStamp && type == that.type && sendType == that.sendType && expiresInSeconds == that.expiresInSeconds && notifySequenceId == that.notifySequenceId && sequenceId == that.sequenceId && mode == that.mode && roomType == that.roomType && playStatus == that.playStatus && readTime == that.readTime && criticalAlertType == that.criticalAlertType && Objects.equals(id, that.id) && Objects.equals(messageText, that.messageText) && Objects.equals(atPersons, that.atPersons) && Objects.equals(fromWho, that.fromWho) && Objects.equals(roomId, that.roomId) && Objects.equals(quoteDatabaseId, that.quoteDatabaseId) && Objects.equals(forwardContextDatabaseId, that.forwardContextDatabaseId) && Objects.equals(cardModelDatabaseId, that.cardModelDatabaseId) && Objects.equals(receiverIds, that.receiverIds) && Objects.equals(screenShotJson, that.screenShotJson);
+        return timeStamp == that.timeStamp && systemShowTimestamp == that.systemShowTimestamp && receivedTimeStamp == that.receivedTimeStamp && type == that.type && sendType == that.sendType && expiresInSeconds == that.expiresInSeconds && notifySequenceId == that.notifySequenceId && sequenceId == that.sequenceId && mode == that.mode && roomType == that.roomType && playStatus == that.playStatus && readTime == that.readTime && criticalAlertType == that.criticalAlertType && Objects.equals(id, that.id) && Objects.equals(messageText, that.messageText) && Objects.equals(atPersons, that.atPersons) && Objects.equals(fromWho, that.fromWho) && Objects.equals(roomId, that.roomId) && Objects.equals(quoteDatabaseId, that.quoteDatabaseId) && Objects.equals(forwardContextDatabaseId, that.forwardContextDatabaseId) && Objects.equals(receiverIds, that.receiverIds) && Objects.equals(screenShotJson, that.screenShotJson);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, timeStamp, systemShowTimestamp, receivedTimeStamp, messageText, type, sendType, expiresInSeconds, notifySequenceId, sequenceId, mode, atPersons, fromWho, roomId, roomType, quoteDatabaseId, forwardContextDatabaseId, cardModelDatabaseId, playStatus, readTime, receiverIds, criticalAlertType, screenShotJson);
+        return Objects.hash(id, timeStamp, systemShowTimestamp, receivedTimeStamp, messageText, type, sendType, expiresInSeconds, notifySequenceId, sequenceId, mode, atPersons, fromWho, roomId, roomType, quoteDatabaseId, forwardContextDatabaseId, playStatus, readTime, receiverIds, criticalAlertType, screenShotJson);
     }
 }

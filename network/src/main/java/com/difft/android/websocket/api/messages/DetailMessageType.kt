@@ -8,11 +8,11 @@ enum class DetailMessageType(val value: Int) {
     Task(4),
     Vote(5),
     Reaction(6),
-    Card(7),
+    @Deprecated("Card message type removed") Card(7),
     Screenshot(8),
     Confidential(9),
     VerifyIdentity(10),
-    CardRefresh(1000),
+    @Deprecated("Card message type removed") CardRefresh(1000),
     CallEnd(1001),
     GroupCallEnd(1002),
 }

@@ -68,7 +68,7 @@ class PushReadReceiptSendJob @AssistedInject constructor(
     override fun onAdded() {
     }
 
-    public override fun onPushSend() {
+    public override suspend fun onPushSend() {
         try {
             //change upon to dsl builder
             val receiptMessage = receiptMessage {

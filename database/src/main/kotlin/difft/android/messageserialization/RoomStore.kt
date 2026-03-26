@@ -1,30 +1,28 @@
 package difft.android.messageserialization
 
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
-import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Single
 import java.util.Optional
 
 interface RoomStore {
-    fun updateMessageExpiry(forWhat: For, messageExpiry: Long, messageClearAnchor: Long): Completable
+    suspend fun updateMessageExpiry(forWhat: For, messageExpiry: Long, messageClearAnchor: Long)
 
-    fun getMessageExpiry(forWhat: For): Single<Optional<Long>>
+    suspend fun getMessageExpiry(forWhat: For): Optional<Long>
 
-    fun updateMuteStatus(forWhat: For, muteStatus: Int?): Completable
+    suspend fun updateMuteStatus(forWhat: For, muteStatus: Int?)
 
-    fun getMuteStatus(forWhat: For): Single<Optional<Int>>
+    suspend fun getMuteStatus(forWhat: For): Optional<Int>
 
-    fun updatePinnedTime(forWhat: For, pinnedTime: Long?): Completable
+    suspend fun updatePinnedTime(forWhat: For, pinnedTime: Long?)
 
-    fun getPinnedTime(forWhat: For): Single<Optional<Long>>
+    suspend fun getPinnedTime(forWhat: For): Optional<Long>
 
-    fun getPublicKeyInfo(forWhat: For): Single<Optional<String>>
+    suspend fun getPublicKeyInfo(forWhat: For): String?
 
-    fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?): Completable
+    suspend fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?)
 
-    fun getMessageReadPosition(forWhat: For): Single<Long>
+    suspend fun getMessageReadPosition(forWhat: For): Long
 
     suspend fun updateMessageReadPosition(forWhat: For, readPosition: Long)
 
-    fun getUnreadMessageInfo(room: For): Single<UnreadMessageInfo>
+    suspend fun getUnreadMessageInfo(room: For): UnreadMessageInfo
 }

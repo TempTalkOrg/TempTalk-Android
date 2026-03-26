@@ -127,12 +127,6 @@ class SignalServiceDataClass(
         } else signalServiceEnvelope.sequenceId
     }
 
-    val extraLatestCard: SignalServiceProtos.Card? by lazy {
-        if (signalServiceEnvelope.hasMsgExtra() && signalServiceEnvelope.msgExtra.hasLatestCard()) {
-            signalServiceEnvelope.msgExtra.latestCard
-        } else null
-    }
-
     val extraReactionInfos: List<SignalServiceProtos.MsgExtra.ReactionInfo>? by lazy {
         if (signalServiceEnvelope.hasMsgExtra() && signalServiceEnvelope.msgExtra.reactionInfosCount > 0) {
             signalServiceEnvelope.msgExtra.reactionInfosList

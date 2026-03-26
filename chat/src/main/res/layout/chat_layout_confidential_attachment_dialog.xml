@@ -44,4 +44,15 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <com.difft.android.base.widget.ConfidentialTipView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="80dp" />
+
 </LinearLayout>

@@ -22,8 +22,6 @@ internal fun getForwardText(context: Context, forward: Forward): String {
         context.getString(R.string.chat_message_chat_history)
     } else if (forward.attachments?.isNotEmpty() == true) {
         context.getString(R.string.chat_message_attachment)
-    } else if (forward.card != null) {
-        forward.card?.content ?: ""
     } else {
         forward.text ?: ""
     }

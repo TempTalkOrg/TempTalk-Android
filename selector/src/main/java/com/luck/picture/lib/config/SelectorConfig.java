@@ -95,6 +95,7 @@ public final class SelectorConfig {
     public boolean isEmptyResultReturn;
     public boolean isHidePreviewDownload;
     public boolean isHidePreviewShare;
+    public boolean isShowConfidentialTip;
     public boolean isWithVideoImage;
     public List<String> queryOnlyImageList;
     public List<String> queryOnlyVideoList;
@@ -187,6 +188,7 @@ public final class SelectorConfig {
         isEnablePreviewVideo = true;
         isEnablePreviewAudio = true;
         isHidePreviewDownload = false;
+        isShowConfidentialTip = false;
         isOpenClickSound = false;
         isEmptyResultReturn = false;
         cameraImageFormat = PictureMimeType.JPEG;

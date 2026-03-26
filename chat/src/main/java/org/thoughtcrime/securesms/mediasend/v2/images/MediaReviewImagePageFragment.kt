@@ -6,14 +6,15 @@ import android.view.View
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
-import autodispose2.androidx.lifecycle.autoDispose
-import com.difft.android.base.utils.RxUtil
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.chat.R
 import util.getParcelableCompat
 import org.thoughtcrime.securesms.mediasend.v2.HudCommand
 import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionViewModel
 import org.thoughtcrime.securesms.scribbles.ImageEditorFragment
 import org.thoughtcrime.securesms.scribbles.ImageEditorHudV2
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 private const val IMAGE_EDITOR_TAG = "image.editor.fragment"
@@ -32,18 +33,10 @@ class MediaReviewImagePageFragment : Fragment(R.layout.fragment_container), Imag
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         imageEditorFragment = ensureImageEditorFragment()
-    }
 
-
-    override fun onResume() {
-        super.onResume()
-
-        sharedViewModel
-            .hudCommands
-            .compose(RxUtil.getSchedulerComposer())
-            .autoDispose(this, Lifecycle.Event.ON_PAUSE)
-            .subscribe { command ->
-                if (isResumed) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                sharedViewModel.hudCommands.collect { command ->
                     when (command) {
                         HudCommand.StartDraw -> {
                             sharedViewModel.setTouchEnabled(false)
@@ -70,6 +63,7 @@ class MediaReviewImagePageFragment : Fragment(R.layout.fragment_container), Imag
                     }
                 }
             }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

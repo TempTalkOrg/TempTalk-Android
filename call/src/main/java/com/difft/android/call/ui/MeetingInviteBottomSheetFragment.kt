@@ -24,6 +24,7 @@ import com.difft.android.call.handler.InviteCallHandler
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
@@ -270,15 +271,19 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
             setPadding(0, 0, 0, bottomPaddingPx)
         }
 
-        // 监听过滤后的联系人变化
-        inviteCallHandler?.filteredContacts?.let { flow ->
+        // 合并联系人列表、选中状态、会议中状态三个 Flow，统一驱动 UI
+        inviteCallHandler?.let { handler ->
             viewLifecycleOwner.lifecycleScope.launch {
-                flow.collect { contacts ->
+                combine(
+                    handler.filteredContacts,
+                    handler.selectedContactIds,
+                    handler.inMeetingIds
+                ) { contacts, selectedIds, inMeetingIds ->
+                    Triple(contacts, selectedIds, inMeetingIds)
+                }.collect { (contacts, selectedIds, inMeetingIds) ->
                     withContext(Dispatchers.Main) {
                         if (!isAdded) return@withContext
-                        
-                        val selectedIds = inviteCallHandler?.selectedContactIds?.value ?: emptySet()
-                        val inMeetingIds = inviteCallHandler?.inMeetingIds?.value ?: emptySet()
+
                         val contactsList = callToChatController.contactorListSortedByPinyin(contacts).map { contact ->
                             MeetingInviteContactItem(
                                 contact = contact,
@@ -293,39 +298,28 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
                         } else {
                             tvNoResult?.visibility = View.GONE
                             recyclerViewContacts?.visibility = View.VISIBLE
-                            contactsAdapter.submitList(contactsList) {
-                                recyclerViewContacts?.scrollToPosition(0)
-                            }
+                            contactsAdapter.submitList(contactsList)
                         }
-                    }
-                }
-            }
-        }
 
-        inviteCallHandler?.contacts?.let { flow ->
-            viewLifecycleOwner.lifecycleScope.launch {
-                flow.collect { contacts ->
-                    withContext(Dispatchers.Main) {
-                        if (!isAdded) return@withContext
-                        contactsSnapshot = contacts
-                        updateSelectedStrip()
-                    }
-                }
-            }
-        }
-
-        // 监听已选联系人ID变化，更新适配器
-        inviteCallHandler?.selectedContactIds?.let { flow ->
-            viewLifecycleOwner.lifecycleScope.launch {
-                flow.collect { selectedIds ->
-                    withContext(Dispatchers.Main) {
-                        if (!isAdded) return@withContext
-                        selectedIdsSnapshot = selectedIds
-                        updateSelectedStrip()
-                        contactsAdapter.updateSelectedIds(selectedIds)
                         // 更新完成按钮状态
                         tvDone?.isEnabled = selectedIds.isNotEmpty()
                         tvDone?.alpha = if (selectedIds.isNotEmpty()) 1.0f else 0.5f
+                    }
+                }
+            }
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                combine(
+                    handler.contacts,
+                    handler.selectedContactIds
+                ) { contacts, selectedIds ->
+                    contacts to selectedIds
+                }.collect { (contacts, selectedIds) ->
+                    withContext(Dispatchers.Main) {
+                        if (!isAdded) return@withContext
+                        contactsSnapshot = contacts
+                        selectedIdsSnapshot = selectedIds
+                        updateSelectedStrip()
                     }
                 }
             }

@@ -12,7 +12,6 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
@@ -52,11 +51,9 @@ import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.TranslateTargetLanguage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.subjects.BehaviorSubject
-import io.reactivex.rxjava3.subjects.PublishSubject
-import io.reactivex.rxjava3.subjects.Subject
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -71,8 +68,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.asFlow
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import org.difft.app.database.convertToMessageModel
 import org.difft.app.database.convertToTextMessage
@@ -114,8 +109,6 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     val viewModelCreateTime = System.currentTimeMillis()
-
-    private val disposableManager = CompositeDisposable()
 
     /**
      * 页面级联系人缓存
@@ -175,21 +168,21 @@ class ChatMessageViewModel @AssistedInject constructor(
     private fun observeContactorUpdates() {
         viewModelScope.launch {
             ContactorUtil.contactsUpdate
-                .asFlow()
-                .flowOn(Dispatchers.IO)
                 .collect { updatedContactIds ->
-                    // 获取缓存中的所有联系人ID
-                    val cachedIds = contactorCache.getCachedIds()
+                    withContext(Dispatchers.IO) {
+                        // 获取缓存中的所有联系人ID
+                        val cachedIds = contactorCache.getCachedIds()
 
-                    // 找出需要更新的联系人（在缓存中的）
-                    val idsToRefresh = updatedContactIds.filter { cachedIds.contains(it) }.toSet()
+                        // 找出需要更新的联系人（在缓存中的）
+                        val idsToRefresh = updatedContactIds.filter { cachedIds.contains(it) }.toSet()
 
-                    if (idsToRefresh.isNotEmpty()) {
-                        // 清除缓存中的旧数据并重新加载
-                        contactorCache.remove(idsToRefresh)
-                        contactorCache.loadContactors(idsToRefresh)
-                        _contactorCacheRefreshed.emit(Unit)
-                        L.i { "MessageContactsCacheUtil: Refreshed ${idsToRefresh.size} cached contactors" }
+                        if (idsToRefresh.isNotEmpty()) {
+                            // 清除缓存中的旧数据并重新加载
+                            contactorCache.remove(idsToRefresh)
+                            contactorCache.loadContactors(idsToRefresh, (forWhat as? For.Group)?.id)
+                            _contactorCacheRefreshed.emit(Unit)
+                            L.i { "MessageContactsCacheUtil: Refreshed ${idsToRefresh.size} cached contactors" }
+                        }
                     }
                 }
         }
@@ -292,38 +285,38 @@ class ChatMessageViewModel @AssistedInject constructor(
         chatUIData.value = data
     }
 
-    var messageQuoted: Subject<ChatMessage> = BehaviorSubject.create()
-    var messageForward: Subject<Pair<ChatMessage, Boolean>> = BehaviorSubject.create()
-    var messageRecall: Subject<ChatMessage> = BehaviorSubject.create()
-    var messageResend: Subject<ChatMessage> = BehaviorSubject.create()
-    var messageEmojiReaction: Subject<EmojiReactionEvent> = BehaviorSubject.create()
+    val messageQuoted: MutableSharedFlow<ChatMessage> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val messageForward: MutableSharedFlow<Pair<ChatMessage, Boolean>> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val messageRecall: MutableSharedFlow<ChatMessage> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val messageResend: MutableSharedFlow<ChatMessage> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val messageEmojiReaction: MutableSharedFlow<EmojiReactionEvent> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    var voiceVisibilityChange: Subject<Boolean> = BehaviorSubject.create()
+    val voiceVisibilityChange = MutableStateFlow(false)
 
     fun setVoiceVisibility(visible: Boolean) {
-        voiceVisibilityChange.onNext(visible)
+        voiceVisibilityChange.value = visible
     }
 
-    var avatarLongClicked: Subject<ContactorModel> = PublishSubject.create()
+    val avatarLongClicked: MutableSharedFlow<ContactorModel> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun longClickAvatar(contactorModel: ContactorModel) {
-        avatarLongClicked.onNext(contactorModel)
+        avatarLongClicked.tryEmit(contactorModel)
     }
 
-    var listClick: Subject<Unit> = BehaviorSubject.create()
+    val listClick: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     fun clickList() {
-        listClick.onNext(Unit)
+        listClick.tryEmit(Unit)
     }
 
-    var voiceMessageSend: Subject<String> = BehaviorSubject.create()
+    val voiceMessageSend: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun sendVoiceMessage(path: String) {
-        voiceMessageSend.onNext(path)
+        voiceMessageSend.tryEmit(path)
     }
 
-    var chatActionsShow: Subject<Unit> = BehaviorSubject.create()
+    val chatActionsShow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     fun showChatActions() {
-        chatActionsShow.onNext(Unit)
+        chatActionsShow.tryEmit(Unit)
     }
 
     fun startCall(activity: Activity, chatRoomName: String?) {
@@ -358,93 +351,101 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    var showOrHideFullInput: Subject<Pair<Boolean, String>> = PublishSubject.create()
+    val showOrHideFullInput: MutableSharedFlow<Pair<Boolean, String>> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun showOrHideFullInput(show: Boolean, inputContent: String) {
-        showOrHideFullInput.onNext(show to inputContent)
+        showOrHideFullInput.tryEmit(show to inputContent)
     }
 
-    var confidentialViewReceipt: Subject<ChatMessage> = BehaviorSubject.create()
+    val confidentialViewReceipt: MutableSharedFlow<ChatMessage> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    var translateEvent: Subject<Pair<String, TranslateData>> = BehaviorSubject.create()
+    val translateEvent: MutableSharedFlow<Pair<String, TranslateData>> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    var speechToTextEvent: Subject<Pair<String, SpeechToTextData>> = BehaviorSubject.create()
+    val speechToTextEvent: MutableSharedFlow<Pair<String, SpeechToTextData>> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun sendConfidentialViewReceipt(message: ChatMessage) {
         L.i { "[Confidential] Send view receipt, messageId: ${message.id}, timestamp: ${message.timeStamp}" }
-        confidentialViewReceipt.onNext(message)
+        confidentialViewReceipt.tryEmit(message)
     }
 
     fun quoteMessage(data: ChatMessage) {
-        messageQuoted.onNext(data)
+        messageQuoted.tryEmit(data)
     }
 
     fun forwardMessage(data: ChatMessage, saveToNote: Boolean) {
-        messageForward.onNext(data to saveToNote)
+        messageForward.tryEmit(data to saveToNote)
     }
 
     fun recallMessage(data: ChatMessage) {
-        messageRecall.onNext(data)
+        messageRecall.tryEmit(data)
     }
 
     fun reSendMessage(data: ChatMessage) {
-        messageResend.onNext(data)
+        messageResend.tryEmit(data)
     }
 
     fun deleteMessage(messageId: String) {
         dbMessageStore.deleteMessage(listOf(messageId))
     }
 
-    // ========== Confidential placeholder: track seen placeholders, batch delete on page close ==========
+    // ========== Confidential placeholder: auto-delete 3s after displayed, fallback on page close ==========
     private val pendingConfidentialPlaceholders = mutableSetOf<Long>()
 
     /**
-     * Record the timestamp of a seen confidential placeholder message.
-     * Called during scroll and after list updates. Only records, does not delete.
+     * Record a seen confidential placeholder and auto-delete it after 3 seconds.
+     * Each placeholder launches its own coroutine. On successful deletion, it is
+     * removed from the pending set so the fallback in onDestroyView skips it.
      */
     fun markConfidentialPlaceholderAsSeen(timestamp: Long) {
-        pendingConfidentialPlaceholders.add(timestamp)
+        if (!pendingConfidentialPlaceholders.add(timestamp)) return
+        viewModelScope.launch {
+            delay(AUTO_DELETE_DELAY)
+            deleteConfidentialPlaceholder(timestamp)
+            pendingConfidentialPlaceholders.remove(timestamp)
+        }
     }
 
     /**
-     * Batch delete seen placeholder messages on page close.
+     * Fallback: batch delete remaining placeholders on page close.
+     * Only processes items that were not yet auto-deleted (e.g., page closed within 3s).
      */
     suspend fun processPendingConfidentialPlaceholders() {
         if (pendingConfidentialPlaceholders.isEmpty()) return
 
-        withContext(Dispatchers.IO) {
-            val timestamps = pendingConfidentialPlaceholders.toList()
-            pendingConfidentialPlaceholders.clear()
+        val timestamps = pendingConfidentialPlaceholders.toList()
+        pendingConfidentialPlaceholders.clear()
 
-            timestamps.forEach { timestamp ->
-                val messageModel = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp))
-                if (messageModel != null) {
-                    messageModel.delete()
-                    L.i { "[Confidential] Deleted placeholder message -> timestamp:${timestamp}" }
-                }
+        timestamps.forEach { deleteConfidentialPlaceholder(it) }
+    }
+
+    private suspend fun deleteConfidentialPlaceholder(timestamp: Long) {
+        withContext(Dispatchers.IO) {
+            val messageModel = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp))
+            if (messageModel != null) {
+                messageModel.delete()
+                L.i { "[Confidential] Deleted placeholder message -> timestamp:$timestamp" }
             }
         }
     }
 
-    fun emojiReaction(emojiEvent: EmojiReactionEvent) {
-        messageEmojiReaction.onNext(emojiEvent)
+    companion object {
+        private const val AUTO_DELETE_DELAY = 3000L
     }
 
-    override fun onCleared() {
-        disposableManager.dispose()
-        super.onCleared()
+    fun emojiReaction(emojiEvent: EmojiReactionEvent) {
+        messageEmojiReaction.tryEmit(emojiEvent)
     }
 
     private fun updateTranslateStatus(id: String, translateData: TranslateData) {
-        translateEvent.onNext(id to translateData)
+        translateEvent.tryEmit(id to translateData)
     }
 
     private fun updateSpeechToTextStatus(id: String, speechToTextData: SpeechToTextData) {
-        speechToTextEvent.onNext(id to speechToTextData)
+        speechToTextEvent.tryEmit(id to speechToTextData)
     }
 
     fun speechToText(context: Context, data: TextChatMessage) {
-        appScope.launch {
+        viewModelScope.launch {
             if (data.speechToTextData?.convertStatus == SpeechToTextStatus.Converting) {
                 L.w { "[speechToTextManager] current voice file is converting." }
                 return@launch
@@ -461,31 +462,29 @@ class ChatMessageViewModel @AssistedInject constructor(
                 val speechToTextData = data.speechToTextData ?: SpeechToTextData(SpeechToTextStatus.Invisible, null)
                 speechToTextData.convertStatus = SpeechToTextStatus.Converting
                 updateSpeechToTextStatus(data.id, speechToTextData)
-                withContext(Dispatchers.Main) {
-                    speechToTextManager.speechToText(
-                        context,
-                        attachment,
-                        onSuccess = {
-                            if (it.isNotEmpty()) {
-                                speechToTextData.convertStatus = SpeechToTextStatus.Show
-                                speechToTextData.speechToTextContent = it
-                                updateSpeechToTextStatus(data.id, speechToTextData)
-                                updateSpeechToTextDataOfDB(data, speechToTextData)
-                            } else {
-                                speechToTextData.convertStatus = SpeechToTextStatus.Invisible
-                                updateSpeechToTextStatus(data.id, speechToTextData)
-                                ToastUtil.show(R.string.chat_speech_to_text_isblank)
-                            }
-                        },
-                        onFailure = {
-                            L.e { "[speechToTextManager] SpeechToText failed:" + it.message }
+                speechToTextManager.speechToText(
+                    viewModelScope,
+                    context,
+                    attachment,
+                    onSuccess = {
+                        if (it.isNotEmpty()) {
+                            speechToTextData.convertStatus = SpeechToTextStatus.Show
+                            speechToTextData.speechToTextContent = it
+                            updateSpeechToTextStatus(data.id, speechToTextData)
+                            updateSpeechToTextDataOfDB(data, speechToTextData)
+                        } else {
                             speechToTextData.convertStatus = SpeechToTextStatus.Invisible
                             updateSpeechToTextStatus(data.id, speechToTextData)
-                            ToastUtil.show(R.string.chat_speech_to_text_fail)
+                            ToastUtil.show(R.string.chat_speech_to_text_isblank)
                         }
-                    )
-                }
-
+                    },
+                    onFailure = {
+                        L.e { "[speechToTextManager] SpeechToText failed:" + it.message }
+                        speechToTextData.convertStatus = SpeechToTextStatus.Invisible
+                        updateSpeechToTextStatus(data.id, speechToTextData)
+                        ToastUtil.show(R.string.chat_speech_to_text_fail)
+                    }
+                )
             }
         }
     }
@@ -498,7 +497,13 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     private fun updateSpeechToTextDataOfDB(data: TextChatMessage, speechToTextData: SpeechToTextData) {
-        dbMessageStore.updateMessageSpeechToTextData(forWhat.id, data.id, speechToTextData).subscribe()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                dbMessageStore.updateMessageSpeechToTextData(forWhat.id, data.id, speechToTextData)
+            } catch (e: Exception) {
+                L.e { "[ChatMessageViewModel] updateSpeechToTextDataOfDB error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     fun translate(data: TextChatMessage, targetLanguage: TranslateTargetLanguage) {
@@ -523,17 +528,14 @@ class ChatMessageViewModel @AssistedInject constructor(
         updateTranslateStatus(data.id, translateData)
 
         val content = if (data.forwardContext?.forwards?.size == 1) {
-            data.forwardContext?.forwards?.firstOrNull()?.let { forward ->
-                forward.card?.content.takeUnless { it.isNullOrEmpty() }
-                    ?: forward.text.takeUnless { it.isNullOrEmpty() }
-            }
-        } else data.card?.content.takeUnless { it.isNullOrEmpty() }
-            ?: data.message.takeUnless { it.isNullOrEmpty() }
+            data.forwardContext?.forwards?.firstOrNull()?.text.takeUnless { it.isNullOrEmpty() }
+        } else data.message.takeUnless { it.isNullOrEmpty() }
             ?: ""
 
         val targetLang = if (targetLanguage == TranslateTargetLanguage.ZH) TranslateLanguage.CHINESE else TranslateLanguage.ENGLISH
 
         translateManager.translateText(
+            scope = viewModelScope,
             text = content.toString(),
             targetLang = targetLang,
             onSuccess = {
@@ -571,7 +573,13 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     private fun updateTranslateDataOfDB(data: TextChatMessage, translateData: TranslateData) {
-        dbMessageStore.updateMessageTranslateData(forWhat.id, data.id, translateData).subscribe()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                dbMessageStore.updateMessageTranslateData(forWhat.id, data.id, translateData)
+            } catch (e: Exception) {
+                L.e { "[ChatMessageViewModel] updateTranslateDataOfDB error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private suspend fun assembleMessagesUIData(
@@ -585,10 +593,10 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
 
         // 2. 在循环外判断是否是大群，避免重复查询
+        val groupMemberCount = if (forWhat is For.Group) wcdb.getGroupMemberCount(forWhat.id) else 0
         val isLargeGroup = if (forWhat is For.Group) {
             val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
-            val memberCount = wcdb.getGroupMemberCount(forWhat.id)
-            memberCount > threshold
+            groupMemberCount > threshold
         } else {
             false
         }
@@ -596,14 +604,14 @@ class ChatMessageViewModel @AssistedInject constructor(
         // 3. 生成 ChatMessage（generateMessageTwo 内部会查询子数据一次）
         // 转换锚点消息用于计算显示逻辑
         val anchorChatMessageBefore = chatMessageListBehavior.anchorMessageBefore?.let {
-            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup)
+            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount)
         }
         val anchorChatMessageAfter = chatMessageListBehavior.anchorMessageAfter?.let {
-            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup)
+            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount)
         }
 
         val chatMessages = chatMessageListBehavior.messageList.mapNotNull { msg ->
-            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup)
+            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup, groupMemberCount)
         }
 
         // 4. 从已生成的 ChatMessage 中收集所有联系人ID（不触发新查询）
@@ -611,7 +619,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         val allContactIds = com.difft.android.chat.MessageContactsCacheUtil.collectContactIds(allMessagesToCollect)
 
         // 5. 批量加载联系人到当前页面的缓存（只查询缓存中不存在的）
-        contactorCache.loadContactors(allContactIds)
+        contactorCache.loadContactors(allContactIds, (forWhat as? For.Group)?.id)
         val list = chatMessages.sortedBy { message -> message.systemShowTimestamp }
 
         // 过滤掉错误通知消息
@@ -688,7 +696,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                 false
             }
 
-            val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat).await()
+            val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat)
             if (currentReadPosition > lastReadPosition) {
                 val messages = wcdb.message.getAllObjects(
                     DBMessageModel.roomId.eq(forWhat.id)
@@ -764,7 +772,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     suspend fun updateMessageReadPosition(readPosition: Long) = withContext(Dispatchers.IO) {
         try {
             dbRoomStore.updateMessageReadPosition(forWhat, readPosition)
-            dbMessageStore.updateMessageReadTime(forWhat.id, readPosition).await()
+            dbMessageStore.updateMessageReadTime(forWhat.id, readPosition)
         } catch (e: Exception) {
             L.e { "updateMessageReadPosition error: ${e.stackTraceToString()}" }
         }
@@ -784,7 +792,7 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     suspend fun getUnreadMessageInfo(): UnreadMessageInfo? {
         return try {
-            dbRoomStore.getUnreadMessageInfo(forWhat).await()
+            dbRoomStore.getUnreadMessageInfo(forWhat)
         } catch (e: Exception) {
             L.e { "[${forWhat.id}] Error getting unread message info: ${e.stackTraceToString()}" }
             null
@@ -910,7 +918,6 @@ class ChatMessageViewModel @AssistedInject constructor(
                             message.text,
                             message.attachments,
                             null,
-                            message.card,
                             message.mentions,
                             it.systemShowTimestamp
                         )
@@ -935,7 +942,6 @@ class ChatMessageViewModel @AssistedInject constructor(
                 if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
                 message.attachments,
                 message.forwardContext?.forwards,
-                message.card,
                 message.mentions,
                 it.systemShowTimestamp
             )
@@ -971,7 +977,6 @@ class ChatMessageViewModel @AssistedInject constructor(
                     if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
                     message.attachments,
                     message.forwardContext?.forwards,
-                    message.card,
                     message.mentions,
                     it.systemShowTimestamp
                 )

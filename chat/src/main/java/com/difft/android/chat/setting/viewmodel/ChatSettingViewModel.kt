@@ -2,13 +2,10 @@ package com.difft.android.chat.setting.viewmodel
 
 import android.app.Activity
 import android.text.TextUtils
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import autodispose2.autoDispose
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.utils.globalServices
@@ -28,7 +25,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import difft.android.messageserialization.For
-import io.reactivex.rxjava3.subjects.CompletableSubject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,8 +33,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.wcdb
 
@@ -52,8 +48,6 @@ class ChatSettingViewModel @AssistedInject constructor(
     private val httpClient: ChativeHttpClient,
     private val dbRoomStore: DBRoomStore
 ) : ViewModel() {
-    private val autoDisposeCompletable = CompletableSubject.create()
-
     private val _conversationSet = MutableStateFlow<ConversationSetResponseBody?>(null)
     val conversationSet: StateFlow<ConversationSetResponseBody?> = _conversationSet.asStateFlow()
 
@@ -131,16 +125,20 @@ class ChatSettingViewModel @AssistedInject constructor(
 
     fun updateSelectedOption(activity: Activity, time: Long) {
         ComposeDialogManager.showWait(activity, "")
-        messageArchiveManager.updateMessageArchiveTime(conversation, time)
-            .compose(RxUtil.getCompletableTransformer())
-            .autoDispose(autoDisposeCompletable)
-            .subscribe({
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    messageArchiveManager.updateMessageArchiveTime(conversation, time)
+                }
                 ComposeDialogManager.dismissWait()
-            }, {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
-                L.w { "[ChatSettingViewModel] updateSelectedOption error: ${it.stackTraceToString()}" }
-                it.message?.let { message -> ToastUtil.show(message) }
-            })
+                L.w { "[ChatSettingViewModel] updateSelectedOption error: ${e.stackTraceToString()}" }
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 
 
@@ -154,22 +152,23 @@ class ChatSettingViewModel @AssistedInject constructor(
         needFinishActivity: Boolean = false,
         successTips: String? = null
     ) {
-        httpClient.httpService
-            .fetchConversationSet(
-                SecureSharedPrefsUtil.getBasicAuth(),
-                ConversationSetRequestBody(
-                    conversation,
-                    remark,
-                    muteStatus,
-                    blockStatus,
-                    confidentialMode
-                )
-            )
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                if (it.status == 0) {
-                    it.data?.let { conversationSet ->
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    httpClient.httpService
+                        .fetchConversationSet(
+                            SecureSharedPrefsUtil.getBasicAuth(),
+                            ConversationSetRequestBody(
+                                conversation,
+                                remark,
+                                muteStatus,
+                                blockStatus,
+                                confidentialMode
+                            )
+                        )
+                }
+                if (result.status == 0) {
+                    result.data?.let { conversationSet ->
                         // 合并当前值和返回值，保留 messageExpiry 和 messageClearAnchor
                         // 因为 setConversationConfigs API 不修改这两个字段
                         val current = _conversationSet.value
@@ -182,7 +181,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                             conversationSet
                         }
                         // 更新数据库中的配置
-                        viewModelScope.launch(Dispatchers.IO) {
+                        withContext(Dispatchers.IO) {
                             updateCachedConfig(conversation, mergedConfig)
                         }
                         updateConversationSetResponseBody(mergedConfig)
@@ -190,10 +189,8 @@ class ChatSettingViewModel @AssistedInject constructor(
                     if (!TextUtils.isEmpty(successTips)) {
                         successTips?.let { message -> ToastUtil.show(message) }
                         if (needFinishActivity) {
-                            viewModelScope.launch {
-                                kotlinx.coroutines.delay(2000)
-                                activity.finish()
-                            }
+                            kotlinx.coroutines.delay(2000)
+                            activity.finish()
                         }
                     } else {
                         if (needFinishActivity) {
@@ -201,12 +198,15 @@ class ChatSettingViewModel @AssistedInject constructor(
                         }
                     }
                 } else {
-                    it.reason?.let { message -> ToastUtil.show(message) }
+                    result.reason?.let { message -> ToastUtil.show(message) }
                 }
-            }) {
-                L.w { "[ChatSettings] setConversationConfigs error:" + it.stackTraceToString() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[ChatSettings] setConversationConfigs error:" + e.stackTraceToString() }
                 ToastUtil.show(activity.getString(R.string.operation_failed))
             }
+        }
     }
 
     /**
@@ -232,7 +232,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                     httpClient.httpService.fetchGetConversationSet(
                         SecureSharedPrefsUtil.getBasicAuth(),
                         GetConversationSetRequestBody(listOf(conversationId))
-                    ).await()
+                    )
                 }
 
                 if (response.status == 0) {
@@ -263,6 +263,8 @@ class ChatSettingViewModel @AssistedInject constructor(
                 } else {
                     L.w { "[ChatSettings] Server returned error: ${response.reason}" }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.w { "[ChatSettings] refreshConversationConfigs network error: ${e.message}" }
                 // 网络错误时不处理，因为已经使用了缓存配置
@@ -345,8 +347,6 @@ class ChatSettingViewModel @AssistedInject constructor(
     }
 
     override fun onCleared() {
-        autoDisposeCompletable.onComplete()
-
         super.onCleared()
     }
 }

@@ -19,7 +19,8 @@
     <string name="call_instant_call_title_default">instant call</string>
     <string name="call_push_stream_limit_tip">当前服务器已达到推流上限，请稍候再试。</string>
     <string name="call_connect_timeout_tip">连接超时，请稍后重试。</string>
-    <string name="call_connect_exception_error">无法连接服务器，请稍后再试。</string>
+    <string name="call_server_connect_exception_error">无法连接服务器，请稍后再试。</string>
+    <string name="call_room_connect_exception_error">会议连接失败，请稍后再试。</string>
     <string name="call_e2ee_key_error">无法解密通话密钥</string>
     <string name="call_connect_error_ended">通话已结束</string>
     <string name="call_no_internet_connection_tip">当前无网络连接，请检查后重试。</string>
@@ -53,6 +54,9 @@
     <string name="call_button_group_alert_cancel_text">取消</string>
     <string name="call_button_group_alert_end_text">结束</string>
     <string name="call_toolbar_noise_suppression_text">麦克风噪声抑制</string>
+    <string name="call_denoise_mode_label">降噪模式</string>
+    <string name="call_denoise_mode_standard">标准降噪</string>
+    <string name="call_denoise_mode_enhanced">增强降噪</string>
     <string name="call_toolbar_bottom_invite_text">邀请</string>
     <string name="call_toolbar_bottom_raise_hand_text">举手</string>
     <string name="call_toolbar_bottom_switch_text">翻转</string>

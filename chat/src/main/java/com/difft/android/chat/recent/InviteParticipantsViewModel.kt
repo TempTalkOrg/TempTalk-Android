@@ -8,8 +8,6 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupMemberModel
 import com.difft.android.network.group.Member
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import kotlinx.coroutines.rx3.await
 import javax.inject.Inject
 
 @HiltViewModel
@@ -57,7 +55,7 @@ class InviteParticipantsViewModel @Inject constructor(
 
     suspend fun getMyDisplayName(context: Context, myUid: String): String {
         if (myDisplayName.isEmpty()) {
-            val contact = ContactorUtil.getContactWithID(context, myUid).await()
+            val contact = ContactorUtil.getContactWithID(context, myUid)
             if (contact.isPresent) {
                 myDisplayName = contact.get().getDisplayNameForUI()
             }
@@ -65,9 +63,7 @@ class InviteParticipantsViewModel @Inject constructor(
         return myDisplayName
     }
 
-    private val compositeDisposable: CompositeDisposable by lazy { CompositeDisposable() }
     override fun onCleared() {
         super.onCleared()
-        compositeDisposable.dispose()
     }
 }

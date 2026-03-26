@@ -55,8 +55,7 @@ import com.difft.android.network.responses.MuteStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitFirst
+import kotlinx.coroutines.runBlocking
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBRoomModel
@@ -82,7 +81,8 @@ class MessageNotificationUtil @Inject constructor(
     private val activityProvider: ActivityProvider,
     private val cacheManager: NotificationCacheManager,
     private val criticalAlertManager: CriticalAlertManager,
-    private val onGoingCallStateManager: OnGoingCallStateManager
+    private val onGoingCallStateManager: OnGoingCallStateManager,
+    private val groupUtil: dagger.Lazy<GroupUtil>
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -364,17 +364,13 @@ class MessageNotificationUtil @Inject constructor(
         var title: String
 
         if (needTitle) {
-            val contactor = ContactorUtil.getContactWithID(context, fromId).await()
+            val contactor = ContactorUtil.getContactWithID(context, fromId)
             if (contactor.isPresent) {
                 sender = contactor.get()
             }
             if (forWhat is For.Group) {
-                val group = GroupUtil.getSingleGroupInfo(context, forWhat.id, false).awaitFirst()
-                title = if (group.isPresent) {
-                    group.get().name.toString()
-                } else {
-                    forWhat.id
-                }
+                val group = groupUtil.get().getSingleGroupInfo(forWhat.id, false)
+                title = group?.name?.toString() ?: forWhat.id
             } else {
                 title = sender?.getDisplayNameForUI() ?: fromId.formatBase58Id()
             }
@@ -678,11 +674,11 @@ class MessageNotificationUtil @Inject constructor(
         val notificationID = roomId.hashCode()  //roomId为空
         var title = ""
         var content = ""
-        val callerInfo = ContactorUtil.getContactWithID(context, callerId).blockingGet()
+        val callerInfo = kotlinx.coroutines.runBlocking { ContactorUtil.getContactWithID(context, callerId) }
         if (callType.isGroup()) {
             conversationId ?: return
-            val groupInfo = GroupUtil.getSingleGroupInfo(context, conversationId).blockingFirst()
-            title = if (groupInfo.isPresent) groupInfo.get().name ?: conversationId else conversationId
+            val groupInfo = runBlocking { groupUtil.get().getSingleGroupInfo(conversationId) }
+            title = groupInfo?.name ?: conversationId
             content = "${if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()} ${ResUtils.getString(R.string.call_invite_of_group)}"
         } else if (callType.isOneOnOne()) {
             title = if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()

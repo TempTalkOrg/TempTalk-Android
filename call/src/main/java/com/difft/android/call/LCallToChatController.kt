@@ -8,7 +8,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.call.handler.InviteRequestState
 import difft.android.messageserialization.For
-import io.reactivex.rxjava3.core.Observable
+import kotlinx.coroutines.flow.Flow
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
 import java.util.ArrayList
@@ -35,7 +35,7 @@ interface LCallToChatController {
 
     fun getMySelfUid(): String
 
-    suspend fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel>
+    suspend fun getSingleGroupInfo(conversationId: String): GroupModel?
 
     fun cancelNotificationById(notificationId: Int)
 
@@ -74,9 +74,9 @@ interface LCallToChatController {
 
     fun isIncomingCallNotifying(roomId: String): Boolean
 
-    fun getContactsUpdateListener(): Observable<List<String>>
+    fun getContactsUpdateListener(): Flow<List<String>>
 
-    fun getGroupsUpdateListener(): Observable<GroupModel>
+    fun getGroupsUpdateListener(): Flow<GroupModel>
 
     fun startForegroundService(context: Context, intent: Intent)
 

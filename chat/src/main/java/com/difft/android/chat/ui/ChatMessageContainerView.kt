@@ -23,10 +23,21 @@ class ChatMessageContainerView @JvmOverloads constructor(
      */
     var containerWidth: Int = 0
 
+    /**
+     * Track the last bound message ID. Padding reset only happens when
+     * the message changes (different item reusing ViewHolder), not on
+     * re-measure of the same message (e.g., scroll adjustments).
+     */
+    private var lastBoundMessageId: String? = null
+
+    fun bindMessageId(messageId: String) {
+        if (messageId != lastBoundMessageId) {
+            lastBoundMessageId = messageId
+            resetAllPaddingsToDefault()
+        }
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        // First, always reset all paddings to ensure clean state for RecyclerView reuse
-        // This prevents padding from previous item from affecting current item
-        resetAllPaddingsToDefault()
 
         // First measure to get initial sizes
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)

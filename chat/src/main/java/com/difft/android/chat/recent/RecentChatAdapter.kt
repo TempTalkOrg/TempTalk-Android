@@ -26,6 +26,7 @@ import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
+import com.difft.android.chat.contacts.data.isOfficialBotId
 import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
 import com.difft.android.chat.group.getAvatarData
 import com.difft.android.chat.search.setHighLightText
@@ -200,6 +201,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             is RoomViewData.Type.OneOnOne -> {
                 binding.imageviewAvatar.visibility = View.VISIBLE
                 if (data.roomId == myID) {
+                    binding.imageviewBotBadge.isVisible = false
                     binding.imageviewAvatar.showFavorites()
                     if (searchKey.isNotEmpty()) {
                         binding.textviewLabel.setHighLightText(
@@ -211,6 +213,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                             binding.root.context.getString(com.difft.android.base.R.string.chat_favorites)
                     }
                 } else {
+                    binding.imageviewBotBadge.isVisible = data.roomId.isOfficialBotId()
                     val contactAvatar = data.roomAvatarJson?.getContactAvatarData()
                     binding.imageviewAvatar.setAvatar(
                         contactAvatar?.getContactAvatarUrl(),
@@ -224,6 +227,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             is RoomViewData.Type.Group -> {
                 binding.imageviewGroupAvatar.visibility = View.VISIBLE
                 binding.imageviewGroupAvatar.setAvatar(data.roomAvatarJson?.getAvatarData(), true, data.groupMembersNumber, data.roomId)
+                binding.imageviewBotBadge.isVisible = false
             }
         }
 

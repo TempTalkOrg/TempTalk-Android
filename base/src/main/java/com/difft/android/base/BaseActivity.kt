@@ -15,6 +15,16 @@ import dagger.hilt.android.AndroidEntryPoint
 abstract class BaseActivity : AppCompatActivity() {
     private val activityStartTimestamp: Long = System.currentTimeMillis()
 
+    // Time when this window last lost focus (0 if currently focused).
+    // Used by screenshot detector to skip screenshots taken in notification panel.
+    var windowFocusLostAt: Long = 0L
+        private set
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        windowFocusLostAt = if (hasFocus) 0L else System.currentTimeMillis()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable edge-to-edge before super.onCreate()
         if (shouldEnableEdgeToEdge()) {

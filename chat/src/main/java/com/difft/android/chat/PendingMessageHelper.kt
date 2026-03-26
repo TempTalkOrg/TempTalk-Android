@@ -19,7 +19,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.difft.app.database.WCDBUpdateService
@@ -159,7 +158,7 @@ class PendingMessageHelper @Inject constructor(
                             SecureSharedPrefsUtil.getBasicAuth(),
                             msg.source.toString(),
                             msg.timestamp.toString()
-                        ).await()
+                        )
 
                         if (result.isSuccess()) {
                             L.i { "[Message][PendingMessageHelper] remove pending message ${msg.timestamp} success" }

@@ -8,8 +8,8 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.net.toUri
-import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import com.difft.android.base.utils.getLifecycleOwner
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
@@ -50,6 +50,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     val binding: LayoutImageMessageViewBinding by viewbind(this)
 
     private var progressJob: Job? = null
+    private var loadImageJob: Job? = null
     private var currentAttachmentId: String? = null
     private var currentMessage: TextChatMessage? = null
     private var currentShouldSaveToPhotos: Boolean = false
@@ -320,7 +321,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (progressJob == null) {
-            findViewTreeLifecycleOwner()?.lifecycleScope?.launch {
+            getLifecycleOwner()?.lifecycleScope?.launch {
                 FileUtil.progressUpdate
                     .filter { it == currentAttachmentId }
                     .collect {
@@ -335,29 +336,35 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         progressJob?.cancel()
         progressJob = null
+        loadImageJob?.cancel()
+        loadImageJob = null
         super.onDetachedFromWindow()
     }
 
     private fun loadImage(attachmentPath: String, expectedSize: Int, contentType: String) {
-        val file = File(attachmentPath)
-        val fileLastModified = file.lastModified()
-        val actualFileSize = file.length()
+        loadImageJob?.cancel()
+        loadImageJob = getLifecycleOwner()?.lifecycleScope?.launch {
+            val file = File(attachmentPath)
+            val (fileLastModified, actualFileSize) = withContext(Dispatchers.IO) {
+                file.lastModified() to file.length()
+            }
 
-        Glide.with(context)
-            .load(attachmentPath)
-            .signature(ObjectKey(fileLastModified))
-            .transform(CenterCrop(), RoundedCorners(6.dp))
-            .listener(object : RequestListener<Drawable> {
-                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
-                    L.e { "[MediaMsg] Load FAILED - path: $attachmentPath, contentType: $contentType, expectedSize: $expectedSize, actualFileSize: $actualFileSize, lastModified: $fileLastModified, error: ${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }
-                    return false
-                }
+            Glide.with(context)
+                .load(attachmentPath)
+                .signature(ObjectKey(fileLastModified))
+                .transform(CenterCrop(), RoundedCorners(6.dp))
+                .listener(object : RequestListener<Drawable> {
+                    override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
+                        L.e { "[MediaMsg] Load FAILED - path: $attachmentPath, contentType: $contentType, expectedSize: $expectedSize, actualFileSize: $actualFileSize, lastModified: $fileLastModified, error: ${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }
+                        return false
+                    }
 
-                override fun onResourceReady(resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean): Boolean {
-                    return false
-                }
-            })
-            .into(binding.imageView)
+                    override fun onResourceReady(resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean): Boolean {
+                        return false
+                    }
+                })
+                .into(binding.imageView)
+        }
     }
 
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {

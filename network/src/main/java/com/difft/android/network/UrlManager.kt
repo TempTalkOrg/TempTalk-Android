@@ -4,6 +4,7 @@ import android.net.Uri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import dagger.Lazy
 import javax.inject.Inject
 
@@ -30,7 +31,7 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
     override val inviteGroupUrl: String = "https://yelling.pro/"
-    override val installationGuideUrl: String = "https://yelling.pro/"
+    override val installationGuideUrl: String = "https://yelling.pro"
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/prod-buildversion/insider-version.json"
 }
 
@@ -44,14 +45,14 @@ private class ChativeDevelopmentUrlProtocol : UrlProtocol {
     override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
     override val inviteGroupUrl: String = "https://yelling.pro/"
-    override val installationGuideUrl: String = "https://test.yelling.pro/"
+    override val installationGuideUrl: String = "https://test.yelling.pro"
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/test-buildversion/insider-version.json"
 }
 
 class UrlManager @Inject constructor(
     val environmentHelper: EnvironmentHelper,
     private val globalConfigsManager: Lazy<GlobalConfigsManager>,
-    private val hostManager: HostManager
+    private val coordinator: DomainSpeedTestCoordinator
 ) {
 
     private val protocol: UrlProtocol = when {
@@ -60,95 +61,87 @@ class UrlManager @Inject constructor(
         else -> throw IllegalArgumentException("Unknown Environment.")
     }
 
+    /** Tracks the host used by the last WebSocket connection, for accurate failure reporting. */
+    @Volatile
+    private var lastConnectedWsHost: String? = null
+
     private val newGlobalConfig by lazy {
         globalConfigsManager.get().getNewGlobalConfigs()
     }
 
-    // ==================== HTTP 相关 ====================
+    // ==================== HTTP ====================
 
     /**
-     * 获取 HTTP 请求的 host（优先使用 GlobalConfig，fallback 到 protocol 默认值）
+     * Returns the best host (speed test -> persisted -> GlobalConfig -> hardcoded default).
      */
-    private fun getHttpHost(): String {
-        return hostManager.getHost(HostManager.SERVICE_TYPE_CHAT, HostManager.FAILED_HOST_KEY_HTTP_CHAT)
-            ?: protocol.defaultHost
+    private fun getBestHost(): String {
+        return coordinator.getBestHostSync() ?: protocol.defaultHost
     }
 
     /**
-     * 记录 HTTP 请求失败的 host
+     * Marks a host as unavailable for this session.
      */
     fun recordFailedHost(hostName: String) {
-        hostManager.recordFailedHost(HostManager.FAILED_HOST_KEY_HTTP_CHAT, hostName)
+        coordinator.markHostUnavailable(hostName)
     }
 
     /**
-     * 根据旧 host 查找同 serviceType 的所有 hosts
+     * Returns all hosts ranked by latency for retry fallback.
      */
-    fun findHostsByOldHost(oldHostName: String): List<String> {
-        val serviceType = hostManager.findServiceTypeByHost(oldHostName)
-        return if (serviceType != null) {
-            hostManager.getAllHosts(serviceType)
-        } else {
-            emptyList()
-        }
+    fun getAllHostsRanked(): List<String> {
+        return coordinator.getAllHostsRanked()
     }
 
     val default: String
         get() {
-            val host = getHttpHost()
+            val host = getBestHost()
             return "https://$host/"
         }
 
     val chat: String
         get() {
-            val host = getHttpHost()
+            val host = getBestHost()
             val path = newGlobalConfig?.data?.srvs?.chat ?: "/chat"
             return "https://$host$path/"
         }
 
     val call: String
         get() {
-            val host = getHttpHost()
+            val host = getBestHost()
             val path = newGlobalConfig?.data?.srvs?.call ?: "/call"
             return "https://$host$path/"
         }
 
     val fileSharing: String
         get() {
-            val host = getHttpHost()
+            val host = getBestHost()
             val path = newGlobalConfig?.data?.srvs?.fileSharing ?: "/fileshare"
             return "https://$host$path/"
         }
 
-    // ==================== WebSocket 相关 ====================
+    // ==================== WebSocket ====================
 
     /**
-     * 获取 WebSocket 的 host（优先使用 GlobalConfig，fallback 到 protocol 默认值）
-     */
-    private fun getWebSocketHost(): String {
-        return hostManager.getHost(HostManager.SERVICE_TYPE_CHAT, HostManager.FAILED_HOST_KEY_WS_CHAT)
-            ?: protocol.defaultHost
-    }
-
-    /**
-     * 获取 Chat WebSocket URL
+     * Returns the chat WebSocket URL using the best available host.
+     * Also records the host for accurate failure reporting in [switchToNextChatWebsocketHost].
      */
     fun getChatWebsocketUrl(): String {
-        val chatHost = getWebSocketHost()
+        val chatHost = getBestHost()
+        lastConnectedWsHost = chatHost
         val path = newGlobalConfig?.data?.srvs?.chat ?: "/chat"
         return "wss://$chatHost$path/v1/websocket/"
     }
 
     /**
-     * 记录当前 WebSocket host 为失败，下次获取时会优先使用其他 host
+     * Marks the last connected WebSocket host as unavailable; next connection will use another host.
      */
     fun switchToNextChatWebsocketHost() {
-        val currentHost = getWebSocketHost()
-        hostManager.recordFailedHost(HostManager.FAILED_HOST_KEY_WS_CHAT, currentHost)
-        L.i { "[Net] UrlManager switchToNextChatWebsocketHost: recorded failed host=$currentHost" }
+        val failedHost = lastConnectedWsHost ?: return
+        coordinator.markHostUnavailable(failedHost)
+        L.i { "[Net] UrlManager switchToNextChatWebsocketHost: marked unavailable host=$failedHost" }
     }
 
-    // ==================== 其他 ====================
+    // ==================== Other ====================
 
     private val avatarStorage
         get() = newGlobalConfig?.data?.avatarFile ?: protocol.avatarStorage

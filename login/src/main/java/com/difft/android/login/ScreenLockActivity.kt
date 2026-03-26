@@ -1,9 +1,7 @@
 package com.difft.android.login
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
@@ -61,13 +59,8 @@ class ScreenLockActivity : BaseActivity() {
     private var patternCountdownJob: Job? = null
     private var passcodeCountdownJob: Job? = null
 
-    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 禁用横屏，强制竖屏显示
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-
         PasscodeUtil.needRecordLastUseTime = false
 
         // 检查是否为验证模式

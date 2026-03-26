@@ -26,9 +26,14 @@
     <string name="contact_name_profile">ID:</string>
     <string name="contact_join_at">Joined:</string>
     <string name="contact_how_you_met">How you met:</string>
+    <string name="contact_info_website">Website:</string>
+    <string name="contact_name_card">Name Card</string>
+    <string name="contact_official_account_label">Official Account</string>
+    <string name="contact_name_label">Name: %s</string>
     <string name="contact_common_groups">Groups:</string>
     <string name="contact_info_title">Contact Info</string>
     <string name="contact_action_message">Message</string>
+    <string name="contact_action_add_and_message">Add &amp; Message</string>
     <string name="contact_action_call">Call</string>
     <string name="contact_action_share">Share</string>
     <string name="contact_met_not_recorded">Not recorded.</string>
@@ -62,6 +67,7 @@
     <string name="contact_account_exception_tips">This account has been disabled and messages can not be reached.</string>
     <string name="contact_unregistered_tips">Operation denied. This account is already unregistered.</string>
     <string name="contact_non_friend_limit_tips">You can only send up to 3 messages per day to a user who is not your friend. Please wait for the other party to accept your request.</string>
+    <string name="contact_non_friend_text_only">Non-friends can only send text messages</string>
     <string name="contact_info">Contact Info</string>
     <string name="contact_bot_cancel">Cancel</string>
     <string name="contact_operation_denied">Operation denied, please contact</string>
@@ -423,7 +429,7 @@
     <string name="invite_add_new_friend">Add a new friend</string>
     <string name="invite_enter_code_to_add">Enter a code to add a new friend</string>
     <string name="invite_enter_hint">Enter a 4-digit code or contact ID</string>
-    <string name="invite_button_add_friend">Add</string>
+    <string name="invite_button_add_friend">Search</string>
     <string name="invite_tv_search_by_uid">Add by friend\'s ID</string>
     <string name="invite_tv_search_by_code">Add by friend\'s code</string>
     <string name="invite_copy_link">Copy Link</string>

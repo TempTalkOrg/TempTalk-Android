@@ -1,11 +1,12 @@
 package com.difft.android.chat.recent
 
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.subjects.PublishSubject
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 object RecentChatUtil {
-    private val mChatDoubleTabSubject = PublishSubject.create<Unit>()
-    fun emitChatDoubleTab() = mChatDoubleTabSubject.onNext(Unit)
+    private val mChatDoubleTabSubject = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    fun emitChatDoubleTab() = mChatDoubleTabSubject.tryEmit(Unit)
 
-    val chatDoubleTab: Observable<Unit> = mChatDoubleTabSubject
+    val chatDoubleTab: SharedFlow<Unit> = mChatDoubleTabSubject
 }

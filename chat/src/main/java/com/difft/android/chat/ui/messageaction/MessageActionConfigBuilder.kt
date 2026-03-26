@@ -246,12 +246,12 @@ class MessageActionConfigBuilder(
         message.forwardContext?.forwards?.let { forwards ->
             if (forwards.size == 1) {
                 val forward = forwards.firstOrNull()
-                if (!forward?.card?.content.isNullOrEmpty() || !forward?.text.isNullOrEmpty()) {
+                if (!forward?.text.isNullOrEmpty()) {
                     return true
                 }
             }
         } ?: run {
-            if (!message.card?.content.isNullOrEmpty() || !message.message.isNullOrEmpty()) {
+            if (!message.message.isNullOrEmpty()) {
                 return true
             }
         }

@@ -19,7 +19,6 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -82,7 +81,7 @@ class CallFeedbackManager @Inject constructor() {
         
         try {
             val response = withContext(Dispatchers.IO) {
-                callService.callFeedback(token, params).await()
+                callService.callFeedback(token, params)
             }
             
             if (response.status == 0) {

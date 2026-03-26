@@ -187,4 +187,12 @@ class CallUiController() {
         _isRequestingPermission.value = status
     }
 
+    @Volatile
+    var screenShareLastInteractionTime: Long = System.currentTimeMillis()
+        private set
+
+    fun notifyScreenShareInteraction() {
+        screenShareLastInteractionTime = System.currentTimeMillis()
+    }
+
 }

@@ -118,7 +118,7 @@ class VoiceMessageView @JvmOverloads constructor(
         binding.audioWaveProgressBar.visibility = View.VISIBLE
         binding.playTime.visibility = View.VISIBLE
 
-        if (isFileValid && (audioMessage.isMine || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {
+        if (isFileValid && (isCurrentDeviceSend || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {
             setupAudioView()
         }
 

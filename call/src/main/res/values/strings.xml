@@ -19,7 +19,8 @@
     <string name="call_instant_call_title_default">instant call</string>
     <string name="call_push_stream_limit_tip">The current server has reached the publish streaming limit. Please try again later.</string>
     <string name="call_connect_timeout_tip">Connection timed out, please try again later.</string>
-    <string name="call_connect_exception_error">Unable to connect to the server. Please try later.</string>
+    <string name="call_server_connect_exception_error">Unable to connect to the server. Please try later.</string>
+    <string name="call_room_connect_exception_error">Failed to connect to the meeting. Please try again later.</string>
     <string name="call_e2ee_key_error">Unable to decrypt call key</string>
     <string name="call_connect_error_ended">The call has ended</string>
     <string name="call_no_internet_connection_tip">No internet connection. Please check your network and try again.</string>
@@ -55,6 +56,9 @@
     <string name="call_button_group_alert_cancel_text">Cancel</string>
     <string name="call_button_group_alert_end_text">End for all</string>
     <string name="call_toolbar_noise_suppression_text">Mic Noise Suppression</string>
+    <string name="call_denoise_mode_label">Denoise Mode</string>
+    <string name="call_denoise_mode_standard">Standard</string>
+    <string name="call_denoise_mode_enhanced">Enhanced</string>
     <string name="call_toolbar_bottom_invite_text">Invite</string>
     <string name="call_toolbar_bottom_raise_hand_text">Raise</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>

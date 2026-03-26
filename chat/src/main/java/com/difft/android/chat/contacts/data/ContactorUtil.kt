@@ -34,18 +34,16 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.TextMessage
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.subjects.PublishSubject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.yield
 import org.difft.app.database.convertToContactorModel
 import org.difft.app.database.covertToGroupMemberContactorModel
@@ -74,28 +72,28 @@ object ContactorUtil {
         fun getPushTextSendJobFactory(): PushTextSendJobFactory
     }
 
-    private val mContactsUpdateSubject = PublishSubject.create<List<String>>()
+    private val mContactsUpdateSubject = MutableSharedFlow<List<String>>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun emitContactsUpdate(ids: List<String>) {
-        mContactsUpdateSubject.onNext(ids)
+        mContactsUpdateSubject.tryEmit(ids)
         ids.forEach {
             RoomChangeTracker.trackRoom(it, RoomChangeType.CONTACT)
         }
     }
 
-    val contactsUpdate: Observable<List<String>> = mContactsUpdateSubject
+    val contactsUpdate: SharedFlow<List<String>> = mContactsUpdateSubject
 
-    private val mGetContactsStatusSubject = PublishSubject.create<Boolean>()
+    private val mGetContactsStatusSubject = MutableSharedFlow<Boolean>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    private fun emitGetContactsStatusUpdate(success: Boolean) = mGetContactsStatusSubject.onNext(success)
+    private fun emitGetContactsStatusUpdate(success: Boolean) { mGetContactsStatusSubject.tryEmit(success) }
 
-    val getContactsStatusUpdate: Observable<Boolean> = mGetContactsStatusSubject
+    val getContactsStatusUpdate: SharedFlow<Boolean> = mGetContactsStatusSubject
 
-    private val mFriendStatusSubject = PublishSubject.create<Pair<String, Boolean>>()
+    private val mFriendStatusSubject = MutableSharedFlow<Pair<String, Boolean>>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    fun emitFriendStatusUpdate(id: String, isFriend: Boolean) = mFriendStatusSubject.onNext(id to isFriend)
+    fun emitFriendStatusUpdate(id: String, isFriend: Boolean) { mFriendStatusSubject.tryEmit(id to isFriend) }
 
-    val friendStatusUpdate: Observable<Pair<String, Boolean>> = mFriendStatusSubject
+    val friendStatusUpdate: SharedFlow<Pair<String, Boolean>> = mFriendStatusSubject
 
     // 协程实现
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -156,99 +154,91 @@ object ContactorUtil {
     }
 
 
-    fun Single<BaseResponse<ContactsDataResponse>>.covertToContactors(): Single<List<ContactorModel>> =
-        this.map { contactsResponseBody ->
-            contactsResponseBody
-                .data
-                ?.contacts
-                ?.mapNotNull { from(it) }
-                ?: emptyList()
-        }
+    private fun BaseResponse<ContactsDataResponse>.covertToContactors(): List<ContactorModel> =
+        this.data
+            ?.contacts
+            ?.mapNotNull { from(it) }
+            ?: emptyList()
 
     /**
      * get data from db first,then through the network
      */
-    fun getContactWithID(context: Context, id: String): Single<Optional<ContactorModel>> =
-        Single.fromCallable {
-            Optional.ofNullable(
-                wcdb.contactor.getFirstObject(DBContactorModel.id.eq(id))
-                    ?: wcdb.groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
-                        ?.convertToContactorModel()
-            )
-        }.concatMap {
-            if (it.isPresent) {
-                Single.just(it)
-            } else {
-                fetchContactors(listOf(id), context).map { contacts ->
-                    if (contacts.isNotEmpty()) {
-                        Optional.ofNullable(contacts.first())
-                    } else {
-                        Optional.empty()
-                    }
-                }
-            }
+    suspend fun getContactWithID(context: Context, id: String): Optional<ContactorModel> {
+        val local = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(id))
+            ?: wcdb.groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
+                ?.convertToContactorModel()
+        if (local != null) {
+            return Optional.of(local)
         }
+        val contacts = fetchContactors(listOf(id), context)
+        return if (contacts.isNotEmpty()) {
+            Optional.ofNullable(contacts.first())
+        } else {
+            Optional.empty()
+        }
+    }
 
 
-    fun fetchContactors(ids: List<String>, context: Context): Single<List<ContactorModel>> =
+    suspend fun fetchContactors(ids: List<String>, context: Context): List<ContactorModel> =
         fetchContactors(context, ids, SecureSharedPrefsUtil.getBasicAuth())
 
-    private fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): Single<List<ContactorModel>> =
-        context
-            .getEntryPoint()
-            .getHttpClient()
-            .httpService
-            .fetchContactors(baseAuth = basicAuth, body = ContactsRequestBody(ids.filter { !TextUtils.isEmpty(it) && it != "server" }))
-            .covertToContactors()
-            .concatMap { contacts ->
-                if (contacts.isNotEmpty()) {
-                    val noAvatarFromServer = contacts.filter { it.avatar == null }.map { it.id }
-                    if (noAvatarFromServer.isNotEmpty()) {
-                        L.i { "[ContactorUtil] fetchContactors server response without avatar: $noAvatarFromServer" }
-                    }
-                    
-                    val list = wcdb.contactor.getAllObjects(DBContactorModel.id.`in`(*contacts.map { it.id }.toTypedArray()))
-                    val existInContacts = contacts.filter { contact -> list.any { it.id == contact.id } }
-                    
-                    val avatarChanges = existInContacts.mapNotNull { contact ->
-                        val local = list.find { it.id == contact.id }
-                        val localHas = local?.avatar != null
-                        val serverHas = contact.avatar != null
-                        if (localHas != serverHas) "${contact.id}:$localHas->$serverHas" else null
-                    }
-                    if (avatarChanges.isNotEmpty()) {
-                        L.i { "[ContactorUtil] fetchContactors avatar changes: $avatarChanges" }
-                    }
+    private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> {
+        return try {
+            val contacts = context
+                .getEntryPoint()
+                .getHttpClient()
+                .httpService
+                .fetchContactors(baseAuth = basicAuth, body = ContactsRequestBody(ids.filter { !TextUtils.isEmpty(it) && it != "server" }))
+                .covertToContactors()
 
-                    wcdb.contactor.deleteObjects(DBContactorModel.id.`in`(existInContacts.map { it.id }))
-                    wcdb.contactor.insertObjects(existInContacts.toList())
-
-                    val notExistInContacts = contacts.filter { contact -> list.none { it.id == contact.id } }
-                    if (notExistInContacts.isNotEmpty()) {
-                        L.i { "[ContactorUtil] fetchContactors notExistInContacts: ${notExistInContacts.map { it.id }}" }
-                    }
-
-                    val contactorOfGroupMember = notExistInContacts.map { contactor -> contactor.covertToGroupMemberContactorModel() }
-                    wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq("").and(DBGroupMemberContactorModel.id.`in`(contactorOfGroupMember.map { it.id })))
-                    wcdb.groupMemberContactor.insertObjects(contactorOfGroupMember)
-                    Single.just(contacts)
-                } else {
-                    Single.just(emptyList())
+            if (contacts.isNotEmpty()) {
+                val noAvatarFromServer = contacts.filter { it.avatar == null }.map { it.id }
+                if (noAvatarFromServer.isNotEmpty()) {
+                    L.i { "[ContactorUtil] fetchContactors server response without avatar: $noAvatarFromServer" }
                 }
-            }
-            .onErrorResumeNext { throwable ->
-                L.e(throwable) { "[ContactorUtil] fetch contactors data fail:" }
-                Single.just(emptyList())
-            }
 
-    fun fetchAddFriendRequest(context: Context, token: String, contactID: String, sourceType: String? = null, source: String? = null, action: String? = null): Single<BaseResponse<AddContactorResponse>> =
+                val list = wcdb.contactor.getAllObjects(DBContactorModel.id.`in`(*contacts.map { it.id }.toTypedArray()))
+                val existInContacts = contacts.filter { contact -> list.any { it.id == contact.id } }
+
+                val avatarChanges = existInContacts.mapNotNull { contact ->
+                    val local = list.find { it.id == contact.id }
+                    val localHas = local?.avatar != null
+                    val serverHas = contact.avatar != null
+                    if (localHas != serverHas) "${contact.id}:$localHas->$serverHas" else null
+                }
+                if (avatarChanges.isNotEmpty()) {
+                    L.i { "[ContactorUtil] fetchContactors avatar changes: $avatarChanges" }
+                }
+
+                wcdb.contactor.deleteObjects(DBContactorModel.id.`in`(existInContacts.map { it.id }))
+                wcdb.contactor.insertObjects(existInContacts.toList())
+
+                val notExistInContacts = contacts.filter { contact -> list.none { it.id == contact.id } }
+                if (notExistInContacts.isNotEmpty()) {
+                    L.i { "[ContactorUtil] fetchContactors notExistInContacts: ${notExistInContacts.map { it.id }}" }
+                }
+
+                val contactorOfGroupMember = notExistInContacts.map { contactor -> contactor.covertToGroupMemberContactorModel() }
+                wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq("").and(DBGroupMemberContactorModel.id.`in`(contactorOfGroupMember.map { it.id })))
+                wcdb.groupMemberContactor.insertObjects(contactorOfGroupMember)
+                contacts
+            } else {
+                emptyList()
+            }
+        } catch (throwable: Exception) {
+            L.e(throwable) { "[ContactorUtil] fetch contactors data fail:" }
+            emptyList()
+        }
+    }
+
+    suspend fun fetchAddFriendRequest(context: Context, token: String, contactID: String, sourceType: String? = null, source: String? = null, action: String? = null): BaseResponse<AddContactorResponse> =
         context
             .getEntryPoint()
             .getHttpClient()
             .httpService
             .fetchAddContactor(token, if (!TextUtils.isEmpty(sourceType)) AddContactorRequestBody(contactID, AddContactorSource(sourceType, source), action) else AddContactorRequestBody(contactID, null, action))
 
-    fun fetchRemoveFriend(context: Context, token: String, contactID: String): Single<BaseResponse<Any>> = context
+    suspend fun fetchRemoveFriend(context: Context, token: String, contactID: String): BaseResponse<Any> = context
         .getEntryPoint()
         .getHttpClient()
         .httpService
@@ -315,7 +305,7 @@ object ContactorUtil {
                 .collectLatest { forceRefresh ->
                     try {
                         val httpService = application.getEntryPoint().getHttpClient().httpService
-                        val contactsResponse = httpService.fetchAllContactors(baseAuth = SecureSharedPrefsUtil.getBasicAuth()).await()
+                        val contactsResponse = httpService.fetchAllContactors(baseAuth = SecureSharedPrefsUtil.getBasicAuth())
 
                         val contacts = contactsResponse.data?.contacts?.toMutableList() ?: mutableListOf()
                         val directoryVersion = contactsResponse.data?.directoryVersion ?: 0
@@ -345,7 +335,7 @@ object ContactorUtil {
                                 val response = httpService.fetchContactors(
                                     baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
                                     body = ContactsRequestBody(listOf(officialBotId))
-                                ).await()
+                                )
 
                                 response.data?.contacts?.firstOrNull()?.let {
                                     contacts.add(it)
@@ -440,7 +430,6 @@ object ContactorUtil {
                 val time = EntryPointAccessors.fromApplication<EntryPoint>(application)
                     .getMessageArchiveManager()
                     .getMessageArchiveTime(forWhat)
-                    .await()
                 val timeStamp = System.currentTimeMillis()
                 val messageId = "${timeStamp}${myID.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
@@ -560,4 +549,8 @@ const val LENGTH_OF_BOT_ID = 6
 
 fun String.isBotId(): Boolean {
     return this.length <= LENGTH_OF_BOT_ID
+}
+
+fun String.isOfficialBotId(): Boolean {
+    return this == ResUtils.getString(R.string.official_bot_id)
 }

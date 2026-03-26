@@ -1,10 +1,8 @@
 package com.difft.android.chat.setting.archive
 
 
-import android.annotation.SuppressLint
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
@@ -26,14 +24,10 @@ import com.google.gson.JsonObject
 import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
 import difft.android.messageserialization.For
-import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.awaitFirst
 import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.delete
 import org.difft.app.database.models.DBMessageModel
@@ -46,6 +40,7 @@ import util.AppForegroundObserver
 import util.TimeUtils
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -185,7 +180,7 @@ class MessageArchiveManager @Inject constructor(
 
                     // Delete old archive system messages to avoid duplicates
                     wcdb.message.getAllObjects(
-                        DBMessageModel.roomId.eq(room.roomId).and(DBMessageModel.type.eq(2))
+                        DBMessageModel.roomId.eq(room.roomId).and(DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY))
                     ).forEach { message ->
                         if (isArchiveExpiredSystemMessage(message)) {
                             message.delete()
@@ -326,44 +321,41 @@ class MessageArchiveManager @Inject constructor(
         return if (globalServices.myId < targetID) "$myId:$targetID" else "$targetID:$myId"
     }
 
-    fun getMessageArchiveTime(forWhat: For, force: Boolean = false): Single<Long> {
+    suspend fun getMessageArchiveTime(forWhat: For, force: Boolean = false): Long {
         if (globalServices.myId == forWhat.id) {
-            return Single.just(0L)
+            return 0L
         }
         return if (force) {
             getMessageArchiveTimeFromServer(forWhat)
         } else {
-            dbRoomStore.getMessageExpiry(forWhat).flatMap { time ->
-                if (time.isPresent) {
-                    Single.just(time.get())
-                } else {
-                    getMessageArchiveTimeFromServer(forWhat)
-                }
+            val time = dbRoomStore.getMessageExpiry(forWhat)
+            if (time.isPresent) {
+                time.get()
+            } else {
+                getMessageArchiveTimeFromServer(forWhat)
             }
-        }.subscribeOn(Schedulers.io())
+        }
     }
 
-    private fun getMessageArchiveTimeFromServer(forWhat: For): Single<Long> = if (forWhat is For.Group) {
-        groupRepo.getGroupInfo(forWhat.id)
-            .map { response ->
-                if (response.isSuccess()) {
-                    val messageExpiry = response.data?.messageExpiry?.toLong()?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
-                    val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
-                    dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor).blockingAwait()
-                    conversationSettingsManager.get().emitConversationSettingUpdate(
-                        conversationId = forWhat.id,
-                        messageExpiry = messageExpiry,
-                        messageClearAnchor = messageClearAnchor
-                    )
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
-                    messageExpiry
-                } else {
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
-                    getDefaultMessageArchiveTime()
-                }
-            }
+    private suspend fun getMessageArchiveTimeFromServer(forWhat: For): Long = if (forWhat is For.Group) {
+        val response = groupRepo.getGroupInfo(forWhat.id)
+        if (response.isSuccess()) {
+            val messageExpiry = response.data?.messageExpiry?.toLong()?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
+            val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
+            dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
+            conversationSettingsManager.get().emitConversationSettingUpdate(
+                conversationId = forWhat.id,
+                messageExpiry = messageExpiry,
+                messageClearAnchor = messageClearAnchor
+            )
+            L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
+            messageExpiry
+        } else {
+            L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
+            getDefaultMessageArchiveTime()
+        }
     } else {
-        chatHttpClient.httpService
+        val response = chatHttpClient.httpService
             .fetchShareConversationConfig(
                 SecureSharedPrefsUtil.getToken(),
                 GetConversationShareRequestBody(
@@ -371,62 +363,53 @@ class MessageArchiveManager @Inject constructor(
                     false
                 )
             )
-            .map { response ->
-                if (response.isSuccess()) {
-                    val messageExpiry = response.data?.conversations?.firstOrNull()?.messageExpiry?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
-                    val messageClearAnchor = response.data?.conversations?.firstOrNull()?.messageClearAnchor ?: 0L
-                    dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor).blockingAwait()
-                    conversationSettingsManager.get().emitConversationSettingUpdate(
-                        conversationId = forWhat.id,
-                        messageExpiry = messageExpiry,
-                        messageClearAnchor = messageClearAnchor
-                    )
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
-                    messageExpiry
-                } else {
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
-                    getDefaultMessageArchiveTime()
-                }
-            }
+        if (response.isSuccess()) {
+            val messageExpiry = response.data?.conversations?.firstOrNull()?.messageExpiry?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
+            val messageClearAnchor = response.data?.conversations?.firstOrNull()?.messageClearAnchor ?: 0L
+            dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
+            conversationSettingsManager.get().emitConversationSettingUpdate(
+                conversationId = forWhat.id,
+                messageExpiry = messageExpiry,
+                messageClearAnchor = messageClearAnchor
+            )
+            L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
+            messageExpiry
+        } else {
+            L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
+            getDefaultMessageArchiveTime()
+        }
     }
 
-    fun updateMessageArchiveTime(forWhat: For, messageExpiry: Long): Completable {
-        return if (forWhat is For.Group) {
-            groupRepo.changeGroupSettings(forWhat.id, ChangeGroupSettingsReq(messageExpiry = messageExpiry))
-                .concatMapCompletable { response ->
-                    if (response.status == 0) {
-                        val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
-                        conversationSettingsManager.get().emitConversationSettingUpdate(
-                            conversationId = forWhat.id,
-                            messageExpiry = messageExpiry,
-                            messageClearAnchor = messageClearAnchor
-                        )
-                        Completable.complete()
-                    } else {
-                        Completable.error(NetworkException(message = response.reason ?: ""))
-                    }
-                }
+    suspend fun updateMessageArchiveTime(forWhat: For, messageExpiry: Long) {
+        if (forWhat is For.Group) {
+            val response = groupRepo.changeGroupSettings(forWhat.id, ChangeGroupSettingsReq(messageExpiry = messageExpiry))
+            if (response.status == 0) {
+                val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
+                conversationSettingsManager.get().emitConversationSettingUpdate(
+                    conversationId = forWhat.id,
+                    messageExpiry = messageExpiry,
+                    messageClearAnchor = messageClearAnchor
+                )
+            } else {
+                throw NetworkException(message = response.reason ?: "")
+            }
         } else {
-            chatHttpClient.httpService
+            val response = chatHttpClient.httpService
                 .updateConversationConfig(
                     SecureSharedPrefsUtil.getToken(),
                     conversationParams(forWhat.id),
                     ConversationShareRequestBody(messageExpiry)
                 )
-                .concatMapCompletable { response ->
-                    if (response.status == 0) {
-                        // DM API returns messageClearAnchor
-                        val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
-                        conversationSettingsManager.get().emitConversationSettingUpdate(
-                            conversationId = forWhat.id,
-                            messageExpiry = messageExpiry,
-                            messageClearAnchor = messageClearAnchor
-                        )
-                        Completable.complete()
-                    } else {
-                        Completable.error(NetworkException(message = response.reason ?: ""))
-                    }
-                }
+            if (response.status == 0) {
+                val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
+                conversationSettingsManager.get().emitConversationSettingUpdate(
+                    conversationId = forWhat.id,
+                    messageExpiry = messageExpiry,
+                    messageClearAnchor = messageClearAnchor
+                )
+            } else {
+                throw NetworkException(message = response.reason ?: "")
+            }
         }
     }
 
@@ -434,13 +417,17 @@ class MessageArchiveManager @Inject constructor(
      * Update local message expiry. Called by MessageContentProcessor when handling Type 5 notify.
      * Note: Event notification is emitted by the caller (MessageContentProcessor), not here.
      */
-    @SuppressLint("CheckResult")
     fun updateLocalArchiveTime(forWhat: For, messageExpiry: Long, messageClearAnchor: Long) {
-        dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
-            .compose(RxUtil.getCompletableTransformer())
-            .subscribe({
+        appScope.launch(Dispatchers.IO) {
+            try {
+                dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
                 // Event notification is emitted by MessageContentProcessor
-            }, { L.e { "[MessageArchiveManager] updateLocalArchiveTime error: ${it.stackTraceToString()}" } })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[MessageArchiveManager] updateLocalArchiveTime error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     /**
@@ -452,7 +439,7 @@ class MessageArchiveManager @Inject constructor(
             while (true) {
                 val messages = wcdb.message.getAllObjects(
                     DBMessageModel.fromWho.eq(userId)
-                        .and(DBMessageModel.type.notEq(2))
+                        .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
                         .and(DBMessageModel.timeStamp.lt(timestamp))
                         .and(DBMessageModel.roomId.notEq(globalServices.myId)),
                     null,
@@ -487,7 +474,7 @@ class MessageArchiveManager @Inject constructor(
             val checkIdentityKeyResetResponse = chatHttpClient.httpService.getPublicKeys(
                 SecureSharedPrefsUtil.getToken(),
                 GetPublicKeysReq(beginTimestamp = maxResetTime)
-            ).awaitFirst()
+            )
             if (checkIdentityKeyResetResponse.isSuccess()) {
                 val resetIdentityKeyModels = checkIdentityKeyResetResponse.data?.keys?.map {
                     ResetIdentityKeyModel().apply {

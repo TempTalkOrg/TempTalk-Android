@@ -4,7 +4,6 @@ import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
 import org.difft.app.database.attachment
-import org.difft.app.database.card
 import org.difft.app.database.forwardContext
 import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.screenShot
@@ -43,7 +42,6 @@ import org.whispersystems.signalservice.internal.push.DataMessageKt.forward
 import org.whispersystems.signalservice.internal.push.DataMessageKt.mention
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import org.whispersystems.signalservice.internal.push.attachmentPointer
-import org.whispersystems.signalservice.internal.push.card
 
 
 val RECEIVER_ID_TYPE = object : TypeToken<List<String>>() {}.type
@@ -65,9 +63,14 @@ fun calculateReadStatus(
     record: MessageModel,
     readInfoList: List<ReadInfoModel>?,
     isLargeGroup: Boolean,
-    systemShowTimestamp: Long
+    systemShowTimestamp: Long,
+    groupMemberCount: Int = 0
 ): ReadStatusResult {
     if (record.fromWho != globalServices.myId) return ReadStatusResult(0, 0)
+
+    // Confidential messages never show read status — once the recipient reads,
+    // the message is deleted, so read tracking is meaningless.
+    if (record.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) return ReadStatusResult(0, 0)
 
     if (forWhat is For.Account) {
         return if (forWhat.id == globalServices.myId) {
@@ -90,9 +93,11 @@ fun calculateReadStatus(
     return when {
         readInfos == null -> ReadStatusResult(0, 0)
         receiverIds == null -> {
-            L.w { "Group message receiverIds is null, messageId: ${record.id}, systemShowTimestamp: $systemShowTimestamp" }
             val readContactIds = readInfos.map { it.uid }.filter { it != globalServices.myId }.toSet()
-            ReadStatusResult(0, readContactIds.size)
+            // Fallback: use current group member count to determine "all read"
+            val expectedReceiverCount = (groupMemberCount - 1).coerceAtLeast(0)
+            val isAllRead = expectedReceiverCount > 0 && readContactIds.size >= expectedReceiverCount
+            ReadStatusResult(if (isAllRead) 1 else 0, readContactIds.size)
         }
         else -> {
             val readContactIds = readInfos.map { it.uid }.toSet()
@@ -109,7 +114,8 @@ fun generateMessageTwo(
     record: MessageModel,
     contactor: List<ContactorModel>,
     readInfoList: List<ReadInfoModel>?,
-    isLargeGroup: Boolean = false
+    isLargeGroup: Boolean = false,
+    groupMemberCount: Int = 0
 ): ChatMessage? {
     val isFromMySelf = globalServices.myId == record.fromWho
     val authorId = record.fromWho
@@ -139,11 +145,10 @@ fun generateMessageTwo(
             this.attachment = record.attachment()
             this.quote = record.quote()
             this.forwardContext = record.forwardContext()
-            this.card = record.card()
             this.mentions = record.mentions()
             this.reactions = record.reactions()
             this.sharedContacts = record.sharedContacts()
-            val readResult = calculateReadStatus(forWhat, record, readInfoList, isLargeGroup, systemShowTimestamp)
+            val readResult = calculateReadStatus(forWhat, record, readInfoList, isLargeGroup, systemShowTimestamp, groupMemberCount)
             this.readStatus = readResult.readStatus
             this.readContactNumber = readResult.readContactNumber
             this.playStatus = record.playStatus
@@ -215,21 +220,6 @@ fun createForward(forward: Forward): SignalServiceProtos.DataMessage.Forward {
         }
     }
 
-    val card1 =
-        forward.card?.let {
-            card {
-                it.appId?.let { appId = it }
-                it.cardId?.let { cardId = it }
-                version = it.version
-                it.creator?.let { creator = it }
-                timestamp = it.timestamp
-                it.content?.let { content = it }
-                contentType = it.contentType
-                type = it.type
-                fixedWidth = it.fixedWidth
-            }
-        }
-
     val mentions1 = mutableListOf<SignalServiceProtos.DataMessage.Mention>().apply {
         forward.mentions?.let { mentions ->
             mentions.forEach { mention ->
@@ -257,7 +247,6 @@ fun createForward(forward: Forward): SignalServiceProtos.DataMessage.Forward {
         if (forwards1.isNotEmpty()) {
             forwards.addAll(forwards1)
         }
-        card1?.let { card = it }
         if (mentions1.isNotEmpty()) {
             mentions.addAll(mentions1)
         }
@@ -336,7 +325,6 @@ fun generateMessageFromForward(record: Forward, mode: Int = 0): ChatMessage {
             }
             this.forwardContext = ForwardContext(record.forwards, isFromGroup)
         }
-        this.card = record.card
         this.mentions = record.mentions
     }
 }

@@ -12,7 +12,6 @@ import livekit.org.webrtc.RendererCommon
 import livekit.org.webrtc.SurfaceViewRenderer
 import livekit.org.webrtc.VideoFrame
 import java.util.Collections
-import java.util.concurrent.atomic.AtomicInteger
 
 class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notifier {
 
@@ -23,7 +22,6 @@ class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notif
     @Volatile private var hasFirstFrameRendered = false
     @Volatile private var dismissPlaceholderView = false
     @Volatile private var firstFrameJustRendered = false
-    private val framesLoadedAfterFirstFrame = AtomicInteger(0)
     @Volatile private var isReleased = false
 
     private val frameStatusListeners = Collections.synchronizedList(mutableListOf<FrameStatusListener>())
@@ -73,17 +71,15 @@ class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notif
         
         try {
             super.onFrame(frame)
-            //  如果刚渲染了第一帧，则不进行后续处理（onFrame、onFirstFrameRendered调用存在并发问题，执行先后顺序可能不同）
             if (firstFrameJustRendered) {
+                // 跳过与 onFirstFrameRendered 并发的帧（同一帧，尚未合成到屏幕）
                 firstFrameJustRendered = false
                 return
             }
-            // 如果已经渲染过第一帧，并且之后加载到第二帧时，则通知移除占位符视图（选择第二帧考虑视频画面已稳定加载，不会出现黑屏）
             if (hasFirstFrameRendered && !dismissPlaceholderView) {
-                if (framesLoadedAfterFirstFrame.incrementAndGet() == 2) {
-                    dismissPlaceholderView = true
-                    frameStatusListeners.toList().forEach { it.onDismissPlaceHolderView() }
-                }
+                // 此时上一帧已实际渲染到 Surface，可以安全移除占位图
+                dismissPlaceholderView = true
+                frameStatusListeners.toList().forEach { it.onDismissPlaceHolderView() }
             }
         } catch (e: RuntimeException) {
             // 捕获 updateTexImage 相关的 RuntimeException，避免崩溃
@@ -109,9 +105,8 @@ class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notif
         super.onFirstFrameRendered()
         if (!hasFirstFrameRendered) {
             L.i {"[Call] ScreenShare SurfaceViewRenderer First frame rendered."}
-            hasFirstFrameRendered = true
-            framesLoadedAfterFirstFrame.set(0)
             firstFrameJustRendered = true
+            hasFirstFrameRendered = true
         }
     }
 
@@ -119,7 +114,6 @@ class ScreenShareSurfaceViewRenderer : SurfaceViewRenderer, ViewVisibility.Notif
         hasFirstFrameRendered = false
         dismissPlaceholderView = false
         firstFrameJustRendered = false
-        framesLoadedAfterFirstFrame.set(0)
     }
 
     fun addFrameStatusListener(listener: FrameStatusListener) {

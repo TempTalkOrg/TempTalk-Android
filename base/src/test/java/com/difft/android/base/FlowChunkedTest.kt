@@ -218,7 +218,7 @@ class ChunkedTest {
         assertEquals(2, result.size)
         assertEquals(5, result.first().size)
         assertEquals(5, result[1].size)
-        assertTrue(duration == 200L, "expected time at least 200 ms but was: $duration")
+        assertTrue(duration >= 200L, "expected time at least 200 ms but was: $duration")
     }
 
     @Test

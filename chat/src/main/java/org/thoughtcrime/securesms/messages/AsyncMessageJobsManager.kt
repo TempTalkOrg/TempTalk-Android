@@ -8,8 +8,6 @@ import com.difft.android.chat.group.GroupUtil
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitFirstOrNull
 import org.difft.app.database.WCDB
 import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.models.DBGroupModel
@@ -30,6 +28,7 @@ class AsyncMessageJobsManager @Inject constructor(
     @param:ApplicationContext
     private val context: Context,
     private val wcdb: WCDB,
+    private val groupUtil: GroupUtil,
 ){
     private val contactorIdsForFetching = mutableSetOf<String>()
 
@@ -90,7 +89,7 @@ class AsyncMessageJobsManager @Inject constructor(
         if (contactorsToFetch.isNotEmpty()) {
             L.i { "[AsyncMessageJobsManager] Fetching ${contactorsToFetch.size} contactors from network: $contactorsToFetch" }
             try {
-                ContactorUtil.fetchContactors(contactorsToFetch, context).await()
+                ContactorUtil.fetchContactors(contactorsToFetch, context)
                 confirmedContactorIds.addAll(contactorsToFetch)
                 L.i { "[AsyncMessageJobsManager] Successfully fetched contactors, confirmed cache size: ${confirmedContactorIds.size}" }
             } catch (e: Exception) {
@@ -126,7 +125,7 @@ class AsyncMessageJobsManager @Inject constructor(
             L.i { "[AsyncMessageJobsManager] Fetching ${groupsToFetch.size} groups from network: $groupsToFetch" }
             for (groupId in groupsToFetch) {
                 try {
-                    GroupUtil.getSingleGroupInfo(context, groupId, forceUpdate = true).awaitFirstOrNull()
+                    groupUtil.getSingleGroupInfo(groupId, forceUpdate = true)
                     confirmedGroupIds.add(groupId)
                 } catch (e: Exception) {
                     L.w { "[AsyncMessageJobsManager] getSingleGroupInfo error for $groupId: ${e.stackTraceToString()}" }

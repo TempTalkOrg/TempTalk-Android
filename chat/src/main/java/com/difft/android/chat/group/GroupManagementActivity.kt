@@ -6,11 +6,12 @@ import android.os.Bundle
 import android.text.TextUtils
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.SwitchCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
@@ -26,8 +27,13 @@ import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.withContext
 import org.difft.app.database.convertToContactorModels
 import org.difft.app.database.members
@@ -39,6 +45,9 @@ class GroupManagementActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     private var groupInfo: GroupModel? = null
 
@@ -62,25 +71,23 @@ class GroupManagementActivity : BaseActivity() {
 
         if (TextUtils.isEmpty(groupId)) return
 
-        GroupUtil.getSingleGroupInfo(this, groupId)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    groupInfo = it.get()
-                    initView(it.get())
+        lifecycleScope.launch {
+            try {
+                val group = groupUtil.getSingleGroupInfo(groupId)
+                if (group != null) {
+                    groupInfo = group
+                    initView(group)
                 }
-            }, { L.w { "[GroupManagementActivity] getSingleGroupInfo error: ${it.stackTraceToString()}" } })
+            } catch (e: Exception) {
+                L.w { "[GroupManagementActivity] getSingleGroupInfo error: ${e.stackTraceToString()}" }
+            }
+        }
 
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.gid == groupId) {
-                    groupInfo = it
-                    initView(it)
-                }
-            }, { L.w { "[GroupManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } })
+        groupUtil.singleGroupsUpdate
+            .onEach { if (it.gid == groupId) { groupInfo = it; initView(it) } }
+            .catch { L.w { "[GroupManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .launchIn(lifecycleScope)
     }
 
     private val mGroupsAdapter: GroupInfoMemberAdapter by lazy {
@@ -190,25 +197,30 @@ class GroupManagementActivity : BaseActivity() {
         criticalAlertSwitch: Boolean? = null,
     ) {
         ComposeDialogManager.showWait(this@GroupManagementActivity, "")
-        groupRepo.changeGroupSettings(
-            groupId, ChangeGroupSettingsReq(
-                invitationRule = invitationRule,
-                publishRule = publishRule,
-                linkInviteSwitch = linkInviteSwitch,
-                criticalAlert = criticalAlertSwitch,
-            )
-        ).compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                ComposeDialogManager.dismissWait()
-                if (it.status != 0) {
-                    showErrorAndRestoreSwitch(it.reason, switch)
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.changeGroupSettings(
+                        groupId, ChangeGroupSettingsReq(
+                            invitationRule = invitationRule,
+                            publishRule = publishRule,
+                            linkInviteSwitch = linkInviteSwitch,
+                            criticalAlert = criticalAlertSwitch,
+                        )
+                    )
                 }
-            }, {
-                L.w { "[GroupManagementActivity] changeGroupSetting error: ${it.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                if (result.status != 0) {
+                    showErrorAndRestoreSwitch(result.reason, switch)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[GroupManagementActivity] changeGroupSetting error: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 showErrorAndRestoreSwitch(getString(R.string.operation_failed), switch)
-            })
+            }
+        }
     }
 
     private fun showErrorAndRestoreSwitch(errorMessage: String?, switch: SwitchCompat) {

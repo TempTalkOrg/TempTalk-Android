@@ -17,7 +17,6 @@ data class Forward(
     val text: String?,
     var attachments: List<Attachment>?,
     var forwards: List<Forward>?,
-    var card: Card?,
     var mentions: List<Mention>?,
     val serverTimestamp: Long = 0L
 ) : Serializable {

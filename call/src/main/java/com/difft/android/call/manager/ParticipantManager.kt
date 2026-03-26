@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -107,20 +108,20 @@ class ParticipantManager(private val scope: CoroutineScope) {
     }
 
     fun updateAwaitingJoinInvitees() {
-        if (_awaitingJoinInvitees.value.isEmpty()) return
-
-        // Remove all invitees that have joined
         val joinedUserIds = participants.value.mapNotNull { participant ->
             IdUtil.getUidByIdentity(participant.identity?.value)
         }.toSet()
         if (joinedUserIds.isEmpty()) return
-        _awaitingJoinInvitees.value = _awaitingJoinInvitees.value.filterNot { userId ->
-            userId in joinedUserIds
+
+        _awaitingJoinInvitees.update { current ->
+            current.filterNot { userId -> userId in joinedUserIds }
         }
     }
 
     fun addAwaitingJoinInvitees(inviteeIds: List<String>) {
-        _awaitingJoinInvitees.value = (_awaitingJoinInvitees.value + inviteeIds).distinct()
+        _awaitingJoinInvitees.update { current ->
+            (current + inviteeIds).distinct()
+        }
     }
 
 }

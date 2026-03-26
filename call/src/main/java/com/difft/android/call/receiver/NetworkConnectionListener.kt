@@ -1,22 +1,19 @@
 package com.difft.android.call.receiver
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.call.util.NetUtil
 
-class NetworkConnectionListener(private val context: Context, private val onNetworkLost: (() -> Boolean) -> Unit) {
+class NetworkConnectionListener(context: Context, private val onNetworkLost: (() -> Boolean) -> Unit) {
 
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-
-    private val networkChangedCallback: ConnectivityManager.NetworkCallback = object : ConnectivityManager.NetworkCallback() {
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             L.d { "[Call] ConnectivityManager.NetworkCallback onAvailable()" }
@@ -30,28 +27,18 @@ class NetworkConnectionListener(private val context: Context, private val onNetw
         }
     }
 
-    private val connectionReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            L.d { "[Call] BroadcastReceiver onReceive()." }
-            onNetworkLost { !NetUtil.checkNet(context) }
-        }
-    }
-
     fun register() {
         if (Build.VERSION.SDK_INT >= 28) {
-            connectivityManager.registerDefaultNetworkCallback(networkChangedCallback)
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
         } else {
-            context.registerReceiver(connectionReceiver,
-                IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
-            )
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager.registerNetworkCallback(request, networkCallback)
         }
     }
 
     fun unregister() {
-        if (Build.VERSION.SDK_INT >= 28) {
-            connectivityManager.unregisterNetworkCallback(networkChangedCallback)
-        } else {
-            context.unregisterReceiver(connectionReceiver)
-        }
+        connectivityManager.unregisterNetworkCallback(networkCallback)
     }
 }

@@ -12,6 +12,7 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import difft.android.messageserialization.MessageStore
 import com.difft.android.network.config.WsTokenManager
+import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,7 +33,8 @@ class LogoutManagerImpl @Inject constructor(
     private val messageNotificationUtil: MessageNotificationUtil,
     private val wsTokenManager: WsTokenManager,
     private val appIconBadgeManager: AppIconBadgeManager,
-    private val webSocketManager: WebSocketManager
+    private val webSocketManager: WebSocketManager,
+    private val coordinator: DomainSpeedTestCoordinator
 ) : LogoutManager {
     override fun doLogout() {
         performLogout(clearAllData = true)
@@ -63,6 +65,7 @@ class LogoutManagerImpl @Inject constructor(
 
             messageNotificationUtil.cancelAllNotifications()
             wsTokenManager.clearToken()
+            coordinator.resetSession()
             stopMessageService()
             webSocketManager.stop()
 

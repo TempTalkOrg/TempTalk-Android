@@ -127,30 +127,62 @@
             </RelativeLayout>
 
             <LinearLayout
-                android:id="@+id/ll_search_chat_history"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:background="@color/bg.setting.item"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
+                android:orientation="vertical">
 
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/search_chat_history"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp" />
+                <LinearLayout
+                    android:id="@+id/ll_name_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
 
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_chat_history_arrow"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    android:tint="@color/t.primary" />
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/contact_name_card"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_search_chat_history"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/search_chat_history"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_chat_history_arrow"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </LinearLayout>
 
             </LinearLayout>
 

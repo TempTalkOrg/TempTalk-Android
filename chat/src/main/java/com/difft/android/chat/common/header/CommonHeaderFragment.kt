@@ -1,5 +1,5 @@
 package com.difft.android.chat.common.header
 
-import com.difft.android.base.fragment.DisposableManageFragment
+import androidx.fragment.app.Fragment
 
-abstract class CommonHeaderFragment : DisposableManageFragment()
+abstract class CommonHeaderFragment : Fragment()

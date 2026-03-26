@@ -129,7 +129,7 @@ object AudioAmplitudesHelper {
                     DBAttachmentModel.id.eq(attachmentId)
                 )
 
-                AudioMessageManager.deleteCurrentFile(message)
+                AudioMessageManager.deleteDecryptedFile(filePath)
 
                 message.attachment?.amplitudes = integerAmplitudes
                 message.attachment?.totalTime = duration / 1000

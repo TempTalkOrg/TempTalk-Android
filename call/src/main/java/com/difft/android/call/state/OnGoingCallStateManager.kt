@@ -1,6 +1,7 @@
 package com.difft.android.call.state
 
 import com.difft.android.base.call.CallActionType
+import com.difft.android.base.call.CallData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -179,6 +180,16 @@ class OnGoingCallStateManager @Inject constructor() {
         _callingTime.value = null
         _chatHeaderCallVisibility.value = false
         _controlMessage.value = null
+    }
+
+    /**
+     * 判断是否存在需要展示通话头部栏的其他通话数据。
+     * 当用户正在通话时，排除自身 roomId 的通话，仅考虑其他通话。
+     */
+    fun hasOtherCallData(callingList: Map<String, CallData>): Boolean {
+        if (_chatHeaderCallVisibility.value) return true
+        return if (!_isInCalling.value) callingList.isNotEmpty()
+        else callingList.values.any { it.roomId != getCurrentRoomId() }
     }
 
     /**

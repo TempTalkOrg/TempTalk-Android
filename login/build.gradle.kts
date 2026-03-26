@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
 }
 
@@ -33,25 +34,15 @@ android {
 
     viewBinding.isEnabled = true
 
-    val flavorDimensionType = "environment"
-    val flavorDimensionChannel = "channel"
-    flavorDimensions += setOf(flavorDimensionType, flavorDimensionChannel)
+    val flavorDimensionEnvironment = "environment"
+    flavorDimensions += flavorDimensionEnvironment
 
     productFlavors {
         create("TTDev") {
-            dimension = flavorDimensionType
+            dimension = flavorDimensionEnvironment
         }
         create("TTOnline") {
-            dimension = flavorDimensionType
-        }
-        create("google") {
-            dimension = flavorDimensionChannel
-        }
-        create("official") {
-            dimension = flavorDimensionChannel
-        }
-        create("insider") {
-            dimension = flavorDimensionChannel
+            dimension = flavorDimensionEnvironment
         }
     }
 
@@ -62,12 +53,20 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/login"))
 }
 
 dependencies {
@@ -90,10 +89,27 @@ dependencies {
     // Retrofit (explicit for KAPT)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
-    implementation(libs.retrofit.adapter.rxjava3)
 
     // PictureSelector
     implementation(project(":selector"))
     implementation(libs.picture.selector.ucrop)
     implementation(libs.picture.selector.compress)
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 }

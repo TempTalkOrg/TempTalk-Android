@@ -49,7 +49,6 @@ class CallIntent(private val intent: Intent) {
         CALL_CONVERSATION_ID("CALL_CONVERSATION_ID"),
         CALL_ROLE("CALL_ROLE"),
         CALL_START_PARAMS("CALL_START_PARAMS"),
-        CALL_APP_TOKEN("CALL_APP_TOKEN"),
         CALL_NEED_APP_LOCK("CALL_NEED_APP_LOCK"),
         CALL_WAIT_DIALOG_SHOWN("CALL_WAIT_DIALOG_SHOWN"),
     }
@@ -118,11 +117,6 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
-        fun withAppToken(token: String): Builder {
-            intent.putExtra(getExtraString(Extra.CALL_APP_TOKEN), token)
-            return this
-        }
-
         fun withNeedAppLock(isNeedAppLock: Boolean): Builder {
             intent.putExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), isNeedAppLock)
             return this
@@ -154,8 +148,6 @@ class CallIntent(private val intent: Intent) {
     val callServerUrls: List<String> by lazy { intent.getStringArrayListExtra(getExtraString(Extra.CALL_SERVER_URLS)).orEmpty() }
 
     val startCallParams: ByteArray? by lazy { intent.getByteArrayExtra(getExtraString(Extra.CALL_START_PARAMS))}
-
-    val appToken: String by lazy { intent.getStringExtra(getExtraString(Extra.CALL_APP_TOKEN)).orEmpty()}
 
     val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
 
