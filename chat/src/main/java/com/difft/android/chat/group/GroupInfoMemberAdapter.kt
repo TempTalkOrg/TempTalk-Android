@@ -65,7 +65,7 @@ class GroupInfoMemberViewHolder(parentView: ViewGroup) : RecyclerView.ViewHolder
                 binding.tvName.visibility = View.VISIBLE
                 binding.avatar.visibility = View.VISIBLE
                 binding.tvName.text = contactor.name
-                binding.avatar.setAvatar(contactor.avatarUrl, contactor.avatarEncKey, ContactorUtil.getFirstLetter(contactor.name), contactor.uid ?: "")
+                binding.avatar.setAvatar(contactor.avatarUrl, contactor.avatarEncKey, ContactorUtil.getFirstLetter(contactor.letterName ?: contactor.name), contactor.uid ?: "")
             }
         }
 

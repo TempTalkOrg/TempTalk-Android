@@ -2,8 +2,8 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="@dimen/conversation_reaction_scrubber_height"
-    android:layout_height="@dimen/conversation_reaction_scrubber_height">
+    android:layout_width="@dimen/reaction_emoji_item_size"
+    android:layout_height="@dimen/reaction_emoji_item_size">
 
     <!--    android:background="@drawable/reactions_old_background"-->
     <androidx.appcompat.widget.AppCompatTextView

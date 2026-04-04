@@ -4,7 +4,6 @@ import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import io.reactivex.rxjava3.core.Single
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,8 +17,11 @@ class InviteRepo @Inject constructor() {
         httpClient.getService(InviteService::class.java)
     }
 
-    fun getInviteCode(regenerate: Int, short: Int): Single<BaseResponse<GetInviteCodeResponse>> =
+    suspend fun getInviteCode(regenerate: Int, short: Int): BaseResponse<GetInviteCodeResponse> =
         inviteService.getInviteCode(SecureSharedPrefsUtil.getToken(), regenerate, short)
 
-    fun queryByInviteCode(inviteCode: String): Single<BaseResponse<QueryInviteCodeResponse>> = inviteService.queryByInviteCode(SecureSharedPrefsUtil.getToken(), QueryInviteCodeRequest(inviteCode))
+    suspend fun queryByInviteCode(inviteCode: String): BaseResponse<QueryInviteCodeResponse> = inviteService.queryByInviteCode(SecureSharedPrefsUtil.getToken(), QueryInviteCodeRequest(inviteCode))
+
+    suspend fun queryByCustomUid(version: Int, customUid: String): BaseResponse<QueryCustomUidResponse> = inviteService.queryByCustomUid(SecureSharedPrefsUtil.getToken(), QueryCustomUidRequest(version, customUid))
+
 }

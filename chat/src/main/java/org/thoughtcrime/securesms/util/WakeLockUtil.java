@@ -44,7 +44,7 @@ public class WakeLockUtil {
             return wakeLock;
         } catch (Exception e) {
             String finalTag = tag;
-            L.w(() -> "Failed to acquire wakelock with tag: " + finalTag + e);
+            L.w(e, () -> "Failed to acquire wakelock with tag: " + finalTag);
             return null;
         }
     }
@@ -66,7 +66,7 @@ public class WakeLockUtil {
             }
         } catch (Exception e) {
             String finalTag2 = tag;
-            L.w(() -> "Failed to release wakelock with tag: " + finalTag2 + e);
+            L.w(e, () -> "Failed to release wakelock with tag: " + finalTag2);
         }
     }
 

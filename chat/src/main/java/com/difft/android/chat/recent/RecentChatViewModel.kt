@@ -3,39 +3,36 @@ package com.difft.android.chat.recent
 import android.app.Activity
 import android.content.Context
 import android.text.TextUtils
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.call.CallDataSourceType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils.getString
-import com.difft.android.base.utils.RxUtil
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sampleAfterFirst
-import org.difft.app.database.updateRoomUnreadState
-import org.difft.app.database.wcdb
-import com.difft.android.base.viewmodel.DisposableManageViewModel
-import com.difft.android.call.LCallManager
+import androidx.lifecycle.ViewModel
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
-import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.DraftRepository
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.group.GroupRepo
+import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.requests.ConversationSetRequestBody
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
+import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -44,31 +41,39 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
+import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
-import org.difft.app.database.observeTable
-import util.TimeFormatter
+import org.difft.app.database.updateRoomUnreadState
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.AppIconBadgeManager
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import util.TimeFormatter
 import javax.inject.Inject
+import dagger.Lazy
 import kotlin.time.Duration.Companion.minutes
 
 @HiltViewModel
 class RecentChatViewModel @Inject constructor(
     private val dbRoomStore: DBRoomStore,
-    @ChativeHttpClientModule.Call
+    @param:ChativeHttpClientModule.Call
     private val httpClient: ChativeHttpClient,
-    @ChativeHttpClientModule.Chat
+    @param:ChativeHttpClientModule.Chat
     private val chatHttpClient: ChativeHttpClient,
     private val draftRepository: DraftRepository,
     private val appIconBadgeManager: AppIconBadgeManager,
-    private val messageNotificationUtil: MessageNotificationUtil
-) : DisposableManageViewModel() {
+    private val messageNotificationUtil: MessageNotificationUtil,
+    private val callDataManagerLazy: Lazy<CallDataManager>,
+    private val contactorCacheManager: ContactorCacheManager,
+    private val groupUtil: GroupUtil
+) : ViewModel() {
 
     private val language by lazy {
         LanguageUtils.getLanguage(application)
@@ -78,16 +83,31 @@ class RecentChatViewModel @Inject constructor(
         httpClient.getService(LCallHttpService::class.java)
     }
 
+    private val callDataManager: CallDataManager by lazy {
+        callDataManagerLazy.get()
+    }
+
+    // ✅ 只查询room数据，draft独立管理
     private val latestRoomModelsFlow: Flow<List<RoomModel>> by lazy {
-        observeTable({ wcdb.room }) {
-            val newRooms = getAllObjects(
-                DBRoomModel.roomId.notEq("server")
-                    .and(DBRoomModel.roomName.notNull())
-                    .and(DBRoomModel.roomName.notEq(""))
-            )
-            L.i { "[ChatList] latestRoomModelsFlow receive new room flow size: ${newRooms.size}" }
-            newRooms
-        }.sampleAfterFirst(500)
+        merge(
+            WCDBUpdateService.roomTableUpdated,
+            updateTime.map { }  // 每分钟触发查询，作为兜底机制
+        )
+            .onStart { emit(Unit) }  // 初始化时立即触发一次
+            .map {
+                withContext(Dispatchers.IO) {
+                    val newRooms = wcdb.room.getAllObjects(
+                        DBRoomModel.roomId.notEq("server")
+                            .and(DBRoomModel.roomName.notNull())
+                            .and(DBRoomModel.roomName.notEq(""))
+                            .and(DBRoomModel.lastActiveTime.notEq(0L))
+                    )
+                    L.i { "[ChatList] latestRoomModelsFlow queried ${newRooms.size} rooms" }
+                    newRooms
+                }
+            }
+            .sampleAfterFirst(500)
+            .flowOn(Dispatchers.IO)
     }
 
     private val updateTime by lazy {
@@ -104,19 +124,16 @@ class RecentChatViewModel @Inject constructor(
     val instantCallRoomViewData: MutableMap<String, RoomViewData> = mutableMapOf()
 
     @Inject
-    lateinit var groupRepo: GroupRepo
-
-    @Inject
     fun initLoadAndKeepObserving() {
         L.i { "[ChatList] initLoadAndKeepObserving" }
+        // ✅ 分开处理：room变化时查询room，draft变化时查询draft
         combine(
             latestRoomModelsFlow,
-            updateTime,
             draftRepository.allDraftsFlow.onStart { emit(emptyMap()) }
-        ) { roomModels, _, allDrafts ->
+        ) { roomModels, allDrafts ->
             Pair(roomModels, allDrafts)
         }.sampleAfterFirst(500).onEach { (roomModels, allDrafts) ->
-            L.i { "[ChatList] combine conversations: ${roomModels.size}" }
+            L.i { "[ChatList] Processing conversations: ${roomModels.size}, drafts: ${allDrafts.size}" }
 
             val finalRoomList = buildList {
                 // 添加常规房间数据
@@ -131,14 +148,15 @@ class RecentChatViewModel @Inject constructor(
                         it.roomName,
                         it.roomAvatarJson,
                         it.lastDisplayContent,
-                        lastActiveTime = LCallManager.getCallDataByConversationId(it.roomId)?.createdAt ?: it.lastActiveTime,
+                        lastActiveTime = callDataManager.getCallDataByConversationId(it.roomId)?.createdAt ?: it.lastActiveTime,
                         lastActiveTimeText,
                         it.unreadMessageNum,
                         it.muteStatus,
                         it.pinnedTime,
                         it.mentionType,
+                        it.criticalAlertType,
                         it.messageExpiry,
-                        callData = LCallManager.getCallDataByConversationId(it.roomId),
+                        callData = callDataManager.getCallDataByConversationId(it.roomId),
                         draftPreview = allDrafts[it.roomId]?.content,
                         groupMembersNumber = it.groupMembersNumber,
                     )
@@ -155,74 +173,75 @@ class RecentChatViewModel @Inject constructor(
         }.flowOn(Dispatchers.IO).launchIn(viewModelScope)
     }
 
-    fun createNote(activity: Activity) {
-        dbRoomStore.findOrCreateRoomModel(For.Account(globalServices.myId), pinnedTime = System.currentTimeMillis())
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({}, { error ->
-                error.printStackTrace()
-            })
+    fun createNote() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                dbRoomStore.createRoomIfNotExist(For.Account(globalServices.myId))
+                RoomChangeTracker.trackRoom(globalServices.myId, RoomChangeType.REFRESH)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (error: Exception) {
+                L.e { "createNote error: ${error.stackTraceToString()}" }
+            }
+        }
     }
 
 
     fun retrieveCallingList() {
         L.d { "[Call] RecentChatViewModel retrieveCallingList" }
         viewModelScope.launch(Dispatchers.IO) {
-            manageDisposable(
-                callService.getCallingList(SecureSharedPrefsUtil.getToken())
-                    .subscribeOn(Schedulers.io())
-                    .subscribe(
-                        {
-                            L.d { "[Call] RecentChatViewModel retrieve calling list from server: ${it.status}, ${it.data?.calls}" }
-                            val joinAbleCalls = it.data?.calls
-                            if (joinAbleCalls?.isNotEmpty() == true) {
-                                viewModelScope.launch(Dispatchers.IO) {
-                                    joinAbleCalls.forEach { call ->
-                                        call.source = CallDataSourceType.SERVER
-                                        when (call.type) {
-                                            CallType.ONE_ON_ONE.type -> {
-                                                call.conversation?.let { conversation ->
-                                                    call.callName = LCallManager.getDisplayName(conversation) ?: conversation
-                                                }
-                                            }
+            try {
+                val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
+                if(response.status == 0) {
+                    L.d { "[Call] RecentChatViewModel retrieve calling list from server: ${response.status}, ${response.data?.calls}" }
+                    val joinAbleCalls = response.data?.calls
+                    if (joinAbleCalls?.isNotEmpty() == true) {
+                        viewModelScope.launch(Dispatchers.IO) {
+                            joinAbleCalls.forEach { call ->
+                                call.source = CallDataSourceType.SERVER
+                                when (call.type) {
+                                    CallType.ONE_ON_ONE.type -> {
+                                        call.conversation?.let { conversation ->
+                                            call.callName = contactorCacheManager.getDisplayName(conversation) ?: conversation
+                                        }
+                                    }
 
-                                            CallType.GROUP.type -> {
-                                                call.conversation?.let { conversation ->
-                                                    val groupData = groupRepo.getGroupInfo(conversation).await().data
-                                                    if (groupData == null) {
-                                                        call.type = CallType.INSTANT.type
-                                                        call.conversation = null
-                                                        call.callName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
-                                                    } else {
-                                                        call.callName = groupData.name
-                                                    }
-                                                }
-                                            }
-
-                                            CallType.INSTANT.type -> {
-                                                val callerId = call.caller.uid
-                                                val displayName = LCallManager.getDisplayName(callerId)
-                                                call.callName = if (!TextUtils.isEmpty(displayName)) {
-                                                    "${displayName}${getString(com.difft.android.call.R.string.call_instant_call_title)}"
-                                                } else {
-                                                    getString(com.difft.android.call.R.string.call_instant_call_title_default)
-                                                }
-                                            }
-
-                                            else -> {
+                                    CallType.GROUP.type -> {
+                                        call.conversation?.let { conversation ->
+                                            val group = groupUtil.getSingleGroupInfo(conversation)
+                                            if (group != null) {
+                                                call.callName = group.name
+                                            } else {
+                                                call.type = CallType.INSTANT.type
+                                                call.conversation = null
+                                                call.callName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
                                             }
                                         }
-                                        LCallManager.addCallData(call)
+                                    }
+
+                                    CallType.INSTANT.type -> {
+                                        val callerId = call.caller.uid
+                                        val displayName = contactorCacheManager.getDisplayName(callerId)
+                                        call.callName = if (!TextUtils.isEmpty(displayName)) {
+                                            "${displayName}${getString(com.difft.android.call.R.string.call_instant_call_title)}"
+                                        } else {
+                                            getString(com.difft.android.call.R.string.call_instant_call_title_default)
+                                        }
+                                    }
+
+                                    else -> {
                                     }
                                 }
-                            } else {
-                                LCallManager.clearAllCallData()
+                                callDataManager.addCallData(call)
                             }
-                        },
-                        { error ->
-                            L.e { "[Call] RecentChatViewModel retrieveCallingList error: $error" }
-                        })
-            )
+                        }
+                    } else {
+                        callDataManager.clearAllCallData()
+                    }
+                }
+            } catch (error: Exception) {
+                L.e { "[Call] retrieveCallingList error: ${error.message}" }
+            }
         }
     }
 
@@ -235,21 +254,23 @@ class RecentChatViewModel @Inject constructor(
             For.Account(channelId)
         }
 
-        dbRoomStore.updatePinnedTime(
-            forWhat, if (isPinnedItem) {
-                System.currentTimeMillis()
-            } else {
-                null
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    dbRoomStore.updatePinnedTime(
+                        forWhat, if (isPinnedItem) {
+                            System.currentTimeMillis()
+                        } else {
+                            null
+                        }
+                    )
+                }
+                L.i { "Successfully pin item $isPinnedItem $channelId" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.i { "Error updating pin item $isPinnedItem $channelId $e" }
             }
-        ).subscribe(
-            {
-                L.i { "BH_Lin: Successfully pin item $isPinnedItem $channelId" }
-            },
-            { error ->
-                L.i { "BH_Lin: Error updating pin item $isPinnedItem $channelId $error" }
-            }
-        ).also {
-            manageDisposable(it)
         }
     }
 
@@ -272,31 +293,32 @@ class RecentChatViewModel @Inject constructor(
         context: Context,
         setting: ConversationSetRequestBody
     ) {
-        manageDisposable(
-            context
-                .getEntryPoint()
-                .getHttpClient()
-                .httpService
-                .fetchConversationSet(
-                    SecureSharedPrefsUtil.getBasicAuth(),
-                    setting
-                )
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .subscribe({
-                    if (it.status == 0) {
-//                        saveMuteStatus(setting.conversation, it.data?.muteStatus ?: 0)
-                    } else {
-                        PopTip.show(it.reason)
-                    }
-                }) {
-                    PopTip.show(it.message)
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    context
+                        .getEntryPoint()
+                        .getHttpClient()
+                        .httpService
+                        .fetchConversationSet(
+                            SecureSharedPrefsUtil.getBasicAuth(),
+                            setting
+                        )
                 }
-
-        )
+                if (result.status == 0) {
+//                    saveMuteStatus(setting.conversation, it.data?.muteStatus ?: 0)
+                } else {
+                    result.reason?.let { message -> ToastUtil.show(message) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 
-    //激活设备
-    fun activateDevice(): Single<BaseResponse<Any>> {
+    suspend fun activateDevice(): BaseResponse<Any> {
         return chatHttpClient.getService(HttpService::class.java)
             .activateDevice(SecureSharedPrefsUtil.getBasicAuth())
     }
@@ -305,15 +327,16 @@ class RecentChatViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Main) {
             //allRecentRoomsStateFlow.value = allRecentRoomsStateFlow.value.map { it.copy(unreadMessageNum = 0) }
 
-            WaitDialog.show(activity, "")
+            ComposeDialogManager.showWait(activity, "")
 
             withContext(Dispatchers.IO) {
                 wcdb.room.allObjects.filter { it.unreadMessageNum > 0 }.forEach {
                     it.updateRoomUnreadState(it.lastActiveTime)
+                    RoomChangeTracker.trackRoom(it.roomId, RoomChangeType.REFRESH)
                 }
             }
 
-            WaitDialog.dismiss()
+            ComposeDialogManager.dismissWait()
 
             delay(1000)
             SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)

@@ -1,6 +1,5 @@
 /** 
- * Copyright (C) 2011 Whisper Systems
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -19,22 +18,18 @@ package org.thoughtcrime.securesms.database;
 public class NoExternalStorageException extends Exception {
 
   public NoExternalStorageException() {
-    // TODO Auto-generated constructor stub
   }
 
   public NoExternalStorageException(String detailMessage) {
     super(detailMessage);
-    // TODO Auto-generated constructor stub
   }
 
   public NoExternalStorageException(Throwable throwable) {
     super(throwable);
-    // TODO Auto-generated constructor stub
   }
 
   public NoExternalStorageException(String detailMessage, Throwable throwable) {
     super(detailMessage, throwable);
-    // TODO Auto-generated constructor stub
   }
 
 }

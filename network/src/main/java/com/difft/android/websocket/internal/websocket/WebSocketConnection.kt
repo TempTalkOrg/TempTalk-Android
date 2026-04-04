@@ -1,24 +1,18 @@
 package com.difft.android.websocket.internal.websocket
 
 import android.content.Context
-import android.os.Bundle
 import com.difft.android.base.BuildConfig
-import com.difft.android.base.log.lumberjack.L.d
-import com.difft.android.base.log.lumberjack.L.e
-import com.difft.android.base.log.lumberjack.L.i
-import com.difft.android.base.log.lumberjack.L.w
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.websocket.api.util.Tls12SocketFactory
-import com.difft.android.websocket.internal.TrustAllSSLSocketFactory
 import com.difft.android.websocket.internal.util.Util
-import com.google.firebase.analytics.FirebaseAnalytics
+import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
 import com.google.protobuf.InvalidProtocolBufferException
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subjects.SingleSubject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -42,12 +36,10 @@ import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSo
 import org.whispersystems.signalservice.internal.websocket.webSocketMessage
 import java.io.IOException
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.X509TrustManager
 
 class WebSocketConnection @AssistedInject constructor(
     @Assisted("auth")
@@ -56,16 +48,49 @@ class WebSocketConnection @AssistedInject constructor(
     private val webSocketUrlGetter: () -> String,
     @Assisted
     private val keepAliveSender: KeepAliveSender,
-    @Named("UserAgent")
+    @param:Named("UserAgent")
     private val userAgent: String,
     private val healthMonitor: HealthMonitor,
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
 ) : WebSocketListener() {
 
     private val incomingRequests = LinkedBlockingQueue<WebSocketRequestMessage>()
 
-    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = HashMap()
+    /**
+     * Shared OkHttpClient instance to avoid thread pool leaks.
+     * Creating a new OkHttpClient for each connection causes thread pool accumulation
+     * because each client has its own ConnectionPool and Dispatcher threads.
+     * Reusing a single client prevents OutOfMemoryError from pthread_create failures.
+     */
+    private val okHttpClient: OkHttpClient by lazy {
+        val customConnectionSpec: ConnectionSpec = ConnectionSpec.Builder(RESTRICTED_TLS)
+            .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3)
+            .build()
+
+        val clientBuilder: OkHttpClient.Builder = OkHttpClient.Builder()
+            .connectionSpecs(Util.immutableList(customConnectionSpec))
+            .dns(SYSTEM)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+
+        if (BuildConfig.DEBUG) {
+            val logging = HttpLoggingInterceptor()
+            logging.setLevel(HttpLoggingInterceptor.Level.BODY)
+            clientBuilder.addInterceptor(logging)
+        }
+
+        val sslCreator = OfficialSSLSocketFactoryCreator(context)
+        clientBuilder.sslSocketFactory(
+            Tls12SocketFactory(sslCreator.socketFactory),
+            sslCreator.trustManager
+        )
+
+        clientBuilder.build()
+    }
+
+    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = ConcurrentHashMap()
 
     val name: String = "[ws][chat:" + System.identityHashCode(this) + "]"
 
@@ -110,36 +135,11 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     internal fun connect() {
         startConnectTime = System.currentTimeMillis()
-        i { "$name connect()" }
+        L.i { "$name connect()" }
 
         if (currentWebsocket == null) {
             val filledUri = webSocketUrlGetter()
-            i { "$name connect with URL $filledUri" }
-            val customConnectionSpec: ConnectionSpec = ConnectionSpec.Builder(RESTRICTED_TLS)
-                .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3) // 指定TLS版本为TLS 1.2 TLS 1.3
-                .build()
-
-            val clientBuilder: OkHttpClient.Builder = OkHttpClient.Builder()
-                .connectionSpecs(Util.immutableList(customConnectionSpec))
-                .dns(SYSTEM)
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(60, TimeUnit.SECONDS)
-
-            if (BuildConfig.DEBUG) {
-                // Set up HTTP logging interceptor
-                val logging = HttpLoggingInterceptor()
-                logging.setLevel(HttpLoggingInterceptor.Level.BODY)
-                clientBuilder.addInterceptor(logging)
-            }
-
-            val (sslSocketFactory, trustManager) = createTrustAllTlsSocketFactory()
-            clientBuilder.sslSocketFactory(
-                Tls12SocketFactory(sslSocketFactory),
-                trustManager
-            )
-
-            val okHttpClient: OkHttpClient = clientBuilder.build()
+            L.i { "$name connect with URL $filledUri" }
 
             val requestBuilder: Request.Builder = Request.Builder().url(filledUri)
 
@@ -158,16 +158,16 @@ class WebSocketConnection @AssistedInject constructor(
             }
             currentWebsocket = okHttpClient.newWebSocket(requestBuilder.build(), websocketListener)
 
-            i { "$name Really start connecting in code" }
+            L.i { "$name Really start connecting in code" }
         }
     }
 
     @Synchronized
     fun disconnectWhenConnected() {
-        i { "$name disconnect(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
+        L.i { "$name disconnect(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
         if (webSocketConnectionState.value == WebSocketConnectionState.CONNECTED) {
             currentWebsocket?.let {
-                i { "$name Client not null when disconnect" }
+                L.i { "$name Client not null when disconnect" }
                 it.cancel() //use [cancel()] function instead of [close()] can terminate the connection immediately
                 currentWebsocket = null
                 currentWebsocketListener?.invalidate()
@@ -179,9 +179,9 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     fun cancelConnection() {
-        i { "$name cancelConnection(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
+        L.i { "$name cancelConnection(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
         currentWebsocket?.let {
-            i { "$name Client not null when cancelConnection" }
+            L.i { "$name Client not null when cancelConnection" }
             it.cancel()
             currentWebsocket = null
             currentWebsocketListener?.invalidate()
@@ -195,8 +195,8 @@ class WebSocketConnection @AssistedInject constructor(
     }
 
     @Throws(IOException::class)
-    fun sendRequestAwaitResponse(request: WebSocketRequestMessage): Single<WebsocketResponse> {
-        d { "$name sendMessageRequest() $request" }
+    suspend fun sendRequestAwaitResponse(request: WebSocketRequestMessage): WebsocketResponse {
+        L.d { "$name sendMessageRequest() requestId=${request.requestId}, path=${request.path}, verb=${request.verb}" }
         if (webSocketConnectionState.value != WebSocketConnectionState.CONNECTED) {
             throw IOException("$name No connected connection!")
         }
@@ -206,22 +206,26 @@ class WebSocketConnection @AssistedInject constructor(
             this.request = request
         }
 
-        val single = SingleSubject.create<WebsocketResponse>()
+        val deferred = CompletableDeferred<WebsocketResponse>()
 
-        outgoingRequests[request.requestId] = OutgoingRequest(single)
+        outgoingRequests[request.requestId] = OutgoingRequest(deferred)
 
-        if (currentWebsocket?.send(ByteString.of(*message.toByteArray())) != true) {
-            throw IOException("$name Write failed!")
+        try {
+            if (currentWebsocket?.send(ByteString.of(*message.toByteArray())) != true) {
+                throw IOException("$name Write failed!")
+            }
+
+            return withTimeout(10_000) {
+                deferred.await()
+            }
+        } finally {
+            outgoingRequests.remove(request.requestId)
         }
-
-        return single.subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .timeout(10, TimeUnit.SECONDS, Schedulers.io())
     }
 
     @Throws(IOException::class)
     fun sendRequest(request: WebSocketRequestMessage) {
-        d { "$name sendMessageRequest() $request" }
+        L.d { "$name sendMessageRequest() requestId=${request.requestId}, path=${request.path}, verb=${request.verb}" }
         if (currentWebsocket == null) {
             throw IOException("$name No connection!")
         }
@@ -234,44 +238,25 @@ class WebSocketConnection @AssistedInject constructor(
         }
     }
 
-    @Throws(IOException::class)
-    fun sendRequestAwaitResponse(json: String): Single<WebsocketResponse> {
-        d { "$name sendMessageRequest() $json" }
-        if (webSocketConnectionState.value != WebSocketConnectionState.CONNECTED) {
-            throw IOException("$name No connected connection!")
-        }
-        val single = SingleSubject.create<WebsocketResponse>()
-        if (currentWebsocket?.send(json) != true) {
-            e { "$name sendRequest string failed..." }
-            throw IOException("$name Write failed!")
-        }
-        if ("ping" == json) {
-            e { "$name sendRequest string failed..." }
-        }
-
-        return single.subscribeOn(Schedulers.io())
-            .observeOn(Schedulers.io())
-            .timeout(10, TimeUnit.SECONDS, Schedulers.io())
-    }
 
     @Throws(IOException::class)
     fun sendRequest(json: String) {
-        d { "$name sendMessageRequest() $json" }
+        L.d { "$name sendMessageRequest() jsonLength=${json.length}" }
         if (currentWebsocket == null) {
             throw IOException("$name No connection!")
         }
         if (currentWebsocket?.send(json) != true) {
-            e { "$name sendRequest string failed..." }
+            L.e { "$name sendRequest string failed..." }
             throw IOException("$name Write failed!")
         }
         if ("ping" == json) {
-            i { "$name Sending keep alive..." }
+            L.i { "$name Sending keep alive..." }
         }
     }
 
     @Throws(IOException::class)
     fun sendResponse(response: WebSocketResponseMessage) {
-        d { "$name sendResponse() $response" }
+        L.d { "$name sendResponse() requestId=${response.requestId}, status=${response.status}" }
         if (currentWebsocket == null) {
             throw IOException("$name Connection closed!")
         }
@@ -290,16 +275,11 @@ class WebSocketConnection @AssistedInject constructor(
     override fun onOpen(webSocket: WebSocket, response: Response) {
         if (currentWebsocket == null) {
             // onOpen() is executed immediately after cancelConnection, which will cause the state to be wrong
-            i { "$name onOpen() currentWebsocket is null, ignore this call back" }
+            L.i { "$name onOpen() currentWebsocket is null, ignore this call back" }
             return
         }
         val connectCostTime = System.currentTimeMillis() - startConnectTime
-        Bundle().apply {
-            putLong(WEB_SOCKET_CONNECT_TIME, connectCostTime)
-        }.let {
-            FirebaseAnalytics.getInstance(context).logEvent(WEB_SOCKET_CONNECT_TIME, it)
-        }
-        i { "$name onOpen() connected, time cost $connectCostTime" }
+        L.i { "$name onOpen() connected, time cost $connectCostTime" }
         _webSocketConnectionState.value = WebSocketConnectionState.CONNECTED
     }
 
@@ -307,7 +287,7 @@ class WebSocketConnection @AssistedInject constructor(
         healthMonitor.onKeepAliveResponse()
         try {
             val message = WebSocketMessage.parseFrom(bytes.toByteArray())
-            d { "$name onMessage() message = $message" }
+            L.d { "$name onMessage() type=${message.type}, requestId=${if (message.hasRequest()) message.request.requestId else message.response.requestId}" }
 
             if (message.type.number == WebSocketMessage.Type.REQUEST_VALUE) {
                 incomingRequests.add(message.request)
@@ -321,20 +301,20 @@ class WebSocketConnection @AssistedInject constructor(
                 )
             }
         } catch (e: InvalidProtocolBufferException) {
-            w(e)
+            L.w(e) { "[WebSocketConnection] onMessage parse error" }
         }
     }
 
     @Synchronized
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-        i { "$name onClose()" }
+        L.i { "$name onClose()" }
         if (webSocketConnectionState.value is WebSocketConnectionState.DISCONNECTED
             || webSocketConnectionState.value is WebSocketConnectionState.FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.UNKNOWN_HOST_FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.AUTHENTICATION_FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.INACTIVE_FAILED
         ) {
-            w { "Now the webSocketConnectionState is ${webSocketConnectionState.value}, ignore onClosed() callback" }
+            L.w { "Now the webSocketConnectionState is ${webSocketConnectionState.value}, ignore onClosed() callback" }
             return
         }
         cleanupAfterShutdown()
@@ -343,18 +323,18 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        w(t) { "$name onFailure()" }
+        L.w(t) { "$name onFailure()" }
         if (webSocketConnectionState.value is WebSocketConnectionState.DISCONNECTED
             || webSocketConnectionState.value is WebSocketConnectionState.FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.UNKNOWN_HOST_FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.AUTHENTICATION_FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.INACTIVE_FAILED
         ) {
-            w { "Now the webSocketConnectionState is ${webSocketConnectionState.value}, ignore onFailure() callback" }
+            L.w { "Now the webSocketConnectionState is ${webSocketConnectionState.value}, ignore onFailure() callback" }
             return
         }
         if (t is IOException && t.message == "Canceled") {
-            i { "$name onFailure() Canceled, ignore this call back as all cancel is handled manually" }
+            L.i { "$name onFailure() Canceled, ignore this call back as all cancel is handled manually" }
             return
         }
         cleanupAfterShutdown()
@@ -362,10 +342,10 @@ class WebSocketConnection @AssistedInject constructor(
         if (response != null && (response.code == 401 || response.code == 403)) {
             _webSocketConnectionState.value = WebSocketConnectionState.AUTHENTICATION_FAILED
         } else if (response != null && (response.code == 451)) {
-            w { "$name onFailure() inactive device" }
+            L.w { "$name onFailure() inactive device" }
             _webSocketConnectionState.value = WebSocketConnectionState.INACTIVE_FAILED
         } else if (t is UnknownHostException) {
-            i { "$name onFailure() UnknownHostException, need switch host to do websocket connection" }
+            L.i { "$name onFailure() UnknownHostException, need switch host to do websocket connection" }
             _webSocketConnectionState.value = WebSocketConnectionState.UNKNOWN_HOST_FAILED
         } else {
             _webSocketConnectionState.value = WebSocketConnectionState.FAILED
@@ -375,70 +355,61 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     private fun cleanupAfterShutdown() {
         // Handle outgoing requests
-        val iterator = outgoingRequests.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            entry.value.onError(IOException("$name Closed unexpectedly"))
-            iterator.remove()
+        // Create a copy of the keys to avoid ConcurrentModificationException
+        val requestIds = outgoingRequests.keys.toList()
+        for (requestId in requestIds) {
+            try {
+                outgoingRequests.remove(requestId)?.onError(IOException("$name Closed unexpectedly"))
+            } catch (e: Exception) {
+                L.e(e) { "[WebSocketConnection] $name Error while cleaning up request $requestId" }
+            }
         }
 
         currentWebsocket = null // Allow garbage collection
         currentWebsocketListener?.invalidate()
         currentWebsocketListener = null
-        i { "$name WebSocket connection cleaned up and set to null." }
+        L.i { "$name WebSocket connection cleaned up and set to null." }
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
-        d { "$name onMessage() $text" }
+        L.d { "$name onMessage() $text" }
         healthMonitor.onKeepAliveResponse()
     }
 
     @Synchronized
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-        i { "$name onClosing(), code: $code, reason: $reason" }
+        L.i { "$name onClosing(), code: $code, reason: $reason" }
         if (webSocketConnectionState.value is WebSocketConnectionState.DISCONNECTED
             || webSocketConnectionState.value is WebSocketConnectionState.FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.UNKNOWN_HOST_FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.AUTHENTICATION_FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.INACTIVE_FAILED
         ) {
-            w { "Now the webSocketConnectionState is ${webSocketConnectionState.value}, ignore onClosing() callback" }
+            L.w { "Now the webSocketConnectionState is ${webSocketConnectionState.value}, ignore onClosing() callback" }
             return
         }
         cleanupAfterShutdown()
         _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
     }
 
-    private fun createTrustAllTlsSocketFactory(): Pair<SSLSocketFactory, X509TrustManager> {
-        try {
-            val context = SSLContext.getInstance("TLSv1.2")
-            val trustAllManager =
-                TrustAllSSLSocketFactory.TrustAllManager()
-            val trustAllManagers = arrayOf(trustAllManager)
-            context.init(null, trustAllManagers, null)
-            return Pair(context.socketFactory, trustAllManager)
-        } catch (e: Exception) {
-            throw AssertionError(e)
-        }
-    }
-
     fun sendKeepAlive() {
         keepAliveSender.sendKeepAliveFrom(this)
     }
 
-    private class OutgoingRequest(private val responseSingle: SingleSubject<WebsocketResponse>) {
+    private class OutgoingRequest(private val deferred: CompletableDeferred<WebsocketResponse>) {
         fun onSuccess(response: WebsocketResponse) {
-            responseSingle.onSuccess(response)
+            deferred.complete(response)
         }
 
         fun onError(throwable: Throwable?) {
-            throwable?.let { e(throwable) }
+            val error = throwable ?: IOException("[WebSocketConnection] OutgoingRequest failed with no error")
+            L.e(error) { "[WebSocketConnection] OutgoingRequest error" }
+            deferred.completeExceptionally(error)
         }
     }
 
     companion object {
         const val KEEP_ALIVE_TIMEOUT_SECONDS: Int = 30
-        const val WEB_SOCKET_CONNECT_TIME = "web_socket_connect_time"
     }
 }
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="status_bar_guideline" type="id" />
+    <item name="navigation_bar_guideline" type="id" />
+    <item name="keyboard_guideline" type="id" />
+    <item name="parent_start_guideline" type="id" />
+    <item name="parent_end_guideline" type="id" />
+</resources>

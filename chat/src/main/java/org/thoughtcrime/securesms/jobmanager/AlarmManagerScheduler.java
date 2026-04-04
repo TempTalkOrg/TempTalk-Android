@@ -13,7 +13,6 @@ import com.annimon.stream.Stream;
 import com.difft.android.base.log.lumberjack.L;
 
 import util.PendingIntentFlags;
-import util.logging.Log;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 
 import java.util.List;

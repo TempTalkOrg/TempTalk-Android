@@ -17,6 +17,8 @@ import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 import android.widget.OverScroller;
 
+import com.difft.android.base.log.lumberjack.L;
+
 /**
  * The component of {@link com.github.chrisbanes.photoview.PhotoView} which does the work allowing for zooming, scaling, panning, etc.
  * It is made public in case you need to subclass something other than AppCompatImageView and still
@@ -228,6 +230,7 @@ public class PhotoViewAttacher implements View.OnTouchListener,
                     }
                 } catch (ArrayIndexOutOfBoundsException e) {
                     // Can sometimes happen when getX() and getY() is called
+                    L.w(e, () -> "[PhotoViewAttacher] onDoubleTap scale failed");
                 }
                 return true;
             }

@@ -17,6 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,13 +39,19 @@ fun ShowAudioDeviceOnClickView(
 ){
 
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     DropdownMenu(
         modifier = Modifier
             .clip(shape = RoundedCornerShape(12.dp))
             .background(colorResource(id = com.difft.android.base.R.color.bg_popup_night)),
         expanded = expanded,
-        onDismissRequest = { setExpanded(false) },
+        onDismissRequest = {
+            setExpanded(false)
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        },
     ) {
         audioDevices.forEachIndexed { index, item ->
             DropdownMenuItem(

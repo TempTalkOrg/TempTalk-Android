@@ -13,11 +13,6 @@
                 android:resource="@xml/ps_file_paths" />
         </provider>
 
-        <service
-            android:name="com.luck.picture.lib.service.ForegroundService"
-            android:enabled="true"
-            android:foregroundServiceType="location" />
-
         <activity
             android:name=".basic.PictureSelectorSupporterActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"

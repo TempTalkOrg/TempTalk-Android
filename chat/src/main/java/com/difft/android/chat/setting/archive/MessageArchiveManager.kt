@@ -1,19 +1,13 @@
 package com.difft.android.chat.setting.archive
 
 
-import android.annotation.SuppressLint
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
-import org.difft.app.database.delete
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.data.ContactorUtil
-import difft.android.messageserialization.For
+import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
@@ -24,24 +18,29 @@ import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.requests.ConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
+import com.difft.android.websocket.api.messages.GetPublicKeysReq
+import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.google.gson.JsonObject
 import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
-import io.reactivex.rxjava3.core.Completable
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subjects.BehaviorSubject
-import io.reactivex.rxjava3.subjects.Subject
+import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import org.difft.app.database.delete
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBResetIdentityKeyModel
 import org.difft.app.database.models.DBRoomModel
+import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.ResetIdentityKeyModel
+import org.difft.app.database.wcdb
+import util.AppForegroundObserver
 import util.TimeUtils
-import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 @Singleton
@@ -49,28 +48,80 @@ class MessageArchiveManager @Inject constructor(
     private val dbRoomStore: DBRoomStore,
     private val groupRepo: GroupRepo,
     private val globalConfigsManager: GlobalConfigsManager,
-    @ChativeHttpClientModule.Chat
+    @param:ChativeHttpClientModule.Chat
     private val chatHttpClient: ChativeHttpClient,
-    private val dbMessageStore: DBMessageStore
+    private val dbMessageStore: DBMessageStore,
+    private val localMessageCreator: dagger.Lazy<LocalMessageCreator>,
+    private val conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>
 ) {
-    fun startCheckTask() {
-        appScope.launch(Dispatchers.IO) {
-            delay(3000L) // 延迟3秒开始执行
-            FileUtil.deleteMessageAttachmentEmptyDirectories()
+    companion object {
+        private const val FOREGROUND_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
+        private const val BACKGROUND_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
+    }
 
+    @Volatile
+    private var currentInterval = FOREGROUND_INTERVAL_MS
+
+    @Volatile
+    private var lastCheckTime: Long = 0L
+
+    // Channel to signal state changes and interrupt the delay
+    private val stateChangeSignal = Channel<Unit>(Channel.CONFLATED)
+
+    fun startCheckTask() {
+        currentInterval = if (AppForegroundObserver.isForegrounded()) {
+            FOREGROUND_INTERVAL_MS
+        } else {
+            BACKGROUND_INTERVAL_MS
+        }
+
+        appScope.launch(Dispatchers.IO) {
             checkIdentityKeyReset()
 
             while (true) {
-                archiveMessages()
-                delay(5 * 60 * 1000L) // 5 minutes delay
+                doArchiveIfNeeded()
+                // Wait for either: interval timeout OR state change signal
+                val signaled = withTimeoutOrNull(currentInterval) {
+                    stateChangeSignal.receive()
+                    true
+                }
+                if (signaled == true) {
+                    L.i { "[MessageArchiveManager] State changed, interval now ${currentInterval / 1000}s" }
+                }
             }
         }
     }
 
     /**
-     * 消息过期基于会话设置，满足两个条件之一便会归档销毁
-     * 1. 消息的readTime小于等于messageClearAnchor
-     * 2. 消息的readTime加上expiresInSeconds小于当前时间
+     * Call when app foreground/background state changes.
+     * Updates the interval and triggers immediate check if needed.
+     */
+    fun onAppStateChanged(isForeground: Boolean) {
+        currentInterval = if (isForeground) FOREGROUND_INTERVAL_MS else BACKGROUND_INTERVAL_MS
+        stateChangeSignal.trySend(Unit)
+    }
+
+    private suspend fun doArchiveIfNeeded() {
+        val timeSinceLastCheck = System.currentTimeMillis() - lastCheckTime
+
+        // First call (lastCheckTime = 0) or exceeded interval
+        if (lastCheckTime == 0L || timeSinceLastCheck >= currentInterval) {
+            L.i { "[MessageArchiveManager] Archive check triggered (${timeSinceLastCheck / 1000}s since last)" }
+            archiveMessages()
+            lastCheckTime = System.currentTimeMillis()
+        } else {
+            L.d { "[MessageArchiveManager] Skip archive check, ${(currentInterval - timeSinceLastCheck) / 1000}s remaining" }
+        }
+    }
+
+    /**
+     * Archive expired messages for all rooms. A message is archived if either:
+     * 1. readTime <= messageClearAnchor
+     * 2. readTime + messageExpiry < currentTime
+     *
+     * Archive system messages ("Earlier messages expired") are skipped during deletion
+     * to prevent accidentally emptying conversations. They are only replaced (delete + recreate)
+     * when new normal messages are archived.
      */
     private suspend fun archiveMessages() {
         val pageSize = 100L
@@ -87,22 +138,17 @@ class MessageArchiveManager @Inject constructor(
 
                 val messageExpiryMillis = (room.messageExpiry ?: 0L) * 1000L
                 val messageClearAnchor = room.messageClearAnchor ?: 0L
+                val readPosition = room.readPosition
 
-                // 构建查询条件
                 val baseCondition = DBMessageModel.roomId.eq(room.roomId)
-                    .and(DBMessageModel.readTime.gt(0))
 
                 val finalCondition = buildMessageClearCondition(
                     baseCondition = baseCondition,
                     messageClearAnchor = messageClearAnchor,
                     messageExpiryMillis = messageExpiryMillis,
-                    currentTimeMillis = currentTimeMillis
-                )
-
-                // 如果没有需要清除的消息，跳过这个房间
-                if (finalCondition == null) {
-                    return@forEach
-                }
+                    currentTimeMillis = currentTimeMillis,
+                    readPosition = readPosition
+                ) ?: return@forEach // No expiry rules configured, skip this room
 
                 while (true) {
                     val messagesToClear = wcdb.message.getAllObjects(
@@ -112,13 +158,15 @@ class MessageArchiveManager @Inject constructor(
                     )
 
                     if (messagesToClear.isNotEmpty()) {
-                        totalProcessedCount += messagesToClear.size
-                        messagesToClear.forEach {
-                            it.delete()
+                        messagesToClear.forEach { message ->
+                            // Skip archive system messages to avoid emptying the conversation
+                            if (!isArchiveExpiredSystemMessage(message)) {
+                                totalProcessedCount++
+                                message.delete()
+                            }
                         }
                     }
 
-                    // 如果查询结果数量小于pageSize，说明已经是最后一批数据，不需要继续查询
                     if (messagesToClear.size < pageSize) {
                         break
                     }
@@ -126,20 +174,45 @@ class MessageArchiveManager @Inject constructor(
                     delay(100)
                 }
 
-                // 如果该会话有消息被清除，创建一条Earlier messages expired的系统消息
+                // Replace the archive system message when normal messages were archived
                 if (totalProcessedCount > 0) {
-                    L.i { "[MessageArchiveManager] processed $totalProcessedCount messages for room ${room.roomId}" }
-                    wcdb.message.getFirstObject(DBMessageModel.roomId.eq(room.roomId), DBMessageModel.systemShowTimestamp.order(Order.Asc))?.let { earliestMessage ->
-                        L.i { "[MessageArchiveManager] created earlier messages expired message for room $room.roomId" }
-                        ContactorUtil.createEarlierMessagesExpiredMessage(
-                            room.roomId,
-                            room.roomType,
-                            earliestMessage.systemShowTimestamp - 1,
-                            earliestMessage.readTime,
-                            earliestMessage.expiresInSeconds
-                        ).let { message ->
-                            wcdb.message.insertObject(message)
+                    L.i { "[MessageArchiveManager] processed $totalProcessedCount normal messages for room ${room.roomId}" }
+
+                    // Delete old archive system messages to avoid duplicates
+                    wcdb.message.getAllObjects(
+                        DBMessageModel.roomId.eq(room.roomId).and(DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY))
+                    ).forEach { message ->
+                        if (isArchiveExpiredSystemMessage(message)) {
+                            message.delete()
                         }
+                    }
+
+                    // Anchor the new archive message to the earliest remaining message
+                    val earliestMessage = wcdb.message.getFirstObject(
+                        DBMessageModel.roomId.eq(room.roomId),
+                        DBMessageModel.systemShowTimestamp.order(Order.Asc)
+                    )
+
+                    // Place it 1ms before the earliest message so it appears first
+                    val systemShowTimestamp = earliestMessage?.systemShowTimestamp?.minus(1)
+                        ?: System.currentTimeMillis()
+
+                    // Use the earliest message's readTime for consistent expiry calculation.
+                    // Fallback to current time if readTime = 0 (unread) to ensure it can be archived later.
+                    val readTime = earliestMessage?.readTime?.takeIf { it > 0 } ?: System.currentTimeMillis()
+
+                    // Inherit expiresInSeconds from earliest message, or fall back to room-level messageExpiry
+                    val expiresInSeconds = earliestMessage?.expiresInSeconds ?: (room.messageExpiry ?: 0L).toInt()
+
+                    L.i { "[MessageArchiveManager] creating archive message for room ${room.roomId}, timestamp: $systemShowTimestamp, readTime: $readTime, expiresInSeconds: $expiresInSeconds" }
+                    localMessageCreator.get().createEarlierMessagesExpiredMessage(
+                        room.roomId,
+                        room.roomType,
+                        systemShowTimestamp,
+                        readTime,
+                        expiresInSeconds
+                    ).let { message ->
+                        wcdb.message.insertObject(message)
                     }
                 }
             } catch (e: Exception) {
@@ -150,76 +223,93 @@ class MessageArchiveManager @Inject constructor(
         L.i { "[MessageArchiveManager] finished archiving messages" }
     }
 
+    /**
+     * Build the WHERE condition for expired message deletion.
+     *
+     * Normal messages (readTime > 0):
+     * - readTime <= messageClearAnchor, OR
+     * - readTime + messageExpiry < currentTime
+     *
+     * Legacy messages (readTime = 0, fallback):
+     * - When messageExpiry > 0 and systemShowTimestamp <= readPosition,
+     *   use systemShowTimestamp instead of readTime for expiry calculation.
+     *
+     * @return null if no expiry rules apply (neither messageClearAnchor nor messageExpiry is set)
+     */
     private fun buildMessageClearCondition(
         baseCondition: Expression,
         messageClearAnchor: Long,
         messageExpiryMillis: Long,
-        currentTimeMillis: Long
-    ): Expression? = when {
-        // 有messageClearAnchor且messageExpiry > 0时，检查两个条件之一
-        messageClearAnchor > 0 && messageExpiryMillis > 0 -> {
-            val clearAnchorCondition = DBMessageModel.readTime.le(messageClearAnchor)
-            val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
-            baseCondition.and(clearAnchorCondition.or(expiryCondition))
+        currentTimeMillis: Long,
+        readPosition: Long
+    ): Expression? {
+        // Legacy fallback: messages with readTime = 0 but systemShowTimestamp <= readPosition.
+        // Only enabled when both messageExpiry and readPosition are positive.
+        val legacyFallback = if (messageExpiryMillis > 0 && readPosition > 0) {
+            DBMessageModel.readTime.eq(0)
+                .and(DBMessageModel.systemShowTimestamp.le(readPosition))
+                .and(DBMessageModel.systemShowTimestamp.add(messageExpiryMillis).lt(currentTimeMillis))
+        } else null
+
+        return when {
+            // Both messageClearAnchor and messageExpiry: check either condition
+            messageClearAnchor > 0 && messageExpiryMillis > 0 -> {
+                val hasReadTime = DBMessageModel.readTime.gt(0)
+                val clearAnchorCondition = DBMessageModel.readTime.le(messageClearAnchor)
+                val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
+                val normalCondition = hasReadTime.and(clearAnchorCondition.or(expiryCondition))
+
+                if (legacyFallback != null) {
+                    baseCondition.and(normalCondition.or(legacyFallback))
+                } else {
+                    baseCondition.and(normalCondition)
+                }
+            }
+            // Only messageClearAnchor: no legacy fallback needed (clearAnchor is an explicit cutoff)
+            messageClearAnchor > 0 -> {
+                baseCondition.and(DBMessageModel.readTime.gt(0)).and(DBMessageModel.readTime.le(messageClearAnchor))
+            }
+            // Only messageExpiry: check time-based expiry
+            messageExpiryMillis > 0 -> {
+                val hasReadTime = DBMessageModel.readTime.gt(0)
+                val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
+                val normalCondition = hasReadTime.and(expiryCondition)
+
+                if (legacyFallback != null) {
+                    baseCondition.and(normalCondition.or(legacyFallback))
+                } else {
+                    baseCondition.and(normalCondition)
+                }
+            }
+            // Neither set: no messages to delete
+            else -> null
         }
-        // 只有messageClearAnchor时，只检查clearAnchor条件
-        messageClearAnchor > 0 -> {
-            baseCondition.and(DBMessageModel.readTime.le(messageClearAnchor))
-        }
-        // 只有messageExpiry > 0时，只检查过期条件
-        messageExpiryMillis > 0 -> {
-            baseCondition.and(DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis))
-        }
-        // 都没有时，不删除任何消息
-        else -> null
     }
 
-//    /**
-//     * 处理基于expiresInSeconds过期的消息(旧版消息归档逻辑)
-//     */
-//    private suspend fun archiveMessagesByExpiry() {
-//        val currentTimeMillis = System.currentTimeMillis()
-//        val pageSize = 100L
-//
-//        try {
-//            while (true) {
-//                val expiredMessages = wcdb.message.getAllObjects(
-//                    DBMessageModel.expiresInSeconds.gt(0)
-//                        .and(DBMessageModel.readTime.gt(0))
-//                        .and(DBMessageModel.readTime.add(DBMessageModel.expiresInSeconds.multiply(1000L)).lt(currentTimeMillis)),
-//                    null,
-//                    pageSize
-//                )
-//
-//                if (expiredMessages.isNotEmpty()) {
-//                    L.i { "[MessageArchiveManager] archiveMessages by expiry:" + expiredMessages.size + "===" + expiredMessages.map { it.timeStamp } }
-//                    expiredMessages.forEach {
-//                        it.delete()
-//                    }
-//                }
-//
-//                // 如果查询结果数量小于pageSize，说明已经是最后一批数据，不需要继续查询
-//                if (expiredMessages.size < pageSize) {
-//                    break
-//                }
-//
-//                delay(100)
-//            }
-//
-//
-//        } catch (e: Exception) {
-//            L.e { "[MessageArchiveManager] error archiving messages by expiry: ${e.stackTraceToString()}" }
-//        }
-//    }
+    /**
+     * Check if a message is the "Earlier messages expired" archive system message.
+     *
+     * Fast path: non-Notify messages (type != 2) return immediately without JSON parsing.
+     * Slow path: only Notify messages require JSON parsing, which are typically very few.
+     */
+    private fun isArchiveExpiredSystemMessage(message: MessageModel): Boolean {
+        if (message.type != 2) return false
+        return try {
+            val json = globalServices.gson.fromJson(message.messageText, JsonObject::class.java)
+            val data = json?.get("data")?.asJsonObject
+            val actionType = data?.get("actionType")?.asInt
+            actionType == TTNotifyMessage.NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     fun getDefaultMessageArchiveTime(): Long {
         return globalConfigsManager.getNewGlobalConfigs()?.data?.disappearanceTimeInterval?.message?.default ?: 0L
     }
 
     fun getDefaultArchiveTimeList(): List<Long> {
-        return globalConfigsManager.getNewGlobalConfigs()?.data?.disappearanceTimeInterval?.let { interval ->
-            interval.messageArchivingTimeOptionValues ?: interval.otherMessageArchivingTimeOptionValues
-        } ?: emptyList()
+        return globalConfigsManager.getNewGlobalConfigs()?.data?.disappearanceTimeInterval?.messageArchivingTimeOptionValues ?: emptyList()
     }
 
     fun getGroupDefaultArchiveTimeList(): List<Long> {
@@ -231,39 +321,41 @@ class MessageArchiveManager @Inject constructor(
         return if (globalServices.myId < targetID) "$myId:$targetID" else "$targetID:$myId"
     }
 
-    fun getMessageArchiveTime(forWhat: For, force: Boolean = false): Single<Long> {
+    suspend fun getMessageArchiveTime(forWhat: For, force: Boolean = false): Long {
         if (globalServices.myId == forWhat.id) {
-            return Single.just(0L)
+            return 0L
         }
         return if (force) {
             getMessageArchiveTimeFromServer(forWhat)
         } else {
-            dbRoomStore.getMessageExpiry(forWhat).flatMap { time ->
-                if (time.isPresent) {
-                    Single.just(time.get())
-                } else {
-                    getMessageArchiveTimeFromServer(forWhat)
-                }
+            val time = dbRoomStore.getMessageExpiry(forWhat)
+            if (time.isPresent) {
+                time.get()
+            } else {
+                getMessageArchiveTimeFromServer(forWhat)
             }
-        }.subscribeOn(Schedulers.io())
+        }
     }
 
-    private fun getMessageArchiveTimeFromServer(forWhat: For): Single<Long> = if (forWhat is For.Group) {
-        groupRepo.getGroupInfo(forWhat.id)
-            .map { response ->
-                if (response.isSuccess()) {
-                    val messageExpiry = response.data?.messageExpiry?.toLong()?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
-                    dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, response.data?.messageClearAnchor ?: 0L).blockingAwait()
-                    MessageArchiveUtil.updateArchiveTime(forWhat.id, messageExpiry)
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
-                    messageExpiry
-                } else {
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
-                    getDefaultMessageArchiveTime()
-                }
-            }
+    private suspend fun getMessageArchiveTimeFromServer(forWhat: For): Long = if (forWhat is For.Group) {
+        val response = groupRepo.getGroupInfo(forWhat.id)
+        if (response.isSuccess()) {
+            val messageExpiry = response.data?.messageExpiry?.toLong()?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
+            val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
+            dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
+            conversationSettingsManager.get().emitConversationSettingUpdate(
+                conversationId = forWhat.id,
+                messageExpiry = messageExpiry,
+                messageClearAnchor = messageClearAnchor
+            )
+            L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
+            messageExpiry
+        } else {
+            L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
+            getDefaultMessageArchiveTime()
+        }
     } else {
-        chatHttpClient.httpService
+        val response = chatHttpClient.httpService
             .fetchShareConversationConfig(
                 SecureSharedPrefsUtil.getToken(),
                 GetConversationShareRequestBody(
@@ -271,75 +363,83 @@ class MessageArchiveManager @Inject constructor(
                     false
                 )
             )
-            .map { response ->
-                if (response.isSuccess()) {
-                    val messageExpiry = response.data?.conversations?.firstOrNull()?.messageExpiry?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
-                    val messageClearAnchor = response.data?.conversations?.firstOrNull()?.messageClearAnchor ?: 0L
-                    dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor).blockingAwait()
-                    MessageArchiveUtil.updateArchiveTime(forWhat.id, messageExpiry)
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
-                    messageExpiry
-                } else {
-                    L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
-                    getDefaultMessageArchiveTime()
-                }
-            }
+        if (response.isSuccess()) {
+            val messageExpiry = response.data?.conversations?.firstOrNull()?.messageExpiry?.takeIf { it >= 0L } ?: getDefaultMessageArchiveTime()
+            val messageClearAnchor = response.data?.conversations?.firstOrNull()?.messageClearAnchor ?: 0L
+            dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
+            conversationSettingsManager.get().emitConversationSettingUpdate(
+                conversationId = forWhat.id,
+                messageExpiry = messageExpiry,
+                messageClearAnchor = messageClearAnchor
+            )
+            L.i { "[MessageArchiveManager] getMessageArchiveTime success:" + forWhat.id + "====" + messageExpiry }
+            messageExpiry
+        } else {
+            L.i { "[MessageArchiveManager] getMessageArchiveTime fail:" + forWhat.id + "====" + response.reason }
+            getDefaultMessageArchiveTime()
+        }
     }
 
-    fun updateMessageArchiveTime(forWhat: For, messageExpiry: Long): Completable {
-        return if (forWhat is For.Group) {
-            groupRepo.changeGroupSettings(forWhat.id, ChangeGroupSettingsReq(messageExpiry = messageExpiry))
-                .concatMapCompletable {
-                    if (it.status == 0) {
-                        MessageArchiveUtil.updateArchiveTime(forWhat.id, messageExpiry)
-//                        ApplicationDependencies.getRoomStore().updateMessageExpiry(forWhat, messageExpiry)
-                        Completable.complete()
-                    } else {
-                        Completable.error(NetworkException(message = it.reason ?: ""))
-                    }
-                }
+    suspend fun updateMessageArchiveTime(forWhat: For, messageExpiry: Long) {
+        if (forWhat is For.Group) {
+            val response = groupRepo.changeGroupSettings(forWhat.id, ChangeGroupSettingsReq(messageExpiry = messageExpiry))
+            if (response.status == 0) {
+                val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
+                conversationSettingsManager.get().emitConversationSettingUpdate(
+                    conversationId = forWhat.id,
+                    messageExpiry = messageExpiry,
+                    messageClearAnchor = messageClearAnchor
+                )
+            } else {
+                throw NetworkException(message = response.reason ?: "")
+            }
         } else {
-            chatHttpClient.httpService
+            val response = chatHttpClient.httpService
                 .updateConversationConfig(
                     SecureSharedPrefsUtil.getToken(),
                     conversationParams(forWhat.id),
                     ConversationShareRequestBody(messageExpiry)
                 )
-                .concatMapCompletable {
-                    if (it.status == 0) {
-                        MessageArchiveUtil.updateArchiveTime(forWhat.id, messageExpiry)
-//                        ApplicationDependencies.getRoomStore().updateMessageExpiry(forWhat, messageExpiry)
-                        Completable.complete()
-                    } else {
-                        Completable.error(NetworkException(message = it.reason ?: ""))
-                    }
-                }
+            if (response.status == 0) {
+                val messageClearAnchor = response.data?.messageClearAnchor ?: 0L
+                conversationSettingsManager.get().emitConversationSettingUpdate(
+                    conversationId = forWhat.id,
+                    messageExpiry = messageExpiry,
+                    messageClearAnchor = messageClearAnchor
+                )
+            } else {
+                throw NetworkException(message = response.reason ?: "")
+            }
         }
     }
 
-    @SuppressLint("CheckResult")
+    /**
+     * Update local message expiry. Called by MessageContentProcessor when handling Type 5 notify.
+     * Note: Event notification is emitted by the caller (MessageContentProcessor), not here.
+     */
     fun updateLocalArchiveTime(forWhat: For, messageExpiry: Long, messageClearAnchor: Long) {
-        dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
-            .compose(RxUtil.getCompletableTransformer())
-            .subscribe({
-                MessageArchiveUtil.updateArchiveTime(forWhat.id, messageExpiry)
-            }, { it.stackTraceToString() })
+        appScope.launch(Dispatchers.IO) {
+            try {
+                dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
+                // Event notification is emitted by MessageContentProcessor
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[MessageArchiveManager] updateLocalArchiveTime error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     /**
-     * 清除所有小于等于指定时间的指定用户发送的消息
-     * @param userId 用户ID，指定要删除哪个用户发送的消息
-     * @param timestamp 时间戳，小于等于此时间的消息将被删除
-     * @param pageSize 每页处理的消息数量，默认100条
+     * Delete all messages sent by [userId] with timestamp before [timestamp], in batches.
      */
     private suspend fun clearMessagesBeforeTimestamp(userId: String, timestamp: Long, pageSize: Long = 100) {
         try {
             L.i { "[MessageArchiveManager] start clearing messages for user: $userId before timestamp: $timestamp" }
             while (true) {
-                // 分页查询指定用户发送的消息
                 val messages = wcdb.message.getAllObjects(
                     DBMessageModel.fromWho.eq(userId)
-                        .and(DBMessageModel.type.notEq(2))
+                        .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
                         .and(DBMessageModel.timeStamp.lt(timestamp))
                         .and(DBMessageModel.roomId.notEq(globalServices.myId)),
                     null,
@@ -351,7 +451,6 @@ class MessageArchiveManager @Inject constructor(
                     it.delete()
                 }
 
-                // 如果查询结果数量小于pageSize，说明已经是最后一批数据，不需要继续查询
                 if (messages.size < pageSize) {
                     break
                 }
@@ -365,17 +464,17 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    //检查重置了identity key的用户，清理其对应的消息
+    /** Check for users who reset their identity key and clear their corresponding messages. */
     private suspend fun checkIdentityKeyReset() {
         try {
-            // 获取当前最大的重置时间戳，以此获取增量的重置记录
+            // Fetch incremental reset records starting from the latest known reset timestamp
             val maxResetTime = wcdb.resetIdentityKey.getValue(DBResetIdentityKeyModel.resetTime.max())?.long ?: 0L
             L.i { "[MessageArchiveManager] checkIdentityKeyReset maxResetTime: $maxResetTime" }
 
             val checkIdentityKeyResetResponse = chatHttpClient.httpService.getPublicKeys(
                 SecureSharedPrefsUtil.getToken(),
                 GetPublicKeysReq(beginTimestamp = maxResetTime)
-            ).blockingFirst()
+            )
             if (checkIdentityKeyResetResponse.isSuccess()) {
                 val resetIdentityKeyModels = checkIdentityKeyResetResponse.data?.keys?.map {
                     ResetIdentityKeyModel().apply {
@@ -401,18 +500,18 @@ class MessageArchiveManager @Inject constructor(
     }
 
     suspend fun archiveMessagesByResetIdentityKey(operator: String, resetIdentityKeyTime: Long) {
-        if (operator == globalServices.myId) { //如果是自己重置identityKey，需要检查自己所有的1v1会话是否存在，创建提示消息
+        if (operator == globalServices.myId) { // Self reset: create notify messages for all 1v1 conversations
             wcdb.room.getAllObjects(DBRoomModel.roomId.notEq(globalServices.myId).and(DBRoomModel.roomType.eq(0)))
                 .map { room ->
-                    ContactorUtil.createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry)
+                    localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry)
                 }.let { messages ->
                     L.i { "[MessageArchiveManager] create reset identity key notify message for self, rooms size:${messages.size}" }
                     dbMessageStore.putWhenNonExist(*messages.toTypedArray())
                 }
-        } else {//如果不是自己重置identityKey，需要检查1v1会话是否存在，并创建提示消息
+        } else { // Other user reset: create notify message for the 1v1 conversation if it exists
             wcdb.room.getFirstObject(DBRoomModel.roomId.eq(operator))?.let {
                 L.i { "[MessageArchiveManager] create reset identity key message -> operator:${operator}  resetIdentityKeyTime:${resetIdentityKeyTime}" }
-                ContactorUtil.createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry).let { message ->
+                localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry).let { message ->
                     dbMessageStore.putWhenNonExist(message)
                 }
             } ?: run {
@@ -424,7 +523,7 @@ class MessageArchiveManager @Inject constructor(
         wcdb.resetIdentityKey.insertOrReplaceObject(ResetIdentityKeyModel().apply {
             uid = operator
             resetTime = resetIdentityKeyTime
-            status = 1 // 标记为已处理
+            status = 1 // Mark as processed
         })
     }
 }
@@ -434,13 +533,5 @@ fun Long.toArchiveTimeDisplayText(): String {
         ResUtils.getString(R.string.disappearing_messages_not_archive)
     } else {
         TimeUtils.millis2FitTimeSpan(this.seconds.inWholeMilliseconds, 3, true)
-    }
-}
-
-object MessageArchiveUtil {
-    var archiveTimeUpdate: Subject<Pair<String, Long>> = BehaviorSubject.create()
-
-    fun updateArchiveTime(id: String, time: Long) {
-        archiveTimeUpdate.onNext(id to time)
     }
 }

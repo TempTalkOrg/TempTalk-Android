@@ -1,13 +1,15 @@
 package com.difft.android.chat.group
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.RxUtil
 import org.difft.app.database.convertToContactorModels
 import org.difft.app.database.members
 import com.difft.android.chat.R
@@ -16,23 +18,27 @@ import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.ChangeRolepReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupModeratorsManagementActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     private var groupInfo: GroupModel? = null
 
@@ -63,25 +69,23 @@ class GroupModeratorsManagementActivity : BaseActivity() {
 
         if (TextUtils.isEmpty(groupId)) return
 
-        GroupUtil.getSingleGroupInfo(this, groupId, true)
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isPresent) {
-                    groupInfo = it.get()
-                    initView(it.get())
+        lifecycleScope.launch {
+            try {
+                val group = groupUtil.getSingleGroupInfo(groupId, true)
+                if (group != null) {
+                    groupInfo = group
+                    initView(group)
                 }
-            }, { it.printStackTrace() })
+            } catch (e: Exception) {
+                L.w { "[GroupModeratorsManagementActivity] getSingleGroupInfo error: ${e.stackTraceToString()}" }
+            }
+        }
 
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.gid == groupId) {
-                    groupInfo = it
-                    initView(it)
-                }
-            }, { it.printStackTrace() })
+        groupUtil.singleGroupsUpdate
+            .onEach { if (it.gid == groupId) { groupInfo = it; initView(it) } }
+            .catch { L.w { "[GroupModeratorsManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .launchIn(lifecycleScope)
     }
 
     private var selectedIds: Set<String> = emptySet()
@@ -135,63 +139,67 @@ class GroupModeratorsManagementActivity : BaseActivity() {
     }
 
     private fun changeMemberRole(role: Int) {
-        WaitDialog.show(this@GroupModeratorsManagementActivity, "")
-        groupRepo.changeMemberRole(groupId, selectedIds.first(), ChangeRolepReq(role))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                WaitDialog.dismiss()
-                if (it.status == 0) {
-                    TipDialog.show(getString(R.string.operation_successful))
-                } else {
-                    PopTip.show(it.reason)
+        ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.changeMemberRole(groupId, selectedIds.first(), ChangeRolepReq(role))
                 }
-            }, {
-                it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
-            })
+                ComposeDialogManager.dismissWait()
+                if (result.status == 0) {
+                    ToastUtil.showLong(getString(R.string.operation_successful))
+                } else {
+                    result.reason?.let { message -> ToastUtil.show(message) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[GroupModeratorsManagementActivity] changeMemberRole error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 
     private fun showTransferDialog() {
         val name = groupInfo?.members?.find { it.id == selectedIds.first() }?.displayName
-        MessageDialog.show(
-            getString(R.string.tip),
-            getString(R.string.group_transfer_owner_tips, name),
-            getString(R.string.chat_dialog_ok),
-            getString(R.string.chat_dialog_cancel)
-        )
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.tip),
+            message = getString(R.string.group_transfer_owner_tips, name),
+            confirmText = getString(R.string.chat_dialog_ok),
+            cancelText = getString(R.string.chat_dialog_cancel),
+            onConfirm = {
                 transferOwner()
-                false
             }
+        )
     }
 
     private fun transferOwner() {
-        WaitDialog.show(this@GroupModeratorsManagementActivity, "")
-        groupRepo.changeGroupSettings(
-            groupId, ChangeGroupSettingsReq(owner = selectedIds.first())
-        )
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                WaitDialog.dismiss()
-                if (it.status == 0) {
-                    TipDialog.show(getString(R.string.operation_successful)).dialogLifecycleCallback =
-                        object : DialogLifecycleCallback<WaitDialog?>() {
-                            override fun onDismiss(dialog: WaitDialog?) {
-                                setResult(RESULT_OK)
-                                finish()
-                            }
-                        }
-                } else {
-                    PopTip.show(it.reason)
+        ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.changeGroupSettings(
+                        groupId, ChangeGroupSettingsReq(owner = selectedIds.first())
+                    )
                 }
-            }, {
-                it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
-            })
+                ComposeDialogManager.dismissWait()
+                if (result.status == 0) {
+                    ToastUtil.showLong(getString(R.string.operation_successful))
+                    setResult(RESULT_OK)
+                    finish()
+                } else {
+                    result.reason?.let { message -> ToastUtil.show(message) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[GroupModeratorsManagementActivity] transferOwner error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
     }
 }
 

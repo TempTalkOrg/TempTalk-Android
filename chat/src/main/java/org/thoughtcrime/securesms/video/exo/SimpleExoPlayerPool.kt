@@ -7,9 +7,9 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.AppForegroundObserver
+import util.AppForegroundObserver
 import org.thoughtcrime.securesms.util.DeviceProperties
 import kotlin.time.Duration.Companion.seconds
 
@@ -80,7 +80,7 @@ abstract class ExoPlayerPool<T : ExoPlayer>(
 ) : AppForegroundObserver.Listener {
 
     companion object {
-        private val TAG = Log.tag(ExoPlayerPool::class.java)
+        private val TAG = L.tag(ExoPlayerPool::class.java)
     }
 
     private val pool: MutableMap<T, PoolState> = mutableMapOf()
@@ -134,7 +134,7 @@ abstract class ExoPlayerPool<T : ExoPlayer>(
             pool[player] = poolState
             player
         } else {
-            Log.d(TAG, "Failed to get an ExoPlayer instance for tag: $tag :: ${poolStats()}")
+            L.d { "$TAG Failed to get an ExoPlayer instance for tag: $tag :: ${poolStats()}" }
             null
         }
 
@@ -194,7 +194,7 @@ abstract class ExoPlayerPool<T : ExoPlayer>(
         )
 
         return pool.values.fold(poolStats) { acc, state ->
-            Log.d(TAG, "$state")
+            L.d { "$TAG $state" }
             acc.copy(
                 unreservedAndAvailable = acc.unreservedAndAvailable + if (state.unreservedAndAvailable) 1 else 0,
                 reservedAndAvailable = acc.reservedAndAvailable + if (state.reservedAndAvailable) 1 else 0,

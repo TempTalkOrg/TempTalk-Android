@@ -1,8 +1,4 @@
-/**
- * Copyright (C) 2014-2016 Open Whisper Systems
- *
- * Licensed according to the LICENSE file in this repository.
- */
+
 syntax = "proto2";
 
 package signalservice;
@@ -436,7 +432,8 @@ message DataMessage {
     CARD = 7;
     CONFIDE = 8;
     SCREEN_SHOT = 9;
-    CURRENT = 9;
+    VERIFY = 10;
+    CURRENT = 10;
   }
 
   message Group {

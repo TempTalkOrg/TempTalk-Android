@@ -3,25 +3,17 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
-import androidx.activity.compose.setContent
-import com.difft.android.BuildConfig
+import androidx.fragment.app.commit
+import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.globalServices
-import com.difft.android.base.utils.openExternalBrowser
-import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
-import util.TimeUtils
-import javax.inject.Inject
 
+/**
+ * Activity container for AboutFragment
+ * The actual UI logic is in AboutFragment for dual-pane support
+ */
 @AndroidEntryPoint
 class AboutActivity : BaseActivity() {
-    @Inject
-    lateinit var updateManager: UpdateManager
-
-    @Inject
-    lateinit var urlManager: UrlManager
 
     companion object {
         fun startActivity(activity: Activity) {
@@ -32,23 +24,12 @@ class AboutActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            AboutPageView(
-                onBackClick = { finish() },
-                appVersion = PackageUtil.getAppVersionName() ?: "",
-                buildVersion = PackageUtil.getAppVersionCode().toString(),
-                buildTime = TimeUtils.millis2String(BuildConfig.BUILD_TIME.toLong()),
-                onCheckForUpdateClick = {
-                    updateManager.checkUpdate(this, true)
-                },
-                joinDesktopClick = {
-                    val url = urlManager.installationGuideUrl
-                    if (!TextUtils.isEmpty(url)) {
-                        openExternalBrowser(url)
-                    }
-                },
-                isInsider = globalServices.environmentHelper.isInsiderChannel()
-            )
+        setContentView(R.layout.activity_fragment_container)
+
+        if (savedInstanceState == null) {
+            supportFragmentManager.commit {
+                replace(R.id.fragment_container, AboutFragment.newInstance())
+            }
         }
     }
 }

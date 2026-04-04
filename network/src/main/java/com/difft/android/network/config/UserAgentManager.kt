@@ -24,8 +24,8 @@ object UserAgentManager {
 
     private val productName
         get() = when {
-            environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT) -> "TempTalkTest"
-            else -> "TempTalk"
+            environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT) -> "YellingTest"
+            else -> "Yelling"
         }
 
     private val appVersionName

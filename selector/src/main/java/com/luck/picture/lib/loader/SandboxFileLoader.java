@@ -1,5 +1,7 @@
 package com.luck.picture.lib.loader;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.text.TextUtils;
 
@@ -80,7 +82,7 @@ public final class SandboxFileLoader {
             try {
                 md = MessageDigest.getInstance("MD5");
             } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[SandboxFileLoader] loadInAppSandboxFolderFile MD5 error:");
             }
             for (File f : files) {
                 String mimeType = MediaUtils.getMimeTypeFromMediaUrl(f.getAbsolutePath());

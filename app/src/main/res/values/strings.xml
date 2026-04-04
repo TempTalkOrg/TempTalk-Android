@@ -1,4 +1,9 @@
 <resources>
+    <!-- Test (not translatable) -->
+    <string name="test_button_label" translatable="false">Test</string>
+    <string name="test_dialog_title" translatable="false">Custom View Dialog</string>
+    <string name="test_dialog_content" translatable="false">This is an example of a custom view dialog using traditional XML layout.\n\nYou can embed traditional View components in Compose via AndroidView, keeping existing layouts while enjoying modern Compose features.</string>
+    <string name="test_dialog_close" translatable="false">Close</string>
     <!--    settings-->
     <string name="settings_privacy_setting_title">Privacy</string>
     <string name="settings_privacy_find_me">METHODS FOR FINDING ME</string>
@@ -8,15 +13,31 @@
     <string name="settings_screen_lock">Screen lock</string>
     <string name="settings_screen_lock_timeout">Timeout</string>
     <string name="settings_screen_lock_timeout_instant">Instant</string>
-    <string name="settings_screen_lock_tips">Unlock screen using a passcode. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to %s. It also prevents content previews from appearing in the app switcher.</string>
-    <string name="settings_passcode_tips">Enter a passcode (4–10 digits).\nYou will be asked to enter this passcode the next time you unlock %s</string>
-    <string name="settings_passcode_confirm_again">Please enter again to confirm your passcode.</string>
+    <string name="settings_screen_lock_tips">Unlock Yelling’s screen using a passcode or pattern. The passcode can be different from system’s passcode. So if somebody manage to get access to your system, he still has no access to TempTalk. It also prevents content previews from appearing in the app switcher.</string>
+    <string name="settings_pattern_lock">Pattern</string>
+    <string name="settings_passcode_lock">Passcode</string>
+    <string name="settings_pattern_show_path">Pattern Path</string>
+    <string name="settings_pattern_draw_title">Create your pattern</string>
+    <string name="settings_pattern_draw_subtitle">Draw an unlock pattern</string>
+    <string name="settings_pattern_confirm_title">Confirm your pattern</string>
+    <string name="settings_pattern_confirm_subtitle">Draw the pattern again</string>
+    <string name="settings_pattern_too_short">Too short. Connect at least 4 dots</string>
+    <string name="settings_pattern_not_match">Patterns don’t match. Please try again.</string>
+    <string name="settings_pattern_success_title">Pattern lock enabled</string>
+    <string name="settings_passcode_success_title">Passcode lock enabled</string>
+    <string name="settings_pattern_disabled_title">Pattern lock disabled</string>
+    <string name="settings_passcode_disabled_title">Passcode lock disabled</string>
+    <string name="settings_passcode_tips">Enter a passcode (4–10 digits).\nYou will be asked to enter this passcode the next time you unlock %1$s.</string>
+    <string name="settings_passcode_confirm_again">Please enter again to confirm.</string>
     <string name="settings_passcode_confirm">Confirm</string>
     <string name="settings_passcode_error_tips">Passcode does not match.</string>
-    <string name="settings_passcode_success">Success!</string>
-    <string name="settings_passcode_success_tips">Safely save this code.</string>
-    <string name="settings_passcode_forget_tips">If you forget your passcode, you’ll need to log out or reinstall the app.</string>
-    <string name="settings_passcode_got_it">I understand</string>
+    <string name="settings_passcode_forget_tips">If you forget your passcode or pattern, try the other one. If you forget both, you’ll need to log in again.</string>
+    <string name="settings_bind_account_prompt_title">Bind Email and Phone</string>
+    <string name="settings_bind_account_prompt_message">Regain access via phone or email if you forget your passcode and pattern.</string>
+    <string name="settings_bind_account_prompt_bind">Bind</string>
+    <string name="settings_bind_account_prompt_not_now">Not now</string>
+    <string name="settings_bind_account_choice_title">Bind Email or Phone</string>
+    <string name="settings_bind_account_choice_message">To avoid being locked out if you forget your passcode, please link your email or phone before enabling screen lock.</string>
 
     <string name="settings_new_key_tips">%sAll your data, including messages, are encrypted with this key.</string>
     <string name="settings_new_key_time_info">🔐 %s\n</string>
@@ -24,13 +45,25 @@
     <string name="settings_new_key_time_format">MMM d, yyyy HH:mm:ss</string>
 
     <string name="settings_about">About</string>
-    <string name="settings_contact_ID">UID</string>
+    <string name="settings_contact_ID">Contact ID</string>
+    <string name="settings_contact_ID_SWITCH">Allow search</string>
+    <string name="settings_contact_ID_status_success">Saved successfully</string>
+    <string name="settings_contact_ID_status_failed">Failed to save settings</string>
+    <string name="settings_contact_ID_title">Edit Contact ID</string>
+    <string name="settings_contact_ID_button_save">Save</string>
+    <string name="settings_contact_ID_input_hint">Enter contact id</string>
+    <string name="settings_contact_ID_valid_tip">· 6–20 characters. \n· Starts with a letter or _. \n· Letters, numbers, _ or - only. \n· Changeable every 3 months.</string>
+    <string name="settings_contact_ID_status_uid_limited">This ID can only be changed once every 3 months.</string>
+    <string name="settings_contact_ID_status_uid_exists">This ID is taken. Try another or use %s.</string>
+    <string name="settings_contact_ID_status_uid_invalid_1">Must start with a letter or “_”. Please try another one.</string>
+    <string name="settings_contact_ID_status_uid_invalid_2">Use only letters, numbers, “_” or “-”. Please try another one.</string>
+    <string name="settings_contact_ID_status_uid_length_invalid">Must be 6–20 characters long. Please try another one.</string>
     <string name="settings_information">INFORMATION</string>
     <string name="settings_version">Version</string>
     <string name="settings_build_version">Build Version</string>
     <string name="settings_build_time">Build Time</string>
     <string name="settings_check_new_version">Check New Version</string>
-    <string name="settings_obtain_desktop_version">Join Desktop App</string>
+    <string name="settings_obtain_desktop_version">Website</string>
 
     <string name="settings_version_is_latest">The current version is the latest version</string>
     <string name="settings_new_version_found">A new version found</string>
@@ -72,7 +105,7 @@
     <string name="language_restart">Restart</string>
 
     <string name="status_upgrade_downolad_failed">Update package download failed</string>
-    <string name="status_upgrade_downloading">Update package is downloading in the background</string>
+    <string name="status_upgrade_downloading">Update downloading…</string>
     <string name="status_upgrade_install_failed">Update package install failed</string>
     <string name="status_upgrade_filename_error">File name contains illegal characters</string>
     <string name="status_upgrade_download_success">Update package downloaded successfully. Do you want to install it?</string>

@@ -1,26 +1,27 @@
 package com.difft.android.chat.speech2text
 
 import android.content.Context
-import androidx.lifecycle.LifecycleOwner
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.fileshare.UploadInfoReq
 import difft.android.messageserialization.model.Attachment
-import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ProgressRequestBody
 import com.difft.android.network.requests.SpeechToTextRequestBody
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.RequestBody
 import util.FileUtils
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import java.io.File
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -28,7 +29,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SpeechToTextManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ){
 
     companion object {
@@ -46,95 +47,108 @@ class SpeechToTextManager @Inject constructor(
     lateinit var chatHttpClient: ChativeHttpClient
 
     fun speechToText(
+        scope: CoroutineScope,
         context: Context,
         attachment: Attachment,
         onSuccess: (String) -> Unit,
         onFailure: (Exception) -> Unit,
     ){
-        convert(context, attachment, onSuccess, onFailure)
+        convert(scope, attachment, onSuccess, onFailure)
     }
 
 
-    private fun convert(context: Context, attachment: Attachment, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
-        Single.fromCallable {
-            val keyDigest = MessageDigest.getInstance("SHA-256").digest(attachment.key)
-            val fileHash = android.util.Base64.encodeToString(keyDigest, android.util.Base64.NO_WRAP)
-            fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, listOf(SPEECH_TO_TEXT)))
-                .execute()
-        }.subscribeOn(Schedulers.io())
-            .concatMap { fileExistResponse ->
-                if(fileExistResponse.isSuccessful) {
+    /**
+     * Convert speech to text. Uses the caller-provided scope for lifecycle management.
+     */
+    private fun convert(scope: CoroutineScope, attachment: Attachment, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val keyDigest = MessageDigest.getInstance("SHA-256").digest(attachment.key)
+                    val fileHash = android.util.Base64.encodeToString(keyDigest, android.util.Base64.NO_WRAP)
+                    val fileExistResponse = fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, listOf(SPEECH_TO_TEXT))).execute()
+
+                    if (!fileExistResponse.isSuccessful) {
+                        throw Exception("File permission application failed")
+                    }
+
                     val fileExistResp = fileExistResponse.body()?.data
                     L.i { "[SpeechToTextManager]  fileExistResp:${fileExistResp}" }
-                    if(fileExistResp?.exists == true) {
-                        // 已存在，直接请求语音转文字服务
+
+                    if (fileExistResp?.exists == true) {
+                        // Already exists, directly request speech-to-text service
                         val requestBody = SpeechToTextRequestBody(
                             authorizeId = fileExistResp.authorizeId.toString(),
-                            key= Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
+                            key = Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
                         )
                         chatHttpClient.httpService.voiceToText(SecureSharedPrefsUtil.getToken(), requestBody)
-                    }else{
-                        // 不存在，先请求文件权限，拿到文件链接后上传音频文件到OSS，然后语音转文字服务
+                    } else {
+                        // Does not exist, upload audio file first then request speech-to-text service
                         val urlString = fileExistResp?.url
                         val filePath = attachment.path
                         val encryptedFile = File("$filePath.encrypt")
-                        if(urlString.isNullOrEmpty() || filePath.isNullOrEmpty() || !encryptedFile.exists()){
-                            // 文件不存在，直接返回失败结果
-                            Single.just(BaseResponse(ver = 1, status = -1, reason = "file is not exist", data = null))
-                        }else {
-                            // 上传本地已加密的音频文件
-                            val body: RequestBody = ProgressRequestBody(encryptedFile, null, null)
-                            val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
-                            if (!uploadToOSSCallResponse.isSuccessful) {
-                                Single.just(BaseResponse(ver = 1, status = -1, reason = "uploadToOSSCall execute failed:${uploadToOSSCallResponse.message}", data = null))
-                            }else {
-                                // 上传文件信息到服务器
-                                val keyDigest = MessageDigest.getInstance("SHA-256").digest(attachment.key)
-                                val fileHash = android.util.Base64.encodeToString(keyDigest, android.util.Base64.NO_WRAP)
-                                val uploadInfoCallResponse = fileShareRepo.uploadInfo(
-                                    UploadInfoReq(
-                                        SecureSharedPrefsUtil.getToken(), listOf(SPEECH_TO_TEXT),
-                                        fileExistResp.attachmentId, fileHash,
-                                        FileUtils.bytesToHex(attachment.digest), "MD5", "SHA-256", "SHA-512", "AES-CBC-256", attachment.size
-                                    )
-                                ).execute()
-
-                                if (uploadInfoCallResponse.isSuccessful) {
-                                    // 上传文件信息到服务器成功，请求语音转文字服务
-                                    val authorityId = uploadInfoCallResponse.body()?.data?.authorizeId ?: 0
-                                    val requestBody = SpeechToTextRequestBody(
-                                        authorizeId = authorityId.toString(),
-                                        key= Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
-                                    )
-                                    chatHttpClient.httpService.voiceToText(SecureSharedPrefsUtil.getToken(), requestBody)
-                                } else {
-                                    L.w { "[SpeechToTextManager] upload attachment fail${uploadInfoCallResponse.message()}" }
-                                    Single.just(BaseResponse(ver = 1, status = -1, reason = "upload attachment fail:${uploadInfoCallResponse.message()}", data = null))
-                                }
-                            }
+                        if (urlString.isNullOrEmpty() || filePath.isNullOrEmpty() || !encryptedFile.exists()) {
+                            throw Exception("file is not exist")
                         }
+
+                        // Upload encrypted audio file
+                        val body: RequestBody = ProgressRequestBody(encryptedFile, null, null)
+                        val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
+                        if (!uploadToOSSCallResponse.isSuccessful) {
+                            throw Exception("uploadToOSSCall execute failed:${uploadToOSSCallResponse.message}")
+                        }
+
+                        // Upload file info to server
+                        val keyDigest2 = MessageDigest.getInstance("SHA-256").digest(attachment.key)
+                        val fileHash2 = android.util.Base64.encodeToString(keyDigest2, android.util.Base64.NO_WRAP)
+                        val uploadInfoCallResponse = fileShareRepo.uploadInfo(
+                            UploadInfoReq(
+                                token = SecureSharedPrefsUtil.getToken(),
+                                numbers = listOf(SPEECH_TO_TEXT),
+                                attachmentId = fileExistResp.attachmentId,
+                                fileHash = fileHash2,
+                                cipherHash = FileUtils.bytesToHex(attachment.digest),
+                                cipherHashType = "MD5",
+                                hashAlg = "SHA-256",
+                                keyAlg = "SHA-512",
+                                encAlg = "AES-CBC-256",
+                                fileSize = attachment.size,
+                                attachmentType = AttachmentUploadType.VOICE
+                            )
+                        ).execute()
+
+                        if (!uploadInfoCallResponse.isSuccessful) {
+                            L.w { "[SpeechToTextManager] upload attachment fail${uploadInfoCallResponse.message()}" }
+                            throw Exception("upload attachment fail:${uploadInfoCallResponse.message()}")
+                        }
+
+                        // Upload succeeded, request speech-to-text service
+                        val authorityId = uploadInfoCallResponse.body()?.data?.authorizeId ?: 0
+                        val requestBody = SpeechToTextRequestBody(
+                            authorizeId = authorityId.toString(),
+                            key = Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
+                        )
+                        chatHttpClient.httpService.voiceToText(SecureSharedPrefsUtil.getToken(), requestBody)
                     }
-                }else{
-                    Single.just(BaseResponse(ver = 1, status = -1, reason = "File permission application failed", data = null))
                 }
-            }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(context as LifecycleOwner))
-            .subscribe({
-                if(it.status == 0 && it.data != null){
-                    L.d { "[SpeechToTextManager] speechToText response onSuccess:${it}" }
-                    val concatenatedText = it.data?.segments?.map { segment ->
+
+                if (result.status == 0 && result.data != null) {
+                    L.d { "[SpeechToTextManager] speechToText response onSuccess:${result}" }
+                    val concatenatedText = result.data?.segments?.map { segment ->
                         segment.text ?: ""
                     }?.joinToString(" ")
                     L.d { "[SpeechToTextManager] speechToText concatenatedText:${concatenatedText}" }
                     onSuccess(concatenatedText.toString())
-                }else{
-                    L.e { "[SpeechToTextManager] speechToText response error:${it}" }
-                    onFailure(Exception(it.toString()))
+                } else {
+                    L.e { "[SpeechToTextManager] speechToText response error:${result}" }
+                    onFailure(Exception(result.toString()))
                 }
-            }, {
-                L.e { "[SpeechToTextManager]speechToText response onFailure:${it}" }
-                onFailure(it as Exception)
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[SpeechToTextManager] speechToText response onFailure:${e}" }
+                onFailure(e)
+            }
+        }
     }
 }

@@ -10,6 +10,13 @@
     app:layout_constraintTop_toTopOf="parent"
     app:layout_constraintWidth="match_parent">
 
+    <include
+        android:id="@+id/ll_new_msg_divider"
+        layout="@layout/chat_item_new_msg_divider"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tv_day_time"
         android:layout_width="wrap_content"
@@ -22,7 +29,7 @@
         android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/ll_new_msg_divider"
         tools:text="FRI ,DEC 25" />
 
     <com.difft.android.chat.ui.ChatMessageContainerView
@@ -88,76 +95,14 @@
 
         </LinearLayout>
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/cl_forward_content"
+        <!-- 单条转发消息的信息头（时间+来源） -->
+        <include
+            android:id="@+id/forward_info_zone"
+            layout="@layout/chat_item_forward_zone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            tools:minHeight="20dp"
-            tools:visibility="visible">
-
-            <com.difft.android.chat.ui.MessageForwardView
-                android:id="@+id/messageForwardView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <TextView
-                android:id="@+id/v_forward_cover"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:background="@drawable/chat_message_confidential_bg"
-                android:gravity="center"
-                android:text="@string/chat_tap_to_view"
-                android:textColor="@color/t.white"
-                android:textSize="16sp"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="@+id/messageForwardView"
-                app:layout_constraintEnd_toEndOf="@+id/messageForwardView"
-                app:layout_constraintStart_toStartOf="@+id/messageForwardView"
-                app:layout_constraintTop_toTopOf="@+id/messageForwardView" />
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/v_forward_attachment_fail"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:background="@color/reactions_screen_light_shade_color"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="@+id/messageForwardView"
-                app:layout_constraintEnd_toEndOf="@+id/messageForwardView"
-                app:layout_constraintStart_toStartOf="@+id/messageForwardView"
-                app:layout_constraintTop_toTopOf="@+id/messageForwardView">
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_fail"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_icon_message_sending"
-                    app:layout_constraintBottom_toTopOf="@+id/tv_fail"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintVertical_chainStyle="packed"
-                    app:tint="@color/t.primary" />
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_fail"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:gravity="center"
-                    android:text="@string/download_failed"
-                    android:textColor="@color/t.primary"
-                    android:textSize="14sp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/iv_fail"
-                    app:layout_constraintVertical_chainStyle="packed" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </androidx.constraintlayout.widget.ConstraintLayout>
+            tools:visibility="visible" />
 
         <FrameLayout
             android:id="@+id/contentFrame"
@@ -178,13 +123,35 @@
             tools:visibility="visible" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/cl_message_time"
+            android:id="@+id/ll_time_wrapper"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:layout_marginTop="-26dp"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="3dp">
+            android:layout_marginTop="-26dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_confidential_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="3dp"
+                android:background="@drawable/chat_message_item_time_bg"
+                android:padding="4dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_confidential_tip"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/cl_message_time"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_goneMarginEnd="8dp"
+                tools:visibility="visible" />
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_message_time"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:paddingHorizontal="8dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
             <TextView
                 android:id="@+id/textViewTime"
@@ -241,8 +208,9 @@
                     tools:visibility="visible" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-        </androidx.constraintlayout.widget.ConstraintLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </com.difft.android.chat.ui.ChatMessageContainerView>
 
@@ -372,7 +340,25 @@
         android:src="@drawable/chat_icon_message_sent_failed"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/contentContainer"
+        app:layout_constraintEnd_toStartOf="@+id/tv_voice_speed"
+        app:layout_constraintTop_toTopOf="@+id/contentContainer"
+        tools:visibility="visible" />
+
+    <!-- Voice playback speed button - shown only during audio playback -->
+    <!-- Position: right of iv_send_fail, left of contentContainer -->
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_voice_speed"
+        android:layout_width="36dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/chat_voice_speed_btn_bg"
+        android:gravity="center"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/contentContainer"
         app:layout_constraintEnd_toStartOf="@+id/contentContainer"
         app:layout_constraintTop_toTopOf="@+id/contentContainer"
+        tools:text="1×"
         tools:visibility="visible" />
 </com.difft.android.chat.ui.ChatMessageItemView>

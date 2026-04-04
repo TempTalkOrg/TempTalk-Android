@@ -11,8 +11,8 @@
 
     <com.luck.picture.lib.widget.MediumBoldTextView
         android:id="@+id/tvCheck"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
         android:layout_alignParentEnd="true"
         android:layout_margin="8dp"
         android:background="@drawable/ps_checkbox_selector"

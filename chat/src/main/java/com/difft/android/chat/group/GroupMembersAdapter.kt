@@ -64,4 +64,6 @@ data class GroupMemberModel(
     var going: String? = null,
     var isGroupUser: Boolean? = false,
     var isRemovable: Boolean? = true,
+    /** Name without remark for avatar letter display */
+    var letterName: String? = null,
 )

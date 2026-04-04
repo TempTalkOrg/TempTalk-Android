@@ -1,5 +1,4 @@
 /**
- * Copyright (C) 2014 Open Whisper Systems
  * <p>
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +29,7 @@ import androidx.appcompat.widget.LinearLayoutCompat;
 
 import com.difft.android.chat.R;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.util.ServiceUtil;
 import org.thoughtcrime.securesms.util.Util;
 import org.thoughtcrime.securesms.util.ViewUtil;
@@ -44,7 +43,7 @@ import java.util.Set;
  * has been opened and what its height would be.
  */
 public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
-  private static final String TAG = Log.tag(KeyboardAwareLinearLayout.class);
+  private static final String TAG = "KeyboardAwareLinearLayout";
 
   private static final long KEYBOARD_DEBOUNCE = 150;
 
@@ -103,7 +102,7 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
     int oldRotation = rotation;
     rotation = getDeviceRotation();
     if (oldRotation != rotation) {
-      Log.i(TAG, "rotation changed");
+      L.i(() -> TAG + " rotation changed");
       onKeyboardClose();
     }
   }
@@ -147,7 +146,7 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
       }
 
       if (bottomInset != 0 && (viewInset == 0 || viewInset == statusBarHeight)) {
-        Log.i(TAG, "Updating view inset based on WindowInsets. viewInset: " + viewInset + " windowInset: " + bottomInset);
+        L.i(() -> TAG + " Updating view inset based on WindowInsets. viewInset: " + viewInset + " windowInset: " + bottomInset);
         viewInset = bottomInset;
       }
     }
@@ -168,6 +167,7 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
       }
     } catch (NoSuchFieldException | IllegalAccessException e) {
       // Do nothing
+      L.w(e, () -> TAG + " getViewInset failed");
     }
     return statusBarHeight;
   }
@@ -185,7 +185,7 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
   }
 
   protected void onKeyboardOpen(int keyboardHeight) {
-    Log.i(TAG, "onKeyboardOpen(" + keyboardHeight + ")");
+    L.i(() -> TAG + " onKeyboardOpen(" + keyboardHeight + ")");
     keyboardOpen = true;
     openedAt = System.currentTimeMillis();
 
@@ -194,12 +194,12 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
 
   protected void onKeyboardClose() {
     if (System.currentTimeMillis() - openedAt < KEYBOARD_DEBOUNCE) {
-      Log.i(TAG, "Delaying onKeyboardClose()");
+      L.i(() -> TAG + " Delaying onKeyboardClose()");
       postDelayed(this::updateKeyboardState, KEYBOARD_DEBOUNCE);
       return;
     }
 
-    Log.i(TAG, "onKeyboardClose()");
+    L.i(() -> TAG + " onKeyboardClose()");
     keyboardOpen = false;
     openedAt = 0;
     notifyHiddenListeners();

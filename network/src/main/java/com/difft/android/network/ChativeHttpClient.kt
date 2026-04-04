@@ -8,7 +8,6 @@ import okhttp3.OkHttpClient
 import okhttp3.TlsVersion
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import retrofit2.adapter.rxjava3.RxJava3CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import java.util.concurrent.TimeUnit
@@ -41,7 +40,7 @@ class ChativeHttpClient(
             } else {
                 addInterceptor(HeaderInterceptor(authProvider))
             }
-            addInterceptor(HttpErrorReportInterceptor())
+            addInterceptor(HttpClientInterceptor())
             if (BuildConfig.DEBUG) {
                 //如果想使用抓包工具获取接口数据，可以开启这个
 //                val manager = TrustAllSSLSocketFactory.TrustAllManager()
@@ -66,7 +65,6 @@ class ChativeHttpClient(
         .connectionSpecs(listOf(customConnectionSpec))
         .build()
     private val retrofit: Retrofit = Retrofit.Builder()
-        .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
         .addConverterFactory(ScalarsConverterFactory.create())
         .addConverterFactory(GsonConverterFactory.create(gson))
         .baseUrl(baseUrl)

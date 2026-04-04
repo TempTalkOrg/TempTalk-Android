@@ -23,17 +23,27 @@ import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
-import com.kongzue.dialogx.dialogs.BottomDialog
-import com.kongzue.dialogx.interfaces.OnBindView
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.globalServices
+import com.difft.android.chat.compose.ConfidentialTipDialogContent
+import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.requests.ConversationSetRequestBody
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import com.luck.picture.lib.entity.LocalMedia
 import util.FileUtils
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
+import org.thoughtcrime.securesms.mediasend.VideoTrimTransform
+import org.thoughtcrime.securesms.video.VideoUtil
 import org.thoughtcrime.securesms.mediasend.v2.HudCommand
 import org.thoughtcrime.securesms.mediasend.v2.MediaAnimations
+import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionActivity
 import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionState
 import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionViewModel
 import org.thoughtcrime.securesms.mediasend.v2.MediaValidator
@@ -48,6 +58,11 @@ import org.thoughtcrime.securesms.util.views.TouchInterceptingFrameLayout
 import org.thoughtcrime.securesms.util.visible
 import org.thoughtcrime.securesms.video.TranscodingQuality
 import org.thoughtcrime.securesms.video.videoconverter.VideoThumbnailsRangeSelectorView
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.annotation.meta.Exhaustive
@@ -55,7 +70,12 @@ import javax.annotation.meta.Exhaustive
 /**
  * Allows the user to view and edit selected media.
  */
+@AndroidEntryPoint
 class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoThumbnailsRangeSelectorView.RangeDragListener {
+
+    @Inject
+    @ChativeHttpClientModule.Chat
+    lateinit var httpClient: ChativeHttpClient
 
     private val sharedViewModel: MediaSelectionViewModel by viewModels(
         ownerProducer = { requireActivity() }
@@ -68,7 +88,11 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
     private lateinit var qualityButton: ImageView
     private lateinit var saveButton: View
     private lateinit var sendButton: ImageView
+    private lateinit var inputContainer: View
+    private lateinit var inputArea: View
+    private lateinit var confidentialLine: View
     private lateinit var addMessageButton: AppCompatTextView
+    private lateinit var confidentialToggle: ImageView
     private lateinit var pager: ViewPager2
     private lateinit var controls: ConstraintLayout
     private lateinit var selectionRecycler: RecyclerView
@@ -96,7 +120,11 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
         qualityButton = view.findViewById(R.id.quality_selector)
         saveButton = view.findViewById(R.id.save_to_media)
         sendButton = view.findViewById(R.id.send)
+        inputContainer = view.findViewById(R.id.input_container)
+        inputArea = view.findViewById(R.id.input_area)
+        confidentialLine = view.findViewById(R.id.confidential_line)
         addMessageButton = view.findViewById(R.id.add_a_message)
+        confidentialToggle = view.findViewById(R.id.confidential_toggle)
         pager = view.findViewById(R.id.media_pager)
         controls = view.findViewById(R.id.controls)
         selectionRecycler = view.findViewById(R.id.selection_recycler)
@@ -112,15 +140,15 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
         val pagerAdapter = MediaReviewFragmentPagerAdapter(this)
 
-        sharedViewModel.hudCommands
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe {
+        viewLifecycleOwner.lifecycleScope.launch {
+            sharedViewModel.hudCommands.collect {
+                if (!isAdded || view == null) return@collect
                 when (it) {
                     HudCommand.ResumeEntryTransition -> startPostponedEnterTransition()
                     else -> Unit
                 }
             }
+        }
 
         pager.adapter = pagerAdapter
 
@@ -154,6 +182,17 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
         addMessageButton.setOnClickListener {
             AddMessageDialogFragment.show(parentFragmentManager, sharedViewModel.state.value?.message, false)
+        }
+
+        confidentialToggle.setOnClickListener {
+            val newMode = if (sharedViewModel.state.value?.confidentialMode == 1) 0 else 1
+            if (newMode == 1 && globalServices.userManager.getUserData()?.hasShownConfidentialTip != true) {
+                showConfidentialTipDialog {
+                    syncConfidentialModeToServer(newMode)
+                }
+            } else {
+                syncConfidentialModeToServer(newMode)
+            }
         }
 
         sendButton.setOnClickListener {
@@ -193,6 +232,7 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
             presentPager(state)
             presentAddMessageEntry(state.message)
+            presentConfidentialToggle(state)
             presentImageQualityToggle(state)
             if (state.quality != sentMediaQuality) {
                 presentQualityToggleToast(state)
@@ -205,10 +245,12 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
             computeViewStateAndAnimate(state)
         }
 
-        sharedViewModel.mediaErrors
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe(this::handleMediaValidatorFilterError)
+        viewLifecycleOwner.lifecycleScope.launch {
+            sharedViewModel.mediaErrors.collect { error ->
+                if (!isAdded || view == null) return@collect
+                handleMediaValidatorFilterError(error)
+            }
+        }
 
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -241,7 +283,7 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
                     getString(R.string.MediaReviewFragment__photo_set_to_standard_quality)
                 }
             } else {
-                Log.i(TAG, "Could not display quality toggle toast for attachment of type: ${media.mimeType}")
+                L.i { "$TAG Could not display quality toggle toast for attachment of type: ${media.mimeType}" }
                 return
             }
         } else {
@@ -292,20 +334,29 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
             .setInterpolator(MediaAnimations.interpolator)
             .alpha(1f)
 
-        sharedViewModel
-            .send()
-            .to(RxUtil.autoDispose(this))
-            .subscribe(
-                { result -> callback.onSentWithResult(result) },
-                { error -> callback.onSendError(error) },
-                { callback.onSentWithoutResult() }
-            )
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = sharedViewModel.send()
+                callback.onSentWithResult(result)
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                callback.onSendError(e)
+            }
+        }
     }
 
     private fun presentAddMessageEntry(message: CharSequence?) {
+        val hasMessage = !message.isNullOrEmpty()
         addMessageButton.setText(
-            message.takeIf { !it.isNullOrEmpty() } ?: getString(R.string.MediaReviewFragment__add_a_message),
+            if (hasMessage) message else getString(R.string.MediaReviewFragment__add_a_message),
             TextView.BufferType.SPANNABLE
+        )
+        addMessageButton.setTextColor(
+            ContextCompat.getColor(
+                requireContext(),
+                if (hasMessage) com.difft.android.base.R.color.t_primary else com.difft.android.base.R.color.t_disable
+            )
         )
     }
 
@@ -375,11 +426,45 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
         videoSizeHint.text = if (state.isVideoTrimmingVisible) {
             val seconds = trimData.getDuration().inWholeSeconds
-            val bytes = TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+            val bytes = calculateExpectedFileSize(focusedMedia, trimData, state)
             String.format(Locale.getDefault(), "%d:%02d • %s", seconds / 60, seconds % 60, MemoryUnitFormat.formatBytes(bytes, MemoryUnitFormat.MEGA_BYTES, true))
         } else {
             null
         }
+    }
+
+    /**
+     * Calculate expected file size based on whether compression will be needed.
+     * Returns original file size if no compression needed, otherwise returns estimated compressed size.
+     */
+    private fun calculateExpectedFileSize(media: LocalMedia, trimData: org.thoughtcrime.securesms.mediasend.v2.videos.VideoTrimData, state: MediaSelectionState): Long {
+        val fileSize = File(media.realPath).length()
+
+        // Trimming always requires transcode -> show estimated size
+        if (trimData.isDurationEdited) {
+            return TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+        }
+
+        // Check if compression is needed
+        val constraints = MediaConstraints.getPushMediaConstraints(state.quality)
+        val maxFileSize = constraints.getCompressedVideoMaxSize(requireContext())
+        val (inputBitRate, targetBitRate) = getBitrateInfo(media.realPath, constraints)
+
+        val compressionNeeded = VideoTrimTransform.needsCompression(inputBitRate, targetBitRate, fileSize, maxFileSize)
+
+        return if (compressionNeeded) {
+            TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+        } else {
+            fileSize // No compression, fast remux keeps original size
+        }
+    }
+
+    /**
+     * Get input bitrate and target bitrate for compression decision.
+     */
+    private fun getBitrateInfo(inputPath: String, constraints: MediaConstraints): Pair<Int, Int> {
+        val preset = constraints.videoTranscodingSettings
+        return VideoUtil.getBitrateInfo(inputPath, preset.videoBitRate, preset.audioBitRate)
     }
 
     private fun computeViewStateAndAnimate(state: MediaSelectionState) {
@@ -388,6 +473,7 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
         val animators = mutableListOf<Animator>()
 
         animators.addAll(computeAddMessageAnimators(state))
+        animators.addAll(computeConfidentialToggleAnimators(state))
         animators.addAll(computeAddMediaButtonsAnimators(state))
         animators.addAll(computeSendButtonAnimators(state))
         animators.addAll(computeSaveButtonAnimators(state))
@@ -451,14 +537,26 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
 
     private fun computeAddMessageAnimators(state: MediaSelectionState): List<Animator> {
         return if (!state.isTouchEnabled) {
+            inputArea.visibility = View.INVISIBLE
+            confidentialLine.visibility = View.GONE
             listOf(
-                MediaReviewAnimatorController.getFadeOutAnimator(addMessageButton)
+                MediaReviewAnimatorController.getFadeOutAnimator(inputContainer)
             )
         } else {
+            val isConfidential = state.confidentialMode == 1
+            if (isConfidential) {
+                inputArea.visibility = View.VISIBLE
+                confidentialLine.visibility = View.VISIBLE
+            }
             listOf(
-                MediaReviewAnimatorController.getFadeInAnimator(addMessageButton)
+                MediaReviewAnimatorController.getFadeInAnimator(inputContainer)
             )
         }
+    }
+
+    private fun computeConfidentialToggleAnimators(state: MediaSelectionState): List<Animator> {
+        confidentialToggle.visibility = if (state.showConfidentialToggle) View.VISIBLE else View.GONE
+        return emptyList()
     }
 
     private fun computeAddMediaButtonsAnimators(state: MediaSelectionState): List<Animator> {
@@ -532,8 +630,77 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
     }
 
 
+    private fun presentConfidentialToggle(state: MediaSelectionState) {
+        if (state.showConfidentialToggle) {
+            val isConfidential = state.confidentialMode == 1
+            if (isConfidential) {
+                confidentialToggle.setImageResource(R.drawable.chat_btn_confidential_mode_enable)
+                confidentialToggle.imageTintList = null
+            } else {
+                confidentialToggle.setImageResource(R.drawable.chat_btn_confidential_mode_disable)
+                confidentialToggle.imageTintList = ContextCompat.getColorStateList(requireContext(), com.difft.android.base.R.color.icon)
+            }
+            applyConfidentialInputStyle(isConfidential)
+        }
+    }
+
+    private fun applyConfidentialInputStyle(isConfidential: Boolean) {
+        if (isConfidential) {
+            val overlayColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg_confidential_area)
+            inputArea.setBackgroundColor(overlayColor)
+            inputArea.visibility = View.VISIBLE
+            inputContainer.setBackgroundResource(R.drawable.chat_msg_input_bg_confidential)
+            confidentialLine.visibility = View.VISIBLE
+        } else {
+            inputArea.visibility = View.INVISIBLE
+            inputContainer.setBackgroundResource(R.drawable.chat_msg_input_field_bg)
+            confidentialLine.visibility = View.GONE
+        }
+    }
+
+    private fun syncConfidentialModeToServer(mode: Int) {
+        val conversationId = (requireActivity() as? MediaSelectionActivity)?.conversationId
+        if (conversationId.isNullOrEmpty()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    httpClient.httpService.fetchConversationSet(
+                        SecureSharedPrefsUtil.getBasicAuth(),
+                        ConversationSetRequestBody(conversationId, confidentialMode = mode)
+                    )
+                }
+                if (result.status == 0) {
+                    sharedViewModel.setConfidentialMode(mode)
+                } else {
+                    com.difft.android.base.widget.ToastUtil.show(getString(R.string.operation_failed))
+                }
+            } catch (e: Exception) {
+                L.e(e) { "$TAG syncConfidentialMode failed" }
+                com.difft.android.base.widget.ToastUtil.show(getString(R.string.operation_failed))
+            }
+        }
+    }
+
+    private fun showConfidentialTipDialog(onConfirm: () -> Unit) {
+        globalServices.userManager.update { hasShownConfidentialTip = true }
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = requireActivity(),
+            onDismiss = { }
+        ) {
+            ConfidentialTipDialogContent(
+                title = getString(R.string.chat_confidential_tip_title),
+                content = getString(R.string.chat_confidential_tip_content),
+                onConfirm = {
+                    dialog?.dismiss()
+                    onConfirm()
+                }
+            )
+        }
+    }
+
     companion object {
-        private val TAG = Log.tag(MediaReviewFragment::class.java)
+        private val TAG = L.tag(MediaReviewFragment::class.java)
     }
 
     interface Callback {
@@ -548,38 +715,36 @@ class MediaReviewFragment : Fragment(R.layout.v2_media_review_fragment), VideoTh
         sharedViewModel.onEditVideoDuration(context = requireContext(), totalDurationUs = duration, startTimeUs = minValue, endTimeUs = maxValue, touchEnabled = end)
     }
 
-    private var qualitySelectorDialog: BottomDialog? = null
-
     private fun showQualitySelectorDialog() {
-
         val standardQuality = sharedViewModel.state.value?.quality == SentMediaQuality.STANDARD
 
-        qualitySelectorDialog = BottomDialog.build()
-            .setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg3))
-            .setCustomView(object : OnBindView<BottomDialog?>(R.layout.layout_media_quality_select_dialog) {
-                override fun onBind(dialog: BottomDialog?, v: View) {
-                    val btnStandard = v.findViewById<TextView>(R.id.btn_standard)
-                    val btnHigh = v.findViewById<TextView>(R.id.btn_high)
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = requireActivity(),
+            layoutId = R.layout.layout_media_quality_select_dialog,
+            onDismiss = { /* Dialog dismissed */ },
+            onViewCreated = { v ->
+                val btnStandard = v.findViewById<TextView>(R.id.btn_standard)
+                val btnHigh = v.findViewById<TextView>(R.id.btn_high)
 
-                    if (standardQuality) {
-                        btnStandard.setBackgroundResource(R.drawable.media_quality_select_background)
-                        btnHigh.setBackgroundResource(0)
-                    } else {
-                        btnStandard.setBackgroundResource(0)
-                        btnHigh.setBackgroundResource(R.drawable.media_quality_select_background)
-                    }
-
-                    btnStandard.setOnClickListener {
-                        qualitySelectorDialog?.dismiss()
-                        sharedViewModel.setSentMediaQuality(SentMediaQuality.STANDARD)
-                    }
-
-                    btnHigh.setOnClickListener {
-                        qualitySelectorDialog?.dismiss()
-                        sharedViewModel.setSentMediaQuality(SentMediaQuality.HIGH)
-                    }
+                if (standardQuality) {
+                    btnStandard.setBackgroundResource(R.drawable.media_quality_select_background)
+                    btnHigh.setBackgroundResource(0)
+                } else {
+                    btnStandard.setBackgroundResource(0)
+                    btnHigh.setBackgroundResource(R.drawable.media_quality_select_background)
                 }
-            })
-            .show()
+
+                btnStandard.setOnClickListener {
+                    dialog?.dismiss()
+                    sharedViewModel.setSentMediaQuality(SentMediaQuality.STANDARD)
+                }
+
+                btnHigh.setOnClickListener {
+                    dialog?.dismiss()
+                    sharedViewModel.setSentMediaQuality(SentMediaQuality.HIGH)
+                }
+            }
+        )
     }
 }

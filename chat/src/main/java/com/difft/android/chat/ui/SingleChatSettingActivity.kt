@@ -7,15 +7,11 @@ import android.text.TextUtils
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.widget.AppCompatTextView
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import autodispose2.androidx.lifecycle.autoDispose
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import org.difft.app.database.getCommonGroupsCount
@@ -32,9 +28,7 @@ import com.difft.android.chat.databinding.ChatActivitySettingBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
-import com.difft.android.chat.setting.ChatSettingUtils
-import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
+import com.difft.android.chat.setting.SaveToPhotosSettingsActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
@@ -42,29 +36,25 @@ import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.responses.MuteStatus
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.BottomDialog
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.interfaces.OnBindView
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Single
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class SingleChatSettingActivity : BaseActivity() {
-
-    @Inject
-    lateinit var messageArchiveManager: MessageArchiveManager
 
     @Inject
     lateinit var dbMessageStore: DBMessageStore
@@ -77,6 +67,9 @@ class SingleChatSettingActivity : BaseActivity() {
 
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
+
+    @Inject
+    lateinit var userManager: com.difft.android.base.user.UserManager
 
     private val chatSettingViewModel: ChatSettingViewModel by viewModels(extrasProducer = {
         defaultViewModelCreationExtras.withCreationCallback<ChatSettingViewModelFactory> {
@@ -107,28 +100,36 @@ class SingleChatSettingActivity : BaseActivity() {
 
         if (TextUtils.isEmpty(contactId)) return
 
-        // chatSettingViewModel.setCurrentTarget(For.Account(contactId)) - 不再需要，因为通过构造方法传递
-
         if (contactId.isBotId()) {
-            mBinding.relMember.visibility = View.GONE
+            mBinding.relInfo.visibility = View.GONE
         } else {
             mBinding.relMember.visibility = View.VISIBLE
             mBinding.relMember.setOnClickListener {
-                Single.fromCallable {
-                    Optional.ofNullable(wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId)))
-                }
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({ contact ->
-                        if (contact.isPresent) {
-                            CreateGroupActivity.startActivity(this, arrayListOf(contact.get().id))
-                        } else {
-                            TipDialog.show(getString(R.string.contact_not_in_list))
+                lifecycleScope.launch {
+                    try {
+                        val contact = withContext(Dispatchers.IO) {
+                            wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId))
                         }
-                    }, { error ->
-                        error.printStackTrace()
-                    })
+                        if (contact != null) {
+                            CreateGroupActivity.startActivity(this@SingleChatSettingActivity, arrayListOf(contact.id))
+                        } else {
+                            ToastUtil.showLong(getString(R.string.contact_not_in_list))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[SingleChatSettingActivity] createGroup error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
+        }
+
+        mBinding.llNameCard.setOnClickListener {
+            ContactDetailActivity.startActivity(this, contactId)
+        }
+
+        mBinding.saveToPhotosContainer.setOnClickListener {
+            SaveToPhotosSettingsActivity.start(this, For.Account(contactId))
         }
 
         mBinding.disappearingTimeContainer.setOnClickListener {
@@ -149,41 +150,52 @@ class SingleChatSettingActivity : BaseActivity() {
             SearchMessageActivity.startActivity(this@SingleChatSettingActivity, contactId, false, null)
         }
 
-        ContactorUtil.getContactWithID(this, contactId)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contact ->
-                if (contact.isPresent) {
-                    val contactor = contact.get()
-                    mContact = contactor
-                    mBinding.avatar.setAvatar(contactor)
-                    mBinding.tvName.text = contactor.getDisplayNameForUI()
-                    mBinding.title.text = contactor.getDisplayNameForUI()
+        lifecycleScope.launch {
+            try {
+                val contact = withContext(Dispatchers.IO) {
+                    wcdb.getContactorFromAllTable(contactId)
+                }
+                if (contact != null) {
+                    mContact = contact
+                    mBinding.avatar.setAvatar(contact)
+                    mBinding.tvName.text = contact.getDisplayNameForUI()
+                    mBinding.title.text = contact.getDisplayNameForUI()
 
                     mBinding.vInfo.setOnClickListener {
-                        ContactDetailActivity.startActivity(this, contactId)
+                        ContactDetailActivity.startActivity(this@SingleChatSettingActivity, contactId)
                     }
                 }
-            }, { error ->
-                error.printStackTrace()
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[SingleChatSettingActivity] getContactWithID error: ${e.stackTraceToString()}" }
+            }
+        }
 
-        refreshConversationSetting()
-
+        // Subscribe to conversationSet for all config-related UI updates
         chatSettingViewModel.conversationSet
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.blockStatus == 1) {
+            .filterNotNull()
+            .onEach { conversationSet ->
+                // Update block status (hidden for bots)
+                if (contactId.isBotId()) {
+                    mBinding.clBlock.visibility = View.GONE
+                } else if (conversationSet.blockStatus == 1) {
+                    mBinding.clBlock.visibility = View.VISIBLE
                     mBinding.tvUnblock.visibility = View.VISIBLE
                     mBinding.tvBlock.visibility = View.GONE
                 } else {
+                    mBinding.clBlock.visibility = View.VISIBLE
                     mBinding.tvUnblock.visibility = View.GONE
                     mBinding.tvBlock.visibility = View.VISIBLE
                 }
-            }, {
-                it.printStackTrace()
-            })
+                // Update mute status
+                mBinding.switch2mute1on1.isChecked = conversationSet.isMuted
+                // Update save to photos
+                mBinding.saveToPhotosText.text = getSaveToPhotosDisplayText(conversationSet.saveToPhotos)
+                // Update disappearing time
+                mBinding.disappearingTimeText.text = conversationSet.messageExpiry.toArchiveTimeDisplayText()
+            }
+            .launchIn(lifecycleScope)
 
         mBinding.tvUnblock.setOnClickListener {
             chatSettingViewModel.setConversationConfigs(this, contactId, null, null, 0, null, false, getString(R.string.contact_unblocked))
@@ -199,6 +211,7 @@ class SingleChatSettingActivity : BaseActivity() {
         } else if (contactId.isBotId()) {
             mBinding.clMute.visibility = View.VISIBLE
             mBinding.relRemove.visibility = View.GONE
+            mBinding.clBlock.visibility = View.GONE
         } else {
             mBinding.clMute.visibility = View.VISIBLE
             if (wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId)) != null) {
@@ -208,14 +221,6 @@ class SingleChatSettingActivity : BaseActivity() {
                 }
             }
         }
-        // 20230803@w --------------------------------------------------------->
-        // Purpose: Setup mute switch for conversation
-        chatSettingViewModel.conversationSet.observeOn(AndroidSchedulers.mainThread())
-            .autoDispose(this)
-            .subscribe {
-                L.i { "BH_Lin: settings of conversation=$it" }
-                mBinding.switch2mute1on1.isChecked = it.isMuted == true
-            }
         mBinding.switch2mute1on1.setOnClickListener {
             var muteStatus = MuteStatus.UNMUTED.value
             if (mBinding.switch2mute1on1.isChecked) {
@@ -227,47 +232,18 @@ class SingleChatSettingActivity : BaseActivity() {
                 muteStatus = muteStatus
             )
         }
-        // 20230803@w ---------------------------------------------------------<
 
-        ChatSettingUtils.conversationSettingUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it == contactId) {
-                    refreshConversationSetting()
-                }
-            }, {
-                it.printStackTrace()
-            })
-
-        mBinding.switchStick.isChecked = isPined()
-        mBinding.switchStick.setOnClickListener {
-            if (isPined()) {
-                pinChattingRoom(false)
-            } else {
-                pinChattingRoom(true)
+        // 异步加载置顶状态
+        lifecycleScope.launch(Dispatchers.IO) {
+            val isPinned = isPined()
+            withContext(Dispatchers.Main) {
+                mBinding.switchStick.isChecked = isPinned
             }
         }
-
-        messageArchiveManager.getMessageArchiveTime(For.Account(contactId))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mBinding.disappearingTimeText.text = it.toArchiveTimeDisplayText()
-            }, { it.printStackTrace() })
-
-        MessageArchiveUtil.archiveTimeUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.first == contactId) {
-                    mBinding.disappearingTimeText.text = it.second.toArchiveTimeDisplayText()
-                }
-            }, { it.printStackTrace() })
-    }
-
-    private fun refreshConversationSetting() {
-        chatSettingViewModel.getConversationConfigs(this, listOf(contactId))
+        mBinding.switchStick.setOnClickListener {
+            val newPinned = mBinding.switchStick.isChecked
+            pinChattingRoom(newPinned)
+        }
     }
 
     override fun onResume() {
@@ -279,7 +255,7 @@ class SingleChatSettingActivity : BaseActivity() {
      * Handle the display and query of common groups between current user and contact
      */
     private fun handleCommonGroupsDisplay() {
-        if (contactId == globalServices.myId) {
+        if (contactId == globalServices.myId || contactId.isBotId()) {
             mBinding.relGroupInCommon.visibility = View.GONE
         } else {
             mBinding.relGroupInCommon.visibility = View.VISIBLE
@@ -304,7 +280,6 @@ class SingleChatSettingActivity : BaseActivity() {
                     }
                 } catch (e: Exception) {
                     L.e { "[SingleChatSettingActivity] Error querying common groups: ${e.stackTraceToString()}" }
-                    e.printStackTrace()
                     // Fallback: hide the section on error
                     mBinding.relGroupInCommon.visibility = View.GONE
                 }
@@ -317,72 +292,112 @@ class SingleChatSettingActivity : BaseActivity() {
     }
 
     private fun showRemoveDialog() {
-        MessageDialog.show(getString(R.string.contact_remove_dialog_title), getString(R.string.contact_remove_dialog_tips), getString(R.string.contact_remove_dialog_yes), getString(R.string.contact_remove_dialog_cancel))
-            .setOkButton { _, _ ->
-                ContactorUtil.fetchRemoveFriend(this@SingleChatSettingActivity, token, contactId)
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({
-                        if (it.status == 0) {
-                            wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contactId))
-                            dbMessageStore.removeRoomAndMessages(contactId)
-                            PopTip.show(getString(R.string.contact_removed))
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.contact_remove_dialog_title),
+            message = getString(R.string.contact_remove_dialog_tips),
+            confirmText = getString(R.string.contact_remove_dialog_yes),
+            cancelText = getString(R.string.contact_remove_dialog_cancel),
+            onConfirm = {
+                lifecycleScope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            ContactorUtil.fetchRemoveFriend(this@SingleChatSettingActivity, token, contactId)
+                        }
+                        if (result.status == 0) {
+                            withContext(Dispatchers.IO) {
+                                wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contactId))
+                                dbMessageStore.removeRoomAndMessages(contactId)
+                            }
+                            ToastUtil.show(getString(R.string.contact_removed))
                             ContactorUtil.emitContactsUpdate(listOf(contactId))
                             mBinding.relRemove.visibility = View.GONE
                             startActivity(Intent(this@SingleChatSettingActivity, activityProvider.getActivityClass(ActivityType.INDEX)))
                         } else {
-                            PopTip.show(it.reason)
+                            result.reason?.let { message -> ToastUtil.show(message) }
                         }
-                    }) {
-                        PopTip.show(it.message)
-                        it.printStackTrace()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        e.message?.let { message -> ToastUtil.show(message) }
+                        L.w { "[SingleChatSettingActivity] removeFriend error: ${e.stackTraceToString()}" }
                     }
-                false
+                }
             }
+        )
     }
 
     private fun showBlockDialog() {
-        BottomDialog.build()
-            .setBackgroundColor(ContextCompat.getColor(this, com.difft.android.base.R.color.bg3))
-            .setCustomView(object : OnBindView<BottomDialog?>(R.layout.layout_block_dialog) {
-                override fun onBind(dialog: BottomDialog?, v: View) {
-                    val tvBlockTips = v.findViewById<AppCompatTextView>(R.id.tv_block_tips)
-                    val tvBlock = v.findViewById<AppCompatTextView>(R.id.tv_block)
-//                    val tvBlockAndReport = v.findViewById<AppCompatTextView>(R.id.tv_block_and_report)
-                    val tvCancel = v.findViewById<AppCompatTextView>(R.id.tv_cancel)
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = this,
+            layoutId = R.layout.layout_block_dialog,
+            onDismiss = { /* Dialog dismissed */ },
+            onViewCreated = { v ->
+                val tvBlockTips = v.findViewById<AppCompatTextView>(R.id.tv_block_tips)
+                val tvBlock = v.findViewById<AppCompatTextView>(R.id.tv_block)
+//                val tvBlockAndReport = v.findViewById<AppCompatTextView>(R.id.tv_block_and_report)
+                val tvCancel = v.findViewById<AppCompatTextView>(R.id.tv_cancel)
 
-                    tvBlockTips.text = getString(R.string.contact_block_users_tips, PackageUtil.getAppName())
+                tvBlockTips.text = getString(R.string.contact_block_users_tips, PackageUtil.getAppName())
 
-                    tvBlock.setOnClickListener {
-                        chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
-                        dialog?.dismiss()
-                    }
-
-//                    tvBlockAndReport.setOnClickListener {
-//                        chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
-////                        chatSettingViewModel.reportContact(this@SingleChatSettingActivity, contactId)
-//                        dialog?.dismiss()
-//                    }
-
-                    tvCancel.setOnClickListener {
-                        dialog?.dismiss()
-                    }
+                tvBlock.setOnClickListener {
+                    dialog?.dismiss()
+                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
                 }
-            })
-            .show()
+
+//                tvBlockAndReport.setOnClickListener {
+//                    dialog?.dismiss()
+//                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
+////                    chatSettingViewModel.reportContact(this@SingleChatSettingActivity, contactId)
+//                }
+
+                tvCancel.setOnClickListener {
+                    dialog?.dismiss()
+                }
+            }
+        )
     }
 
     private fun pinChattingRoom(isPinned: Boolean) {
-        dbRoomStore.updatePinnedTime(
-            For.Account(contactId),
-            if (isPinned) System.currentTimeMillis() else null
-        )
-            .compose(RxUtil.getCompletableTransformer())
-            .autoDispose(this, Lifecycle.Event.ON_DESTROY)
-            .subscribe({}, { it.printStackTrace() })
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    dbRoomStore.updatePinnedTime(
+                        For.Account(contactId),
+                        if (isPinned) System.currentTimeMillis() else null
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[SingleChatSettingActivity] pinChattingRoom error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
-    private fun isPined(): Boolean {
-        return dbRoomStore.getPinnedTime(For.Account(contactId)).blockingGet().isPresent
+    private suspend fun isPined(): Boolean {
+        return dbRoomStore.getPinnedTime(For.Account(contactId)).isPresent
+    }
+
+    /**
+     * Get the display text for save to photos setting
+     * @param saveToPhotos null: follow global, 0: never, 1: always
+     */
+    private fun getSaveToPhotosDisplayText(saveToPhotos: Int?): String {
+        return when (saveToPhotos) {
+            1 -> getString(R.string.save_to_photos_always)
+            0 -> getString(R.string.save_to_photos_never)
+            else -> {
+                // Default - show dynamic status based on global setting
+                val globalEnabled = userManager.getUserData()?.saveToPhotos == true
+                val statusText = if (globalEnabled) {
+                    getString(R.string.save_to_photos_on)
+                } else {
+                    getString(R.string.save_to_photos_off)
+                }
+                getString(R.string.save_to_photos_default, statusText)
+            }
+        }
     }
 }

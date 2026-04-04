@@ -3,10 +3,9 @@ package org.thoughtcrime.securesms.messages
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
-import org.difft.app.database.convertToTextMessage
-import org.difft.app.database.delete
+import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LChatToCallController
@@ -15,15 +14,23 @@ import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.ContactsUpdater
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupUpdater
-import com.difft.android.chat.setting.ChatSettingUtils
+import com.difft.android.chat.message.LocalMessageCreator
+import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.messageserialization.db.store.DBRoomStore
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.websocket.api.messages.NotifyConversation
+import com.difft.android.websocket.api.messages.SignalServiceDataClass
+import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.difft.android.websocket.api.util.mapToMessageId
+import com.google.gson.Gson
+import dagger.hilt.android.qualifiers.ApplicationContext
 import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
-import com.difft.android.messageserialization.db.store.DBRoomStore
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
-import difft.android.messageserialization.model.Card
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
@@ -32,6 +39,7 @@ import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.QuotedAttachment
 import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.RealSource
+import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactAvatar
 import difft.android.messageserialization.model.SharedContactEmail
@@ -39,19 +47,16 @@ import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
 import difft.android.messageserialization.model.SharedContactPostalAddress
 import difft.android.messageserialization.model.TextMessage
-import com.google.gson.Gson
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.rx3.await
-import org.difft.app.database.WCDB
+import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.delete
+import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import com.difft.android.websocket.api.messages.NotifyConversation
-import com.difft.android.websocket.api.messages.TTNotifyMessage
-import com.difft.android.websocket.api.messages.SignalServiceDataClass
-import com.difft.android.websocket.api.util.mapToMessageId
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -60,7 +65,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class MessageContentProcessor @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val dbRoomStore: DBRoomStore,
     private val messageStore: MessageStore,
@@ -68,11 +73,11 @@ class MessageContentProcessor @Inject constructor(
     private val contactsUpdater: ContactsUpdater,
     private val groupUpdater: GroupUpdater,
     private val messageArchiveManager: MessageArchiveManager,
-    private val userManager: UserManager,
-    private val wcdb: WCDB,
-    private val lCallManager: LChatToCallController,
+    private val lCallManagerProvider: Provider<LChatToCallController>,
     private val receiptMessageHelper: ReceiptMessageHelper,
-    private val messageNotificationUtil: MessageNotificationUtil
+    private val messageNotificationUtil: MessageNotificationUtil,
+    private val conversationSettingsManager: ConversationSettingsManager,
+    private val localMessageCreator: LocalMessageCreator
 ) {
 
     private var tag: String = ""
@@ -96,57 +101,51 @@ class MessageContentProcessor @Inject constructor(
             handleNotifyMessage(content)
         } else if (content.signalServiceContent != null) {
             val serviceContent: SignalServiceProtos.Content = content.signalServiceContent ?: return null
-            if (content.signalServiceEnvelope.msgType?.number == SignalServiceProtos.Envelope.MsgType.MSG_SCHEDULE_NORMAL_VALUE) {//SCHEDULE message
-                return handleDataMessage(
-                    content,
-                    isSyncMessage = false,
-                    isScheduleMessage = true
-                )
-            } else if (serviceContent.hasNotifyMessage()) {
+            if (serviceContent.hasNotifyMessage()) {
                 return handleClientNotifyMessage(content)
             } else if (serviceContent.hasDataMessage()) {
                 return handleDataMessage(
                     content,
-                    isSyncMessage = false,
-                    isScheduleMessage = false
+                    isSyncMessage = false
                 )
             } else if (serviceContent.hasSyncMessage()) {
-                if(content.senderId != globalServices.myId) {
+                if (content.senderId != globalServices.myId) {
                     L.w { "[Message][${tag}] received sync message from another id, senderId:${content.senderId}." }
                     return null
                 }
                 if (serviceContent.syncMessage.hasSent()) {
                     return handleDataMessage(
                         content,
-                        isSyncMessage = true,
-                        isScheduleMessage = false
+                        isSyncMessage = true
                     )
                 } else if (serviceContent.syncMessage.readCount > 0) {
                     L.i { "[Message][${tag}] process sync read message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
-                    val readMessage = serviceContent.syncMessage.readList[0]
-                    if (readMessage.messageMode == SignalServiceProtos.Mode.CONFIDENTIAL) {
-                        val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(readMessage.timestamp)) ?: run {
-//                            val originalMessageId = "${readMessage.timestamp}${readMessage.sender.replace("+", "")}$DEFAULT_DEVICE_ID"
-                            L.i { "[Message] delete sync read confidential message, can't find the original message, message timestamp:${readMessage.timestamp}" }
-                            messageStore.savePendingMessage(content.messageId, readMessage.timestamp, content.signalServiceEnvelope.toByteArray())
-                            return null
+                    val firstReadMessage = serviceContent.syncMessage.readList[0]
+                    if (firstReadMessage.messageMode == SignalServiceProtos.Mode.CONFIDENTIAL) {
+                        // Sync: confidential message read on another device, delete locally
+                        serviceContent.syncMessage.readList.forEach { readMessage ->
+                            val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(readMessage.timestamp)) ?: run {
+                                L.i { "[Message] sync confidential delete, can't find message, timestamp:${readMessage.timestamp}" }
+                                messageStore.savePendingMessage(content.messageId, readMessage.timestamp, content.signalServiceEnvelope.toByteArray())
+                                return@forEach
+                            }
+                            L.i { "[Message][${tag}] delete sync read confidential message -> timestamp:${readMessage.timestamp}" }
+                            originalMessage.delete()
                         }
-                        L.i { "[Message][${tag}] delete sync read confidential message -> timestamp:${readMessage.timestamp}" }
-                        originalMessage.delete()
                     } else {
                         var forWhat: For? = null
-                        if (readMessage.readPosition.hasGroupId() && readMessage.readPosition.groupId.isEmpty.not()) {
-                            forWhat = For.Group(String(readMessage.readPosition.groupId.toByteArray()))
-                        } else if (!readMessage.sender.isNullOrEmpty()) {
-                            forWhat = For.Account(readMessage.sender)
+                        if (firstReadMessage.readPosition.hasGroupId() && firstReadMessage.readPosition.groupId.isEmpty.not()) {
+                            forWhat = For.Group(String(firstReadMessage.readPosition.groupId.toByteArray()))
+                        } else if (!firstReadMessage.sender.isNullOrEmpty()) {
+                            forWhat = For.Account(firstReadMessage.sender)
                         }
                         if (forWhat != null) {
                             setReadMark(
                                 forWhat,
-                                readMessage.readPosition.maxServerTime,
-                                readMessage.readPosition.maxSequenceId
+                                firstReadMessage.readPosition.maxServerTime,
+                                firstReadMessage.readPosition.maxSequenceId
                             )
-                            messageStore.updateMessageReadTime(forWhat.id, readMessage.timestamp).await()
+                            messageStore.updateMessageReadTime(forWhat.id, firstReadMessage.timestamp)
                         }
                     }
                 } else return null
@@ -156,7 +155,7 @@ class MessageContentProcessor @Inject constructor(
             } else if (serviceContent.hasCallMessage()) {
                 L.i { "[Message][${tag}] process call message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 LCallManager.removePendingMessage(content.signalServiceEnvelope.source, content.signalServiceEnvelope.timestamp.toString())
-                lCallManager.handleCallMessage(content)
+                lCallManagerProvider.get().handleCallMessage(content)
             }
         }
         return null
@@ -164,16 +163,13 @@ class MessageContentProcessor @Inject constructor(
 
     private suspend fun handleDataMessage(
         content: SignalServiceDataClass,
-        isSyncMessage: Boolean,
-        isScheduleMessage: Boolean
+        isSyncMessage: Boolean
     ): Message? {
         val (envelop, _, _) = content
         val message = if (isSyncMessage) content.signalServiceContent?.syncMessage?.sent?.message else content.signalServiceContent?.dataMessage
         if (message == null) return null
         val fromWho: For = For.Account(content.senderId)
-        if (isScheduleMessage) {
-            L.i { "[Message][${tag}] process schedule message -> timestamp:${envelop.timestamp}  device:${envelop.sourceDevice}  senderId:${content.senderId}  conversationId:${content.conversation.id}" }
-        } else if (isSyncMessage) {
+        if (isSyncMessage) {
             L.i { "[Message][${tag}] process sync message -> timestamp:${envelop.timestamp} conversationId:${content.conversation.id}" }
         } else {
             L.i { "[Message][${tag}] process data message -> timestamp:${envelop.timestamp}  device:${envelop.sourceDevice}  senderId:${content.senderId}  conversationId:${content.conversation.id}" }
@@ -201,7 +197,51 @@ class MessageContentProcessor @Inject constructor(
         messageBody: String,
         isSyncMessage: Boolean,
     ): Message? {
-        L.i { "[Message][${tag}] handle text message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}  senderId:${fromWho.id}  conversationId:${content.conversation.id}" }
+        L.i {
+            "[Message][${tag}] handle text message -> " +
+                    "timestamp:${content.signalServiceEnvelope.timestamp}, " +
+                    "device:${content.signalServiceEnvelope.sourceDevice}, " +
+                    "senderId:${fromWho.id}, " +
+                    "conversationId:${content.conversation.id}, " +
+                    "msgType=${content.signalServiceEnvelope.msgType}, " +
+                    "isRecall=${message.hasRecall()}, " +
+                    "isReaction=${message.hasReaction()}, " +
+                    "hasQuote=${message.hasQuote()}, " +
+                    "hasForward=${message.hasForwardContext()}, " +
+                    "hasScreenShot=${message.hasScreenShot()}, " +
+                    "hasBody=${messageBody.isNotEmpty()}, " +
+                    "attachmentCount=${message.attachmentsCount}, " +
+                    "contactCount=${message.contactCount}, " +
+                    "mentionCount=${message.mentionsCount}, " +
+                    "isSyncMessage=$isSyncMessage, " +
+                    "requiredVersion=${message.requiredProtocolVersion}, " +
+                    "currentVersion=${SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE}"
+        }
+
+        val systemShowTimestamp = content.signalServiceEnvelope.systemShowTimestamp
+
+        // Check protocol version first - if message requires newer version, save as unsupported message
+        val requiredVersion = message.requiredProtocolVersion
+        val currentVersion = SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE
+        if (requiredVersion > currentVersion) {
+            L.w { "[Message][${tag}] Unsupported protocol version: required=$requiredVersion, current=$currentVersion" }
+            return TextMessage(
+                id = content.messageId,
+                fromWho = fromWho,
+                forWhat = content.conversation,
+                systemShowTimestamp = systemShowTimestamp,
+                timeStamp = content.signalServiceEnvelope.timestamp,
+                receivedTimeStamp = System.currentTimeMillis(),
+                sendType = SendType.Sent.rawValue,
+                expiresInSeconds = message.expireTimer,
+                notifySequenceId = content.signalServiceEnvelope.notifySequenceId,
+                sequenceId = content.sequenceId,
+                mode = message.messageMode.number,
+                text = null,
+                isUnsupported = true
+            )
+        }
+
         val attachmentList: MutableList<Attachment> = ArrayList()
         if (message.attachmentsCount > 0) {
             L.d { "[Message][${tag}] Found attachments in handle text message" }
@@ -315,31 +355,18 @@ class MessageContentProcessor @Inject constructor(
                 list.add(forward1)
             }
             forwardContext = ForwardContext(list, message.forwardContext.isFromGroup)
-
-            asyncMessageJobsManager.needFetchSpecifiedContactors(forwardContactIds.toList())
-        }
-        var card: Card? = null
-        if (message.hasCard()) {
-            L.d { "[Message][${tag}] Found card in handle text message" }
-            val extraLatestCard = content.extraLatestCard
-            if (extraLatestCard != null) {
-                L.i { "[Message][${tag}] Found extraLatestCard -> ${extraLatestCard.version} in handle card message" }
+            // Fetch contactor info for forward authors if not already cached
+            // Note: AsyncMessageJobsManager uses in-memory cache to skip already confirmed contactors
+            if (forwardContactIds.isNotEmpty()) {
+                asyncMessageJobsManager.needFetchSpecifiedContactors(forwardContactIds.toList())
             }
-            val card1 = message.card
-            card = Card(
-                card1.cardId,
-                card1.appId,
-                extraLatestCard?.version ?: card1.version,
-                card1.creator,
-                card1.timestamp,
-                extraLatestCard?.content ?: card1.content,
-                card1.contentType,
-                card1.type,
-                card1.fixedWidth,
-                fromWho.id,
-                content.conversation.id
-            )
         }
+        // Handle screenshot
+        val screenShot: ScreenShot? = if (message.hasScreenShot()) {
+            L.d { "[Message][${tag}] Found screenshot in handle text message" }
+            val source = message.screenShot.source
+            ScreenShot(RealSource(source.source, source.sourceDevice, source.timestamp, source.serverTimestamp))
+        } else null
 
         if (message.hasRecall() && message.recall.hasSource()) {
             if (message.recall.source.source != content.senderId) {
@@ -373,36 +400,39 @@ class MessageContentProcessor @Inject constructor(
                 )
             )
             messageStore.updateMessageReaction(content.conversation.id, reaction, content.messageId, content.signalServiceEnvelope.toByteArray())
-        } else if (message.hasScreenShot()) {
-            return ContactorUtil.createScreenShotMessageNew(
-                content.conversation,
-                content.messageId,
-                message.screenShot.source.source,
-                content.signalServiceEnvelope.notifySequenceId,
-                content.sequenceId,
-            )
+            return null
         } else {
-            val contentText = if ((TextUtils.isEmpty(messageBody)
-                        && forwardContext == null
-                        && card == null
-                        && quote == null
-                        && attachmentList.isEmpty()
-                        && sharedContacts.isEmpty())
-                || messageBody == "[Unsupported message type]"
-            ) {
-                context.getString(R.string.unsupported_message_type)
+            // Check for empty message - don't save to database if no valid content
+            val isEmptyMessage = TextUtils.isEmpty(messageBody)
+                    && forwardContext == null
+                    && quote == null
+                    && attachmentList.isEmpty()
+                    && sharedContacts.isEmpty()
+                    && screenShot == null
+
+            if (isEmptyMessage) {
+                L.w { "[Message][${tag}] Empty message detected, skipping." }
+                return null
+            }
+
+            // Set contentText for screenshot messages directly for display
+            val contentText = if (screenShot != null) {
+                val screenshotSource = screenShot.realSource?.source
+                val screenshotUserName = if (screenshotSource == globalServices.myId) {
+                    context.getString(R.string.you)
+                } else if (screenshotSource != null) {
+                    wcdb.getContactorFromAllTable(screenshotSource)?.getDisplayNameForUI()
+                        ?: screenshotSource.formatBase58Id()
+                } else {
+                    ""
+                }
+                context.getString(R.string.chat_took_a_screen_shot, screenshotUserName)
             } else {
                 messageBody
             }
 
-            val systemShowTimestamp = if (isSyncMessage && content.conversation.id != content.myId) {
-                content.signalServiceContent?.syncMessage?.sent?.serverTimestamp ?: content.signalServiceEnvelope.systemShowTimestamp
-            } else {
-                content.signalServiceEnvelope.systemShowTimestamp
-            }
-
             var receiverIds: String? = null
-            if (isSyncMessage && content.conversation is For.Group) {
+            if (content.senderId == globalServices.myId && content.conversation is For.Group) {
                 val receiverIdList = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.gid.eq(content.conversation.id)).map { it.id } - globalServices.myId
                 receiverIds = globalServices.gson.toJson(receiverIdList)
             }
@@ -428,19 +458,16 @@ class MessageContentProcessor @Inject constructor(
                 quote,
                 forwardContext,
                 null,
-                card,
                 mentions,
                 message.atPersons,
                 null,
-                null,
+                screenShot,
                 sharedContacts,
                 playStatus = AudioMessageManager.PLAY_STATUS_NOT_PLAY,
                 receiverIds = receiverIds
             )
             return textMessage
         }
-
-        return null
     }
 
     private suspend fun handleClientNotifyMessage(signalServiceDataClass: SignalServiceDataClass): Message? {
@@ -459,16 +486,39 @@ class MessageContentProcessor @Inject constructor(
             val message = notifyMessageContent
             L.i { "[Message][${tag}] process notify message -> timestamp:${envelop.timestamp}  device:${envelop.sourceDevice}  data:${message.notifyType}" }
             if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING) {
-                message.data?.let {
-                    updateDisappearingTime(content.conversation, it.messageExpiry, it.messageClearAnchor)
+                // Type 5: messageExpiry, messageClearAnchor
+                message.data?.let { data ->
+                    updateDisappearingTime(content.conversation, data.messageExpiry, data.messageClearAnchor)
+                    // 通知 ViewModel 更新 (携带具体值)
+                    conversationSettingsManager.emitConversationSettingUpdate(
+                        conversationId = content.conversation.id,
+                        messageExpiry = data.messageExpiry.toLong(),
+                        messageClearAnchor = data.messageClearAnchor
+                    )
                 }
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING) {
+                // Type 4: muteStatus, blockStatus, confidentialMode
                 message.data?.conversation?.let {
                     kotlin.runCatching {
                         val notifyConversation = Gson().fromJson(it.toString(), NotifyConversation::class.java)
-                        dbRoomStore.updateMuteStatus(notifyConversation.conversation, notifyConversation.muteStatus).await()
-                        ContactorUtil.updateRemark(notifyConversation.conversation, notifyConversation.remark)
-                        ChatSettingUtils.emitConversationSettingUpdate(notifyConversation.conversation)
+                        // 批量更新配置到数据库
+                        dbRoomStore.updateConversationSettings(
+                            roomId = notifyConversation.conversation,
+                            muteStatus = notifyConversation.muteStatus,
+                            blockStatus = notifyConversation.blockStatus,
+                            confidentialMode = notifyConversation.confidentialMode
+                        )
+                        // remark 单独处理（涉及联系人表）
+                        if (!notifyConversation.remark.isNullOrEmpty()) {
+                            ContactorUtil.updateRemark(notifyConversation.conversation, notifyConversation.remark)
+                        }
+                        // 通知 ViewModel 更新 (携带具体值)
+                        conversationSettingsManager.emitConversationSettingUpdate(
+                            conversationId = notifyConversation.conversation,
+                            muteStatus = notifyConversation.muteStatus,
+                            blockStatus = notifyConversation.blockStatus,
+                            confidentialMode = notifyConversation.confidentialMode
+                        )
                     }.onFailure {
                         L.e { "[Message][${tag}] handle conversation setting notify message fail: ${it.stackTraceToString()}" }
                     }
@@ -482,9 +532,9 @@ class MessageContentProcessor @Inject constructor(
                     when (data.actionType) {
                         TTNotifyMessage.NOTIFY_ACTION_TYPE_ADD_FRIEND_REQUEST ->
                             data.operatorInfo?.operatorId?.let { id ->
-                                dbRoomStore.findOrCreateRoomModel(For.Account(id)).await()
+                                dbRoomStore.createRoomIfNotExist(For.Account(id))
                                 ContactorUtil.updateContactRequestStatus(id)
-                                ContactorUtil.getContactWithID(context, id).await()
+                                ContactorUtil.getContactWithID(context, id)
                                 ContactorUtil.emitContactsUpdate(listOf(id))
                             }
 
@@ -499,14 +549,54 @@ class MessageContentProcessor @Inject constructor(
                 message.data?.let {
                     val roomId = it.roomId
                     if (!roomId.isNullOrEmpty()) {
-                        lCallManager.handleCallEndNotification(roomId)
+                        lCallManagerProvider.get().handleCallEndNotification(roomId)
                     }
                 }
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_RESET_IDENTITY_KEY) {
-                L.i { "[Message][${tag}] process reset identity key notify message -> data:${message.data}" }
                 val data = message.data ?: return
                 val operator = data.operator ?: return
+                L.i { "[Message][${tag}] process reset identity key notify message -> operator=$operator, resetTime=${data.resetIdentityKeyTime}" }
                 messageArchiveManager.archiveMessagesByResetIdentityKey(operator, data.resetIdentityKeyTime)
+            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT || message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2) {
+                val data = message.data ?: return
+                L.d { "[Message][${tag}] process critical alert notify message -> notifyType=${message.notifyType}, source=${data.source}, showCriticalAlert=${data.showCriticalAlert}" }
+
+                val serverTimestamp = envelop.systemShowTimestamp
+                if (!messageNotificationUtil.isCriticalAlertTimestampValid(serverTimestamp)) {
+                    L.w { "[Message][${tag}] critical alert notify message expired, skip. serverTimestamp=$serverTimestamp" }
+                    return
+                }
+
+                if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT && !data.showCriticalAlert) {
+                    L.i { "[Message][${tag}] critical alert notify message 20 is not show" }
+                    return
+                }
+
+                // 忽略自己的消息，避免重复提醒
+                if (data.source == globalServices.myId && data.sourceDevice == DEFAULT_DEVICE_ID) {
+                    L.i { "[Message][${tag}] critical alert notify message is from myself" }
+                    return
+                }
+
+                val conversationId = data.conversation?.asString ?: return
+                val source = data.source ?: return
+                val forWhat = if (ValidatorUtil.isGid(conversationId)) {
+                    For.Group(conversationId)
+                } else {
+                    For.Account(conversationId)
+                }
+                val (title, content) = LCallManager.getCriticalAlertNotificationContent(conversationId, source)
+                val timestamp = data.timestamp
+                L.i { "[Message][${tag}] handle notify critical alert: conversationId=$conversationId, timestamp=$timestamp, serverTimestamp=$serverTimestamp" }
+                if (data.source != globalServices.myId && data.showCriticalAlert) {
+                    messageNotificationUtil.showCriticalAlert(forWhat, title, content, timestamp, data.roomId)
+                } else {
+                    L.i { "[Message][${tag}] critical alert notification not shown (source=myself or showCriticalAlert=false)" }
+                }
+
+                // 本地生成 critical alert 文本消息
+                createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice)
+
             }
         }
     }
@@ -526,7 +616,6 @@ class MessageContentProcessor @Inject constructor(
         forwardContactIds.add(forward.author)
         val attachments: MutableList<Attachment> = ArrayList()
         val forwards: MutableList<Forward> = ArrayList()
-        var card: Card? = null
         val mentions: MutableList<Mention> = ArrayList()
         if (forward.attachmentsCount > 0) {
             for (attachmentPointer in forward.attachmentsList) {
@@ -547,17 +636,13 @@ class MessageContentProcessor @Inject constructor(
                 forwards.add(createForward(messageId, forward1, forwardContactIds, source, conversationId, forward1.serverTimestamp))
             }
         }
-        if (forward.hasCard()) {
-            val card1 = forward.card
-            card = Card(card1.cardId, card1.appId, card1.version, card1.creator, card1.timestamp, card1.content, card1.contentType, card1.type, card1.fixedWidth, source, conversationId)
-        }
         if (forward.mentionsCount > 0) {
             for (mention in forward.mentionsList) {
                 mentions.add(Mention(mention.start, mention.length, mention.uid, mention.type.number))
             }
         }
 
-        return Forward(forward.id, forward.type, forward.isFromGroup, forward.author, forward.text, attachments, forwards, card, mentions, serverTimestamp)
+        return Forward(forward.id, forward.type, forward.isFromGroup, forward.author, forward.text, attachments, forwards, mentions, serverTimestamp)
     }
 
     private fun createAttachmentFormPointer(
@@ -583,5 +668,21 @@ class MessageContentProcessor @Inject constructor(
 
     private fun updateDisappearingTime(forWhat: For, messageExpiry: Int, messageClearAnchor: Long) {
         messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor)
+    }
+
+    /**
+     * 创建本地 Critical Alert 文本消息
+     * @param serverTimestamp 服务器时间戳
+     * @param source 消息发送者ID
+     * @param forWhat 消息所属会话
+     * @param showCriticalAlert 控制会话的 Critical Alert 高亮状态
+     * @param sourceDevice 消息所属设备类型
+     */
+    private suspend fun createCriticalAlertMessage(serverTimestamp: Long, timestamp: Long, source: String, forWhat: For, showCriticalAlert: Boolean, sourceDevice: Int) {
+        localMessageCreator.createCriticalAlertMessage(serverTimestamp, timestamp, For.Account(source), forWhat, sourceDevice)
+        // 设置会话列表高亮（仅当消息未读时）
+        if (source != globalServices.myId && showCriticalAlert) {
+            dbRoomStore.setCriticalAlertIfUnread(forWhat.id, serverTimestamp)
+        }
     }
 }

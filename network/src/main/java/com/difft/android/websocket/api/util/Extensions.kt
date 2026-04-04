@@ -2,7 +2,6 @@ package com.difft.android.websocket.api.util
 
 import com.difft.android.base.log.lumberjack.L
 import difft.android.messageserialization.model.MessageId
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import util.Hex
 import com.difft.android.websocket.internal.push.NewOutgoingPushMessage
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
@@ -45,8 +44,6 @@ fun ByteArray.transformGroupIdFromServerToLocal(): String {
             // 上报异常，包含两种转换结果对比
             val errorMsg = "Invalid group id length: $size, UTF8: ${utf8Result ?: "FAILED"}, Hex: $hexResult"
             L.e { errorMsg }
-            FirebaseCrashlytics.getInstance().recordException(IllegalArgumentException(errorMsg))
-
             utf8Result ?: hexResult
         }
     }

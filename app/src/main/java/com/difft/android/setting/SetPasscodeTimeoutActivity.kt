@@ -78,17 +78,15 @@ class SetPasscodeTimeoutActivity : BaseActivity() {
         if (isUpdating) return // 防抖
 
         isUpdating = true
-        val passcode = userManager.getUserData()?.passcode ?: return
         userManager.update {
-            this.passcode = passcode
             this.passcodeTimeout = timeoutItem.time
         }
         updateSelectedItem(timeoutItem)
-        PasscodeUtil.disableScreenLock = true
         isUpdating = false
     }
 
     private fun updateSelectedItem(selectedItem: TimeoutItem) {
+
         val updatedList = timeoutAdapter.currentList.map { item ->
             item.copy(isSelected = item.time == selectedItem.time)
         }

@@ -23,16 +23,16 @@
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/t.primary" />
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_my_code"
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/ib_scan_code"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_marginEnd="16dp"
-            android:gravity="center_vertical"
-            android:text="@string/invite_my_code"
-            android:textColor="@color/icon"
-            android:textSize="16sp"
-            app:layout_constraintEnd_toEndOf="parent" />
+            android:background="@null"
+            android:padding="10dp"
+            android:src="@drawable/chat_tabler_scan"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:tint="@color/t.primary" />
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>
@@ -42,7 +42,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="30dp"
-        android:text="@string/invite_add_new_friend"
+        android:text="@string/contact_add_contacts"
         android:textColor="@color/t.primary"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -56,59 +56,106 @@
         android:text="@string/invite_enter_code_to_add"
         android:textColor="@color/t.secondary"
         android:textSize="14sp"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/loginTitle" />
 
     <LinearLayout
-        android:id="@+id/inputZone"
+        android:id="@+id/inputZoneUid"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="30dp"
-        android:gravity="center_horizontal"
         android:orientation="vertical"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/loginHint">
+        app:layout_constraintTop_toBottomOf="@id/loginTitle">
 
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_uid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:background="@drawable/invite_uid_border"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="14dp">
 
-        <com.maning.pswedittextlibrary.MNPasswordEditText
-            android:id="@+id/et_code"
-            android:layout_width="230dp"
-            android:layout_height="50dp"
-            android:focusableInTouchMode="true"
-            android:inputType="number"
-            android:maxLength="4"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            app:psw_background_color="@android:color/transparent"
-            app:psw_border_color="@color/line"
-            app:psw_border_radius="4dp"
-            app:psw_border_selected_color="@color/t.info"
-            app:psw_border_width="2dp"
-            app:psw_cursor_width="1dp"
-            app:psw_item_margin="10dp"
-            app:psw_mode="OriginalText"
-            app:psw_show_cursor="true"
-            app:psw_style="StyleOneself"
-            app:psw_text_color="@color/t.primary">
+            <com.difft.android.base.widget.RuleEditText
+                android:id="@+id/customUid"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:background="@android:color/transparent"
+                android:drawableEnd="@drawable/account_input_clear_icon"
+                android:gravity="start|center_vertical"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:textAlignment="viewStart"
+                android:textColor="@color/t.primary"
+                android:textColorHint="@color/t.disable"
+                android:textSize="14sp"
+                android:hint="@string/invite_enter_hint"
+                app:clearable="true"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_goneMarginStart="0dp"
+                app:rule="not_empty">
 
-            <requestFocus />
-        </com.maning.pswedittextlibrary.MNPasswordEditText>
+                <requestFocus />
+            </com.difft.android.base.widget.RuleEditText>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
-
-        <androidx.appcompat.widget.AppCompatTextView
+        <TextView
             android:id="@+id/tv_error"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="49dp"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="4dp"
+            android:gravity="start"
             android:lineSpacingExtra="3sp"
             android:textColor="@color/t.error"
             android:textSize="14sp"
-            tools:text="@string/chat_net_error"
+            android:visibility="gone"
+            tools:text="The contact ID is not correct, please try again."
             tools:visibility="visible" />
+
+        <RelativeLayout
+            android:id="@+id/handleZone"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:background="@drawable/add_friend_handle_zone_bg"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/customUid">
+
+            <Button
+                android:id="@+id/addText"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                android:gravity="center"
+                android:text="@string/invite_button_add_friend"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/animationView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
+                android:gravity="center"
+                android:visibility="gone"
+                app:lottie_autoPlay="true"
+                app:lottie_fileName="login_loading_anim.json"
+                app:lottie_loop="true"
+                tools:visibility="visible" />
+        </RelativeLayout>
 
     </LinearLayout>
 </LinearLayout>

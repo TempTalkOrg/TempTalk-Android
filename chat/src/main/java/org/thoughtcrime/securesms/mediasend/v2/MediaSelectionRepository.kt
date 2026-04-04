@@ -4,8 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.WorkerThread
 import com.luck.picture.lib.entity.LocalMedia
-import io.reactivex.rxjava3.core.Maybe
-import io.reactivex.rxjava3.schedulers.Schedulers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.mediasend.ImageEditorModelRenderMediaTransform
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.MediaTransform
@@ -22,29 +22,29 @@ class MediaSelectionRepository(context: Context) {
     /**
      * Tries to send the selected media, performing proper transformations for edited images and videos.
      */
-    fun send(
+    suspend fun send(
         selectedMedia: List<LocalMedia>,
         stateMap: Map<Uri, Any>,
         quality: SentMediaQuality,
         message: CharSequence?,
-    ): Maybe<MediaSendActivityResult> {
+        confidentialMode: Int = 0,
+    ): MediaSendActivityResult {
         if (selectedMedia.isEmpty()) {
             throw IllegalStateException("No selected media!")
         }
 
-        return Maybe.create { emitter ->
+        return withContext(Dispatchers.IO) {
             val trimmedBody: String = message?.toString()?.trim() ?: ""
             val modelsToTransform: Map<LocalMedia, MediaTransform> = buildModelsToTransform(selectedMedia, stateMap, quality)
             val oldToNewMediaMap: Map<LocalMedia, LocalMedia> = transformMediaSync(context, selectedMedia, modelsToTransform)
             val updatedMedia = oldToNewMediaMap.values.toList()
 
-            emitter.onSuccess(
-                MediaSendActivityResult(
-                    media = updatedMedia,
-                    body = trimmedBody
-                )
+            MediaSendActivityResult(
+                media = updatedMedia,
+                body = trimmedBody,
+                confidentialMode = confidentialMode
             )
-        }.subscribeOn(Schedulers.io()).cast(MediaSendActivityResult::class.java)
+        }
     }
 
     fun deleteBlobs(media: List<LocalMedia>) {

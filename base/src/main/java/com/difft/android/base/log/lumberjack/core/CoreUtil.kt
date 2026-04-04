@@ -3,6 +3,7 @@ package com.difft.android.base.log.lumberjack.core
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import com.difft.android.base.log.lumberjack.L
 
 object CoreUtil {
 
@@ -15,7 +16,7 @@ object CoreUtil {
             val info = packageManager.getPackageInfo(packageName, 0)
             info.versionName
         } catch (e: PackageManager.NameNotFoundException) {
-            e.printStackTrace()
+            L.w { "[CoreUtil] error: ${e.stackTraceToString()}" }
             null
         }
     }

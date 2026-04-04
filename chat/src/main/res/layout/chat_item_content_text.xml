@@ -2,25 +2,62 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/cl_text_content_root"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/textView"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/ll_content"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:lineSpacingMultiplier="1.2"
-        android:padding="8dp"
-        android:textColor="@color/t.primary"
-        android:textColorLink="@color/t.info"
-        android:textIsSelectable="true"
-        android:textSize="16sp"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="asdasd asdasd sadasdasd sadasd asdasdasd sadasdasda sadasdasda sadasd">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-    </androidx.appcompat.widget.AppCompatTextView>
+        <com.difft.android.chat.ui.textpreview.SelectableTextView
+            android:id="@+id/textView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:lineSpacingMultiplier="1.2"
+            android:padding="8dp"
+            android:textColor="@color/t.primary"
+            android:textColorLink="@color/t.info"
+            android:textIsSelectable="false"
+            android:textSize="16sp"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="asdasd asdasd sadasdasd sadasd asdasdasd sadasdasda sadasdasda sadasd" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <TextView
+        android:id="@+id/v_cover"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/chat_message_confidential_bg"
+        android:gravity="center"
+        android:text="@string/chat_tap_to_view"
+        android:textColor="@color/t.white"
+        android:textSize="16sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/ll_content"
+        app:layout_constraintEnd_toEndOf="@+id/ll_content"
+        app:layout_constraintStart_toStartOf="@+id/ll_content"
+        app:layout_constraintTop_toTopOf="@+id/ll_content" />
+
+    <TextView
+        android:id="@+id/tv_blur_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/chat_message_confidential_label_bg"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:text="@string/chat_tap_to_view"
+        android:textColor="@color/t.white"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/ll_content"
+        app:layout_constraintEnd_toEndOf="@+id/ll_content"
+        app:layout_constraintStart_toStartOf="@+id/ll_content"
+        app:layout_constraintTop_toTopOf="@+id/ll_content" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

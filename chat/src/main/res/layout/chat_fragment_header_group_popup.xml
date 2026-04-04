@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="44dp"
+    android:background="@android:color/transparent">
+
+    <!-- Back/Close button - same as normal GroupChatActivity header -->
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/ib_back"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:background="@null"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="10dp"
+        android:src="@drawable/chative_ic_back"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/t.primary" />
+
+    <!-- Group name - same font size as normal GroupChatActivity header (20sp) -->
+    <TextView
+        android:id="@+id/textview_nickname"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:ellipsize="middle"
+        android:gravity="center_vertical"
+        android:singleLine="true"
+        android:textColor="@color/t.primary"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintEnd_toStartOf="@+id/textview_timer"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintStart_toEndOf="@+id/ib_back"
+        tools:text="Group Name" />
+
+    <!-- Archive time indicator - same font size as normal GroupChatActivity header (20sp) -->
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/textview_timer"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:textColor="@color/t.third"
+        android:textSize="20sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/textview_nickname"
+        app:layout_constraintEnd_toStartOf="@+id/ib_maximize"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintStart_toEndOf="@+id/textview_nickname"
+        app:layout_constraintTop_toTopOf="@+id/textview_nickname"
+        tools:text=" [7d]"
+        tools:visibility="visible" />
+
+    <!-- Maximize button -->
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/ib_maximize"
+        android:layout_width="44dp"
+        android:layout_height="match_parent"
+        android:background="@null"
+        android:padding="10dp"
+        android:src="@drawable/chat_icon_maximize"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/icon" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

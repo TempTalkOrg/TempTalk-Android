@@ -11,15 +11,16 @@ import android.net.Uri
 import android.provider.MediaStore
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
+import androidx.exifinterface.media.ExifInterface
+import com.difft.android.base.log.lumberjack.L
 import difft.android.messageserialization.model.Attachment
 import com.luck.picture.lib.entity.LocalMedia
-import util.logging.Log
 import org.thoughtcrime.securesms.mms.PartAuthority
 import java.io.IOException
 import java.util.Locale
 
 object MediaUtil {
-    private val TAG: String = Log.tag(MediaUtil::class.java)
+    private val TAG: String = L.tag(MediaUtil::class.java)
 
     const val IMAGE_PNG: String = "image/png"
     const val IMAGE_JPEG: String = "image/jpeg"
@@ -506,6 +507,31 @@ object MediaUtil {
             BitmapFactory.decodeFile(filePath, options)
             width = options.outWidth
             height = options.outHeight
+
+            // 处理EXIF旋转信息
+            try {
+                val exif = ExifInterface(filePath)
+                val orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                )
+
+                // 如果图片被旋转了90°或270°，需要交换宽高
+                when (orientation) {
+                    ExifInterface.ORIENTATION_ROTATE_90,
+                    ExifInterface.ORIENTATION_ROTATE_270,
+                    ExifInterface.ORIENTATION_TRANSPOSE,
+                    ExifInterface.ORIENTATION_TRANSVERSE -> {
+                        // 交换宽高
+                        val temp = width
+                        width = height
+                        height = temp
+                    }
+                }
+            } catch (e: Exception) {
+                // 如果读取EXIF失败，使用原始尺寸
+                L.w { "Failed to read EXIF orientation for $filePath, error:${e.stackTraceToString()}" }
+            }
         } else if (isVideoType(mimeType)) {
             val mmr = MediaMetadataRetriever()
             try {
@@ -516,7 +542,7 @@ object MediaUtil {
                     height = bitmap.height
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MediaUtil] error: ${e.stackTraceToString()}" }
             } finally {
                 mmr.release()
             }

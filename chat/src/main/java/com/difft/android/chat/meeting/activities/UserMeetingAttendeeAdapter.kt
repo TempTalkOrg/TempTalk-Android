@@ -19,8 +19,11 @@ import com.difft.android.chat.databinding.AttendeeListItemBinding
 import com.difft.android.chat.group.GroupMemberModel
 import com.difft.android.network.responses.AttendanceStatus
 import com.difft.android.network.responses.Attendee
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.schedulers.Schedulers
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed class AttendeeListItem {
 
@@ -45,7 +48,8 @@ interface AttendeeClickListener {
 
 class UserMeetingAttendeeAdapter(
     private val clickListener: AttendeeClickListener,
-    private val isInEditMode: Boolean
+    private val isInEditMode: Boolean,
+    private val coroutineScope: CoroutineScope
 ) : ListAdapter<AttendeeListItem, RecyclerView.ViewHolder>(AttendeeDiffCallback()) {
 
     companion object {
@@ -188,11 +192,12 @@ class UserMeetingAttendeeAdapter(
             }
         }
 
-        val composable = ContactorUtil.getContactWithID(
-            context, attendee.uid!!
-        ).observeOn(AndroidSchedulers.mainThread()).subscribeOn(Schedulers.io())
-            .subscribe({
-                if (!it.isPresent) {
+        coroutineScope.launch {
+            try {
+                val contact = withContext(Dispatchers.IO) {
+                    ContactorUtil.getContactWithID(context, attendee.uid!!)
+                }
+                if (!contact.isPresent) {
                     val displayName = getDisplayName(
                         attendee.name, attendee.email, attendee.uid
                     )
@@ -202,10 +207,10 @@ class UserMeetingAttendeeAdapter(
                         null, null, firstLetter, attendee.uid ?: ""
                     )
                     labelExt.isVisible = true
-                    return@subscribe
+                    return@launch
                 }
 
-                val contactor = it.get()
+                val contactor = contact.get()
                 val displayName = getDisplayName(
                     contactor.getDisplayNameForUI(), contactor.email, contactor.id
                 )
@@ -217,7 +222,9 @@ class UserMeetingAttendeeAdapter(
                     attendee.uid
                 )
                 avatarView.setAvatar(contactor)
-            }, { error ->
+            } catch (e: CancellationException) {
+                throw e
+            } catch (error: Exception) {
                 L.i { "getContactWithID Error: $error, attendee=$attendee" }
                 val displayName = getDisplayName(
                     attendee.name, attendee.email, attendee.uid
@@ -237,7 +244,8 @@ class UserMeetingAttendeeAdapter(
                 avatarView.setOnClickListener {
                     L.i { "Can not show user info for this $attendee" }
                 }
-            })
+            }
+        }
     }
 
     private fun getDisplayName(

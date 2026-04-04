@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
@@ -22,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,31 +37,30 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.wcdb
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.network.group.ChangeSelfSettingsInGroupReq
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
+import org.difft.app.database.wcdb
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -70,6 +71,8 @@ class GroupNotificationSettingsActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    private var refreshTrigger = mutableIntStateOf(0)
 
     companion object {
         fun start(activity: Activity, groupId: String) {
@@ -94,7 +97,9 @@ class GroupNotificationSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            DifftTheme(useSecondaryBackground = true) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -102,13 +107,8 @@ class GroupNotificationSettingsActivity : BaseActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == GroupGlobalNotificationSettingsActivity.REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            // 从全局设置页面返回，刷新默认设置显示
-            // 重新创建 ComposeView 以刷新 globalNotificationType
-            val composeView = ComposeView(this)
-            composeView.setContent {
-                MainContent()
-            }
-            setContentView(composeView)
+            // 从全局设置页面返回，触发刷新以更新 globalNotificationType 显示
+            refreshTrigger.intValue++
         }
     }
 
@@ -122,23 +122,23 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                     useGlobal = isDefaultEnabled // 开关开启时传 true，关闭时传 false
                 )
 
-                WaitDialog.show(this@GroupNotificationSettingsActivity, "")
+                ComposeDialogManager.showWait(this@GroupNotificationSettingsActivity, "")
                 val response = withContext(Dispatchers.IO) {
                     groupRepo.changeSelfSettingsInGroup(groupId, currentUserId, request)
                 }
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
 
                 if (response.status == 0) {
                     // 接口调用成功
                     L.i { "[GroupNotificationSettingsActivity] Update group notification settings success: useGlobal=$isDefaultEnabled" }
                 } else {
                     // 接口调用失败，显示错误信息
-                    PopTip.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                    ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                 }
             } catch (e: Exception) {
                 L.e { "[GroupNotificationSettingsActivity] Update group notification settings failed: ${e.stackTraceToString()}" }
-                WaitDialog.dismiss()
-                PopTip.show(getString(com.difft.android.chat.R.string.operation_failed))
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
             }
         }
     }
@@ -153,11 +153,11 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                     useGlobal = false // 选项切换时，useGlobal 传 false
                 )
 
-                WaitDialog.show(this@GroupNotificationSettingsActivity, "")
+                ComposeDialogManager.showWait(this@GroupNotificationSettingsActivity, "")
                 val response = withContext(Dispatchers.IO) {
                     groupRepo.changeSelfSettingsInGroup(groupId, currentUserId, request)
                 }
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
 
                 if (response.status == 0) {
                     // 接口调用成功，执行回调更新UI状态
@@ -165,12 +165,12 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                     L.i { "[GroupNotificationSettingsActivity] Update group notification settings success: notification=$notification, useGlobal=false" }
                 } else {
                     // 接口调用失败，显示错误信息
-                    PopTip.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                    ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                 }
             } catch (e: Exception) {
                 L.e { "[GroupNotificationSettingsActivity] Update group notification settings failed: ${e.stackTraceToString()}" }
-                WaitDialog.dismiss()
-                PopTip.show(getString(com.difft.android.chat.R.string.operation_failed))
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
             }
         }
     }
@@ -180,20 +180,22 @@ class GroupNotificationSettingsActivity : BaseActivity() {
     private fun MainContent() {
         // 全局设置值，用于 DefaultSettingItem 显示，需要能够被刷新
         var globalNotificationType by remember {
-            mutableStateOf(userManager.getUserData()?.globalNotification ?: 0)
+            mutableIntStateOf(userManager.getUserData()?.globalNotification ?: 0)
         }
 
         // 选择项的当前值，从群组成员数据获取
         var currentType by remember {
-            mutableStateOf(0) // 初始值，稍后从数据库更新
+            mutableIntStateOf(0) // 初始值，稍后从数据库更新
         }
 
         var isDefaultEnabled by remember {
             mutableStateOf(true) // 默认开启，稍后从数据库更新
         }
 
-        // 异步获取数据库中的 useGlobal 和 notification 值，只加载一次
-        LaunchedEffect(Unit) {
+        // 异步获取数据库中的 useGlobal 和 notification 值，并响应 refreshTrigger 变化
+        LaunchedEffect(refreshTrigger.intValue) {
+            // 刷新全局通知设置
+            globalNotificationType = userManager.getUserData()?.globalNotification ?: 0
             try {
                 val groupMember = wcdb.groupMemberContactor.getFirstObject(
                     (DBGroupMemberContactorModel.gid.eq(groupId))
@@ -209,18 +211,12 @@ class GroupNotificationSettingsActivity : BaseActivity() {
 
 
         Column(
-            Modifier.Companion
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize().systemBarsPadding()
         ) {
-            ToolBar()
+            TitleBar(
+                titleText = getString(com.difft.android.chat.R.string.notification),
+                onBackClick = { finish() }
+            )
 
             LazyColumn(modifier = Modifier.Companion.padding(16.dp)) {
                 // 默认设置项
@@ -252,7 +248,7 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                                     Color(
                                         ContextCompat.getColor(
                                             LocalContext.current,
-                                            R.color.bg_setting
+                                            R.color.bg1  // Use bg1 for divider/background
                                         )
                                     )
                                 )
@@ -522,64 +518,4 @@ class GroupNotificationSettingsActivity : BaseActivity() {
         }
     }
 
-    @Preview
-    @Composable
-    private fun ToolBar() {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.Companion.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier.Companion
-                .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            R.color.bg1
-                        )
-                    )
-                )
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier.Companion
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackPressedDispatcher.onBackPressed()
-                    },
-                imageVector = ImageVector.Companion.vectorResource(id = com.difft.android.chat.R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = getString(com.difft.android.chat.R.string.notification),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Companion.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        LocalContext.current, R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.Companion.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
-        }
-    }
 }

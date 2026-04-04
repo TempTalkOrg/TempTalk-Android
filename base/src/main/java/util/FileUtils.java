@@ -9,6 +9,8 @@ import android.os.Build;
 import android.os.StatFs;
 import android.text.TextUtils;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileFilter;
@@ -92,6 +94,7 @@ public final class FileUtils {
                 try {
                     afd.close();
                 } catch (IOException ignore) {
+                    L.w(ignore, () -> "[FileUtils] close afd failed");
                 }
             } catch (FileNotFoundException e) {
                 return false;
@@ -217,7 +220,7 @@ public final class FileUtils {
         try {
             return file.createNewFile();
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] createOrExistsFile failed");
             return false;
         }
     }
@@ -246,7 +249,7 @@ public final class FileUtils {
         try {
             return file.createNewFile();
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] createFileByDeleteOldFile failed");
             return false;
         }
     }
@@ -467,7 +470,7 @@ public final class FileUtils {
             return FileIOUtils.writeFileFromIS(destFile.getAbsolutePath(), new FileInputStream(srcFile))
                     && !(isMove && !deleteFile(srcFile));
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] copyOrMoveFile failed");
             return false;
         }
     }
@@ -909,14 +912,14 @@ public final class FileUtils {
             is = new BufferedInputStream(new FileInputStream(file));
             p = (is.read() << 8) + is.read();
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] getFileCharsetSimple read failed");
         } finally {
             try {
                 if (is != null) {
                     is.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileUtils] getFileCharsetSimple close failed");
             }
         }
         switch (p) {
@@ -960,14 +963,14 @@ public final class FileUtils {
                 return false;
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] isUtf8 read failed");
         } finally {
             try {
                 if (is != null) {
                     is.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileUtils] isUtf8 close failed");
             }
         }
         return false;
@@ -1079,14 +1082,14 @@ public final class FileUtils {
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] getFileLines read failed");
         } finally {
             try {
                 if (is != null) {
                     is.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileUtils] getFileLines close failed");
             }
         }
         return count;
@@ -1202,7 +1205,7 @@ public final class FileUtils {
                 }
                 return -1;
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileUtils] getFileLength from URL failed");
             }
         }
         return getFileLength(getFileByPath(filePath));
@@ -1270,14 +1273,14 @@ public final class FileUtils {
             md = dis.getMessageDigest();
             return md.digest();
         } catch (NoSuchAlgorithmException | IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileUtils] getFileMD5 failed");
         } finally {
             try {
                 if (dis != null) {
                     dis.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileUtils] getFileMD5 close failed");
             }
         }
         return null;

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -41,6 +42,8 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.SecureSharedPrefsUtil
@@ -48,14 +51,13 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.PrivateConfigsRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
@@ -80,7 +82,9 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            DifftTheme(useSecondaryBackground = true) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -93,18 +97,12 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
         }
 
         Column(
-            Modifier.Companion
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize().systemBarsPadding()
         ) {
-            ToolBar()
+            TitleBar(
+                titleText = getString(com.difft.android.chat.R.string.notification),
+                onBackClick = { finish() }
+            )
 
             ItemViews(currentType) { newType ->
                 // 调用接口同步设置到服务端
@@ -114,15 +112,15 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             privateConfigs = PrivateConfigsRequestBody(globalNotification = newType)
                         )
 
-                        WaitDialog.show(this@GroupGlobalNotificationSettingsActivity, "")
+                        ComposeDialogManager.showWait(this@GroupGlobalNotificationSettingsActivity, "")
                         val response = withContext(Dispatchers.IO) {
                             httpClient.httpService.fetchSetProfile(
                                 baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
                                 profileRequestBody = profileRequestBody
-                            ).blockingGet()
+                            )
                         }
 
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                         if (response.isSuccess()) {
                             // 接口调用成功，更新本地设置
                             userManager.update {
@@ -134,76 +132,15 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                             setResult(Activity.RESULT_OK)
                         } else {
                             // 接口调用失败，显示错误信息
-                            PopTip.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                            ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                         }
                     } catch (e: Exception) {
                         L.e { "[GlobalNotificationSettingsActivity] set global notification failed: ${e.stackTraceToString()}" }
-                        WaitDialog.dismiss()
-                        PopTip.show(getString(com.difft.android.chat.R.string.operation_failed))
+                        ComposeDialogManager.dismissWait()
+                        ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
                     }
                 }
             }
-        }
-    }
-
-    @Preview
-    @Composable
-    private fun ToolBar() {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.Companion.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier.Companion
-                .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            R.color.bg1
-                        )
-                    )
-                )
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier.Companion
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackPressedDispatcher.onBackPressed()
-                    },
-                imageVector = ImageVector.Companion.vectorResource(id = com.difft.android.chat.R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = getString(com.difft.android.chat.R.string.notification),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Companion.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        LocalContext.current, R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.Companion.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
         }
     }
 

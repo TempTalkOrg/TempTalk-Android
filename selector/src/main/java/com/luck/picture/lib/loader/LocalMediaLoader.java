@@ -1,5 +1,7 @@
 package com.luck.picture.lib.loader;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.database.Cursor;
 import android.provider.MediaStore;
@@ -157,7 +159,7 @@ public final class LocalMediaLoader extends IBridgeMediaLoader {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[LocalMediaLoader] loadAllAlbum error:");
                 } finally {
                     if (data != null && !data.isClosed()) {
                         data.close();

@@ -7,14 +7,10 @@ import androidx.annotation.NonNull;
 import org.thoughtcrime.securesms.jobmanager.Constraint;
 import org.thoughtcrime.securesms.jobmanager.ConstraintObserver;
 import org.thoughtcrime.securesms.jobmanager.Job;
-import org.thoughtcrime.securesms.jobmanager.impl.ChargingConstraint;
-import org.thoughtcrime.securesms.jobmanager.impl.ChargingConstraintObserver;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraint;
 import org.thoughtcrime.securesms.jobmanager.impl.NetworkConstraintObserver;
-import org.thoughtcrime.securesms.jobmanager.impl.SqlCipherMigrationConstraint;
-import org.thoughtcrime.securesms.jobmanager.impl.SqlCipherMigrationConstraintObserver;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,16 +28,12 @@ public final class JobManagerFactories {
 
     public static Map<String, Constraint.Factory> getConstraintFactories(@NonNull Application application) {
         return new HashMap<>() {{
-            put(ChargingConstraint.KEY, new ChargingConstraint.Factory());
             put(NetworkConstraint.KEY, new NetworkConstraint.Factory(application));
-            put(SqlCipherMigrationConstraint.KEY, new SqlCipherMigrationConstraint.Factory(application));
         }};
     }
 
     public static List<ConstraintObserver> getConstraintObservers(@NonNull Application application) {
-        return Arrays.asList(new ChargingConstraintObserver(application),
-                new NetworkConstraintObserver(application),
-                new SqlCipherMigrationConstraintObserver());
+        return Collections.singletonList(new NetworkConstraintObserver(application));
     }
 
 }

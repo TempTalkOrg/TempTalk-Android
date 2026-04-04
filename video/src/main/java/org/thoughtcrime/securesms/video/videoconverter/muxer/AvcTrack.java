@@ -19,7 +19,7 @@ import org.mp4parser.streaming.input.h264.H264NalUnitTypes;
 import org.mp4parser.streaming.input.h264.spspps.PictureParameterSet;
 import org.mp4parser.streaming.input.h264.spspps.SeqParameterSet;
 import org.mp4parser.streaming.input.h264.spspps.SliceHeader;
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -127,22 +127,27 @@ abstract class AvcTrack extends AbstractStreamingTrack {
       _timescale = sps.vuiParams.time_scale >> 1; // Not sure why, but I found this in several places, and it works...
       _frametick = sps.vuiParams.num_units_in_tick;
       if (_timescale == 0 || _frametick == 0) {
-        Log.w(TAG, "vuiParams contain invalid values: time_scale: " + _timescale + " and frame_tick: " + _frametick + ". Setting frame rate to 30fps");
+        final int logTimescale = _timescale;
+        final int logFrametick = _frametick;
+        L.w(() -> TAG + "vuiParams contain invalid values: time_scale: " + logTimescale + " and frame_tick: " + logFrametick + ". Setting frame rate to 30fps");
         _timescale = 0;
         _frametick = 0;
       }
       if (_frametick > 0) {
         if (_timescale / _frametick > 100) {
-          Log.w(TAG, "Framerate is " + (_timescale / _frametick) + ". That is suspicious.");
+          final int logTimescale = _timescale;
+          final int logFrametick = _frametick;
+          L.w(() -> TAG + "Framerate is " + (logTimescale / logFrametick) + ". That is suspicious.");
         }
       } else {
-        Log.w(TAG, "Frametick is " + _frametick + ". That is suspicious.");
+        final int logFrametick = _frametick;
+        L.w(() -> TAG + "Frametick is " + logFrametick + ". That is suspicious.");
       }
       if (sps.vuiParams.bitstreamRestriction != null) {
         maxDecFrameBuffering = sps.vuiParams.bitstreamRestriction.max_dec_frame_buffering;
       }
     } else {
-      Log.w(TAG, "Can't determine frame rate as SPS does not contain vuiParama");
+      L.w(() -> TAG + "Can't determine frame rate as SPS does not contain vuiParama");
       _timescale = 0;
       _frametick = 0;
     }
@@ -240,7 +245,7 @@ abstract class AvcTrack extends AbstractStreamingTrack {
         throw new IOException("Sequence parameter set extension is not yet handled. Needs TLC.");
 
       default:
-        Log.w(TAG, "Unknown NAL unit type: " + nalUnitHeader.nal_unit_type);
+        L.w(() -> TAG + "Unknown NAL unit type: " + nalUnitHeader.nal_unit_type);
 
     }
   }

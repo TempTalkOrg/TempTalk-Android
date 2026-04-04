@@ -7,8 +7,18 @@
 /captures
 .externalNativeBuild
 .cxx
+.kotlin
+.vscode
+
+# Eclipse / JDT Language Server (jdtls) generated files
+.classpath
+.project
+.settings/
+
 local.properties
-/package
-app.log
-.cursor
-.cursorignore
+*.log
+org.difft.*.txt
+# Claude Code local settings (user-specific)
+.claude/settings.local.json
+CLAUDE.local.md
+tmp/

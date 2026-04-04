@@ -6,13 +6,13 @@ import android.graphics.Bitmap.CompressFormat;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import java.io.ByteArrayOutputStream;
 
 public class BitmapUtil {
 
-  private static final String TAG = Log.tag(BitmapUtil.class);
+  private static final String TAG = "BitmapUtil";
 
 
   @WorkerThread

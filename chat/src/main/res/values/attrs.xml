@@ -2,10 +2,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <attr name="theme_type" format="string" />
 
-    <declare-styleable name="EmojiImageView">
-        <attr name="forceJumbo" format="boolean" />
-    </declare-styleable>
-
     <declare-styleable name="CircleProgressBar">
         <attr name="progressBarColor" format="color" />
         <attr name="strokeWidth" format="dimension" />

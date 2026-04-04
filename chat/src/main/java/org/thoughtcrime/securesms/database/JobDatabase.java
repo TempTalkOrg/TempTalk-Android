@@ -103,7 +103,7 @@ public class JobDatabase extends SQLiteOpenHelper implements SignalDatabaseOpenH
     }
 
     public JobDatabase(@NonNull Application application, @NonNull DatabaseSecret databaseSecret) {
-        super(application, DATABASE_NAME, databaseSecret.asString(), null, DATABASE_VERSION, 0, new SqlCipherDeletingErrorHandler(DATABASE_NAME), new SqlCipherDatabaseHook());
+        super(application, DATABASE_NAME, databaseSecret.asString(), null, DATABASE_VERSION, 0, new SqlCipherDeletingErrorHandler(DATABASE_NAME), new SqlCipherDatabaseHook(), false);
 
         this.application = application;
     }

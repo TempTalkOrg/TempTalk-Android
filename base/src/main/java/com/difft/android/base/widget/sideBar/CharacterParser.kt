@@ -6,6 +6,8 @@
  */
 package com.difft.android.base.widget.sideBar
 
+import com.difft.android.base.log.lumberjack.L
+
 /**
  * Java汉字转换为拼音
  *
@@ -73,7 +75,7 @@ object CharacterParser {
             }
             return buffer.toString()
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[CharacterParser] error: ${e.stackTraceToString()}" }
             return "#"
         }
     }

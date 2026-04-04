@@ -8,6 +8,7 @@ import android.provider.Settings;
 import androidx.annotation.NonNull;
 
 import com.difft.android.base.R;
+import com.difft.android.base.log.lumberjack.L;
 import com.difft.android.base.utils.ResUtils;
 
 import java.text.DateFormat;
@@ -139,7 +140,7 @@ public final class TimeUtils {
         try {
             return format.parse(time).getTime();
         } catch (ParseException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[TimeUtils] string2Millis parse failed");
         }
         return -1;
     }
@@ -177,7 +178,7 @@ public final class TimeUtils {
         try {
             return format.parse(time);
         } catch (ParseException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[TimeUtils] string2Date parse failed");
         }
         return null;
     }

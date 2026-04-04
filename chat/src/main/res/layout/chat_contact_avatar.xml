@@ -11,7 +11,7 @@
         android:layout_height="match_parent"
         android:background="@drawable/chat_favorites_avatar_bg"
         android:padding="12dp"
-        android:src="@drawable/chat_icon_favorites"
+        android:src="@drawable/chat_message_action_favorites"
         android:tint="@color/white"
         android:visibility="gone"
         app:contentDescription="Avatar image."

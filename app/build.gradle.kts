@@ -1,17 +1,17 @@
 import java.text.SimpleDateFormat
 import java.util.Date
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.crashlytics)
-    alias(libs.plugins.firebase.perf)
+
 }
 
-val appVersionName = "1.9.0"
+val appVersionName = "2.1.7"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -20,12 +20,7 @@ fun getCurrentDayTimestamp(): String {
     return simpleDateFormat.format(currentDate)
 }
 
-fun getTimeBasedVersionCode(): Int {
-    val baseTime = 1735689600000L // 2025-01-01 00:00:00 UTC
-    val currentTime = System.currentTimeMillis()
-    val timeDiff = currentTime - baseTime
-    return (timeDiff / (1000 * 60)).toInt()
-}
+val appVersionCode = 651597
 
 fun getBuildTime(): String {
     return System.currentTimeMillis().toString()
@@ -68,8 +63,10 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         multiDexEnabled = true
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
-        resourceConfigurations.addAll(listOf("en", "zh", "en-rUS", "zh-rCN"))
+    androidResources {
+        localeFilters += setOf("en", "zh", "en-rUS", "zh-rCN")
     }
 
     buildFeatures {
@@ -87,8 +84,8 @@ android {
         create("TTDev") {
             dimension = flavorDimensionEnvironment
 
-            applicationId = "org.difft.chative.test"
-            versionCode = getTimeBasedVersionCode()
+            applicationId = "org.difft.temptalk.test"
+            versionCode = appVersionCode
             versionName = appVersionName
 
             buildConfigField("String", "APP_TYPE", "\"${this.name}\"")
@@ -100,18 +97,14 @@ android {
             manifestPlaceholders.apply {
                 this["APP_SCHEME_VALUE1"] = "chative"
                 this["APP_SCHEME_VALUE2"] = "temptalk"
-
-                this["FIREBASE_ANALYTICS_ENABLED"] = true
-                this["FIREBASE_CRASHLYTICS_ENABLED"] = true
-                this["FIREBASE_PERFORMANCE_ENABLED"] = true
             }
         }
 
         create("TTOnline") {
             dimension = flavorDimensionEnvironment
 
-            applicationId = "org.difft.chative"
-            versionCode = getTimeBasedVersionCode()
+            applicationId = "org.difft.temptalk"
+            versionCode = appVersionCode
             versionName = appVersionName
 
             buildConfigField("String", "APP_TYPE", "\"${this.name}\"")
@@ -123,10 +116,6 @@ android {
             manifestPlaceholders.apply {
                 this["APP_SCHEME_VALUE1"] = "chative"
                 this["APP_SCHEME_VALUE2"] = "temptalk"
-
-                this["FIREBASE_ANALYTICS_ENABLED"] = true
-                this["FIREBASE_CRASHLYTICS_ENABLED"] = true
-                this["FIREBASE_PERFORMANCE_ENABLED"] = true
             }
         }
 
@@ -143,6 +132,12 @@ android {
         }
 
         create("insider") {
+            dimension = flavorDimensionChannel
+
+            buildConfigField("String", "APP_CHANNEL", "\"${this.name}\"")
+        }
+
+        create("fdroid") {
             dimension = flavorDimensionChannel
 
             buildConfigField("String", "APP_CHANNEL", "\"${this.name}\"")
@@ -176,7 +171,6 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -205,10 +199,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     buildFeatures {
         viewBinding = true
         dataBinding = true
@@ -216,15 +206,37 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
-    }
-
     packaging {
-        jniLibs.pickFirsts.add("lib/arm64-v8a/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/armeabi-v7a/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/x86/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/x86_64/libc++_shared.so")
+        // Exclude non-Android platform libraries (following Signal's approach)
+        jniLibs {
+            excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll",
+                "**/libsignal_jni_testing.so"
+            )
+            pickFirsts += setOf(
+                "lib/arm64-v8a/libc++_shared.so",
+                "lib/armeabi-v7a/libc++_shared.so",
+                "lib/x86/libc++_shared.so",
+                "lib/x86_64/libc++_shared.so"
+            )
+        }
+        resources {
+            excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll"
+            )
+            // okhttp 5.x brings duplicated OSGI manifest entries
+            pickFirsts += setOf(
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            )
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
 }
 
@@ -254,26 +266,20 @@ dependencies {
     // WorkManager
     implementation(libs.bundles.androidx.work)
 
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.bundles.firebase)
-
     // PictureSelector
     implementation(project(":selector"))
-    implementation(libs.bundles.picture.selector)
 
     // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlin.metadata.jvm)
 
     // 其他依赖
     implementation(libs.jwtdecode)
     debugImplementation(libs.leakcanary)
-    implementation(libs.play.services.base)
     implementation(libs.reflections)
 
     // 性能监控
-    implementation(libs.koom.java.leak)
     implementation(libs.anrwatchdog)
     implementation(libs.profileinstaller)
 }

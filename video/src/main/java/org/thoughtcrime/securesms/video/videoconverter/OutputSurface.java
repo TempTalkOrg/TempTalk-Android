@@ -22,7 +22,7 @@ import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.view.Surface;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import javax.microedition.khronos.egl.EGL10;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -100,7 +100,7 @@ final class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         // still need to keep a reference to it.  The Surface doesn't retain a reference
         // at the Java level, so if we don't either then the object can get GCed, which
         // causes the native finalizer to run.
-        if (VERBOSE) Log.d(TAG, "textureID=" + mTextureRender.getTextureId());
+        if (VERBOSE) L.d(() -> TAG + "textureID=" + mTextureRender.getTextureId());
         mSurfaceTexture = new SurfaceTexture(mTextureRender.getTextureId());
 
         // This doesn't work if OutputSurface is created on the thread that CTS started for
@@ -272,13 +272,13 @@ final class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
 
     @Override
     public void onFrameAvailable(SurfaceTexture st) {
-        if (VERBOSE) Log.d(TAG, "new frame available");
+        if (VERBOSE) L.d(() -> TAG + "new frame available");
         synchronized (mFrameSyncObject) {
             if (mFrameAvailable) {
                 try {
                     throw new TranscodingException("mFrameAvailable already set, frame could be dropped");
                 } catch (TranscodingException e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[OutputSurface] awaitNewImage frame dropped");
                 }
             }
             mFrameAvailable = true;
@@ -293,7 +293,8 @@ final class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         boolean failed = false;
         int error;
         while ((error = mEGL.eglGetError()) != EGL10.EGL_SUCCESS) {
-            Log.e(TAG, msg + ": EGL error: 0x" + Integer.toHexString(error));
+            final int currentError = error;
+            L.e(() -> TAG + msg + ": EGL error: 0x" + Integer.toHexString(currentError));
             failed = true;
         }
         if (failed) {

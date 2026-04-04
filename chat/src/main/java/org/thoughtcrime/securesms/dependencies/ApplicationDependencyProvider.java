@@ -13,7 +13,7 @@ import org.thoughtcrime.securesms.jobs.FastJobStorage;
 import org.thoughtcrime.securesms.jobs.JobManagerFactories;
 import org.thoughtcrime.securesms.video.exo.SimpleExoPlayerPool;
 import com.difft.android.websocket.api.SignalServiceAccountManager;
-import com.difft.android.websocket.internal.configuration.SignalServiceConfiguration;
+import com.difft.android.websocket.internal.configuration.ServiceConfig;
 
 /**
  * Implementation of {@link ApplicationDependencies.Provider} that provides real app dependencies.
@@ -44,8 +44,8 @@ public class ApplicationDependencyProvider implements ApplicationDependencies.Pr
 
     @Override
     public @NonNull
-    SignalServiceAccountManager provideSignalServiceAccountManager(@NonNull SignalServiceConfiguration signalServiceConfiguration) {
-        return new SignalServiceAccountManager(signalServiceConfiguration, true);
+    SignalServiceAccountManager provideSignalServiceAccountManager(@NonNull ServiceConfig serviceConfig) {
+        return new SignalServiceAccountManager(serviceConfig, true);
     }
 
 

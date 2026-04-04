@@ -2,6 +2,7 @@ package com.difft.android.chat.contacts.contactsgroup
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
@@ -16,12 +17,31 @@ abstract class GroupsAdapter : ListAdapter<GroupModel, GroupItemViewHolder>(obje
 
     override fun areContentsTheSame(oldItem: GroupModel, newItem: GroupModel): Boolean = oldItem.gid == newItem.gid
 }) {
+
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val oldId = field
+            field = value
+            currentList.forEachIndexed { index, item ->
+                if (item.gid == oldId || item.gid == value) {
+                    notifyItemChanged(index)
+                }
+            }
+        }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GroupItemViewHolder =
         GroupItemViewHolder(parent)
 
     override fun onBindViewHolder(holder: GroupItemViewHolder, position: Int) {
         val data = getItem(position)
         holder.bind(data)
+        val bgColorRes = if (selectedId != null && data.gid == selectedId) {
+            com.difft.android.base.R.color.bg3
+        } else {
+            com.difft.android.base.R.color.bg1
+        }
+        holder.itemView.setBackgroundColor(ContextCompat.getColor(holder.itemView.context, bgColorRes))
         holder.itemView.setOnClickListener { onItemClick(data) }
     }
 
@@ -37,11 +57,7 @@ class GroupItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
     private val binding = ChatItemGroupBinding.bind(itemView)
 
     fun bind(data: GroupModel) {
-        if (TextSizeUtil.isLager()) {
-            binding.textviewGroupName.textSize = 24f
-        } else {
-            binding.textviewGroupName.textSize = 16f
-        }
+        binding.textviewGroupName.textSize = if (TextSizeUtil.isLarger) 24f else 16f
         binding.textviewGroupName.text = data.name
         binding.imageviewGroup.setAvatar(data.avatar?.getAvatarData())
     }

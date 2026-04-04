@@ -11,7 +11,6 @@
         android:id="@+id/title_container"
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:background="@color/bg1"
         android:orientation="horizontal"
         app:layout_constraintTop_toTopOf="parent">
 
@@ -128,30 +127,62 @@
             </RelativeLayout>
 
             <LinearLayout
-                android:id="@+id/ll_search_chat_history"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:background="@color/bg.setting.item"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
+                android:orientation="vertical">
 
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/search_chat_history"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp" />
+                <LinearLayout
+                    android:id="@+id/ll_name_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
 
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_chat_history_arrow"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    android:tint="@color/t.primary" />
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/contact_name_card"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_search_chat_history"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/search_chat_history"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_chat_history_arrow"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </LinearLayout>
 
             </LinearLayout>
 
@@ -210,8 +241,9 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch_stick"
+                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:background="@color/bg.setting.item"
@@ -221,8 +253,7 @@
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        tools:ignore="UseSwitchCompatOrMaterialXml" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -233,8 +264,9 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch2mute1on1"
+                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@color/bg.setting.item"
@@ -249,6 +281,44 @@
                         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <RelativeLayout
+                    android:id="@+id/save_to_photos_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:text="@string/me_save_to_photos"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/save_to_photos_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_marginEnd="10dp"
+                        android:layout_toStartOf="@id/arrow_save_to_photos"
+                        android:gravity="end"
+                        android:lineSpacingExtra="5sp"
+                        android:textColor="@color/t.third"
+                        android:textSize="16sp"
+                        tools:text="Default" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/arrow_save_to_photos"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+                </RelativeLayout>
 
                 <RelativeLayout
                     android:id="@+id/disappearing_time_container"

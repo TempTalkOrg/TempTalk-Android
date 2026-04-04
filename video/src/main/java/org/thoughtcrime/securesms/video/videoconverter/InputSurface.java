@@ -26,7 +26,7 @@ import android.opengl.EGLExt;
 import android.opengl.EGLSurface;
 import android.view.Surface;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 
 /**
@@ -177,7 +177,8 @@ final class InputSurface {
         boolean failed = false;
         int error;
         while ((error = EGL14.eglGetError()) != EGL14.EGL_SUCCESS) {
-            Log.e(TAG, msg + ": EGL error: 0x" + Integer.toHexString(error));
+            final int currentError = error;
+            L.e(() -> TAG + msg + ": EGL error: 0x" + Integer.toHexString(currentError));
             failed = true;
         }
         if (failed) {

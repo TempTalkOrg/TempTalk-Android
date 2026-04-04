@@ -26,7 +26,6 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Attach
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.DataMessage.Contact
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.DataMessage.Mention
 import org.whispersystems.signalservice.internal.push.attachmentPointer
-import org.whispersystems.signalservice.internal.push.card
 import org.whispersystems.signalservice.internal.push.dataMessage
 import org.whispersystems.signalservice.internal.push.rapidFile
 import org.whispersystems.signalservice.internal.push.realSource
@@ -71,20 +70,6 @@ class DataMessageCreator @Inject constructor(
                         serverTimestamp = realSource.serverTimestamp
                     }
                 }
-            }
-        }
-
-        val card: SignalServiceProtos.Card? = textMessage.card?.let {
-            card {
-                it.appId?.let { appId = it }
-                it.cardId?.let { cardId = it }
-                version = it.version
-                it.creator?.let { creator = it }
-                timestamp = it.timestamp
-                it.content?.let { content = it }
-                contentType = it.contentType
-                type = it.type
-                fixedWidth = it.fixedWidth
             }
         }
 
@@ -165,7 +150,6 @@ class DataMessageCreator @Inject constructor(
                 }
             } ?: emptyList()
         val attachment = wcdb.attachment.getFirstObject(DBAttachmentModel.messageId.eq(textMessage.id))
-        L.d { attachment.toString() }
         val signalServiceAttachment: AttachmentPointer? = attachment?.let {
             attachmentPointer {
                 cdnNumber = 0
@@ -189,7 +173,6 @@ class DataMessageCreator @Inject constructor(
             quote?.let(::quote::set)
             forwardContext?.let(::forwardContext::set)
             recall?.let(::recall::set)
-            card?.let(::card::set)
             textMessage.atPersons?.let(::atPersons::set)
             mentions.let { this.mentions.addAll(it) }
             textMessage.expiresInSeconds.let(::expireTimer::set)
@@ -204,9 +187,39 @@ class DataMessageCreator @Inject constructor(
                     type = SignalServiceProtos.DataMessage.Group.Type.DELIVER
                 }
             }?.let(::group::set)
-            requiredProtocolVersion = SignalServiceProtos.DataMessage.ProtocolVersion.CURRENT_VALUE
+            requiredProtocolVersion = calculateRequiredProtocolVersion(textMessage)
         }
+        L.i { "[Message] createDataMessage -> messageId:${textMessage.id}, requiredProtocolVersion:${createdDataMessage.requiredProtocolVersion}" }
         return createdDataMessage
+    }
+
+    /**
+     * Calculate the minimum required protocol version based on message content.
+     * This allows older clients to display "unsupported message" for features they don't support.
+     */
+    private fun calculateRequiredProtocolVersion(textMessage: TextMessage): Int {
+        var version = SignalServiceProtos.DataMessage.ProtocolVersion.INITIAL_VALUE
+
+        if (textMessage.forwardContext != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.FORWARD_VALUE)
+        }
+        if (!textMessage.sharedContact.isNullOrEmpty()) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CONTACT_VALUE)
+        }
+        if (textMessage.recall != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.RECALL_VALUE)
+        }
+        if (!textMessage.reactions.isNullOrEmpty()) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.REACTION_VALUE)
+        }
+        if (textMessage.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.CONFIDE_VALUE)
+        }
+        if (textMessage.screenShot != null) {
+            version = maxOf(version, SignalServiceProtos.DataMessage.ProtocolVersion.SCREEN_SHOT_VALUE)
+        }
+
+        return version
     }
 
     private fun getForwardAttachments(forwardContext: ForwardContext): List<Attachment> {

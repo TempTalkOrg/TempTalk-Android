@@ -22,6 +22,16 @@ interface FileShareService {
     @POST("v1/file/uploadInfo")
     fun uploadInfo(@Body uploadInfoReq: UploadInfoReq): Call<BaseResponse<UploadInfoResp>>
 
+    /**
+     * Download file from server
+     * Status codes:
+     * - 0: OK
+     * - 1: INVALID_PARAMETER
+     * - 2: NO_PERMISSION (File expired)
+     * - 9: NO_SUCH_FILE
+     * - 12: INVALID_FILE
+     * - 99: OTHER_ERROR
+     */
     @POST("v1/file/download")
     fun download(@Body downloadReq: DownloadReq): Call<BaseResponse<DownloadResp>>
 }
@@ -91,7 +101,8 @@ data class FileExistResp(
     val cipherHash: String,
     val cipherHashType: String,
     val exists: Boolean,
-    val url: String
+    val url: String,
+    val urls: List<String>? = null
 )
 
 data class UploadInfoReq(
@@ -104,7 +115,8 @@ data class UploadInfoReq(
     val hashAlg: String,
     val keyAlg: String,
     val encAlg: String,
-    val fileSize: Int
+    val fileSize: Int,
+    val attachmentType: Int = AttachmentUploadType.NORMAL
 )
 
 data class UploadInfoResp(
@@ -130,5 +142,18 @@ data class DownloadResp(
     val fileSize: Int,
     val hashAlg: String,
     val keyAlg: String,
-    val url: String
+    val url: String,
+    val urls: List<String>? = null
 )
+
+/**
+ * 附件类型定义
+ * - NORMAL: 普通附件 (默认值 0)
+ * - VOICE: 语音消息附件 (1)
+ * - LARGE: 大附件，大于200M (2)
+ */
+object AttachmentUploadType {
+    const val NORMAL = 0    // 普通附件
+    const val VOICE = 1     // 语音消息附件
+    const val LARGE = 2     // 大附件（>200M）
+}

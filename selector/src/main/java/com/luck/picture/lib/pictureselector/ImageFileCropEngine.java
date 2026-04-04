@@ -36,6 +36,10 @@ public class ImageFileCropEngine implements CropFileEngine {
 
     @Override
     public void onStartCrop(Fragment fragment, Uri srcUri, Uri destinationUri, ArrayList<String> dataSource, int requestCode) {
+        // 防止在 Android 9 等设备上因 dataSource 为空导致 UCropMultipleActivity 崩溃
+        if (dataSource == null || dataSource.isEmpty() || srcUri == null || destinationUri == null) {
+            return;
+        }
         UCrop.Options options = buildOptions();
         UCrop uCrop = UCrop.of(srcUri, destinationUri, dataSource);
         uCrop.withOptions(options);

@@ -1,7 +1,4 @@
-/*
- * Copyright (C) 2011 Whisper Systems
- * Copyright (C) 2013 Open Whisper Systems
- * 
+/* *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -19,7 +16,7 @@ package org.thoughtcrime.securesms.crypto
 
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
-import org.signal.libsignal.protocol.ecc.Curve
+import org.signal.libsignal.protocol.ecc.ECKeyPair
 
 
 /**
@@ -29,7 +26,7 @@ import org.signal.libsignal.protocol.ecc.Curve
  */
 object IdentityKeyUtil {
     fun generateIdentityKeyPair(): IdentityKeyPair {
-        val djbKeyPair = Curve.generateKeyPair()
+        val djbKeyPair = ECKeyPair.generate()
         val djbIdentityKey = IdentityKey(djbKeyPair.publicKey)
         val djbPrivateKey = djbKeyPair.privateKey
         return IdentityKeyPair(djbIdentityKey, djbPrivateKey)

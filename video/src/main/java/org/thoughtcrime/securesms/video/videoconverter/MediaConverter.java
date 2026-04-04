@@ -28,7 +28,7 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.StringDef;
 import androidx.annotation.WorkerThread;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.video.interfaces.MediaInput;
 import org.thoughtcrime.securesms.video.interfaces.Muxer;
 import org.thoughtcrime.securesms.video.videoconverter.exceptions.EncodingException;
@@ -161,14 +161,14 @@ public final class MediaConverter {
                     muxer);
 
         } catch (EncodingException | IOException e) {
-            Log.e(TAG, "error converting", e);
+            L.e(e, () -> TAG + " error converting");
             exception = e;
             throw e;
         } catch (Exception e) {
-            Log.e(TAG, "error converting", e);
+            L.e(e, () -> TAG + " error converting");
             exception = e;
         } finally {
-            if (VERBOSE) Log.d(TAG, "releasing extractor, decoder, encoder, and muxer");
+            if (VERBOSE) L.d(() -> TAG + "releasing extractor, decoder, encoder, and muxer");
             // Try to release everything we acquired, even if one of the releases fails, in which
             // case we save the first exception we got and re-throw at the end (unless something
             // other exception has already been thrown). This guarantees the first exception thrown
@@ -198,7 +198,7 @@ public final class MediaConverter {
                     muxer.release();
                 }
             } catch (Exception e) {
-                Log.e(TAG, "error while releasing muxer", e);
+                L.e(e, () -> TAG + " error while releasing muxer");
                 if (exception == null) {
                     exception = e;
                 }
@@ -228,10 +228,11 @@ public final class MediaConverter {
                  (audioTrackConverter != null &&!audioTrackConverter.mAudioEncoderDone))) {
 
             if (VERBOSE) {
-                Log.d(TAG, "loop: " +
+                final boolean currentMuxing = muxing;
+                L.d(() -> TAG + "loop: " +
                         (videoTrackConverter == null ? "" : videoTrackConverter.dumpState()) +
                         (audioTrackConverter == null ? "" : audioTrackConverter.dumpState()) +
-                        " muxing:" + muxing);
+                        " muxing:" + currentMuxing);
             }
 
             if (videoTrackConverter != null && (audioTrackConverter == null || audioTrackConverter.mAudioExtractorDone || videoTrackConverter.mMuxingVideoPresentationTime <= audioTrackConverter.mMuxingAudioPresentationTime)) {
@@ -266,7 +267,7 @@ public final class MediaConverter {
                 if (audioTrackConverter != null) {
                     audioTrackConverter.setMuxer(muxer);
                 }
-                Log.d(TAG, "muxer: starting");
+                L.d(() -> TAG + "muxer: starting");
                 muxer.start();
                 muxing = true;
             }
@@ -279,8 +280,6 @@ public final class MediaConverter {
         if (audioTrackConverter != null) {
             audioTrackConverter.verifyEndState();
         }
-
-        // TODO: Check the generated output file.
     }
 
     static String getMimeTypeFor(MediaFormat format) {

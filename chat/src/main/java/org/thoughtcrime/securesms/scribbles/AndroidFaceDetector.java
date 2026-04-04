@@ -9,7 +9,7 @@ import androidx.annotation.NonNull;
 
 import com.annimon.stream.Stream;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import java.util.List;
 import java.util.Locale;
@@ -19,7 +19,7 @@ import java.util.Locale;
  */
 final class AndroidFaceDetector implements FaceDetector {
 
-  private static final String TAG = Log.tag(AndroidFaceDetector.class);
+  private static final String TAG = "AndroidFaceDetector";
 
   private static final int MAX_FACES = 20;
 
@@ -27,13 +27,13 @@ final class AndroidFaceDetector implements FaceDetector {
   public List<Face> detect(@NonNull Bitmap source) {
     long startTime = System.currentTimeMillis();
 
-    Log.d(TAG, String.format(Locale.US, "Bitmap format is %dx%d %s", source.getWidth(), source.getHeight(), source.getConfig()));
+    L.d(() -> TAG + String.format(Locale.US, "Bitmap format is %dx%d %s", source.getWidth(), source.getHeight(), source.getConfig()));
 
     boolean createBitmap = source.getConfig() != Bitmap.Config.RGB_565 || source.getWidth() % 2 != 0;
     Bitmap  bitmap;
 
     if (createBitmap) {
-      Log.d(TAG, "Changing colour format to 565, with even width");
+      L.d(() -> TAG + "Changing colour format to 565, with even width");
       bitmap = Bitmap.createBitmap(source.getWidth() & ~0x1, source.getHeight(), Bitmap.Config.RGB_565);
       new Canvas(bitmap).drawBitmap(source, 0, 0, null);
     } else {
@@ -45,7 +45,7 @@ final class AndroidFaceDetector implements FaceDetector {
       android.media.FaceDetector.Face[] faces        = new android.media.FaceDetector.Face[MAX_FACES];
       int                               foundFaces   = faceDetector.findFaces(bitmap, faces);
 
-      Log.d(TAG, String.format(Locale.US, "Found %d faces", foundFaces));
+      L.d(() -> TAG + String.format(Locale.US, "Found %d faces", foundFaces));
 
       return Stream.of(faces)
                    .limit(foundFaces)
@@ -56,7 +56,7 @@ final class AndroidFaceDetector implements FaceDetector {
         bitmap.recycle();
       }
 
-      Log.d(TAG, "Finished in " + (System.currentTimeMillis() - startTime) + " ms");
+      L.d(() -> TAG + "Finished in " + (System.currentTimeMillis() - startTime) + " ms");
     }
   }
 

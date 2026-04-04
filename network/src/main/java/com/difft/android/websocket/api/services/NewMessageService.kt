@@ -2,7 +2,6 @@ package com.difft.android.websocket.api.services
 
 import com.difft.android.base.log.lumberjack.L
 import com.google.protobuf.ByteString
-import io.reactivex.rxjava3.core.Single
 import com.difft.android.websocket.api.AppWebSocketHelper
 import com.difft.android.websocket.api.push.exceptions.NotFoundException
 import com.difft.android.websocket.internal.ServiceResponse
@@ -33,30 +32,32 @@ import javax.inject.Inject
  * Note: To be expanded to have REST fallback and other messaging related operations.
  */
 class NewMessagingService @Inject constructor(private val appWebSocketHelper: AppWebSocketHelper) {
-    fun send(
+    suspend fun send(
         newOutgoingPushMessage: NewOutgoingPushMessage,
         recipientId: String?,
-    ): Single<ServiceResponse<NewSendMessageResponse>> {
-        val basePath = "/v3/messages/%s"
+    ): ServiceResponse<NewSendMessageResponse> {
+        // v4 API for 1v1 messages with syncContent support
+        val basePath = "/v4/messages/%s"
         return innerSend(newOutgoingPushMessage, String.format(basePath, recipientId), false)
     }
 
-    fun sendToGroup(
+    suspend fun sendToGroup(
         newOutgoingPushMessage: NewOutgoingPushMessage,
         groupId: String,
-    ): Single<ServiceResponse<NewSendMessageResponse>> {
+    ): ServiceResponse<NewSendMessageResponse> {
+        // v4 API for group messages, server handles sync
         return innerSend(
             newOutgoingPushMessage,
-            String.format("/v3/messages/group/%s", groupId),
+            String.format("/v4/messages/group/%s", groupId),
             true
         )
     }
 
-    private fun innerSend(
+    private suspend fun innerSend(
         newOutgoingPushMessage: NewOutgoingPushMessage,
         path: String,
         isGroup: Boolean
-    ): Single<ServiceResponse<NewSendMessageResponse>> {
+    ): ServiceResponse<NewSendMessageResponse> {
         L.i { "[Message] send message with request json: ${newOutgoingPushMessage.timestamp}" }
         Objects.requireNonNull(path)
         val headers: List<String> = listOf("content-type:application/json")
@@ -127,17 +128,12 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
                 }
             }
             .build()
-        return appWebSocketHelper.sendChatMessage(requestMessage )
-            .map { response: WebsocketResponse? ->
-                L.d { "[Message] send message with response json: ${response?.body}" }
-                responseMapper.map(
-                    response
-                )
-            }
-            .onErrorReturn { throwable: Throwable? ->
-                ServiceResponse.forUnknownError(
-                    throwable
-                )
-            }
+        return try {
+            val response = appWebSocketHelper.sendChatMessage(requestMessage)
+            L.d { "[Message] send message response received, status=${response.status}" }
+            responseMapper.map(response)
+        } catch (throwable: Throwable) {
+            ServiceResponse.forUnknownError(throwable)
+        }
     }
 }

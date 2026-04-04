@@ -13,8 +13,11 @@ data class PushCustomContent(
     val mutableContent: Int,
     val notifyType: Int,
     val passthrough: String?,
-    val uid: String?
-) {
+    val uid: String?,
+    val critical: Int,
+    val timestamp: Long = 0,
+    val roomId: String? = null,
+    ) {
     val passthroughData: Passthrough?
         get() = passthrough?.let {
             try {

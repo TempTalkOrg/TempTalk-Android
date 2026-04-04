@@ -1,27 +1,69 @@
 plugins {
-    id("com.google.dagger.hilt.android") version "2.49" apply false
-    id("com.android.application") version "8.7.2" apply false
-    id("com.android.library") version "8.7.2" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.23" apply false
-    id("org.jetbrains.kotlin.kapt") version "1.9.23" apply false
-    id("com.google.gms.google-services") version "4.4.0" apply false
-    id("com.google.firebase.crashlytics") version "2.9.9" apply false
-    id("com.google.firebase.firebase-perf") version "1.4.2" apply false
+    alias(libs.plugins.hilt.android) apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.kapt) apply false
+    alias(libs.plugins.kotlin.compose) apply false
 
-    // 其他插件
-    id("androidx.navigation.safeargs.kotlin") version "2.8.4" apply false
-    id("com.google.protobuf") version "0.9.4" apply false
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.23" apply false
+    alias(libs.plugins.navigation.safeargs) apply false
+    alias(libs.plugins.protobuf.plugin) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.roborazzi) apply false
 }
 
 // 强制所有子项目使用指定的Kotlin版本
 allprojects {
     configurations.all {
         resolutionStrategy.eachDependency {
-            if (requested.group == "org.jetbrains.kotlin") {
-                useVersion("1.9.23")
-                because("Force Kotlin version to 1.9.23 for Compose compatibility")
+            if (requested.group == "org.jetbrains.kotlin" ) {
+                useVersion("2.3.0")
+                because("Force Kotlin version to 2.3.0 for Coroutines 1.9.0 compatibility")
             }
         }
     }
+}
+
+tasks.register("testAll") {
+    description = "Run unit tests for all modules (single variant per flavored module)"
+    group = "verification"
+    dependsOn(
+        // Non-flavored modules
+        ":base:testDebugUnitTest",
+        ":network:testDebugUnitTest",
+        ":database:testDebugUnitTest",
+        ":chat:testDebugUnitTest",
+        ":video:testDebugUnitTest",
+        ":image-editor:testDebugUnitTest",
+        ":security:testDebugUnitTest",
+        ":call:testDebugUnitTest",
+        ":selector:testDebugUnitTest",
+        // Flavored modules
+        ":app:testTTDevOfficialDebugUnitTest",
+        ":login:testTTDevDebugUnitTest",
+    )
+}
+
+tasks.register("verifyScreenshots") {
+    description = "Verify Roborazzi screenshots against baselines for all Compose modules"
+    group = "verification"
+    dependsOn(
+        ":app:verifyRoborazziTTDevOfficialDebug",
+        ":base:verifyRoborazziDebug",
+        ":chat:verifyRoborazziDebug",
+        ":call:verifyRoborazziDebug",
+        ":login:verifyRoborazziTTDevDebug",
+    )
+}
+
+tasks.register("recordScreenshots") {
+    description = "Record Roborazzi screenshot baselines for all Compose modules"
+    group = "verification"
+    dependsOn(
+        ":app:recordRoborazziTTDevOfficialDebug",
+        ":base:recordRoborazziDebug",
+        ":chat:recordRoborazziDebug",
+        ":call:recordRoborazziDebug",
+        ":login:recordRoborazziTTDevDebug",
+    )
 }

@@ -1,20 +1,35 @@
 package com.difft.android.base.utils
 
+import android.Manifest
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Environment.MEDIA_MOUNTED
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
+import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.log.lumberjack.L
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.subjects.BehaviorSubject
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
 import java.text.DecimalFormat
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Result of copying a Uri to a temp file.
+ * @param tempFile The temporary file with UUID-based name
+ * @param originalFileName The original file name from the Uri
+ */
+data class CopiedFileResult(
+    val tempFile: File,
+    val originalFileName: String
+)
 
 
 object FileUtil {
@@ -24,16 +39,30 @@ object FileUtil {
     const val FILE_DIR_ATTACHMENT = "attachment"
     const val FILE_DIR_UPGRADE = "upgrade"
     const val DRAFT_ATTACHMENTS_DIRECTORY: String = "draft_blobs"
-    const val TEMP_ATTACHMENTS_DIRECTORY: String = "temp_attachments"
 
+    /** Large file threshold for manual download prompt (10MB) */
+    const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
+
+    @JvmStatic
+    fun canWriteToMediaStore(): Boolean {
+        return Build.VERSION.SDK_INT > 28 ||
+            PermissionUtil.arePermissionsGranted(
+                application,
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
+    }
+
+    // Cache positive file validity results to avoid repeated File.exists() I/O
+    // during RecyclerView scrolling. Only caches true; false results are not cached
+    // so that download completion is naturally picked up on next check.
+    private val fileValidityCache = ConcurrentHashMap<String, Boolean>()
 
     fun isFileValid(path: String): Boolean {
-        // prevent directory traversal attacks by checking for ".." in path
-        if (path.contains("..")) {
-            return false
-        }
+        if (fileValidityCache[path] == true) return true
         val file = File(path)
-        return file.exists() && file.isFile && file.length() > 0
+        val valid = file.exists() && file.isFile && file.length() > 0
+        if (valid) fileValidityCache[path] = true
+        return valid
     }
 
     fun isFileNameValid(filename: String?): Boolean {
@@ -44,24 +73,38 @@ object FileUtil {
         return true
     }
 
+    /**
+     * Get file path for directory
+     *
+     * For common directories (avatar, group_avatar, attachment, upgrade, draft_blobs):
+     *   - Returns cached File path (initialized once lazily, thread-safe)
+     *   - Safe to call from main thread after first access
+     *   - No repeated getExternalFilesDir() calls = no ANR risk
+     *
+     * For dynamic/uncommon directories:
+     *   - Falls back to baseDir + subdir construction
+     *   - Returns path only, does NOT create directory (caller must ensure directory exists before writing)
+     *   - Safe to call from main thread (no IO operations)
+     */
     fun getFilePath(dir: String): String {
-        val directoryPath = if (MEDIA_MOUNTED == Environment.getExternalStorageState()) { //判断外部存储是否可用
-            application.getExternalFilesDir(dir)?.absolutePath
-        } else { //没外部存储就使用内部存储
-            application.filesDir.absolutePath + File.separator + dir
+        // Try to get cached directory first for common paths
+        val cachedDir = FilePathManager.getCachedDir(dir)
+        if (cachedDir != null) {
+            return cachedDir.absolutePath + File.separator
         }
-        val file = directoryPath?.let { File(it) }
-        if (file?.exists() == false) { //判断文件目录是否存在
-            file.mkdirs()
-        }
-        return directoryPath + File.separator
+
+        // Fallback for dynamic/uncommon paths (e.g., "attachment/messageId")
+        // Only return path, do NOT check exists() or call mkdirs() here to avoid main thread IO
+        // Directory creation should be done by the caller before writing files
+        val baseDir = FilePathManager.getBaseDirFile()
+        return File(baseDir, dir).absolutePath + File.separator
     }
 
     fun getAvatarCachePath(): String {
         return getFilePath(FILE_DIR_AVATAR)
     }
 
-    fun getMessageAttachmentFilePath(messageId: String): String? {
+    fun getMessageAttachmentFilePath(messageId: String): String {
         return getFilePath(FILE_DIR_ATTACHMENT + File.separator + messageId)
     }
 
@@ -88,12 +131,27 @@ object FileUtil {
     }
 
     fun clearAllFiles() {
+        fileValidityCache.clear()
+        clearAllFilesInternal(preserveLogs = false)
+    }
+
+    /**
+     * Clear all files except log files.
+     * Log files match pattern: {packageName}_log_{date}.txt
+     * e.g., org.difft.chative.test_log_20260112.txt
+     */
+    fun clearAllFilesExceptLogs() {
+        fileValidityCache.clear()
+        clearAllFilesInternal(preserveLogs = true)
+    }
+
+    private fun clearAllFilesInternal(preserveLogs: Boolean) {
         try {
             // Clear external storage files if available
             if (MEDIA_MOUNTED == Environment.getExternalStorageState()) {
                 application.getExternalFilesDir(null)?.parentFile?.let { externalDir ->
                     if (externalDir.exists()) {
-                        deleteDirectoryContents(externalDir)
+                        deleteDirectoryContents(externalDir, preserveLogs)
                     }
                 }
             }
@@ -101,7 +159,7 @@ object FileUtil {
             // Clear app private data directory (data/data/package_name)
             application.dataDir?.let { dataDir ->
                 if (dataDir.exists()) {
-                    deleteDirectoryContents(dataDir)
+                    deleteDirectoryContents(dataDir, preserveLogs)
                 }
             }
         } catch (e: Exception) {
@@ -109,13 +167,30 @@ object FileUtil {
         }
     }
 
-    private fun deleteDirectoryContents(directory: File) {
+    /**
+     * Check if a file is a log file that should be preserved.
+     * Log file pattern: {packageName}_log_{date}.txt
+     */
+    private fun isLogFile(file: File): Boolean {
+        if (file.isDirectory) return false
+        val name = file.name
+        // Pattern: {packageName}_log_{yyyyMMdd}.txt
+        return name.contains("_log_") && name.endsWith(".txt")
+    }
+
+    private fun deleteDirectoryContents(directory: File, preserveLogs: Boolean) {
         if (!directory.exists() || !directory.isDirectory) return
 
         directory.listFiles()?.forEach { file ->
+            // Skip log files if preserveLogs is true
+            if (preserveLogs && isLogFile(file)) {
+                L.d { "[FileUtil] Preserving log file: ${file.absolutePath}" }
+                return@forEach
+            }
+
             try {
                 if (file.isDirectory) {
-                    deleteDirectoryContents(file)
+                    deleteDirectoryContents(file, preserveLogs)
                 }
                 if (!file.delete()) {
                     L.w { "[FileUtil] Failed to delete file: ${file.absolutePath}, exists: ${file.exists()}, canRead: ${file.canRead()}, canWrite: ${file.canWrite()}" }
@@ -135,7 +210,7 @@ object FileUtil {
             data = ByteArray(rf.length().toInt())
             rf.readFully(data)
         } catch (exception: Exception) {
-            exception.printStackTrace()
+            L.w { "[FileUtil] error: ${exception.stackTraceToString()}" }
         } finally {
             closeQuietly(rf)
         }
@@ -147,24 +222,23 @@ object FileUtil {
         try {
             closeable?.close()
         } catch (exception: Exception) {
-            exception.printStackTrace()
+            L.w { "[FileUtil] error: ${exception.stackTraceToString()}" }
         }
     }
 
-    val progressMap = hashMapOf<String, Int>()
+    private val progressMap = hashMapOf<String, Int>()
 
-    private val mProgressUpdateSubject = BehaviorSubject.create<String>()
+    private val _progressUpdate = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 64)
+    val progressUpdate: SharedFlow<String> = _progressUpdate
+
     fun emitProgressUpdate(id: String, progress: Int) {
         progressMap[id] = progress
-        mProgressUpdateSubject.onNext(id)
+        _progressUpdate.tryEmit(id)
     }
 
-//    fun removeProgress(id: String) {
-//        progressMap.remove(id)
-//        mProgressUpdateSubject.onNext(id)
-//    }
-
-    val progressUpdate: Observable<String> = mProgressUpdateSubject
+    fun getProgress(id: String): Int? {
+        return progressMap[id]
+    }
 
     private val downloadingMap = hashMapOf<Long, String>()
 
@@ -185,17 +259,41 @@ object FileUtil {
     }
 
     fun getFileSize(uri: Uri): Long {
-        var fileSize: Long = -1
-        application.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-            if (cursor.moveToFirst()) {
-                fileSize = cursor.getLong(sizeIndex)
+        // Strategy 1: ContentResolver query
+        runCatching {
+            application.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0 && cursor.moveToFirst()) {
+                    val size = cursor.getLong(sizeIndex)
+                    if (size > 0) return size
+                }
             }
         }
-        return fileSize
+
+        // Strategy 2: openFileDescriptor (fast fallback)
+        runCatching {
+            application.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                if (pfd.statSize > 0) return pfd.statSize
+            }
+        }
+
+        // Strategy 3: Stream reading (last resort, inspired by Signal)
+        runCatching {
+            application.contentResolver.openInputStream(uri)?.use { input ->
+                var size = 0L
+                val buffer = ByteArray(4096)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    size += read
+                }
+                return size
+            }
+        }
+
+        return -1L
     }
 
-    const val MAX_SUPPORT_FILE_SIZE = 1024 * 1024 * 200
+    const val MAX_SUPPORT_FILE_SIZE = 1024 * 1024 * 200 //200M
 
     fun readableFileSize(size: Long): String {
         if (size <= 0) return "0"
@@ -209,24 +307,32 @@ object FileUtil {
         return application.contentResolver.getType(uri)
     }
 
-    fun copyUriToFile(uri: Uri): File? {
+    /**
+     * Copy Uri to a temp file with UUID-based name to avoid conflicts.
+     * @return CopiedFileResult containing the temp file and original file name, or null if failed
+     */
+    fun copyUriToFile(uri: Uri): CopiedFileResult? {
         return runCatching {
             val contentResolver = application.contentResolver
-            val fileName = getFileNameFromUri(uri, contentResolver)
+            val originalFileName = getFileNameFromUri(uri, contentResolver)
                 ?: generateFileNameFromMimeType(uri, contentResolver)
-            val directory = File(getFilePath(TEMP_ATTACHMENTS_DIRECTORY))
+
+            // Extract extension from original file name
+            val extension = originalFileName.substringAfterLast('.', "tmp")
+            val tempFileName = "${UUID.randomUUID()}.$extension"
+
+            val directory = File(getFilePath(DRAFT_ATTACHMENTS_DIRECTORY))
             if (!directory.exists()) {
                 directory.mkdirs()
             }
-            val file = File(directory, fileName)
+            val tempFile = File(directory, tempFileName)
             contentResolver.openInputStream(uri)?.use { inputStream ->
-                file.outputStream().use { outputStream ->
+                tempFile.outputStream().use { outputStream ->
                     inputStream.copyTo(outputStream)
                 }
             }
-            file
+            CopiedFileResult(tempFile, originalFileName)
         }.onFailure {
-            it.printStackTrace()
             L.e { "copyUriToFile fail:" + it.stackTraceToString() }
         }.getOrNull()
     }
@@ -262,13 +368,48 @@ object FileUtil {
 
     fun deleteTempFile(fileName: String?) {
         fileName?.let {
-            val tempFile = File(getFilePath(TEMP_ATTACHMENTS_DIRECTORY), it)
+            val tempFile = File(getFilePath(DRAFT_ATTACHMENTS_DIRECTORY), it)
             if (tempFile.exists()) {
                 tempFile.delete()
             }
         }
     }
 
+
+    /**
+     * Clear temp directories on startup.
+     * These directories are used for intermediate files during attachment processing.
+     * After app restart, any files here are orphaned and can be safely deleted.
+     */
+    fun clearDraftAttachmentsDirectory() {
+        try {
+            // Clear current draft_blobs directory
+            val draftDir = FilePathManager.draftAttachmentsDir
+            if (draftDir.exists()) {
+                draftDir.listFiles()?.forEach { file ->
+                    if (file.isFile) {
+                        file.delete()
+                    }
+                }
+                L.i { "[FileUtil] Cleared draft_blobs directory" }
+            }
+
+            // Clear legacy temp_attachments directory (for users upgrading from older versions)
+            val legacyTempDir = File(draftDir.parentFile, "temp_attachments")
+            if (legacyTempDir.exists()) {
+                legacyTempDir.listFiles()?.forEach { file ->
+                    if (file.isFile) {
+                        file.delete()
+                    }
+                }
+                // Try to delete the directory itself if empty
+                legacyTempDir.delete()
+                L.i { "[FileUtil] Cleared legacy temp_attachments directory" }
+            }
+        } catch (e: Exception) {
+            L.e { "[FileUtil] Error clearing temp directories: ${e.message}" }
+        }
+    }
 
     /**
      * Deletes empty directories in the message attachment directory.

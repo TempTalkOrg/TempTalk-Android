@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dual-pane layout for large screens (width >= 840dp AND height >= 480dp)
+    Following Material Design 3 window size class thresholds:
+    - 840dp = WindowWidthSizeClass.EXPANDED
+    - 480dp = WindowHeightSizeClass.MEDIUM
+    This prevents dual-pane on folded screens in landscape (e.g. ~955dp x ~409dp)
+    See: https://m3.material.io/foundations/layout/applying-layout/window-size-classes
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- NavigationRail for large screens -->
+    <LinearLayout
+        android:id="@+id/navigation_rail_container"
+        android:layout_width="96dp"
+        android:layout_height="match_parent"
+        android:background="@color/bg1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingTop="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.difft.android.views.IndexIndicator
+            android:id="@+id/indicatorview_chats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:src="@drawable/ic_index_activity_chat"
+            android:text="@string/chat_chats"
+            android:textColor="@color/color_index_activity_index_text" />
+
+        <com.difft.android.views.IndexIndicator
+            android:id="@+id/indicatorview_contacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:src="@drawable/ic_index_activity_contact"
+            android:text="@string/chat_contacts"
+            android:textColor="@color/color_index_activity_index_text" />
+
+        <com.difft.android.views.IndexIndicator
+            android:id="@+id/indicatorview_me"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:src="@drawable/ic_index_activity_me"
+            android:text="@string/chat_me"
+            android:textColor="@color/color_index_activity_index_text" />
+
+    </LinearLayout>
+
+    <View
+        android:id="@+id/divider_rail"
+        android:layout_width="0.5dp"
+        android:layout_height="0dp"
+        android:background="@color/line"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/navigation_rail_container"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- List pane: fixed 360dp width (recommended for large screens) -->
+    <FrameLayout
+        android:id="@+id/list_pane"
+        android:layout_width="360dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/divider_rail"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/viewpager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:nestedScrollingEnabled="false"
+            android:overScrollMode="never" />
+
+    </FrameLayout>
+
+    <!-- Divider between list and detail panes -->
+    <View
+        android:id="@+id/divider_pane"
+        android:layout_width="0.5dp"
+        android:layout_height="0dp"
+        android:background="@color/line"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/list_pane"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Detail pane: fills remaining space -->
+    <FrameLayout
+        android:id="@+id/detail_pane"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/bg1"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/divider_pane"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Placeholder for detail content -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container_detail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Empty state shown when no conversation is selected -->
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/empty_detail_view"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_gravity="center"
+            android:src="@drawable/login_logo_with_name"
+            android:tint="@color/t.disable"
+            android:visibility="visible" />
+
+    </FrameLayout>
+
+    <!-- Dual-pane layout: list_pane (360dp fixed) + detail_pane (remaining space) -->
+
+    <!-- Hidden views for compatibility with default layout (needed for ViewBinding) -->
+    <View
+        android:id="@+id/view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_tab"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,12 +1,16 @@
 package org.thoughtcrime.securesms.components
 
 import android.app.Dialog
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.annotation.LayoutRes
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.DialogFragment
 import com.difft.android.chat.R
 
@@ -19,6 +23,7 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
   KeyboardAwareLinearLayout.OnKeyboardHiddenListener {
 
   private var hasShown = false
+  private var imeWasVisible = false
 
   protected open val withDim: Boolean = false
 
@@ -37,21 +42,57 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
       dialog.window?.setDimAmount(0f)
     }
 
-    dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+    dialog.window?.let { window ->
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // API 30+: edge-to-edge mode, handle IME insets manually via WindowInsets API
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+      } else {
+        // API < 30: IME insets not reliably dispatched, use ADJUST_RESIZE for automatic keyboard avoidance
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+      }
+    }
 
     return dialog
   }
 
   override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
     hasShown = false
+    imeWasVisible = false
 
     val view = super.onCreateView(inflater, container, savedInstanceState)
     return if (view is KeyboardAwareLinearLayout) {
       view.addOnKeyboardShownListener(this)
       view.addOnKeyboardHiddenListener(this)
+      // IME insets listener only needed for edge-to-edge mode (API 30+)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        setupImeInsetsListener(view)
+      }
       view
     } else {
       throw IllegalStateException("Expected parent of view hierarchy to be keyboard aware.")
+    }
+  }
+
+  private fun setupImeInsetsListener(view: View) {
+    ViewCompat.setOnApplyWindowInsetsListener(view) { v, windowInsets ->
+      val imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+      val systemBarsInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+      val imeVisible = windowInsets.isVisible(WindowInsetsCompat.Type.ime())
+
+      // Apply bottom padding for IME or navigation bar
+      val bottomPadding = if (imeVisible && imeInsets.bottom > 0) imeInsets.bottom else systemBarsInsets.bottom
+      v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, bottomPadding)
+
+      // Track IME visibility for dismiss-on-keyboard-close behavior
+      if (imeVisible) {
+        imeWasVisible = true
+      } else if (imeWasVisible) {
+        // Keyboard was visible and now hidden - dismiss
+        dismissAllowingStateLoss()
+      }
+
+      windowInsets
     }
   }
 

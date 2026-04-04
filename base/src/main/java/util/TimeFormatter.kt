@@ -11,6 +11,10 @@ import java.util.concurrent.TimeUnit
 
 object TimeFormatter {
 
+    // Cache the result to avoid repeated ContentProvider IPC calls on every message bind.
+    // The 12/24-hour format setting rarely changes; the app restart picks up any change.
+    private val is24HourFormat by lazy { DateFormat.is24HourFormat(application) }
+
     fun formatConversationTime(language: String, timestamp: Long): String {
         val currentLocale = Locale(language)
         val calendar = Calendar.getInstance()
@@ -20,8 +24,6 @@ object TimeFormatter {
         val messageYear = calendar.get(Calendar.YEAR)
 
         val isToday = isSameDay(calendar, Calendar.getInstance())
-
-        val is24HourFormat = DateFormat.is24HourFormat(application)
 
         val timeFormat: SimpleDateFormat
         val dateFormat: SimpleDateFormat
@@ -61,8 +63,6 @@ object TimeFormatter {
         val currentLocale = Locale(language)
         val calendar = Calendar.getInstance()
         calendar.timeInMillis = timestamp
-
-        val is24HourFormat = DateFormat.is24HourFormat(application)
 
         val pattern = when {
             is24HourFormat -> "HH:mm"

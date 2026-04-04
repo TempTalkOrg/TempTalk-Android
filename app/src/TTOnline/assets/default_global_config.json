@@ -1,0 +1,353 @@
+{
+  "code": 0,
+  "sign": "GLOBALCONFIG_MEUCIQDQ6cbpsb2ndLcqYG7Un6d9a2j9KZAqlYewR02iVjhyDQIgQZ1SFObTVIX3ZzEXunA1/JwvbCIo72lM4ICOQ+BDQIc=",
+  "data": {
+    "hosts": [
+      {
+        "name": "srv.chative.im",
+        "certType": "authority",
+        "servTo": "fuse"
+      },
+      {
+        "name": "srv.chative.online",
+        "certType": "authority",
+        "servTo": "fuse"
+      },
+      {
+        "name": "srv.chative.ninja",
+        "certType": "authority",
+        "servTo": "fuse"
+      },
+      {
+        "name": "srv.temptalk.net",
+        "certType": "authority",
+        "servTo": "fuse"
+      },
+      {
+        "name": "chat.temptalk.net",
+        "certType": "self",
+        "servTo": "chat"
+      },
+      {
+        "name": "chat.chative.im",
+        "certType": "self",
+        "servTo": "chat"
+      },
+      {
+        "name": "chat.chative.online",
+        "certType": "self",
+        "servTo": "chat"
+      },
+      {
+        "name": "chat.chative.ninja",
+        "certType": "self",
+        "servTo": "chat"
+      }
+    ],
+    "srvs": {
+      "chat": "/chat",
+      "voice": "/voice",
+      "fileSharing": "/fileshare",
+      "miniProgram": "/mp",
+      "call": "/call",
+      "whisperX": "/whisperX"
+    },
+    "domains": [
+      {
+        "domain": "chat.chative.im",
+        "certType": "self",
+        "label": "chat1"
+      },
+      {
+        "domain": "chat.chative.online",
+        "certType": "self",
+        "label": "chat2"
+      },
+      {
+        "domain": "chat.chative.ninja",
+        "certType": "self",
+        "label": "chat3"
+      },
+      {
+        "domain": "chat.temptalk.net",
+        "certType": "self",
+        "label": "chat4"
+      },
+      {
+        "domain": "d272r1ud4wbyy4.cloudfront.net",
+        "certType": "authority",
+        "label": "avatar"
+      },
+      {
+        "domain": "lJgAX4gRwo4GBW1Svh2z.temptalk.app",
+        "certType": "authority",
+        "label": "livekit-sg1"
+      },
+      {
+        "domain": "lJgAX4gRwo4GBW1Svh2z.ttcall.net",
+        "certType": "authority",
+        "label": "livekit-sg2"
+      }
+    ],
+    "services": [
+      {
+        "name": "chat",
+        "path": "/chat",
+        "domains": [
+          "chat1",
+          "chat2",
+          "chat3",
+          "chat4"
+        ]
+      },
+      {
+        "name": "call",
+        "path": "/call",
+        "domains": [
+          "chat1",
+          "chat2",
+          "chat3",
+          "chat4"
+        ]
+      },
+      {
+        "name": "fileSharing",
+        "path": "/fileshare",
+        "domains": [
+          "chat1",
+          "chat2",
+          "chat3",
+          "chat4"
+        ]
+      },
+      {
+        "name": "speech2text",
+        "path": "/speech2text",
+        "domains": [
+          "chat1",
+          "chat2",
+          "chat3",
+          "chat4"
+        ]
+      },
+      {
+        "name": "avatar",
+        "path": "",
+        "domains": [
+          "avatar"
+        ]
+      },
+      {
+        "name": "livekit",
+        "path": "",
+        "domains": [
+          "livekit-sg1",
+          "livekit-sg2"
+        ]
+      },
+      {
+        "name": "grayCheck",
+        "path": "/grayCheck",
+        "domains": [
+          "chat1",
+          "chat2",
+          "chat3",
+          "chat4"
+        ]
+      }
+    ],
+    "avatarFile": "https://d272r1ud4wbyy4.cloudfront.net",
+    "avatarStorage": [
+      "https://d272r1ud4wbyy4.cloudfront.net"
+    ],
+    "unsafeiOSVersion": [
+      "15.1"
+    ],
+    "disappearanceTimeInterval": {
+      "default": 172800,
+      "message": {
+        "default": 172800,
+        "me": 0
+      },
+      "messageArchivingTimeOptionValues": [
+        3600,
+        172800,
+        604800,
+        2592000,
+        15552000
+      ],
+      "conversation": {
+        "default": 2592000,
+        "me": 0,
+        "other": 2592000,
+        "group": 2592000
+      },
+      "activeConversation": {
+        "default": 604800,
+        "me": 0,
+        "other": 604800,
+        "group": 604800
+      }
+    },
+    "recall": {
+      "timeoutInterval": 8640000,
+      "editableInterval": 86400
+    },
+    "maxStickCount": 15,
+    "meeting": {
+      "messageDisappearTime": 6,
+      "maxAudioPushStreamCount": 24,
+      "maxVideoPushStreamCount": 12,
+      "openMuteOther": true,
+      "meetingPreset": [
+        "Go faster 🚄🚄🚄",
+        "Slow down 🐌🐌🐌",
+        "Can't see 💔❓🙈",
+        "Agree ✅ ✅ ✅",
+        "Disagree ❌ ❌ ❌",
+        "I'd like to speak ✋✋✋",
+        "Bad signal, Can't hear 💔❓🙉",
+        "Your voice is too low 💔❓🙉",
+        "Your voice is too loud 📣📣📣",
+        "Needs  magnifiers 🔎🔎🔎",
+        "Gotta go, have to drop off 👋",
+        "Going in an Elevator, bad reception spot 📶",
+        "Let's take this offline in a separate group 👥"
+      ],
+      "meetingInviteForbid": [
+        "609066",
+        "718882"
+      ]
+    },
+    "group": {
+      "confidentialModeThreshold": 20,
+      "largeGroupThreshold": 50,
+      "chatTunnelSecurityThreshold": 2,
+      "meetingWithoutRingThreshold": 50,
+      "chatWithoutReceiptThreshold": 50,
+      "membersMaxSize": 200,
+      "messageArchivingTimeOptionValues": [
+        3600,
+        172800,
+        604800,
+        2592000,
+        15552000
+      ],
+      "groupRemind": {
+        "remindCycle": [
+          "weekly",
+          "monthly"
+        ],
+        "remindMonthDay": -1,
+        "remindWeekDay": 7,
+        "remindTime": 9,
+        "remindDescription": "Don't forget to update!"
+      }
+    },
+    "chatFolder": {
+      "maxFolderCount": 10
+    },
+    "audit": [
+      ""
+    ],
+    "message": {
+      "tunnelSecurityForced": true,
+      "tunnelSecurityEnds": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    },
+    "conversation": {
+      "blockRegex": "^\\+2[1-8]\\d{3}|\\+10002$"
+    },
+    "emojiReaction": [
+      "👍",
+      "😄",
+      "😢",
+      "👌",
+      "🎉",
+      "😂",
+      "❤️",
+      "🤝",
+      "👏",
+      "✅",
+      "🔥",
+      "🙏"
+    ],
+    "call": {
+      "countdownTimerEnabled": true,
+      "countdownTimer": {
+        "warningThreshold": 10000,
+        "shakingThreshold": 5000
+      },
+      "createCallMsg": false,
+      "autoLeave": {
+        "promptReminder": {
+          "silenceTimeout": 300000,
+          "soloMemberTimeout": 300000
+        },
+        "runAfterReminderTimeout": 180000
+      },
+      "callServers": {
+        "clusters": [
+          {
+            "id": "SG",
+            "global_url": "https://lJgAX4gRwo4GBW1Svh2z.temptalk.app",
+            "mainland_url": "https://lJgAX4gRwo4GBW1Svh2z.ttcall.net",
+            "mainland_url2": "https://pdYQmVa2Mlq9ey3PmJlz.temptalk.app"
+          }
+        ]
+      },
+      "chatPresets": [
+        "Good 👍",
+        "Bad 😝",
+        "Agree ✅",
+        "Disagree ❌",
+        "Gotta go, bye",
+        "Please go faster",
+        "Please make screen bigger",
+        "Can't hear you. Bad Signal",
+        "Can't hear you. Your voice is too low"
+      ],
+      "chat": {
+        "autoHideTimeout": 9000
+      },
+      "denoise": {
+        "bluetooth": {
+          "excludedNameRegex": "AirPods"
+        }
+      },
+      "bubbleMessage": {
+        "emojiPresets": [
+          "👍",
+          "👏",
+          "🎉",
+          "🚀",
+          "❤️",
+          "😂"
+        ],
+        "textPresets": [
+          "Agree ✅",
+          "Disagree ⛔️",
+          "Bye 👋",
+          "Can't hear 🙉"
+        ],
+        "columns": [
+          10,
+          40,
+          70
+        ],
+        "baseSpeed": 4600,
+        "deltaSpeed": 400
+      }
+    }
+  }
+}

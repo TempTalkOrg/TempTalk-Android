@@ -3,25 +3,15 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.lifecycle.lifecycleScope
+import androidx.fragment.app.commit
+import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.databinding.ActivityChatSettingsBinding
-import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.PrivateConfigsRequestBody
-import com.difft.android.network.requests.ProfileRequestBody
-import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import javax.inject.Inject
 
+/**
+ * Activity container for ChatSettingsFragment
+ * The actual UI logic is in ChatSettingsFragment for dual-pane support
+ */
 @AndroidEntryPoint
 class ChatSettingsActivity : BaseActivity() {
 
@@ -32,54 +22,13 @@ class ChatSettingsActivity : BaseActivity() {
         }
     }
 
-    private val mBinding: ActivityChatSettingsBinding by viewbind()
-
-    @Inject
-    lateinit var userManager: UserManager
-
-    @Inject
-    @ChativeHttpClientModule.Chat
-    lateinit var httpClient: ChativeHttpClient
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_fragment_container)
 
-        mBinding.ibBack.setOnClickListener { finish() }
-
-        initView()
-    }
-
-    private fun initView() {
-        mBinding.switchSaveToPhotos.isChecked = (userManager.getUserData()?.saveToPhotos == true)
-        mBinding.switchSaveToPhotos.setOnClickListener {
-            val newValue = mBinding.switchSaveToPhotos.isChecked
-            val profileRequestBody = ProfileRequestBody(
-                privateConfigs = PrivateConfigsRequestBody(saveToPhotos = newValue)
-            )
-
-            WaitDialog.show(this@ChatSettingsActivity, "")
-            lifecycleScope.launch {
-                try {
-                    val response = withContext(Dispatchers.IO) {
-                        httpClient.httpService.fetchSetProfile(
-                            baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
-                            profileRequestBody = profileRequestBody
-                        ).blockingGet()
-                    }
-
-                    WaitDialog.dismiss()
-                    if (response.isSuccess()) {
-                        userManager.update { saveToPhotos = newValue }
-                    } else {
-                        mBinding.switchSaveToPhotos.isChecked = !newValue
-                        PopTip.show(response.reason)
-                    }
-                } catch (e: Exception) {
-                    L.e { "[ChatSettingsActivity] set saveToPhotos failed: ${e.stackTraceToString()}" }
-                    WaitDialog.dismiss()
-                    PopTip.show(e.message)
-                    mBinding.switchSaveToPhotos.isChecked = !newValue
-                }
+        if (savedInstanceState == null) {
+            supportFragmentManager.commit {
+                replace(R.id.fragment_container, ChatSettingsFragment.newInstance())
             }
         }
     }

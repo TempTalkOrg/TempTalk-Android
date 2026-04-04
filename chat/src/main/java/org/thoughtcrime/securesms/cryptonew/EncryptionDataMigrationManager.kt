@@ -3,7 +3,7 @@ package org.thoughtcrime.securesms.cryptonew
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import org.thoughtcrime.securesms.keyvalue.SignalStore
-import org.thoughtcrime.securesms.util.Base64
+import com.difft.android.base.utils.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 

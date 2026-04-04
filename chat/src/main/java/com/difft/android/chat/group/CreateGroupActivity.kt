@@ -17,18 +17,19 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.RxUtil
+import kotlin.coroutines.cancellation.CancellationException
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.getContactorsFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ComposeDialogManager
 import org.difft.app.database.search
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.chat.common.GroupAvatarUtil
 import com.difft.android.chat.common.LetterItem
-import com.difft.android.chat.contacts.contactsall.PinyinComparator
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
@@ -49,9 +50,6 @@ import com.luck.picture.lib.pictureselector.ImageFileCropEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import com.google.gson.Gson
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
 import com.luck.picture.lib.config.SelectModeConfig
@@ -60,7 +58,7 @@ import com.luck.picture.lib.interfaces.OnResultCallbackListener
 import com.luck.picture.lib.language.LanguageConfig
 import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,9 +68,8 @@ import org.difft.app.database.models.ContactorModel
 import util.ScreenLockUtil
 import org.thoughtcrime.securesms.util.MediaUtil
 import java.io.File
-import java.util.Collections
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class CreateGroupActivity : BaseActivity() {
     private val TAG: String = "CreateGroupActivity"
@@ -80,10 +77,6 @@ class CreateGroupActivity : BaseActivity() {
 
     private val memberModels: ArrayList<GroupMemberModel> = arrayListOf()
     private val selectedMap: HashMap<String?, String?> = hashMapOf()
-
-    private val pinyinComparator: PinyinComparator by lazy {
-        PinyinComparator()
-    }
 
     private val selectedIds: ArrayList<String> by lazy {
         intent.getStringArrayListExtra("ids") ?: arrayListOf()
@@ -119,35 +112,38 @@ class CreateGroupActivity : BaseActivity() {
 
     private fun createGeneralGroup(groupName: String) {
         val list = selectedMap.mapNotNull { it.key }
-        WaitDialog.show(this@CreateGroupActivity, "")
+        ComposeDialogManager.showWait(this@CreateGroupActivity, "")
         mAvatarFilePath?.let { path ->
-            httpClient.httpService
-                .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
-                .flatMap { response ->
-                    if (response.status != 0) {
-                        return@flatMap Single.error<String>(NetworkException(response.status, response.reason ?: ""))
-                    }
+            lifecycleScope.launch {
+                try {
+                    val avatarJson = withContext(Dispatchers.IO) {
+                        val response = httpClient.httpService
+                            .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
+                        if (response.status != 0) {
+                            throw NetworkException(response.status, response.reason ?: "")
+                        }
 
-                    val data = FileUtil.readFile(File(path))
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Failed to read avatar file"))
+                        val data = FileUtil.readFile(File(path))
+                            ?: throw NetworkException(message = "Failed to read avatar file")
 
-                    val encryptResult = GroupAvatarUtil.encryptGroupAvatar(data)
+                        val encryptResult = GroupAvatarUtil.encryptGroupAvatar(data)
 
-                    val encryptionKey = encryptResult["encryptionKey"] as? String
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Missing encryption key"))
+                        val encryptionKey = encryptResult["encryptionKey"] as? String
+                            ?: throw NetworkException(message = "Missing encryption key")
 
-                    val digest = encryptResult["digest"] as? String
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Missing digest"))
+                        val digest = encryptResult["digest"] as? String
+                            ?: throw NetworkException(message = "Missing digest")
 
-                    val encryptedData = encryptResult["encryptedData"] as? ByteArray
-                        ?: return@flatMap Single.error<String>(NetworkException(message = "Missing encrypted data"))
+                        val encryptedData = encryptResult["encryptedData"] as? ByteArray
+                            ?: throw NetworkException(message = "Missing encrypted data")
 
-                    val requestBody = RequestBody.create(null, encryptedData)
+                        val requestBody = RequestBody.create(null, encryptedData)
 
-                    noHeaderClient.httpService.fetchUploadAvatar(
-                        response.location.orEmpty(),
-                        requestBody
-                    ).map {
+                        noHeaderClient.httpService.fetchUploadAvatar(
+                            response.location.orEmpty(),
+                            requestBody
+                        )
+
                         val groupAvatarData = GroupAvatarData(
                             0,
                             data.size.toString(),
@@ -162,17 +158,15 @@ class CreateGroupActivity : BaseActivity() {
                         )
                         Gson().toJson(GroupAvatarResponse(groupAvatarDataString))
                     }
-                }
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({ response ->
-                    val request = CreateGroupReq(groupName, list, response)
+                    val request = CreateGroupReq(groupName, list, avatarJson)
                     createGroup(request)
-                }) {
-                    it.printStackTrace()
-                    L.e { "[${TAG}]create group avatar error:${it.stackTraceToString()}" }
-                    PopTip.show(R.string.chat_net_error)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.e { "[${TAG}]create group avatar error:${e.stackTraceToString()}" }
+                    ToastUtil.show(R.string.chat_net_error)
                 }
+            }
         } ?: run {
             val request = CreateGroupReq(groupName, list)
             createGroup(request)
@@ -180,29 +174,32 @@ class CreateGroupActivity : BaseActivity() {
     }
 
     private fun createGroup(request: CreateGroupReq) {
-        groupRepo.createGroup(request)
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                WaitDialog.dismiss()
-                if (it.status == 0) {
-                    it.data?.gid?.let { it1 ->
-                        GroupChatContentActivity.startActivity(this, it1)
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    groupRepo.createGroup(request)
+                }
+                ComposeDialogManager.dismissWait()
+                if (result.status == 0) {
+                    result.data?.gid?.let { gid ->
+                        GroupChatContentActivity.startActivity(this@CreateGroupActivity, gid)
                     }
                     setResult(RESULT_OK)
                     finish()
-                } else if (it.status == 10125) {
-                    it.data?.strangers?.let { strangers ->
+                } else if (result.status == 10125) {
+                    result.data?.strangers?.let { strangers ->
                         val content = strangers.map { s -> s.name }.joinToString(separator = ", ")
-                        PopTip.show(getString(R.string.group_not_your_friend, content))
+                        ToastUtil.show(getString(R.string.group_not_your_friend))
                     }
                 }
-            }, { error ->
-                WaitDialog.dismiss()
-                error.printStackTrace()
-                L.e { "[${TAG}]createGeneralGroup - error=${error.stackTraceToString()}" }
-                PopTip.show(R.string.chat_net_error)
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ComposeDialogManager.dismissWait()
+                L.e { "[${TAG}]createGeneralGroup - error=${e.stackTraceToString()}" }
+                ToastUtil.show(R.string.chat_net_error)
+            }
+        }
     }
 
     private val onPicturePermissionForAvatar = registerPermission {
@@ -233,10 +230,11 @@ class CreateGroupActivity : BaseActivity() {
             createGeneralGroup(groupName)
         }
 
-        Single.fromCallable { wcdb.getContactorsFromAllTable(selectedIds + globalServices.myId) }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contacts ->
+        lifecycleScope.launch {
+            try {
+                val contacts = withContext(Dispatchers.IO) {
+                    wcdb.getContactorsFromAllTable(selectedIds + globalServices.myId)
+                }
                 contacts.forEach {
                     selectedMap[it.id] = it.getDisplayNameWithoutRemarkForUI()
                 }
@@ -253,7 +251,12 @@ class CreateGroupActivity : BaseActivity() {
                 }
 
                 searchContacts("")
-            }, { error -> error.printStackTrace() })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[CreateGroupActivity] loadContacts error: ${e.stackTraceToString()}" }
+            }
+        }
 
         binding.edittextSearchInput.addTextChangedListener {
             val etContent = binding.edittextSearchInput.text.toString().trim()
@@ -317,10 +320,10 @@ class CreateGroupActivity : BaseActivity() {
 
     @SuppressLint("NotifyDataSetChanged")
     private fun refreshContactsList(list: List<ContactorModel>) {
-        val contacts = list.filterNot { it.id == globalServices.myId || (it.id.isBotId()) }
-        Collections.sort(contacts, pinyinComparator)
+        val sortedContacts = list.filterNot { it.id == globalServices.myId || (it.id.isBotId()) }
+            .sortedByPinyin()
         memberModels.clear()
-        contacts.forEach {
+        sortedContacts.forEach {
             val selected = selectedMap.contains(it.id)
             val defaultSelected = selectedIds.find { id -> id == it.id } != null
             val avatarData = it.avatar?.getContactAvatarData()
@@ -334,7 +337,8 @@ class CreateGroupActivity : BaseActivity() {
                     0,
                     isSelected = selected,
                     checkBoxEnable = !defaultSelected,
-                    showCheckBox = true
+                    showCheckBox = true,
+                    letterName = it.getDisplayNameWithoutRemarkForUI()
                 )
             )
         }
@@ -344,14 +348,18 @@ class CreateGroupActivity : BaseActivity() {
     }
 
     private fun searchContacts(key: String) {
-        Single.fromCallable {
-            wcdb.contactor.search(key)
+        lifecycleScope.launch {
+            try {
+                val results = withContext(Dispatchers.IO) {
+                    wcdb.contactor.search(key)
+                }
+                refreshContactsList(results)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[CreateGroupActivity] searchContacts error: ${e.stackTraceToString()}" }
+            }
         }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                refreshContactsList(it)
-            }, { it.printStackTrace() })
     }
 
 
@@ -369,22 +377,22 @@ class CreateGroupActivity : BaseActivity() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onPicturePermissionForAvatarResult: PermanentlyDenied" }
-                MessageDialog.show(
-                    getString(com.difft.android.chat.R.string.tip),
-                    getString(com.difft.android.chat.R.string.no_permission_picture_tip),
-                    getString(com.difft.android.chat.R.string.notification_go_to_settings),
-                    getString(com.difft.android.chat.R.string.notification_ignore)
-                )
-                    .setCancelable(false)
-                    .setOkButton { _, _ ->
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(com.difft.android.chat.R.string.tip),
+                    message = getString(com.difft.android.chat.R.string.no_permission_picture_tip),
+                    confirmText = getString(com.difft.android.chat.R.string.notification_go_to_settings),
+                    cancelText = getString(com.difft.android.chat.R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = {
                         PermissionUtil.launchSettings(this)
-                        false
-                    }.setCancelButton { _, _ ->
+                    },
+                    onCancel = {
                         ToastUtils.showToast(
                             this, getString(com.difft.android.chat.R.string.not_granted_necessary_permissions)
                         )
-                        false
                     }
+                )
             }
         }
     }
@@ -392,7 +400,7 @@ class CreateGroupActivity : BaseActivity() {
     var mAvatarFilePath: String? = null
 
     private fun createPictureSelector() {
-        ScreenLockUtil.pictureSelectorIsShowing = true
+        ScreenLockUtil.temporarilyDisabled = true
         PictureSelector.create(this)
             .openGallery(SelectMimeType.ofImage())
             .setDefaultLanguage(LanguageConfig.ENGLISH)
@@ -405,7 +413,6 @@ class CreateGroupActivity : BaseActivity() {
             .setCompressEngine(ImageFileCompressEngine())
             .forResult(object : OnResultCallbackListener<LocalMedia> {
                 override fun onResult(result: ArrayList<LocalMedia>) {
-                    ScreenLockUtil.pictureSelectorIsShowing = false
                     if (result.isNotEmpty()) {
                         val localMedia = result[0]
                         mAvatarFilePath = localMedia.compressPath ?: localMedia.realPath
@@ -414,7 +421,6 @@ class CreateGroupActivity : BaseActivity() {
                 }
 
                 override fun onCancel() {
-                    ScreenLockUtil.pictureSelectorIsShowing = false
                 }
             })
     }
@@ -445,7 +451,6 @@ class CreateGroupActivity : BaseActivity() {
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 L.e { "[${TAG}]generateAvatar failed: ${e.stackTraceToString()}" }
             }
         }

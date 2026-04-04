@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Size;
@@ -15,6 +14,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
+import com.difft.android.base.log.lumberjack.L;
 import com.luck.picture.lib.utils.SpUtils;
 
 /**
@@ -123,7 +123,7 @@ public class PermissionUtil {
             intent.setData(uri);
             fragment.startActivityForResult(intent, requestCode);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PermissionUtil] goIntentSetting error:");
         }
     }
 

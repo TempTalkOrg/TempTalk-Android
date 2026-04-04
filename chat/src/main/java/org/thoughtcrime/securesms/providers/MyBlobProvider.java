@@ -92,7 +92,7 @@ public class MyBlobProvider {
                     return uri;
                 } catch (IOException e) {
                     delete(context, uri);
-                    L.w(() -> "Error during write!" + e);
+                    L.w(e, () -> "Error during write!");
                     throw e;
                 }
             });

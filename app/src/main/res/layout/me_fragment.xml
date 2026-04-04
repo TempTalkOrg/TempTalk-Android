@@ -571,7 +571,7 @@
                     android:id="@+id/tv_test"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="测试"
+                    android:text="@string/test_button_label"
                     android:textColor="@color/t.primary"
                     android:textSize="16sp"
                     app:layout_constraintBottom_toBottomOf="parent"

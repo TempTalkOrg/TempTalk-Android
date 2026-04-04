@@ -1,6 +1,5 @@
 package com.difft.android.chat.message
 
-import org.difft.app.database.models.ContactorModel
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Mode
 import java.io.Serializable
 
@@ -8,8 +7,6 @@ abstract class ChatMessage : Serializable {
     var id: String = ""
     lateinit var authorId: String
     var isMine: Boolean = false
-    var contactor: ContactorModel? = null
-    var nickname: CharSequence? = null
 
     /**
      * {@link com.difft.android.messageserialization.db.store.model.MessageModel.SendType}
@@ -25,6 +22,7 @@ abstract class ChatMessage : Serializable {
     var showName: Boolean = true
     var showTime: Boolean = true
     var showDayTime: Boolean = true
+    var showNewMsgDivider: Boolean = false
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -34,8 +32,6 @@ abstract class ChatMessage : Serializable {
         if (id != other.id) return false
         if (authorId != other.authorId) return false
         if (isMine != other.isMine) return false
-        if (contactor != other.contactor) return false
-        if (nickname != other.nickname) return false
         if (sendStatus != other.sendStatus) return false
         if (timeStamp != other.timeStamp) return false
         if (systemShowTimestamp != other.systemShowTimestamp) return false
@@ -47,6 +43,7 @@ abstract class ChatMessage : Serializable {
         if (showName != other.showName) return false
         if (showTime != other.showTime) return false
         if (showDayTime != other.showDayTime) return false
+        if (showNewMsgDivider != other.showNewMsgDivider) return false
         return true
     }
 
@@ -54,8 +51,6 @@ abstract class ChatMessage : Serializable {
         var result = id.hashCode()
         result = 31 * result + authorId.hashCode()
         result = 31 * result + isMine.hashCode()
-        result = 31 * result + (contactor?.hashCode() ?: 0)
-        result = 31 * result + (nickname?.hashCode() ?: 0)
         result = 31 * result + (sendStatus ?: 0)
         result = 31 * result + timeStamp.hashCode()
         result = 31 * result + systemShowTimestamp.hashCode()
@@ -67,11 +62,12 @@ abstract class ChatMessage : Serializable {
         result = 31 * result + showName.hashCode()
         result = 31 * result + showTime.hashCode()
         result = 31 * result + showDayTime.hashCode()
+        result = 31 * result + showNewMsgDivider.hashCode()
         return result
     }
 
     override fun toString(): String {
-        return "ChatMessage(id='$id', authorId='$authorId', isMine=$isMine, contactor=$contactor, nickname=$nickname, sendStatus=$sendStatus, timeStamp=$timeStamp, systemShowTimestamp=$systemShowTimestamp, readMaxSId=$readMaxSId, notifySequenceId=$notifySequenceId, selectedStatus=$selectedStatus, editMode=$editMode, mode=$mode, showName=$showName, showTime=$showTime, showDayTime=$showDayTime)"
+        return "ChatMessage(id='$id', authorId='$authorId', isMine=$isMine, sendStatus=$sendStatus, timeStamp=$timeStamp, systemShowTimestamp=$systemShowTimestamp, readMaxSId=$readMaxSId, notifySequenceId=$notifySequenceId, selectedStatus=$selectedStatus, editMode=$editMode, mode=$mode, showName=$showName, showTime=$showTime, showDayTime=$showDayTime, showNewMsgDivider=$showNewMsgDivider)"
     }
 
 
@@ -79,4 +75,8 @@ abstract class ChatMessage : Serializable {
 
 fun ChatMessage.isConfidential(): Boolean {
     return this.mode == Mode.CONFIDENTIAL_VALUE
+}
+
+fun ChatMessage.isConfidentialPlaceholder(): Boolean {
+    return this is ConfidentialPlaceholderChatMessage
 }

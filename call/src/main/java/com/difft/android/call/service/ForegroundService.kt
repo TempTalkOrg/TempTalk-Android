@@ -16,6 +16,7 @@
 
 package com.difft.android.call.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -23,8 +24,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import com.difft.android.base.call.CallActionType
@@ -33,7 +36,9 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
-import com.difft.android.call.LCallManager
+import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.util.PermissionUtil
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,21 +46,27 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import javax.inject.Inject
 
 
 /**
  * A foreground service will keep the app alive in the background.
  *
- * Beginning with Android 14, foreground service types are required.
- * This service declares the mediaPlayback, camera, and microphone types
- * in the AndroidManifest.xml.
+ * Beginning with Android 10 (API 30), foreground service types are required.
+ * This service declares the dataSync, camera, and microphone types
+ * in the AndroidManifest.xml and dynamically adjusts the service type
+ * based on runtime permissions.
  *
- * This ensures that the app will continue to be able to playback media and
- * access the camera/microphone in the background. Apps that don't declare
- * these will run into issues when trying to access them from the background.
+ * This ensures that the app will continue to be able to access the camera/microphone
+ * in the background. Apps that don't declare these will run into issues when
+ * trying to access them from the background.
  */
 
+@AndroidEntryPoint
 open class ForegroundService : Service() {
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     private var isForegroundStarted = false
 
@@ -67,12 +78,33 @@ open class ForegroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
 
+    @RequiresApi(30)
+    private fun getServiceType(): Int {
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        val serviceTypes = mutableListOf<String>("DATA_SYNC")
+
+        if (PermissionUtil.hasAll(this, Manifest.permission.RECORD_AUDIO)) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            serviceTypes.add("MICROPHONE")
+        }
+
+        if (PermissionUtil.hasAll(this, Manifest.permission.CAMERA)) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            serviceTypes.add("CAMERA")
+        }
+
+        L.d { "[Call] ForegroundService serviceType: ${serviceTypes.joinToString("|")}" }
+        return type
+    }
+
     override fun onCreate() {
         super.onCreate()
         L.i { "[Call] +++ ForegroundService onCreate +++" }
         isServiceRunning = true
         createNotificationChannel()
-        addCallControlMessageListener()
+        serviceExecutor.execute {
+            addCallControlMessageListener()
+        }
     }
 
     private fun updateNotification(useCallStyle: Boolean) {
@@ -136,9 +168,13 @@ open class ForegroundService : Service() {
         if(!isForegroundStarted) {
             L.i { "[Call] ForegroundService +++ start Foreground Service +++" }
             isForegroundStarted = true
-            val notification: Notification? = buildForegroundNotification()
+            val notification: Notification = buildForegroundNotification()
             try {
-                startForeground(DEFAULT_NOTIFICATION_ID, notification)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    startForeground(DEFAULT_NOTIFICATION_ID, notification, getServiceType())
+                } else {
+                    startForeground(DEFAULT_NOTIFICATION_ID, notification)
+                }
             } catch (e: Exception) {
                 L.e { "[Call] ForegroundService Failed to start foreground service: ${e.message}" }
                 stopSelf() // Stop the service if starting foreground fails, or handle as needed
@@ -150,10 +186,16 @@ open class ForegroundService : Service() {
                 when (intent.action) {
                     ACTION_UPDATE_NOTIFICATION -> {
                         L.i { "[Call] ForegroundService +++ Updating Notification +++" }
-                        if(LCallActivity.isInCalling()){
+                        if(onGoingCallStateManager.isInCalling()){
                             val useCallStyle =
                                 intent.getBooleanExtra(EXTRA_USE_CALL_STYLE, false)
                             updateNotification(useCallStyle)
+                        }
+                    }
+                    ACTION_UPDATE_SERVICE_TYPE -> {
+                        L.i { "[Call] ForegroundService +++ Updating Service Type +++" }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            updateServiceType()
                         }
                     }
                     ACTION_STOP_SERVICE -> {
@@ -172,9 +214,19 @@ open class ForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         L.d { "[Call] ForegroundService onDestroy" }
+        cancelNotification()
         serviceScope.cancel()
         isCallMsgListenerStarted = false
         isServiceRunning = false
+    }
+
+    private fun cancelNotification() {
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(DEFAULT_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            L.w { "[Call] ForegroundService Failed to cancel notification: ${e.message}" }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -189,12 +241,11 @@ open class ForegroundService : Service() {
         }
     }
 
-
     private fun addCallControlMessageListener() {
         if(!isCallMsgListenerStarted){
             isCallMsgListenerStarted = true
             serviceScope.launch {
-                LCallManager.controlMessage.collect {
+                onGoingCallStateManager.controlMessage.collect {
                     handleControlMessage(it)
                 }
             }
@@ -218,9 +269,9 @@ open class ForegroundService : Service() {
     }
 
 
-    private fun handleControlMessage( controlMessage: LCallManager.ControlMessage?) {
+    private fun handleControlMessage( controlMessage: OnGoingCallStateManager.ControlMessage?) {
         if (controlMessage == null) return
-        L.i { "[Call] ForegroundService handleControlMessage ${controlMessage.actionType} roomId:${controlMessage.roomId}}" }
+        L.i { "[Call] ForegroundService handleControlMessage ${controlMessage.actionType} roomId:${controlMessage.roomId}" }
         when (controlMessage.actionType) {
             CallActionType.CALLEND, CallActionType.HANGUP, CallActionType.REJECT -> {
                 sendCallControlBroadcast(this, controlMessage.actionType, controlMessage.roomId)
@@ -253,6 +304,25 @@ open class ForegroundService : Service() {
             .build()
     }
 
+    /**
+     * Updates the foreground service type based on current permissions.
+     * This is necessary when permissions are granted after the service has started.
+     */
+    @RequiresApi(30)
+    private fun updateServiceType() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isForegroundStarted) {
+            try {
+                val newServiceType = getServiceType()
+                val notification = buildForegroundNotification()
+                // Re-call startForeground with updated service type
+                startForeground(DEFAULT_NOTIFICATION_ID, notification, newServiceType)
+                L.i { "[Call] ForegroundService service type updated successfully" }
+            } catch (e: Exception) {
+                L.e { "[Call] ForegroundService Failed to update service type: ${e.message}" }
+            }
+        }
+    }
+
     companion object {
         var isServiceRunning = false
         const val DEFAULT_NOTIFICATION_ID = 3456
@@ -260,6 +330,7 @@ open class ForegroundService : Service() {
         const val CHANNEL_CONFIG_NAME_ONGOING_CALL = "ONGOING_CALL"
         const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
         const val ACTION_UPDATE_NOTIFICATION = "ACTION_UPDATE_NOTIFICATION"
+        const val ACTION_UPDATE_SERVICE_TYPE = "ACTION_UPDATE_SERVICE_TYPE"
         const val EXTRA_USE_CALL_STYLE = "EXTRA_USE_CALL_STYLE"
     }
 }

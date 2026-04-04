@@ -1,13 +1,13 @@
 package com.difft.android.chat.contacts.contactsremark
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.getContactorFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -17,15 +17,14 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ConversationSetRequestBody
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
-import java.util.Optional
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class ContactSetRemarkActivity : BaseActivity() {
 
@@ -89,24 +88,27 @@ class ContactSetRemarkActivity : BaseActivity() {
                 encryptRemark = "V1|" + ContactRemarkUtil.encryptRemark(remark.toByteArray(), key)
             }
             mBinding.btnSave.isLoading = true
-            httpClient.httpService.fetchConversationSet(SecureSharedPrefsUtil.getBasicAuth(), ConversationSetRequestBody(contactId ?: "", remark = encryptRemark))
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
+            lifecycleScope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        httpClient.httpService.fetchConversationSet(SecureSharedPrefsUtil.getBasicAuth(), ConversationSetRequestBody(contactId ?: "", remark = encryptRemark))
+                    }
                     mBinding.btnSave.isLoading = false
-                    if (it.status == 0) {
-                        lifecycleScope.launch(Dispatchers.IO) {
+                    if (result.status == 0) {
+                        launch(Dispatchers.IO) {
                             ContactorUtil.updateRemark(contactId ?: "", encryptRemark)
                         }
                         finish()
                     } else {
-                        PopTip.show(it.reason)
+                        result.reason?.let { message -> ToastUtil.show(message) }
                     }
-                }) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
                     mBinding.btnSave.isLoading = false
-                    PopTip.show(it.message)
+                    e.message?.let { message -> ToastUtil.show(message) }
                 }
-
+            }
         }
     }
 
@@ -121,17 +123,21 @@ class ContactSetRemarkActivity : BaseActivity() {
     }
 
     private fun initData() {
-        Single.fromCallable { Optional.ofNullable(wcdb.getContactorFromAllTable(contactId)) }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contact ->
-                if (contact.isPresent) {
-                    val name = contact.get().getDisplayNameForUI()
+        lifecycleScope.launch {
+            try {
+                val contact = withContext(Dispatchers.IO) {
+                    wcdb.getContactorFromAllTable(contactId)
+                }
+                if (contact != null) {
+                    val name = contact.getDisplayNameForUI()
                     mBinding.etName.setText(name)
                     mBinding.etName.setSelection(mBinding.etName.text?.length ?: 0)
                 }
-            }, { error ->
-                error.printStackTrace()
-            })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[ContactSetRemarkActivity] initData error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 }

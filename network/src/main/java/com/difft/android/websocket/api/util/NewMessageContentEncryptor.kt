@@ -17,8 +17,6 @@ interface INewMessageContentEncryptor {
         theirPubKeys: Map<String, String>
     ): EncryptResult
 
-    fun enableLegacyContent(): Boolean
-
     fun generateKey(): ByteArray
 
 //    fun encryptCallKey(pubKeys: Map<String, String>, mKey: String?): EncryptCallKeyResult
@@ -31,9 +29,10 @@ interface INewMessageContentEncryptor {
      * @param message The message content to encrypt
      * @param localPrivateKey The private key used for encryption
      * @param aesKey The Call meeting encrypt key for symmetric encryption
+     * @param timestamp The message send time
      * @return The encrypted message as a string
      */
-    fun encryptRtmMessage(message: ByteArray, localPrivateKey: ByteArray, aesKey: ByteArray): String
+    fun encryptRtmMessage(message: ByteArray, localPrivateKey: ByteArray, aesKey: ByteArray, timestamp: Long): String
 
     /**
      * Decrypts an RTM message using the provided keys

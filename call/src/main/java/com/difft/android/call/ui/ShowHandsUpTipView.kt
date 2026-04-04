@@ -28,18 +28,18 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.ui.theme.SfProFont
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 
 @Composable
 fun ShowHandsUpTipView(viewModel: LCallViewModel) {
 
-    val showHandsUpEnabled by viewModel.showHandsUpEnabled.collectAsState(false)
+    val showHandsUpEnabled by viewModel.callUiController.showHandsUpEnabled.collectAsState(false)
     val handsUpUserInfo by viewModel.handsUpUserInfo.collectAsState(emptyList())
 
     val shouldShowTip = handsUpUserInfo.isNotEmpty()
@@ -56,10 +56,10 @@ fun ShowHandsUpTipView(viewModel: LCallViewModel) {
                 .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                    if(viewModel.isParticipantSharedScreen.value){
-                        viewModel.setShowUserEnabled(!viewModel.showUsersEnabled.value)
+                    if(viewModel.callUiController.isShareScreening.value){
+                        viewModel.callUiController.setShowUsersEnabled(!viewModel.callUiController.showUsersEnabled.value)
                     }else{
-                        viewModel.setShowHandsUpBottomViewEnabled(!showHandsUpEnabled)
+                        viewModel.callUiController.setShowHandsUpBottomViewEnabled(!showHandsUpEnabled)
                     }
                 },
                 verticalArrangement = Arrangement.Center,
@@ -93,7 +93,7 @@ fun ShowHandsUpTipView(viewModel: LCallViewModel) {
                     style = TextStyle(
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
-                        fontFamily = SfProFont,
+                        fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
                         color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
                     )

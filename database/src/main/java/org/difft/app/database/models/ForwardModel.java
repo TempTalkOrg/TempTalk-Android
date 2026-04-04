@@ -31,9 +31,6 @@ public class ForwardModel {
     public long serverTimestamp = 0L;
 
     @WCDBField
-    public Long cardModelDatabaseId;
-
-    @WCDBField
     public Long parentForwardModelDatabaseId;
 
     @WCDBField
@@ -44,11 +41,11 @@ public class ForwardModel {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ForwardModel that = (ForwardModel) o;
-        return id == that.id && type == that.type && isFromGroup == that.isFromGroup && serverTimestamp == that.serverTimestamp && Objects.equals(author, that.author) && Objects.equals(text, that.text) && Objects.equals(cardModelDatabaseId, that.cardModelDatabaseId) && Objects.equals(parentForwardModelDatabaseId, that.parentForwardModelDatabaseId) && Objects.equals(forwardContextDatabaseId, that.forwardContextDatabaseId);
+        return id == that.id && type == that.type && isFromGroup == that.isFromGroup && serverTimestamp == that.serverTimestamp && Objects.equals(author, that.author) && Objects.equals(text, that.text) && Objects.equals(parentForwardModelDatabaseId, that.parentForwardModelDatabaseId) && Objects.equals(forwardContextDatabaseId, that.forwardContextDatabaseId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, type, isFromGroup, author, text, serverTimestamp, cardModelDatabaseId, parentForwardModelDatabaseId, forwardContextDatabaseId);
+        return Objects.hash(id, type, isFromGroup, author, text, serverTimestamp, parentForwardModelDatabaseId, forwardContextDatabaseId);
     }
 }

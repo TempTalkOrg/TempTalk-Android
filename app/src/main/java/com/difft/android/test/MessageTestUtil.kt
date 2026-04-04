@@ -1,27 +1,30 @@
 package com.difft.android.test
 
 import android.app.Activity
-import androidx.lifecycle.LifecycleOwner
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
-import org.difft.app.database.wcdb
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.group.GROUP_ROLE_OWNER
-import difft.android.messageserialization.For
-import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.NetworkException
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.CreateGroupReq
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
-import io.reactivex.rxjava3.core.Observable
+import difft.android.messageserialization.For
+import difft.android.messageserialization.model.TextMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.difft.app.database.members
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
+import kotlin.random.Random
 
 class MessageTestUtil @Inject constructor(
     private var groupRepo: GroupRepo,
@@ -29,102 +32,175 @@ class MessageTestUtil @Inject constructor(
 ) {
 
     private val testGroupNamePrefix = "TestGroup"
-    private val testMemberIds = listOf("+74463043388")
+    private val testMemberIds = listOf("+74463043388", "+72268589462")
 
-    fun createTestGroups(activity: Activity, memberIds: List<String>? = null, count: Long = 20) {
-        WaitDialog.show(activity, "")
-        val startNameNumber = wcdb.group.allObjects
-            .filter { it.name?.startsWith(testGroupNamePrefix) == true }
-            .maxByOrNull { it.name }?.name
-            ?.replace(testGroupNamePrefix, "")
-            ?.toIntOrNull() ?: 0
+    fun createTestGroups(
+        activity: Activity,
+        scope: CoroutineScope,
+        memberIds: List<String>? = null,
+        count: Int = 50
+    ) {
+        ComposeDialogManager.showWait(activity, "")
         val testMemberIds = if (!memberIds.isNullOrEmpty()) memberIds else testMemberIds
-        Observable.interval(0, 200, TimeUnit.MILLISECONDS)
-            .take(count)
-            .flatMap {
-                val name = testGroupNamePrefix + (startNameNumber + it + 1)
-                val result = groupRepo.createGroup(CreateGroupReq(name, testMemberIds)).blockingGet()
-                if (result.status == 0) {
-                    L.d { "[test] create Test Group success:" + result.data?.gid + "   name:" + name }
-                    Observable.just("ok")
-                } else {
-                    L.e { "[test] create Test Group error:" + result.reason }
-                    Observable.error(NetworkException(result.status, result.reason ?: ""))
+
+        scope.launch {
+            try {
+                val startNameNumber = withContext(Dispatchers.IO) {
+                    wcdb.group.allObjects
+                        .filter { it.name?.startsWith(testGroupNamePrefix) == true }
+                        .mapNotNull { it.name?.replace(testGroupNamePrefix, "")?.toIntOrNull() }
+                        .maxOrNull() ?: 0
                 }
+
+                withContext(Dispatchers.IO) {
+                    repeat(count) { index ->
+                        val name = testGroupNamePrefix + (startNameNumber + index + 1)
+                        val result = groupRepo.createGroup(CreateGroupReq(name, testMemberIds))
+                        if (result.status == 0) {
+                            L.d { "[test] create Test Group success:" + result.data?.gid + "   name:" + name }
+                        } else {
+                            L.e { "[test] create Test Group error:" + result.reason }
+                            throw NetworkException(result.status, result.reason ?: "")
+                        }
+                        delay(100)
+                    }
+                }
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("create success")
+            } catch (e: Exception) {
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
             }
-            .toList()
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                WaitDialog.dismiss()
-                PopTip.show("create success")
-            }, {
-                it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
-            })
+        }
     }
 
-    fun disbandOrLeaveTestGroups(activity: Activity) {
-        WaitDialog.show(activity, "")
-        val testGroups = wcdb.group.allObjects.filter { it.name?.startsWith(testGroupNamePrefix) == true }
-        L.d { "[test] disband or leave testGroups:" + testGroups.joinToString { it.name } }
-        Observable.interval(0, 200, TimeUnit.MILLISECONDS)
-            .take(testGroups.size.toLong())
-            .flatMap {
-                val group = testGroups[it.toInt()]
-                val role = group.members.find { member -> member.id == globalServices.myId }?.groupRole
-                val result = if (role == GROUP_ROLE_OWNER) {
-                    groupRepo.deleteGroup(group.gid).blockingGet()
-                } else {
-                    groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId))).blockingGet()
+    fun disbandOrLeaveTestGroups(activity: Activity, scope: CoroutineScope) {
+        ComposeDialogManager.showWait(activity, "")
+
+        scope.launch {
+            try {
+                val testGroups = withContext(Dispatchers.IO) {
+                    wcdb.group.allObjects.filter { it.name?.startsWith(testGroupNamePrefix) == true }
                 }
-                if (result.status == 0) {
-                    L.d { "[test] disband or leave Test Group success:" }
-                    Observable.just("ok")
-                } else {
-                    L.e { "[test] disband or leave Test Group error:" + result.reason }
-                    Observable.error(NetworkException(result.status, result.reason ?: ""))
+                L.d { "[test] disband or leave testGroups:" + testGroups.joinToString { it.name } }
+
+                withContext(Dispatchers.IO) {
+                    testGroups.forEach { group ->
+                        val role = group.members.find { member -> member.id == globalServices.myId }?.groupRole
+                        val result = if (role == GROUP_ROLE_OWNER) {
+                            groupRepo.deleteGroup(group.gid)
+                        } else {
+                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                        }
+                        if (result.status == 0) {
+                            L.d { "[test] disband or leave Test Group success: ${group.name}" }
+                        } else {
+                            L.e { "[test] disband or leave Test Group error:" + result.reason }
+                            throw NetworkException(result.status, result.reason ?: "")
+                        }
+                        delay(100)
+                    }
                 }
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("disband or leave success")
+            } catch (e: Exception) {
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
             }
-            .toList()
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                WaitDialog.dismiss()
-                PopTip.show("disband or leave success")
-            }, {
-                it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
-            })
+        }
     }
 
-    fun sendTestMessageToAllTestGroups(activity: Activity, content: String = "test", isConfidential: Boolean = false) {
-        val testGroups = wcdb.group.allObjects.filter { it.name.startsWith(testGroupNamePrefix) }
-        L.d { "[test] sendTestMessageToAllTestGroups testGroups:" + testGroups.joinToString { it.name } }
-        WaitDialog.show(activity, "")
-        Observable.interval(0, 200, TimeUnit.MILLISECONDS)
-            .take(testGroups.size.toLong())
-            .flatMap {
-                sendTextPush(testGroups[it.toInt()].gid, content, isConfidential)
-                Observable.just("ok")
+    fun sendTestMessageToAllTestGroups(
+        activity: Activity,
+        scope: CoroutineScope,
+        isConfidential: Boolean = false
+    ) {
+        ComposeDialogManager.showWait(activity, "")
+
+        scope.launch {
+            try {
+                val testGroups = withContext(Dispatchers.IO) {
+                    wcdb.group.allObjects.filter { it.name?.startsWith(testGroupNamePrefix) == true }
+                }
+                L.d { "[test] sendTestMessageToAllTestGroups testGroups:" + testGroups.size }
+
+                val content = generateTestMessage()
+                testGroups.forEach { group ->
+                    sendTextPush(group.gid, content, isConfidential)
+                }
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("send success")
+            } catch (e: Exception) {
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
             }
-            .toList()
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(activity as LifecycleOwner))
-            .subscribe({
-                WaitDialog.dismiss()
-                PopTip.show("send success")
-            }, {
-                it.printStackTrace()
-                WaitDialog.dismiss()
-                PopTip.show(it.message)
-            })
+        }
     }
 
-    private fun sendTextPush(gid: String, content: String = "test", isConfidential: Boolean = false) {
-        val timeStamp = System.currentTimeMillis()
+    fun sendTestMessageToSingleGroup(
+        activity: Activity,
+        scope: CoroutineScope,
+        count: Int = 50,
+        isConfidential: Boolean = false
+    ) {
+        ComposeDialogManager.showWait(activity, "")
+
+        scope.launch {
+            try {
+                val targetGroup = withContext(Dispatchers.IO) {
+                    wcdb.group.allObjects
+                        .filter { it.name?.startsWith(testGroupNamePrefix) == true }
+                        .minByOrNull { it.name?.replace(testGroupNamePrefix, "")?.toIntOrNull() ?: Int.MAX_VALUE }
+                }
+
+                if (targetGroup == null) {
+                    ComposeDialogManager.dismissWait()
+                    ToastUtil.show("No test group found")
+                    return@launch
+                }
+
+                L.d { "[test] sendTestMessageToSingleGroup target: ${targetGroup.name}, count: $count" }
+
+                repeat(count) {
+                    val content = generateTestMessage()
+                    sendTextPush(targetGroup.gid, content, isConfidential)
+                }
+                ComposeDialogManager.dismissWait()
+                ToastUtil.show("send $count messages to ${targetGroup.name}")
+            } catch (e: Exception) {
+                L.w { "[MessageTestUtil] error: ${e.stackTraceToString()}" }
+                ComposeDialogManager.dismissWait()
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
+        }
+    }
+
+    private fun generateTestMessage(): String {
+        return buildString {
+            repeat(500) {
+                append(RANDOM_CHARS[Random.nextInt(RANDOM_CHARS.length)])
+            }
+        }
+    }
+
+    private val lastTimestamp = AtomicLong(0L)
+
+    private fun getSafeTimestamp(): Long {
+        while (true) {
+            val current = System.currentTimeMillis()
+            val last = lastTimestamp.get()
+            val next = if (current <= last) last + 1 else current
+            if (lastTimestamp.compareAndSet(last, next)) {
+                return next
+            }
+        }
+    }
+
+    private fun sendTextPush(gid: String, content: String, isConfidential: Boolean = false) {
+        val timeStamp = getSafeTimestamp()
         val forWhat = For.Group(gid)
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}$DEFAULT_DEVICE_ID"
 
@@ -143,5 +219,9 @@ class MessageTestUtil @Inject constructor(
             content,
         )
         ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+    }
+
+    companion object {
+        private const val RANDOM_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     }
 }

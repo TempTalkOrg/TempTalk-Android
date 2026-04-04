@@ -21,9 +21,10 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.video.VideoSinkVisibility
 
 /**
- *
+ * Compose 布局可见性跟踪，用于 adaptive streaming。
+ * 基于 LayoutCoordinates 判断是否 attached 且尺寸非零来计算可见性。
  */
-class ComposeVisibility : VideoSinkVisibility() {
+open class ComposeVisibility : VideoSinkVisibility() {
     private var coordinates: LayoutCoordinates? = null
 
     private var lastVisible = isVisible()
@@ -61,4 +62,19 @@ class ComposeVisibility : VideoSinkVisibility() {
         coordinates = null
         notifyChanged()
     }
+}
+
+/**
+ * 屏幕共享专用的可见性实现，始终报告可见。
+ *
+ * 屏幕共享不需要 adaptive streaming 的可见性管理（用户始终需要看到流），
+ * 但仍需通过布局尺寸让服务端选择合适的分辨率。
+ *
+ * 解决的问题：
+ * - RemoteTrackPublication.track setter 在 renderer attach 前调用 handleVisibilityChanged(false)
+ *   导致 disabled=true 被发送给服务端
+ * - Compose 重组期间 remove/add renderer 导致 sinkVisibilityMap 短暂为空，触发 disabled=true 抖动
+ */
+class ScreenShareVisibility : ComposeVisibility() {
+    override fun isVisible(): Boolean = true
 }

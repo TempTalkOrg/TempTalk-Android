@@ -183,20 +183,20 @@ public final class FileIOUtils {
             }
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] writeFileFromIS failed");
             return false;
         } finally {
             try {
                 is.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] writeFileFromIS close input stream failed");
             }
             try {
                 if (os != null) {
                     os.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] writeFileFromIS close output stream failed");
             }
         }
     }
@@ -398,7 +398,7 @@ public final class FileIOUtils {
             if (isForce) fc.force(true);
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] writeFileFromBytesByChannel failed");
             return false;
         } finally {
             try {
@@ -406,7 +406,7 @@ public final class FileIOUtils {
                     fc.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] writeFileFromBytesByChannel close channel failed");
             }
         }
     }
@@ -484,7 +484,7 @@ public final class FileIOUtils {
             if (isForce) mbb.force();
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] writeFileFromBytesByMap failed");
             return false;
         } finally {
             try {
@@ -492,7 +492,7 @@ public final class FileIOUtils {
                     fc.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] writeFileFromBytesByMap close channel failed");
             }
         }
     }
@@ -555,7 +555,7 @@ public final class FileIOUtils {
             bw.write(content);
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] writeFileFromString failed");
             return false;
         } finally {
             try {
@@ -563,7 +563,7 @@ public final class FileIOUtils {
                     bw.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] writeFileFromString close writer failed");
             }
         }
     }
@@ -688,7 +688,7 @@ public final class FileIOUtils {
             }
             return list;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] readFile2List failed");
             return null;
         } finally {
             try {
@@ -696,7 +696,7 @@ public final class FileIOUtils {
                     reader.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] readFile2List close reader failed");
             }
         }
     }
@@ -748,7 +748,7 @@ public final class FileIOUtils {
             try {
                 return new String(bytes, charsetName);
             } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] readFile2String encoding failed");
                 return "";
             }
         }
@@ -827,24 +827,24 @@ public final class FileIOUtils {
                 }
                 return os.toByteArray();
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] readFile2BytesByStream read failed");
                 return null;
             } finally {
                 try {
                     is.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[FileIOUtils] readFile2BytesByStream close input stream failed");
                 }
                 try {
                     if (os != null) {
                         os.close();
                     }
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[FileIOUtils] readFile2BytesByStream close output stream failed");
                 }
             }
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] readFile2BytesByStream file not found");
             return null;
         }
     }
@@ -880,7 +880,7 @@ public final class FileIOUtils {
             }
             return byteBuffer.array();
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] readFile2BytesByChannel failed");
             return null;
         } finally {
             try {
@@ -888,7 +888,7 @@ public final class FileIOUtils {
                     fc.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] readFile2BytesByChannel close channel failed");
             }
         }
     }
@@ -924,7 +924,7 @@ public final class FileIOUtils {
             mbb.get(result, 0, size);
             return result;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[FileIOUtils] readFile2BytesByMap failed");
             return null;
         } finally {
             try {
@@ -932,7 +932,7 @@ public final class FileIOUtils {
                     fc.close();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[FileIOUtils] readFile2BytesByMap close channel failed");
             }
         }
     }

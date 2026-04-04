@@ -4,6 +4,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- For services -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+
     <application>
         <activity
             android:name=".LCallActivity"
@@ -13,13 +18,28 @@
             android:resizeableActivity="true"
             android:showOnLockScreen="true"
             android:supportsPictureInPicture="true"
-            android:taskAffinity="com.difft.android.call.task"
-            android:theme="@style/Theme.Livekitandroid.NoActionBar" />
+            android:finishOnTaskLaunch="true"
+            android:taskAffinity="com.difft.android.call.task" />
+
+        <activity
+            android:name=".node.LCallServerNodeActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
+            android:exported="false"
+            android:resizeableActivity="true"
+        />
 
         <service
             android:name=".service.ForegroundService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback|camera|microphone" />
+            android:foregroundServiceType="dataSync|microphone|camera" />
+
+        <receiver
+            android:name=".receiver.InComingCallNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="difft.intent.action.RECEIVE_CALL_OPERATION_ACCEPT" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

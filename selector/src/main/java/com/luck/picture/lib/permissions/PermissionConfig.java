@@ -3,7 +3,6 @@ package com.luck.picture.lib.permissions;
 import android.Manifest;
 import android.content.Context;
 import android.os.Build;
-import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 

@@ -12,6 +12,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import com.difft.android.base.log.lumberjack.L
 
 
 data class SealedData(
@@ -58,7 +59,7 @@ object WCDBSecretKeyHelper {
                     Base64.decode(secretKeyData, Base64.NO_PADDING)
                 }
             } catch (e: Exception){
-                e.printStackTrace()
+                L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
                 null
             }
         }
@@ -78,7 +79,7 @@ object WCDBSecretKeyHelper {
                 return null
             }
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -94,7 +95,7 @@ object WCDBSecretKeyHelper {
                 return null
             }
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -123,7 +124,7 @@ object WCDBSecretKeyHelper {
 
             return keyGenerator.generateKey()
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -138,7 +139,7 @@ object WCDBSecretKeyHelper {
                 KeyStore.SecretKeyEntry::class.java
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return false
     }
@@ -149,7 +150,7 @@ object WCDBSecretKeyHelper {
             keyStore.load(null)
             return keyStore
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -159,7 +160,7 @@ object WCDBSecretKeyHelper {
         try {
             return getSecretKey(keyStore)
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -176,7 +177,7 @@ object WCDBSecretKeyHelper {
             return null
         }
         catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            L.w { "[WCDBSecretKeyHelper] error: ${e.stackTraceToString()}" }
         }
         return null
     }

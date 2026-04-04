@@ -15,13 +15,14 @@ import com.difft.android.base.log.lumberjack.L
 
 import org.difft.app.database.convertToContactorModels
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
 import org.difft.app.database.search
 import org.difft.app.database.wcdb
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.contactsall.GroupMemberRoleComparator
-import com.difft.android.chat.contacts.contactsall.PinyinComparator2
+import com.difft.android.chat.contacts.contactsall.sortedByPinyin
+import com.difft.android.chat.contacts.contactsall.sortedByRoleThenPinyin
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.FriendSourceType
@@ -33,20 +34,18 @@ import com.difft.android.chat.databinding.ChatActivityGroupSelectMemberBinding
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.base.widget.sideBar.GroupMemberDecoration
 import com.hi.dhl.binding.viewbind
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import java.util.Collections
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
 class GroupSelectMemberActivity : BaseActivity() {
     companion object {
@@ -72,6 +71,9 @@ class GroupSelectMemberActivity : BaseActivity() {
 
     @Inject
     lateinit var groupRepo: GroupRepo
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
 
     val mAdapter: GroupMembersAdapter by lazy {
         object : GroupMembersAdapter(type) {
@@ -183,17 +185,18 @@ class GroupSelectMemberActivity : BaseActivity() {
                         it.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER,
                         isSelected = false,
                         checkBoxEnable = true,
-                        showCheckBox = canOperate
+                        showCheckBox = canOperate,
+                        letterName = it.getDisplayNameWithoutRemarkForUI()
                     )
                 )
             }
 
             withContext(Dispatchers.Main) {
-                // 使用自定义比较器排序
-                list.sortWith(GroupMemberRoleComparator())
+                // 使用扩展函数排序
+                val sortedList = list.sortedByRoleThenPinyin()
 
-                addRoleDecoration(list)
-                mAdapter.submitList(list)
+                addRoleDecoration(sortedList)
+                mAdapter.submitList(sortedList)
             }
         }
     }
@@ -235,35 +238,35 @@ class GroupSelectMemberActivity : BaseActivity() {
 
         L.i { "[GroupSelectMemberActivity] currentSelectedIds:$currentSelectedIds" }
 
-        WaitDialog.show(this@GroupSelectMemberActivity, "")
+        ComposeDialogManager.showWait(this@GroupSelectMemberActivity, "")
 
         lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    groupRepo.removeMembers(gid, currentSelectedIds.toList()).blockingGet()
+                    groupRepo.removeMembers(gid, currentSelectedIds.toList())
                 }
 
                 if (response.status == 0) {
                     // 移除成员成功后，刷新群组信息
                     try {
                         withContext(Dispatchers.IO) {
-                            GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).blockingFirst()
+                            groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
                         }
                     } catch (e: Exception) {
                         L.e { "[GroupSelectMemberActivity] Failed to refresh group info after removing members: ${e.message}" }
                     }
                 }
 
-                WaitDialog.dismiss()
+                ComposeDialogManager.dismissWait()
                 if (response.status == 0) {
                     finish()
                 } else {
-                    TipDialog.show(response.reason)
+                    response.reason?.let { ToastUtil.showLong(it) }
                 }
             } catch (e: Exception) {
-                WaitDialog.dismiss()
-                e.printStackTrace()
-                TipDialog.show(R.string.chat_net_error)
+                ComposeDialogManager.dismissWait()
+                L.w { "[GroupSelectMemberActivity] removeMembers error: ${e.stackTraceToString()}" }
+                ToastUtil.showLong(R.string.chat_net_error)
             }
         }
     }
@@ -290,12 +293,12 @@ class GroupSelectMemberActivity : BaseActivity() {
             }
 
             TYPE_ADD_MEMBER -> {
-                WaitDialog.show(this@GroupSelectMemberActivity, "")
+                ComposeDialogManager.showWait(this@GroupSelectMemberActivity, "")
 
                 lifecycleScope.launch {
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.addMembers(gid, currentSelectedIds.toList()).blockingGet()
+                            groupRepo.addMembers(gid, currentSelectedIds.toList())
                         }
 
                         when (response.status) {
@@ -303,7 +306,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                                 // 添加成员成功后，刷新群组信息
                                 try {
                                     withContext(Dispatchers.IO) {
-                                        GroupUtil.fetchAndSaveSingleGroupInfo(ApplicationDependencies.getApplication(), gid, true).blockingFirst()
+                                        groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
                                     }
                                 } catch (e: Exception) {
                                     L.e { "[GroupSelectMemberActivity] Failed to refresh group info after adding members: ${e.message}" }
@@ -311,23 +314,23 @@ class GroupSelectMemberActivity : BaseActivity() {
                             }
                         }
 
-                        WaitDialog.dismiss()
+                        ComposeDialogManager.dismissWait()
                         when (response.status) {
                             0 -> finish()
-                            2 -> TipDialog.show(getString(R.string.invite_only_moderators_can_add))
+                            2 -> ToastUtil.showLong(getString(R.string.invite_only_moderators_can_add))
                             10125 -> {
                                 response.data?.strangers?.let { strangers ->
                                     val content = strangers.joinToString(separator = ", ") { s -> s.name.toString() }
-                                    PopTip.show(getString(R.string.group_not_your_friend, content))
+                                    ToastUtil.show(getString(R.string.group_not_your_friend))
                                 }
                             }
 
-                            else -> TipDialog.show(response.reason)
+                            else -> response.reason?.let { ToastUtil.showLong(it) }
                         }
                     } catch (e: Exception) {
-                        WaitDialog.dismiss()
-                        e.printStackTrace()
-                        TipDialog.show(R.string.chat_net_error)
+                        ComposeDialogManager.dismissWait()
+                        L.w { "[GroupSelectMemberActivity] addMembers error: ${e.stackTraceToString()}" }
+                        ToastUtil.showLong(R.string.chat_net_error)
                     }
                 }
             }
@@ -369,7 +372,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                     refreshContactsList(contacts)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[GroupSelectMemberActivity] searchContacts error: ${e.stackTraceToString()}" }
             }
         }
     }
@@ -403,14 +406,13 @@ class GroupSelectMemberActivity : BaseActivity() {
                 0,
                 isCurrentlySelected, // 总的选择状态
                 !isInInitialSelection, // 只有不在初始选择列表中的才能操作checkbox
-                true
+                true,
+                letterName = contact.getDisplayNameWithoutRemarkForUI()
             )
-        }.let { ArrayList(it) }
-
-        searchResultList.let {
-            Collections.sort(it, PinyinComparator2())
-            mAdapter.submitList(it)
         }
+
+        val sortedList = searchResultList.sortedByPinyin()
+        mAdapter.submitList(sortedList)
     }
 
     private fun resetButtonClear(etContent: String?) {

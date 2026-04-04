@@ -7,6 +7,8 @@ import android.os.Process;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import util.concurrent.TracingExecutor;
 import util.concurrent.TracingExecutorService;
 
@@ -102,7 +104,9 @@ public final class ThreadUtil {
   public static void interruptableSleep(long millis) {
     try {
       Thread.sleep(millis);
-    } catch (InterruptedException ignored) { }
+    } catch (InterruptedException ignored) {
+      L.w(() -> "[ThreadUtil] interruptableSleep interrupted" + ignored);
+    }
   }
 
   public static Executor trace(Executor executor) {

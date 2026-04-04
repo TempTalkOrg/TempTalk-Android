@@ -1,7 +1,6 @@
 package com.difft.android.websocket.api.util
 
-import com.difft.android.base.log.lumberjack.L.i
-import com.difft.android.base.log.lumberjack.L.w
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SecureSharedPrefsUtil.getSignalingKey
 import org.signal.libsignal.protocol.InvalidVersionException
 import com.difft.android.websocket.api.util.PipeDecryptTool.getCipherKey
@@ -35,16 +34,14 @@ object EnvelopDeserializer {
             verifyMac(input, macKey)
 
             Envelope.parseFrom(getPlaintext(input, cipherKey)).also {
-                i { "[Message] parse envelope success:${it.timestamp}" }
+                L.i { "[EnvelopDeserializer] parse envelope success:${it.timestamp}" }
             }
         } catch (e: InvalidVersionException) {
-            w { "[Message] parse envelope exception:" + e.message }
             // 解析 proto 数据可能出现异常，可以在这里处理
-            e.printStackTrace()
+            L.w(e) { "[EnvelopDeserializer] parse envelope exception:" }
             null
         } catch (e: IOException) {
-            w { "[Message] parse envelope exception:" + e.message }
-            e.printStackTrace()
+            L.w(e) { "[EnvelopDeserializer] parse envelope exception:" }
             null
         }
         return envelope

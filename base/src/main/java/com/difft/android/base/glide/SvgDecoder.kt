@@ -19,7 +19,7 @@ class SvgDecoder : ResourceDecoder<InputStream, SVG> {
                 svg.documentHeight = height.toFloat()
             SimpleResource(svg)
         } catch (e: Exception) {
-            L.e { "[SvgDecoder] decode svg fail:" + e.stackTraceToString() }
+            L.e(e) { "[SvgDecoder] decode svg fail:" }
             null
         }
     }

@@ -1,5 +1,7 @@
 package com.luck.picture.lib.utils;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -65,7 +67,7 @@ public class BitmapUtils {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[BitmapUtils] rotateImage error:");
         } finally {
             PictureFileUtils.close(inputStream);
             PictureFileUtils.close(outputStream);
@@ -103,7 +105,7 @@ public class BitmapUtils {
             fos.flush();
             fos.close();
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[BitmapUtils] saveBitmapFile error:");
         } finally {
             PictureFileUtils.close(fos);
             PictureFileUtils.close(stream);
@@ -140,7 +142,7 @@ public class BitmapUtils {
                     return 0;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[BitmapUtils] readPictureDegree error:");
             return 0;
         } finally {
             PictureFileUtils.close(inputStream);

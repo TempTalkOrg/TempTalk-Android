@@ -1,50 +1,51 @@
 package com.difft.android.chat.contacts.contactsall
 
+import com.difft.android.base.widget.sideBar.CharacterParser
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.group.GroupMemberModel
 import org.difft.app.database.models.ContactorModel
 
 /**
- *
+ * Pinyin sort key for efficient sorting.
+ * Letters (A-Z) come first, then non-letters (# group).
  */
-class PinyinComparator : Comparator<ContactorModel> {
-    override fun compare(o1: ContactorModel, o2: ContactorModel): Int {
-        return if (o1.getDisplayNameForUI().getSortLetter() == "@" || o2.getDisplayNameForUI().getSortLetter() == "#") {
-            -1
-        } else if (o1.getDisplayNameForUI().getSortLetter() == "#" || o2.getDisplayNameForUI().getSortLetter() == "@") {
-            1
-        } else {
-            o1.getDisplayNameForUI().getSortLetter().compareTo(o2.getDisplayNameForUI().getSortLetter())
+private data class PinyinSortKey(val isNonLetter: Boolean, val pinyin: String) : Comparable<PinyinSortKey> {
+    override fun compareTo(other: PinyinSortKey): Int {
+        // Non-letters (# group) come after letters
+        if (isNonLetter != other.isNonLetter) {
+            return if (isNonLetter) 1 else -1
         }
+        return pinyin.compareTo(other.pinyin)
     }
 }
 
-class PinyinComparator2 : Comparator<GroupMemberModel> {
-    override fun compare(o1: GroupMemberModel, o2: GroupMemberModel): Int {
-        return if (o1.sortLetters == "@" || o2.sortLetters == "#") {
-            -1
-        } else if (o1.sortLetters == "#" || o2.sortLetters == "@") {
-            1
-        } else {
-            o1.sortLetters!!.compareTo(o2.sortLetters!!)
-        }
-    }
+private fun String.toPinyinSortKey(): PinyinSortKey {
+    val pinyin = CharacterParser.getSelling(this).lowercase()
+    val isNonLetter = pinyin.firstOrNull()?.let { it !in 'a'..'z' } ?: true
+    return PinyinSortKey(isNonLetter, pinyin)
 }
 
 /**
- * GroupMemberModel 排序比较器：先按 role 排序，再按拼音排序
+ * Sort contacts by pinyin with optimal performance.
+ * Each contact's pinyin is calculated only once (cached by compareBy).
+ * Letters (A-Z) come first, then non-letters (# group).
  */
-class GroupMemberRoleComparator : Comparator<GroupMemberModel> {
-    override fun compare(m1: GroupMemberModel, m2: GroupMemberModel): Int {
-        // First compare by role
-        val roleCompare = m1.role.compareTo(m2.role)
-        return if (roleCompare != 0) {
-            // role 值小的排在前面
-            roleCompare
-        } else {
-            // If roles are the same, compare by name using PinyinComparator2
-            PinyinComparator2().compare(m1, m2)
-        }
-    }
+@JvmName("sortedContactsByPinyin")
+fun List<ContactorModel>.sortedByPinyin(): List<ContactorModel> {
+    return sortedWith(compareBy { it.getDisplayNameForUI().toPinyinSortKey() })
+}
+
+/**
+ * Sort group members by pinyin with optimal performance.
+ */
+@JvmName("sortedGroupMembersByPinyin")
+fun List<GroupMemberModel>.sortedByPinyin(): List<GroupMemberModel> {
+    return sortedWith(compareBy { (it.name ?: "").toPinyinSortKey() })
+}
+
+/**
+ * Sort group members by role first, then by pinyin.
+ */
+fun List<GroupMemberModel>.sortedByRoleThenPinyin(): List<GroupMemberModel> {
+    return sortedWith(compareBy({ it.role }, { (it.name ?: "").toPinyinSortKey() }))
 }

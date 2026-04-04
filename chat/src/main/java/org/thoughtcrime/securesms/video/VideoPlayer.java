@@ -1,19 +1,4 @@
-/*
- * Copyright (C) 2017 Whisper Systems
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+
 package org.thoughtcrime.securesms.video;
 
 import android.content.Context;
@@ -43,7 +28,7 @@ import androidx.media3.ui.PlayerView;
 
 import com.difft.android.chat.R;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 
 import java.util.Objects;
@@ -53,7 +38,7 @@ import java.util.concurrent.TimeUnit;
 public class VideoPlayer extends FrameLayout {
 
     @SuppressWarnings("unused")
-    private static final String TAG = Log.tag(VideoPlayer.class);
+    private static final String TAG = "VideoPlayer";
 
     private final PlayerView exoView;
     private final DefaultMediaSourceFactory mediaSourceFactory;
@@ -124,7 +109,7 @@ public class VideoPlayer extends FrameLayout {
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
-                Log.w(TAG, "A player error occurred", error);
+                L.w(error, () -> TAG + " A player error occurred");
                 if (playerCallback != null) {
                     playerCallback.onError();
                 }

@@ -5,8 +5,8 @@
             android:shape="oval"
             android:useLevel="true">
             <size
-                android:width="9dp"
-                android:height="9dp" />
+                android:width="15dp"
+                android:height="15dp" />
 
             <solid android:color="@color/ps_color_transparent" />
             <stroke

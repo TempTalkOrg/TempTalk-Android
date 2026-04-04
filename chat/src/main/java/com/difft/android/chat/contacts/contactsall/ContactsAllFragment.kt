@@ -6,59 +6,76 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
-import com.difft.android.chat.R
+import com.difft.android.base.utils.sampleAfterFirst
+import com.difft.android.base.widget.sideBar.SectionDecoration
+import com.difft.android.base.widget.sideBar.SideBar
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getSortLetter
+import com.difft.android.chat.recent.ConversationNavigationCallback
+import com.difft.android.chat.recent.DualPaneSelectionListener
 import com.difft.android.chat.databinding.ChatFragmentContactsAllBinding
-import com.difft.android.base.widget.sideBar.SectionDecoration
-import com.difft.android.base.widget.sideBar.SideBar
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
-import java.util.Collections
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ContactsAllFragment : Fragment() {
+class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var wcdb: WCDB
 
     val binding: ChatFragmentContactsAllBinding by viewbind()
 
-    private val pinyinComparator: PinyinComparator by lazy {
-        PinyinComparator()
-    }
 
     val mAdapter: ContactorsAdapter by lazy {
         object : ContactorsAdapter(globalServices.myId) {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
-                ContactDetailActivity.startActivity(this@ContactsAllFragment.requireActivity(), contact.id)
+                // Use ConversationNavigationCallback for dual-pane support
+                val navigationCallback = activity as? ConversationNavigationCallback
+                if (navigationCallback != null) {
+                    navigationCallback.onContactDetailSelected(contact.id)
+                    if (navigationCallback.isDualPaneMode) {
+                        selectedId = contact.id
+                    }
+                } else {
+                    ContactDetailActivity.startActivity(this@ContactsAllFragment.requireActivity(), contact.id)
+                }
             }
         }
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        return binding.root
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
         binding.sideBar.setOnTouchingLetterChangedListener(object : SideBar.OnTouchingLetterChangedListener {
             override fun onTouchingLetterChanged(s: String) {
-                //该字母首次出现的位置
                 val position: Int = mAdapter.getLetterPosition(s)
                 if (position != -1) {
-//                    binding.recyclerviewContacts.scrollToPosition(position)
                     (binding.recyclerviewContacts.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(position, 0)
                 }
             }
@@ -77,45 +94,47 @@ class ContactsAllFragment : Fragment() {
         }
 
         ContactorUtil.getContactsStatusUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                binding.smartRefreshLayout.finishRefresh()
-            }, { it.printStackTrace() })
+            .onEach { binding.smartRefreshLayout.finishRefresh() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
+        // Load contacts on every STARTED lifecycle (handles config changes / split-screen)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                loadContacts()
+            }
+        }
+
+        // Reload on incremental contact changes (friend added/removed/updated)
         ContactorUtil.contactsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                initData()
-            }, { it.printStackTrace() })
+            .sampleAfterFirst(2000)
+            .onEach { loadContacts() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        initData()
-
-        TextSizeUtil.textSizeChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mAdapter.notifyDataSetChanged()
-            }, { it.printStackTrace() })
-        return binding.root
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { mAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
-    private fun initData() {
-        Single.fromCallable {
-            val contacts = wcdb.contactor.allObjects
-            val contactList = contacts.toMutableList()
-            contactList.removeAll { it.id == getString(R.string.official_bot_id) }
-            Collections.sort(contactList, pinyinComparator)
-            contactList
-        }.compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ contacts ->
-                mAdapter.submitList(contacts)
-                addLettersDecoration(contacts)
-            }, {
-                it.printStackTrace()
-            })
+    override fun onResume() {
+        super.onResume()
+        val navigationCallback = activity as? ConversationNavigationCallback
+        if (navigationCallback?.isDualPaneMode == true) {
+            mAdapter.selectedId = navigationCallback.currentSelectedConversationId
+        }
+    }
+
+    override fun updateDualPaneSelection(selectedId: String?) {
+        mAdapter.selectedId = selectedId
+    }
+
+    private suspend fun loadContacts() {
+        val contacts = withContext(Dispatchers.IO) {
+            wcdb.contactor.allObjects
+                .sortedByPinyin()
+        }
+        mAdapter.submitList(contacts)
+        addLettersDecoration(contacts)
     }
 
     private var decoration: SectionDecoration? = null

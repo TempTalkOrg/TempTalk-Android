@@ -130,8 +130,8 @@ public abstract class BasePreviewHolder extends RecyclerView.ViewHolder {
         if (!selectorConfig.isPreviewZoomEffect && screenWidth < screenHeight) {
             if (media.getWidth() > 0 && media.getHeight() > 0) {
                 FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) coverImageView.getLayoutParams();
-                layoutParams.width = screenWidth;
-                layoutParams.height = screenAppInHeight;
+                layoutParams.width = FrameLayout.LayoutParams.MATCH_PARENT;
+                layoutParams.height = FrameLayout.LayoutParams.MATCH_PARENT;
                 layoutParams.gravity = Gravity.CENTER;
             }
         }

@@ -1,10 +1,14 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
     id("kotlin-parcelize")
     id("org.jetbrains.kotlin.plugin.serialization")
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -25,10 +29,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     kapt {
         correctErrorTypes = true
     }
@@ -40,11 +40,22 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
-    }
     buildFeatures {
         buildConfig = true
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/call"))
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
     }
 }
 
@@ -56,16 +67,35 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlin.metadata.jvm)
 
     // Compose Debug
     debugImplementation(libs.bundles.compose.debug)
-    // 测试依赖已通过base模块提供
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 
     // Call specific dependencies
     implementation(libs.accompanist.systemuicontroller)
-    implementation(libs.coil.network.okhttp)
+    implementation(libs.accompanist.permissions)
     implementation(libs.livekit.android)
     implementation(libs.livekit.android.camerax)
+    implementation(libs.livekit.ttsignal)
     implementation(libs.denoise.filter)
     implementation(libs.coil.compose)
     implementation(libs.coil)
@@ -73,7 +103,5 @@ dependencies {
     implementation(libs.compose.foundation.version)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.protobuf.javalite)
-    implementation(libs.protobuf.kotlin.lite)
-    
+
 }

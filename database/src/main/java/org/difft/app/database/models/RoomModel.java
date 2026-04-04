@@ -1,7 +1,5 @@
 package org.difft.app.database.models;
 
-import androidx.annotation.NonNull;
-
 import com.tencent.wcdb.WCDBDefault;
 import com.tencent.wcdb.WCDBField;
 import com.tencent.wcdb.WCDBIndex;
@@ -51,6 +49,15 @@ public class RoomModel {
     @WCDBDefault(intValue = 0)
     public int muteStatus;
 
+    /**
+     * 屏蔽状态（仅单聊有效）
+     * 0: 未屏蔽
+     * 1: 已屏蔽
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    public int blockStatus;
+
     @WCDBField
     public String publicKeyInfoJson;
 
@@ -74,15 +81,51 @@ public class RoomModel {
     @WCDBField
     public int groupMembersNumber;
 
+    /**
+     * 0: normal mode
+     * 1: confidential mode
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    public int confidentialMode;
+
+    /**
+     * Critical Alert 类型（用于会话列表显示）
+     * 0: 无未读 Critical Alert
+     * 1: 有未读 Critical Alert
+     * 预留其他值用于后续扩展
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    public int criticalAlertType;
+
+    /**
+     * Conversation-level save to photos setting
+     * null: Follow global setting (default)
+     * 0: Disabled (never)
+     * 1: Enabled (always)
+     */
+    @WCDBField
+    public Integer saveToPhotos;
+
+    /**
+     * Timestamp (ms) when the conversation last became empty
+     * null: Conversation has content (not empty)
+     * non-null: Conversation is empty, value is the time when it became empty
+     * Used for empty room timeout cleanup without affecting lastActiveTime sorting
+     */
+    @WCDBField
+    public Long emptyRoomSince;
+
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof RoomModel roomModel)) return false;
-        return roomType == roomModel.roomType && muteStatus == roomModel.muteStatus && readPosition == roomModel.readPosition && unreadMessageNum == roomModel.unreadMessageNum && mentionType == roomModel.mentionType && lastActiveTime == roomModel.lastActiveTime && groupMembersNumber == roomModel.groupMembersNumber && Objects.equals(roomId, roomModel.roomId) && Objects.equals(roomName, roomModel.roomName) && Objects.equals(roomAvatarJson, roomModel.roomAvatarJson) && Objects.equals(lastDisplayContent, roomModel.lastDisplayContent) && Objects.equals(messageExpiry, roomModel.messageExpiry) && Objects.equals(messageClearAnchor, roomModel.messageClearAnchor) && Objects.equals(pinnedTime, roomModel.pinnedTime) && Objects.equals(publicKeyInfoJson, roomModel.publicKeyInfoJson);
+        return roomType == roomModel.roomType && muteStatus == roomModel.muteStatus && blockStatus == roomModel.blockStatus && readPosition == roomModel.readPosition && unreadMessageNum == roomModel.unreadMessageNum && mentionType == roomModel.mentionType && lastActiveTime == roomModel.lastActiveTime && groupMembersNumber == roomModel.groupMembersNumber && confidentialMode == roomModel.confidentialMode && criticalAlertType == roomModel.criticalAlertType && Objects.equals(roomId, roomModel.roomId) && Objects.equals(roomName, roomModel.roomName) && Objects.equals(roomAvatarJson, roomModel.roomAvatarJson) && Objects.equals(lastDisplayContent, roomModel.lastDisplayContent) && Objects.equals(messageExpiry, roomModel.messageExpiry) && Objects.equals(messageClearAnchor, roomModel.messageClearAnchor) && Objects.equals(pinnedTime, roomModel.pinnedTime) && Objects.equals(publicKeyInfoJson, roomModel.publicKeyInfoJson) && Objects.equals(saveToPhotos, roomModel.saveToPhotos) && Objects.equals(emptyRoomSince, roomModel.emptyRoomSince);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(roomId, roomType, roomName, roomAvatarJson, lastDisplayContent, messageExpiry, messageClearAnchor, pinnedTime, muteStatus, publicKeyInfoJson, readPosition, unreadMessageNum, mentionType, lastActiveTime, groupMembersNumber);
+        return Objects.hash(roomId, roomType, roomName, roomAvatarJson, lastDisplayContent, messageExpiry, messageClearAnchor, pinnedTime, muteStatus, blockStatus, publicKeyInfoJson, readPosition, unreadMessageNum, mentionType, lastActiveTime, groupMembersNumber, confidentialMode, criticalAlertType, saveToPhotos, emptyRoomSince);
     }
 
     @Override
@@ -98,12 +141,17 @@ public class RoomModel {
                 ", messageClearAnchor=" + messageClearAnchor +
                 ", pinnedTime=" + pinnedTime +
                 ", muteStatus=" + muteStatus +
+                ", blockStatus=" + blockStatus +
                 ", publicKeyInfoJson='" + publicKeyInfoJson + '\'' +
                 ", readPosition=" + readPosition +
                 ", unreadMessageNum=" + unreadMessageNum +
                 ", mentionType=" + mentionType +
                 ", lastActiveTime=" + lastActiveTime +
                 ", groupMembersNumber=" + groupMembersNumber +
+                ", confidentialMode=" + confidentialMode +
+                ", criticalAlertType=" + criticalAlertType +
+                ", saveToPhotos=" + saveToPhotos +
+                ", emptyRoomSince=" + emptyRoomSince +
                 '}';
     }
 }

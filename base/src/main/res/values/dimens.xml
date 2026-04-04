@@ -1,3 +1,5 @@
 <resources>
     <dimen name="chat_sidebar_text_size_normal_default">11sp</dimen>
+    <!-- Maximum width for bottom sheet dialogs on wide screens (same as Material 3 ModalBottomSheet) -->
+    <dimen name="bottom_sheet_max_width">640dp</dimen>
 </resources>

@@ -6,27 +6,102 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.ConversationSetResponseBody
-import com.tencent.wcdb.base.Value
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Special value to indicate "set saveToPhotos to null (default/follow global)"
+ * Used to distinguish between "no change" (null) and "set to default" (-1)
+ */
+const val SAVE_TO_PHOTOS_SET_DEFAULT = -1
+
+/**
+ * Conversation setting update event
+ * null indicates the field has not changed
+ */
+data class ConversationSettingUpdate(
+    val conversationId: String,
+    // Type 4 related: muteStatus, blockStatus, confidentialMode
+    val muteStatus: Int? = null,
+    val blockStatus: Int? = null,
+    val confidentialMode: Int? = null,
+    // Type 5 related: messageExpiry, messageClearAnchor (always appear together)
+    val messageExpiry: Long? = null,
+    val messageClearAnchor: Long? = null,
+    // Save to photos setting (null: no change, -1: set to default, 0: disabled, 1: enabled)
+    val saveToPhotos: Int? = null
+)
+
 @Singleton
 class ConversationSettingsManager @Inject constructor(
-    @ChativeHttpClientModule.Chat
+    @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
-    private val messageArchiveManager: MessageArchiveManager
+    private val messageArchiveManager: MessageArchiveManager,
+    private val dbRoomStore: DBRoomStore
 ) : CoroutineScope by appScope {
+
+    private val _conversationSettingUpdate = MutableSharedFlow<ConversationSettingUpdate>(extraBufferCapacity = 1)
+    val conversationSettingUpdate: SharedFlow<ConversationSettingUpdate> = _conversationSettingUpdate.asSharedFlow()
+
+    /**
+     * 通知会话配置已更新
+     * @param conversationId 会话ID
+     * @param muteStatus 静音状态 (null = 未变化)
+     * @param blockStatus 屏蔽状态 (null = 未变化)
+     * @param confidentialMode 机密模式 (null = 未变化)
+     * @param messageExpiry 消息过期时间 (null = 未变化)
+     * @param messageClearAnchor 消息清除锚点 (null = 未变化)
+     */
+    fun emitConversationSettingUpdate(
+        conversationId: String,
+        muteStatus: Int? = null,
+        blockStatus: Int? = null,
+        confidentialMode: Int? = null,
+        messageExpiry: Long? = null,
+        messageClearAnchor: Long? = null
+    ) {
+        val update = ConversationSettingUpdate(
+            conversationId = conversationId,
+            muteStatus = muteStatus,
+            blockStatus = blockStatus,
+            confidentialMode = confidentialMode,
+            messageExpiry = messageExpiry,
+            messageClearAnchor = messageClearAnchor
+        )
+        L.i { "[ConversationSettingsManager] emitConversationSettingUpdate: $update" }
+        _conversationSettingUpdate.tryEmit(update)
+    }
+
+    /**
+     * Emit save to photos setting update
+     * @param conversationId Conversation ID
+     * @param saveToPhotos Save to photos setting (null: follow global, 0: disabled, 1: enabled)
+     */
+    fun emitSaveToPhotosUpdate(conversationId: String, saveToPhotos: Int?) {
+        // Use SAVE_TO_PHOTOS_SET_DEFAULT (-1) to indicate "set to null (default)"
+        // This distinguishes from null which means "no change"
+        val updateValue = saveToPhotos ?: SAVE_TO_PHOTOS_SET_DEFAULT
+        val update = ConversationSettingUpdate(
+            conversationId = conversationId,
+            saveToPhotos = updateValue
+        )
+        L.i { "[ConversationSettingsManager] emitSaveToPhotosUpdate: $update" }
+        _conversationSettingUpdate.tryEmit(update)
+    }
     /**
      * 同步会话设置从服务器
      * 此方法将从数据库获取所有房间对象并同步其设置
@@ -53,7 +128,6 @@ class ConversationSettingsManager @Inject constructor(
                 updateRoomSettings(roomModels, conversationSettings)
             } catch (e: Exception) {
                 L.e { "[ConversationSettingsManager] syncConversationSettings error: ${e.message}" }
-                e.printStackTrace()
             }
         }
     }
@@ -80,7 +154,7 @@ class ConversationSettingsManager @Inject constructor(
         val response = httpClient.httpService.fetchGetConversationSet(
             SecureSharedPrefsUtil.getBasicAuth(),
             GetConversationSetRequestBody(conversationIds)
-        ).await()
+        )
 
         if (response.status != 0) {
             L.e { "[ConversationSettingsManager] Server error: ${response.status} - ${response.reason}" }
@@ -96,7 +170,7 @@ class ConversationSettingsManager @Inject constructor(
     /**
      * 更新房间设置
      */
-    private suspend fun updateRoomSettings(
+    private fun updateRoomSettings(
         roomModels: List<RoomModel>,
         conversationSettings: List<ConversationSetResponseBody>
     ) {
@@ -138,33 +212,30 @@ class ConversationSettingsManager @Inject constructor(
         finalMessageExpiry: Long
     ): Boolean {
         return room.muteStatus != setting.muteStatus ||
+                room.blockStatus != setting.blockStatus ||
                 room.messageExpiry != finalMessageExpiry ||
-                room.messageClearAnchor != setting.messageClearAnchor
+                room.messageClearAnchor != setting.messageClearAnchor ||
+                room.confidentialMode != setting.confidentialMode
     }
 
     /**
      * 更新单个房间的设置
      */
-    private suspend fun updateRoomSetting(
+    private fun updateRoomSetting(
         room: RoomModel,
         setting: ConversationSetResponseBody,
         finalMessageExpiry: Long
     ) {
         try {
-            L.i { "[ConversationSettingsManager] Updating settings for room: ${room.roomId}" }
+            L.i { "[ConversationSettingsManager] Updating room ${room.roomId}: muteStatus=${setting.muteStatus}, blockStatus=${setting.blockStatus}, confidentialMode=${setting.confidentialMode}, messageExpiry=$finalMessageExpiry, messageClearAnchor=${setting.messageClearAnchor}" }
 
-            wcdb.room.updateRow(
-                arrayOf(
-                    Value(setting.muteStatus),
-                    Value(finalMessageExpiry),
-                    Value(setting.messageClearAnchor)
-                ),
-                arrayOf(
-                    DBRoomModel.muteStatus,
-                    DBRoomModel.messageExpiry,
-                    DBRoomModel.messageClearAnchor
-                ),
-                DBRoomModel.roomId.eq(room.roomId)
+            dbRoomStore.updateConversationSettings(
+                roomId = room.roomId,
+                muteStatus = setting.muteStatus,
+                blockStatus = setting.blockStatus,
+                confidentialMode = setting.confidentialMode,
+                messageExpiry = finalMessageExpiry,
+                messageClearAnchor = setting.messageClearAnchor
             )
         } catch (e: Exception) {
             L.e { "[ConversationSettingsManager] Failed to update room ${room.roomId}: ${e.message}" }

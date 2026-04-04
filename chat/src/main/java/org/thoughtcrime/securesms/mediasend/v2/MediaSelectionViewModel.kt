@@ -6,13 +6,11 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.luck.picture.lib.entity.LocalMedia
-import io.reactivex.rxjava3.core.Maybe
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.subjects.BehaviorSubject
-import io.reactivex.rxjava3.subjects.PublishSubject
-import io.reactivex.rxjava3.subjects.Subject
-import util.logging.Log
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.v2.videos.VideoTrimData
 import org.thoughtcrime.securesms.mms.MediaConstraints
@@ -23,7 +21,6 @@ import org.thoughtcrime.securesms.util.Util
 import org.thoughtcrime.securesms.util.livedata.Store
 import java.util.Collections
 import kotlin.math.max
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -31,24 +28,31 @@ import kotlin.time.Duration.Companion.seconds
  */
 class MediaSelectionViewModel(
     initialMedia: List<LocalMedia>,
-    private val repository: MediaSelectionRepository
+    private val repository: MediaSelectionRepository,
+    initialConfidentialMode: Int = 0,
+    showConfidentialToggle: Boolean = false
 ) : ViewModel() {
 
-    private val TAG = Log.tag(MediaSelectionViewModel::class.java)
+    private val TAG = L.tag(MediaSelectionViewModel::class.java)
 
-    private val selectedMediaSubject: Subject<List<LocalMedia>> = BehaviorSubject.create()
+    private val selectedMediaSubject = MutableSharedFlow<List<LocalMedia>>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    private val store: Store<MediaSelectionState> = Store(MediaSelectionState())
+    private val store: Store<MediaSelectionState> = Store(
+        MediaSelectionState(
+            confidentialMode = initialConfidentialMode,
+            showConfidentialToggle = showConfidentialToggle
+        )
+    )
 
     val state: LiveData<MediaSelectionState> = store.stateLiveData
 
-    private val internalHudCommands = PublishSubject.create<HudCommand>()
-    val hudCommands: Observable<HudCommand> = internalHudCommands
+    private val internalHudCommands = MutableSharedFlow<HudCommand>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val hudCommands: SharedFlow<HudCommand> = internalHudCommands
 
-    val mediaErrors: BehaviorSubject<MediaValidator.FilterError> = BehaviorSubject.createDefault(MediaValidator.FilterError.None)
+    val mediaErrors = MutableStateFlow<MediaValidator.FilterError>(MediaValidator.FilterError.None)
 
     fun sendCommand(hudCommand: HudCommand) {
-        internalHudCommands.onNext(hudCommand)
+        internalHudCommands.tryEmit(hudCommand)
     }
 
     fun setTouchEnabled(isEnabled: Boolean) {
@@ -77,17 +81,24 @@ class MediaSelectionViewModel(
         }.toList()
 
         store.update {
-            val initializedVideoEditorStates = newSelectionList.filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
+            // Initialize VideoTrimData for videos that don't have editor state yet
+            // Note: We initialize with totalInputDurationUs=0, and the accurate duration will be set
+            // when onEditVideoDuration is called with the precise value from MediaExtractor
+            val initializedVideoEditorStates = newSelectionList
+                .filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
                 .filter { media -> MediaUtil.isVideoType(media.mimeType) }
                 .associate { media: LocalMedia ->
-                    val duration = media.duration.milliseconds.inWholeMicroseconds
-                    Uri.parse(media.realPath) to VideoTrimData(false, duration, 0, duration)
+                    Uri.parse(media.realPath) to VideoTrimData()
                 }
-            val initializedImageEditorStates = newSelectionList.filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
+
+            // For images, preserve existing editor states (e.g., drawings, stickers)
+            val initializedImageEditorStates = newSelectionList
+                .filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
                 .filter { media -> MediaUtil.isImageAndNotGif(media.mimeType) }
                 .associate { media: LocalMedia ->
                     Uri.parse(media.realPath) to ImageEditorFragment.Data()
                 }
+
             it.copy(
                 selectedMedia = newSelectionList,
                 focusedMedia = it.focusedMedia ?: newSelectionList.first(),
@@ -95,7 +106,7 @@ class MediaSelectionViewModel(
             )
         }
 
-        selectedMediaSubject.onNext(newSelectionList)
+        selectedMediaSubject.tryEmit(newSelectionList)
     }
 
 
@@ -164,15 +175,15 @@ class MediaSelectionViewModel(
         }
 
         if (newMediaList.isEmpty() && !store.state.suppressEmptyError) {
-            mediaErrors.onNext(MediaValidator.FilterError.NoItems())
+            mediaErrors.value = MediaValidator.FilterError.NoItems()
         }
 
-        selectedMediaSubject.onNext(newMediaList)
+        selectedMediaSubject.tryEmit(newMediaList)
         repository.deleteBlobs(listOf(media))
     }
 
     fun clearMediaErrors() {
-        mediaErrors.onNext(MediaValidator.FilterError.None)
+        mediaErrors.value = MediaValidator.FilterError.None
     }
 
     fun kick() {
@@ -196,6 +207,10 @@ class MediaSelectionViewModel(
         store.update { it.copy(message = text) }
     }
 
+    fun setConfidentialMode(mode: Int) {
+        store.update { it.copy(confidentialMode = mode) }
+    }
+
     fun onEditVideoDuration(context: Context, totalDurationUs: Long, startTimeUs: Long, endTimeUs: Long, touchEnabled: Boolean) {
         store.update {
             val uri = it.focusedMedia?.realPath?.let { path -> Uri.parse(path) } ?: return@update it
@@ -203,20 +218,28 @@ class MediaSelectionViewModel(
             val clampedStartTime = max(startTimeUs, 0)
 
             val unedited = !data.isDurationEdited
-            val durationEdited = clampedStartTime > 0 || endTimeUs < totalDurationUs
-            val isEntireDuration = startTimeUs == 0L && endTimeUs == totalDurationUs
-            val endMoved = !isEntireDuration && data.endTimeUs != endTimeUs
+
+            // Check if this is the initial duration sync:
+            // 1. Video not yet edited (unedited=true)
+            // 2. Start time is 0 (no trim from start)
+            // 3. Either data.totalInputDurationUs is 0 (not yet initialized), or endTimeUs covers full duration
+            val isInitialDurationSync = unedited &&
+                clampedStartTime == 0L &&
+                (data.totalInputDurationUs == 0L || endTimeUs == totalDurationUs)
+
+            // On initial sync, use the accurate totalDurationUs as endTimeUs
+            val effectiveEndTimeUs = if (isInitialDurationSync) totalDurationUs else endTimeUs
+
+            val durationEdited = clampedStartTime > 0 || effectiveEndTimeUs < totalDurationUs
+            val isEntireDuration = clampedStartTime == 0L && effectiveEndTimeUs == totalDurationUs
+            val endMoved = !isEntireDuration && data.totalInputDurationUs > 0 && data.endTimeUs != effectiveEndTimeUs
             val maxVideoDurationUs: Long = it.transcodingPreset.calculateMaxVideoUploadDurationInSeconds(getMediaConstraints().getVideoMaxSize(context)).seconds.inWholeMicroseconds
             val preserveStartTime = unedited || !endMoved
-            val videoTrimData = VideoTrimData(durationEdited, totalDurationUs, clampedStartTime, endTimeUs)
+            val videoTrimData = VideoTrimData(durationEdited, totalDurationUs, clampedStartTime, effectiveEndTimeUs)
             val updatedData = clampToMaxClipDuration(videoTrimData, maxVideoDurationUs, preserveStartTime)
 
             if (updatedData != videoTrimData) {
-                Log.d(TAG, "Video trim clamped from ${videoTrimData.startTimeUs}, ${videoTrimData.endTimeUs} to ${updatedData.startTimeUs}, ${updatedData.endTimeUs}")
-            }
-
-            if (unedited && durationEdited) {
-                Log.d(TAG, "Canceling upload because the duration has been edited for the first time..")
+                L.d { "$TAG Video trim clamped from ${videoTrimData.startTimeUs}, ${videoTrimData.endTimeUs} to ${updatedData.startTimeUs}, ${updatedData.endTimeUs}" }
             }
 
             it.copy(
@@ -236,20 +259,19 @@ class MediaSelectionViewModel(
         }
     }
 
-    fun send(
+    suspend fun send(
         scheduledDate: Long? = null
-    ): Maybe<MediaSendActivityResult> = send(scheduledDate ?: -1)
+    ): MediaSendActivityResult = send()
 
-    fun send(): Maybe<MediaSendActivityResult> {
+    suspend fun send(): MediaSendActivityResult {
         return repository.send(
             selectedMedia = store.state.selectedMedia,
             stateMap = store.state.editorStateMap,
             quality = store.state.quality,
             message = store.state.message,
+            confidentialMode = store.state.confidentialMode,
         )
     }
-
-    private val disposables = CompositeDisposable()
 
     private var lastMediaDrag: Pair<Int, Int> = Pair(0, 0)
 
@@ -258,11 +280,6 @@ class MediaSelectionViewModel(
             addMedia(initialMedia)
         }
     }
-
-    override fun onCleared() {
-        disposables.clear()
-    }
-
 
     companion object {
         private const val STATE_PREFIX = "selection.view.model"
@@ -287,10 +304,12 @@ class MediaSelectionViewModel(
 
     class Factory(
         private val initialMedia: List<LocalMedia>,
-        private val repository: MediaSelectionRepository
+        private val repository: MediaSelectionRepository,
+        private val initialConfidentialMode: Int = 0,
+        private val showConfidentialToggle: Boolean = false
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return requireNotNull(modelClass.cast(MediaSelectionViewModel(initialMedia, repository)))
+            return requireNotNull(modelClass.cast(MediaSelectionViewModel(initialMedia, repository, initialConfidentialMode, showConfidentialToggle)))
         }
     }
 }

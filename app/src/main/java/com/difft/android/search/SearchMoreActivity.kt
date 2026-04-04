@@ -1,13 +1,18 @@
 package com.difft.android.search
 
-
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.RxUtil
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.difft.app.database.loadRoomSearchResultsByKeyword
 import org.difft.app.database.search
 import org.difft.app.database.searchByNameAndGroupMembers
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
@@ -22,11 +27,8 @@ import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.databinding.ActivitySearchMoreBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBMessageModel
-import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -50,20 +52,15 @@ class SearchMoreActivity : BaseActivity() {
     @Inject
     lateinit var wcdb: WCDB
 
-    private val type: Int by lazy {
-        intent.getIntExtra("type", -1)
-    }
-    private val key: String by lazy {
-        intent.getStringExtra("key") ?: ""
-    }
+    private val type: Int by lazy { intent.getIntExtra("type", -1) }
+    private val key: String by lazy { intent.getStringExtra("key") ?: "" }
+
     private val mContactsAdapter: SearchContactAdapter by lazy {
         object : SearchContactAdapter() {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
                 ContactDetailActivity.startActivity(this@SearchMoreActivity, contact.id)
             }
-        }.apply {
-            setOrUpdateSearchKey(key)
-        }
+        }.apply { setOrUpdateSearchKey(key) }
     }
 
     private val mGroupsAdapter: SearchGroupsAdapter by lazy {
@@ -71,9 +68,7 @@ class SearchMoreActivity : BaseActivity() {
             override fun onItemClick(group: GroupUIData) {
                 GroupChatContentActivity.startActivity(this@SearchMoreActivity, group.gid)
             }
-        }.apply {
-            setOrUpdateSearchKey(key)
-        }
+        }.apply { setOrUpdateSearchKey(key) }
     }
 
     private val mSearchChatHistoryAdapter: SearchChatHistoryAdapter by lazy {
@@ -81,12 +76,25 @@ class SearchMoreActivity : BaseActivity() {
             override fun onItemClicked(data: SearchChatHistoryViewData, position: Int) {
                 if (data.onlyOneResult) {
                     if (data.type == SearchChatHistoryViewData.Type.Group) {
-                        GroupChatContentActivity.startActivity(this@SearchMoreActivity, data.conversationId, jumpMessageTimeStamp = data.messageTimeStamp)
+                        GroupChatContentActivity.startActivity(
+                            this@SearchMoreActivity,
+                            data.conversationId,
+                            jumpMessageTimeStamp = data.messageTimeStamp
+                        )
                     } else {
-                        ChatActivity.startActivity(this@SearchMoreActivity, data.conversationId, jumpMessageTimeStamp = data.messageTimeStamp)
+                        ChatActivity.startActivity(
+                            this@SearchMoreActivity,
+                            data.conversationId,
+                            jumpMessageTimeStamp = data.messageTimeStamp
+                        )
                     }
                 } else {
-                    SearchMessageActivity.startActivity(this@SearchMoreActivity, data.conversationId, data.type == SearchChatHistoryViewData.Type.Group, key)
+                    SearchMessageActivity.startActivity(
+                        this@SearchMoreActivity,
+                        data.conversationId,
+                        data.type == SearchChatHistoryViewData.Type.Group,
+                        key
+                    )
                 }
             }
         }
@@ -94,7 +102,6 @@ class SearchMoreActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         initView()
     }
 
@@ -102,61 +109,62 @@ class SearchMoreActivity : BaseActivity() {
         mBinding.ibBack.setOnClickListener { finish() }
 
         mBinding.recyclerviewResult.apply {
-            this.layoutManager = LinearLayoutManager(this@SearchMoreActivity)
+            layoutManager = LinearLayoutManager(this@SearchMoreActivity)
             itemAnimator = null
         }
 
-        if (type == SEARCH_TYPE_CONTACT) {
-            mBinding.tvTitle.text = getString(R.string.search_more_contacts)
-
-            mBinding.recyclerviewResult.adapter = mContactsAdapter
-            Single.fromCallable {
-                wcdb.contactor.search(key)
-            }.compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    mContactsAdapter.submitList(it)
-                }, {
-                    mContactsAdapter.submitList(emptyList())
-                    it.printStackTrace()
-                })
-        } else if (type == SEARCH_TYPE_GROUP) {
-            mBinding.tvTitle.text = getString(R.string.search_more_groups)
-
-            mBinding.recyclerviewResult.adapter = mGroupsAdapter
-
-            Single.just(
-                wcdb.group.searchByNameAndGroupMembers(key)
-                    .map { GroupUtil.convert(it) }).compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this)).subscribe({
-                    mGroupsAdapter.submitList(it)
-                }, {
-                    mGroupsAdapter.submitList(emptyList())
-                    it.printStackTrace()
-                })
-        } else if (type == SEARCH_TYPE_MESSAGE) {
-            mBinding.tvTitle.text = getString(R.string.search_more_messages)
-
-            mBinding.recyclerviewResult.adapter = mSearchChatHistoryAdapter
-
-            Single.fromCallable {
-                wcdb.message.getAllObjects(
-                    DBMessageModel.messageText.upper().like("%${key.uppercase()}%")
-                )
-                    .groupBy { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(it.roomId)) }.filter {
-                        it.key != null
-                    }.map { it.key!! to it.value }.toMap()
-            }.concatMap { result ->
-                SearchUtils.createSearchChatHistoryViewDataList(this@SearchMoreActivity, result)
+        when (type) {
+            SEARCH_TYPE_CONTACT -> {
+                mBinding.tvTitle.text = getString(R.string.search_more_contacts)
+                mBinding.recyclerviewResult.adapter = mContactsAdapter
+                lifecycleScope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) { wcdb.contactor.search(key) }
+                        mContactsAdapter.submitList(result)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        mContactsAdapter.submitList(emptyList())
+                        L.w { "[SearchMoreActivity] searchContacts error: ${e.stackTraceToString()}" }
+                    }
+                }
             }
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    mSearchChatHistoryAdapter.submitList(it)
-                }, {
-                    mSearchChatHistoryAdapter.submitList(emptyList())
-                    it.printStackTrace()
-                })
+            SEARCH_TYPE_GROUP -> {
+                mBinding.tvTitle.text = getString(R.string.search_more_groups)
+                mBinding.recyclerviewResult.adapter = mGroupsAdapter
+                lifecycleScope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            wcdb.group.searchByNameAndGroupMembers(key).map { GroupUtil.convert(it) }
+                        }
+                        mGroupsAdapter.submitList(result)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        mGroupsAdapter.submitList(emptyList())
+                        L.w { "[SearchMoreActivity] searchGroups error: ${e.stackTraceToString()}" }
+                    }
+                }
+            }
+            SEARCH_TYPE_MESSAGE -> {
+                mBinding.tvTitle.text = getString(R.string.search_more_messages)
+                mBinding.recyclerviewResult.adapter = mSearchChatHistoryAdapter
+                lifecycleScope.launch {
+                    try {
+                        val viewData = withContext(Dispatchers.IO) {
+                            val results = wcdb.loadRoomSearchResultsByKeyword(key)
+                            SearchUtils.createSearchChatHistoryViewDataList(this@SearchMoreActivity, results)
+                        }
+                        mSearchChatHistoryAdapter.updateWithSearchKey(key, viewData)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        mSearchChatHistoryAdapter.updateWithSearchKey(key, emptyList())
+                        L.w { "[SearchMoreActivity] searchMessages error: ${e.stackTraceToString()}" }
+                    }
+                }
+            }
         }
     }
+
 }

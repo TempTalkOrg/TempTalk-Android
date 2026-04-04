@@ -1,11 +1,13 @@
 package com.difft.android.app
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.fragment.app.FragmentActivity
+import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
@@ -15,42 +17,50 @@ import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
-import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.widget.DialogXUtil
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallEngine
 import com.difft.android.call.LCallManager
+import com.difft.android.call.service.ForegroundService
 import com.difft.android.call.LIncomingCallActivity
-import com.difft.android.chat.common.ScreenShotUtil
+import com.difft.android.call.manager.CriticalAlertManager
+import com.difft.android.call.state.CriticalAlertStateManager
+import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.state.InComingCallStateManager
+import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.login.PasscodeUtil
 import com.difft.android.login.ScreenLockActivity
+import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
+import com.difft.android.security.SecurityLib
 import com.github.anrwatchdog.ANRWatchDog
-import com.google.android.gms.security.ProviderInstaller
-import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.difft.android.base.utils.appScope
 import dagger.hilt.android.HiltAndroidApp
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
-import io.reactivex.rxjava3.plugins.RxJavaPlugins
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.signal.libsignal.protocol.logging.SignalProtocolLogger
 import org.signal.libsignal.protocol.logging.SignalProtocolLoggerProvider
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencyProvider
-import org.thoughtcrime.securesms.keyvalue.SignalStore
-import org.thoughtcrime.securesms.service.KeyCachingService
-import org.thoughtcrime.securesms.util.AppForegroundObserver
+import util.AppForegroundObserver
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import util.ScreenLockUtil
-import util.concurrent.TTExecutors
+import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -66,6 +76,35 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
 
+    @Inject
+    lateinit var environmentHelper: EnvironmentHelper
+
+    @Inject
+    lateinit var coordinator: DomainSpeedTestCoordinator
+
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var inComingCallStateManager: InComingCallStateManager
+
+    @Inject
+    lateinit var criticalAlertManager: CriticalAlertManager
+
+    @Inject
+    lateinit var criticalAlertStateManager: CriticalAlertStateManager
+
+    @Inject
+    lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
+
+    // 追踪当前 resumed 的 Activity
+    private var currentResumedActivity: WeakReference<FragmentActivity>? = null
+
+    private var lockCheckJob: Job? = null
+
+    // Activity 计数，用于准确判断前后台切换
+    private var startedActivityCount = 0
+
     override fun onCreate() {
         AppStartup.onApplicationCreate()
         super.onCreate()
@@ -76,23 +115,29 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init log", this::initLog)
             .addBlocking("init Logger", this::initializeLogging)
+            .addBlocking("init SecurityCheck") {
+                startTracerPidMonitor()
+                checkDebuggerAndHook()
+            }
             .addBlocking("init ApplicationDependencies") {
                 ApplicationDependencies.init(this, ApplicationDependencyProvider(this))
                 AppForegroundObserver.begin()
             }
+            .addBlocking("init UserData", this::initUserData)
             .addBlocking("init theme", this::initAppTheme)
             .addBlocking("lifecycle-observer") {
                 AppForegroundObserver.addListener(this)
             }
-            .addBlocking("init rxJava plugins", this::initRxJavaPlugins)
             .addBlocking("init notification", this::initNotification)
-            .addBlocking("upgradeSecurityProvider", this::upgradeSecurityProvider)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
+            .addBlocking("installCrashFilter", this::installCrashFilter)
             .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking { initCallEngine() }
+            .addNonBlocking { cleanupStaleCallNotification() }
             .addNonBlocking { monitorMainThreadBlocking() }
             .addNonBlocking { ContactorUtil.init() }
             .addNonBlocking { initGlobalConfigs() }
+            .addNonBlocking { coordinator.initialize() }
             .execute()
 
         L.i { "[AppStartup] application onCreate() took " + (System.currentTimeMillis() - AppStartup.getApplicationStartTime()) + " ms" }
@@ -105,16 +150,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-
-        launch(Dispatchers.IO) {
-            val userData = userManager.getUserData()
-
-            withContext(Dispatchers.Main) {
-                if (userData != null) {
-                    initDialogX(userData.theme)
-                }
-            }
-        }
     }
 
     override fun attachBaseContext(context: Context) {
@@ -122,45 +157,36 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun initializeLogging() {
-        SignalProtocolLoggerProvider.setProvider(com.difft.android.logging.CustomSignalProtocolLogger())
+        SignalProtocolLoggerProvider.setProvider { priority, tag, message ->
+            when (priority) {
+                SignalProtocolLogger.VERBOSE, SignalProtocolLogger.DEBUG -> L.d { "[$tag] $message" }
+                SignalProtocolLogger.INFO -> L.i { "[$tag] $message" }
+                SignalProtocolLogger.WARN -> L.w { "[$tag] $message" }
+                SignalProtocolLogger.ERROR, SignalProtocolLogger.ASSERT -> L.e { "[$tag] $message" }
+            }
+        }
+    }
+
+    /**
+     * Initialize user data cache (inMemoryUserData) from EncryptedSharedPreferences.
+     * This prevents ANR when multiple threads try to access SecureSharedPrefsUtil concurrently.
+     * Uses timeout (2s) to prevent ANR on extremely slow devices - falls back to lazy init if timeout.
+     */
+    private fun initUserData() {
+        val job = async(Dispatchers.IO) { userManager.getUserData() }
+        runBlocking { withTimeoutOrNull(2000) { job.await() } }
     }
 
     private fun initAppTheme() {
-        launch(Dispatchers.IO) {
-            val theme = userManager.getUserData()?.theme
-            L.i { "[TempTalkApplication] loadUserThemeAsync theme: $theme" }
-
-            withContext(Dispatchers.Main) {
-                when (theme) {
-                    AppCompatDelegate.MODE_NIGHT_YES -> {
-                        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-                    }
-
-                    AppCompatDelegate.MODE_NIGHT_NO -> {
-                        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-                    }
-
-                    else -> {
-                        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-                    }
-                }
-                DialogXUtil.initDialog(this@TempTalkApplication, theme)
+        val theme = userManager.getUserData()?.theme
+        L.i { "[TempTalkApplication] loadUserTheme theme: $theme" }
+        AppCompatDelegate.setDefaultNightMode(
+            when (theme) {
+                AppCompatDelegate.MODE_NIGHT_YES -> AppCompatDelegate.MODE_NIGHT_YES
+                AppCompatDelegate.MODE_NIGHT_NO -> AppCompatDelegate.MODE_NIGHT_NO
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
             }
-        }
-    }
-
-    private fun initDialogX(theme: Int? = null) {
-        DialogXUtil.initDialog(this, theme)
-    }
-
-
-    private fun initRxJavaPlugins() {
-        if (!com.difft.android.BuildConfig.DEBUG) {
-            RxJavaPlugins.setErrorHandler {
-                L.i { ("[RX] rx exception ->  $it") }
-                FirebaseCrashlytics.getInstance().recordException(it)
-            }
-        }
+        )
     }
 
     private fun initLog() {
@@ -176,28 +202,38 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     override fun onForeground() {
-        if (!ScreenLockUtil.noNeedShowScreenLock && !ScreenLockUtil.pictureSelectorIsShowing) {
-            PasscodeUtil.disableScreenLock = false
-        }
-        ScreenLockUtil.noNeedShowScreenLock = false
-
         recordLastUseTime()
-
-        TTExecutors.BOUNDED.execute {
-//            FeatureFlags.refreshIfNecessary()
-            KeyCachingService.onAppForegrounded(this)
-            SignalStore.misc().lastForegroundTime = System.currentTimeMillis()
-        }
-        LCallManager.restoreCallActivityIfInCalling()
-        LCallManager.restoreIncomingCallActivityIfIncoming()
+        scheduleGrayConfigUpdateCheck()
+        LCallManager.restoreIncomingCallScreenIfActive()
+        globalConfigsManager.onAppStateChanged(isForeground = true)
+        messageArchiveManager.get().onAppStateChanged(isForeground = true)
+        coordinator.startPeriodicTest(isForeground = true)
     }
 
     override fun onBackground() {
-        KeyCachingService.onAppBackgrounded(this)
+        recordLastUseTimeJob?.cancel()
+        globalConfigsManager.onAppStateChanged(isForeground = false)
+        messageArchiveManager.get().onAppStateChanged(isForeground = false)
+        coordinator.startPeriodicTest(isForeground = false)
+    }
 
-        recordLastUseTimeDisposable?.dispose()
+    /**
+     * 通过 Activity 计数判断的真实前台事件（仅用于锁屏检查）
+     * 因为AppForegroundObserver在快速前后台切换时不会触发
+     */
+    private fun onAppForeground() {
+        L.d { "[ScreenLock] onForeground called" }
+        scheduleQuickScreenLockCheck()
+    }
 
-        ScreenLockUtil.appIsForegroundBeforeHandleDeeplink = false
+    /**
+     * 通过 Activity 计数判断的真实后台事件（仅用于锁屏检查）
+     */
+    private fun onAppBackground() {
+        L.d { "[ScreenLock] onBackground called" }
+        // 取消待处理的锁屏检查
+        lockCheckJob?.cancel()
+        lockCheckJob = null
     }
 
     private fun prepareScreenLockListener() {
@@ -206,17 +242,43 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
 
             override fun onActivityStarted(activity: Activity) {
+                startedActivityCount++
+                AppForegroundObserver.notifyActivityStarted()
+                L.d { "[ScreenLock] onActivityStarted: ${activity::class.simpleName}, count=$startedActivityCount" }
+
+                // 从后台进入前台：计数从 0 变为 1
+                if (startedActivityCount == 1) {
+                    L.d { "[ScreenLock] App entered foreground" }
+                    onAppForeground()
+                } else if (shouldCheckScreenLockForCall())
+                {
+                    scheduleQuickScreenLockCheck()
+                }
+
+                // 进入会话列表时停止critical alert
+                if (activity is IndexActivity && criticalAlertManager.isCriticalAlertRunning() && !criticalAlertStateManager.isJoining()) {
+                    LCallManager.dismissCriticalAlertIfActive()
+                }
             }
 
             override fun onActivityResumed(activity: Activity) {
-                if (activity !is ScreenLockActivity && activity !is MainActivity) {
-                    launch(Dispatchers.IO) {
-                        val userData = userManager.getUserData()
+                L.d { "[ScreenLock] onActivityResumed: ${activity::class.simpleName}" }
 
-                        withContext(Dispatchers.Main) {
-                            if (userData != null) {
-                                checkAndShowScreenLock(userData)
-                                ScreenShotUtil.setScreenShotEnable(activity, userData.passcode.isNullOrEmpty())
+                // 维护当前 Activity 引用
+                if (activity is FragmentActivity) {
+                    currentResumedActivity = WeakReference(activity)
+
+                    // 刷新截屏状态（根据屏幕锁决定）
+                    SecureModeUtil.refreshByScreenLock(activity)
+                }
+
+                // 原有的 Call 反馈逻辑
+                if (activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
+                    launch(Dispatchers.IO) {
+                        val callInfo = LCallManager.getAndClearCallFeedbackInfo()
+                        if (callInfo != null && !activity.isDestroyed) {
+                            withContext(Dispatchers.Main) {
+                                LCallManager.showCallFeedbackView(activity, callInfo)
                             }
                         }
                     }
@@ -224,9 +286,21 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
 
             override fun onActivityPaused(activity: Activity) {
+                if (currentResumedActivity?.get() == activity) {
+                    currentResumedActivity = null
+                }
             }
 
             override fun onActivityStopped(activity: Activity) {
+                startedActivityCount--
+                AppForegroundObserver.notifyActivityStopped()
+                L.d { "[ScreenLock] onActivityStopped: ${activity::class.simpleName}, count=$startedActivityCount" }
+
+                // 从前台进入后台：计数从 1 变为 0
+                if (startedActivityCount == 0) {
+                    L.d { "[ScreenLock] App entered background" }
+                    onAppBackground()
+                }
             }
 
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {
@@ -239,80 +313,255 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
 
-    private var recordLastUseTimeDisposable: Disposable? = null
+    private var recordLastUseTimeJob: kotlinx.coroutines.Job? = null
 
     private fun recordLastUseTime() {
-        recordLastUseTimeDisposable = Observable.interval(1, 10, TimeUnit.SECONDS)
-            .compose(RxUtil.getSchedulerComposer())
-            .subscribe({
-                if (PasscodeUtil.needRecordLastUseTime) {
-                    userManager.update {
-                        this.lastUseTime = System.currentTimeMillis()
+        recordLastUseTimeJob?.cancel()
+        recordLastUseTimeJob = appScope.launch {
+            delay(1_000)
+            while (true) {
+                try {
+                    if (PasscodeUtil.needRecordLastUseTime) {
+                        userManager.update {
+                            this.lastUseTime = System.currentTimeMillis()
+                        }
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w { "[TempTalkApplication] recordLastUseTime error: ${e.stackTraceToString()}" }
                 }
-            }, { e -> e.printStackTrace() })
-    }
-
-    private fun checkAndShowScreenLock(userData: UserData) {
-//        L.i { "[screenLock] checkAndShowScreenLock:" + PasscodeUtil.disableScreenLock }
-        if (!userData.baseAuth.isNullOrEmpty()
-            && !LCallActivity.isInCalling()
-            && !LIncomingCallActivity.isActivityShowing()
-            && !ScreenLockUtil.appIsForegroundBeforeHandleDeeplink
-            && !PasscodeUtil.disableScreenLock
-            && (!userData.passcode.isNullOrEmpty())
-            && (userData.passcodeTimeout == 0 || System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds)
-        ) {
-            ScreenLockActivity.startActivity()
+                delay(10_000)
+            }
         }
     }
 
-    private fun upgradeSecurityProvider() {
-        // Ensure an updated security provider is installed into the system when a new one is
-        // available via Google Play services.
-        // https://developer.android.com/privacy-and-security/security-gms-provider?hl=zh-cn
-        try {
-            ProviderInstaller.installIfNeededAsync(this, object :
-                ProviderInstaller.ProviderInstallListener {
-                override fun onProviderInstalled() {}
-                override fun onProviderInstallFailed(errorCode: Int, recoveryIntent: Intent?) {}
-            });
-        } catch (ignorable: Exception) {
-            ignorable.printStackTrace()
+    /**
+     * 触发完整的锁屏检查（用于 deeplink 场景）
+     * 包含两次检查：100ms 快速检查 + 1100ms 等待目标页面启动
+     */
+    fun triggerScreenLockCheck() {
+        L.d { "[ScreenLock] Trigger full screen lock check (for deeplink)" }
+        scheduleFullScreenLockCheck()
+    }
+
+    /**
+     * 前后台切换时检查是否显示锁屏
+     *  Deeplink 场景会在 handleDeeplink() 中再次触发检查
+     */
+    private fun scheduleQuickScreenLockCheck() {
+        // 取消之前的检查
+        lockCheckJob?.cancel()
+
+        lockCheckJob = launch(Dispatchers.Main) {
+            delay(100)
+            L.d { "[ScreenLock] Quick check after 100ms" }
+            showScreenLockIfNeeded()
+
+            // 检查完成后重置临时豁免标志
+            ScreenLockUtil.temporarilyDisabled = false
+        }
+    }
+
+    /**
+     * 完整的锁屏检查（用于 deeplink 场景）
+     * 两次检查：100ms + 1100ms
+     */
+    private fun scheduleFullScreenLockCheck() {
+        // 取消之前的检查
+        lockCheckJob?.cancel()
+
+        lockCheckJob = launch(Dispatchers.Main) {
+            // 第一次检查
+            delay(100)
+            L.d { "[ScreenLock] First check after 100ms" }
+            showScreenLockIfNeeded()
+
+            // 第二次检查：等待 deeplink 目标页面启动
+            delay(1000)
+            L.d { "[ScreenLock] Second check after 1100ms" }
+            showScreenLockIfNeeded()
+
+            // 检查完成后重置临时豁免标志
+            ScreenLockUtil.temporarilyDisabled = false
+        }
+    }
+
+    private fun showScreenLockIfNeeded() {
+        val userData = userManager.getUserData()
+        val activity = currentResumedActivity?.get()
+
+        // 如果当前就是锁屏页，不需要重复启动
+        if (activity is ScreenLockActivity) {
+            L.d { "[ScreenLock] Already showing ScreenLockActivity" }
+            return
+        }
+
+        if (userData != null && shouldShowScreenLock(userData)) {
+            if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+                L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
+                ScreenLockActivity.startActivity(activity)
+            } else {
+                L.w { "[ScreenLock] No valid activity to start ScreenLockActivity" }
+            }
+        } else {
+            L.d { "[ScreenLock] Lock not needed" }
+        }
+    }
+
+    private fun shouldShowScreenLock(userData: UserData): Boolean {
+        // 1. 通用的临时豁免
+        if (ScreenLockUtil.temporarilyDisabled) {
+            L.d { "[ScreenLock] Skip: temporarily disabled" }
+            return false
+        }
+
+        // 2. 通话相关
+        if (criticalAlertStateManager.isShowing()) {
+            L.d { "[ScreenLock] Skip: critical alert" }
+            return false
+        }
+
+        if (onGoingCallStateManager.isInCalling() && !onGoingCallStateManager.needAppLock) {
+            L.d { "[ScreenLock] Skip: in call" }
+            return false
+        }
+
+        if (inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isNeedAppLock()) {
+            L.d { "[ScreenLock] Skip: incoming call" }
+            return false
+        }
+
+        // 3. 用户配置检查
+        if (userData.passcode.isNullOrEmpty() && userData.pattern.isNullOrEmpty()) {
+            L.d { "[ScreenLock] Skip: no lock set" }
+            return false
+        }
+
+        if (userData.baseAuth.isNullOrEmpty()) {
+            L.d { "[ScreenLock] Skip: not authenticated" }
+            return false
+        }
+
+        // 4. 超时检查
+        val isTimeout = userData.passcodeTimeout == 0 ||
+                System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
+
+        if (!isTimeout) {
+            L.d { "[ScreenLock] Skip: not timeout yet" }
+        }
+
+        return isTimeout
+    }
+
+    /**
+     * Intercept [android.util.SuperNotCalledException] to prevent app crash.
+     * This exception is triggered by Hook frameworks (e.g., lhook on rooted emulators)
+     * that intercept Activity.onCreate() without calling through to the original implementation.
+     * It cannot occur during normal app usage.
+     */
+    private fun installCrashFilter() {
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            if (throwable.javaClass.name == "android.util.SuperNotCalledException") {
+                L.w { "[CrashFilter] Suppressed SuperNotCalledException: ${throwable.message}" }
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } else if (isUCropMissingParametersCrash(throwable)) {
+                L.w { "[CrashFilter] Suppressed UCrop missing parameters crash from abnormal device" }
+                android.os.Process.killProcess(android.os.Process.myPid())
+            } else {
+                previousHandler?.uncaughtException(thread, throwable)
+            }
+        }
+    }
+
+    /**
+     * Matches the exact crash: Hook framework launches UCropMultipleActivity directly without
+     * the required CropTotalDataSource parameter, causing `initCropFragments()` to throw.
+     *
+     * Three-layer matching to avoid false positives:
+     * 1. Cause type: `IllegalArgumentException`
+     * 2. Cause message: exact match of UCrop library's error string
+     * 3. Cause stacktrace: must originate from `UCropMultipleActivity.initCropFragments`
+     *
+     * Note: `UCrop.of()` throws the same message but from a different call site — the stacktrace
+     * check distinguishes the two. Our code already guards `UCrop.of()` with null checks (PR #363),
+     * so that path cannot reach here under normal usage.
+     */
+    private fun isUCropMissingParametersCrash(throwable: Throwable): Boolean {
+        // IllegalArgumentException may be the top-level throwable or wrapped as cause
+        // (Android framework wraps Activity.onCreate() exceptions in RuntimeException)
+        val cause = when {
+            throwable is IllegalArgumentException -> throwable
+            throwable.cause is IllegalArgumentException -> throwable.cause as IllegalArgumentException
+            else -> return false
+        }
+        if (cause.message != "Missing required parameters, count cannot be less than 1") return false
+        return cause.stackTrace.any {
+            it.className == "com.yalantis.ucrop.UCropMultipleActivity" &&
+                it.methodName == "initCropFragments"
         }
     }
 
     private fun initCallEngine() {
-        LCallEngine.init(this, globalConfigsManager, this)
+        LCallEngine.init(this, this, environmentHelper)
+    }
+
+    /**
+     * On a fresh process start (after native crash or force-stop), no call can be active,
+     * but the system may not have cleaned up the foreground notification from the previous
+     * process. Cancel it proactively to avoid a ghost "call in progress" notification.
+     */
+    private fun cleanupStaleCallNotification() {
+        if (onGoingCallStateManager.isInCalling()) return
+        try {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(ForegroundService.DEFAULT_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            L.w { "[AppStartup] Failed to cleanup stale call notification: ${e.message}" }
+        }
     }
 
     private fun monitorMainThreadBlocking() {
-        // Define blocking time thresholds for different modes
-        val thresholds = if (BuildConfig.DEBUG) {
-            listOf(200) // Debug mode: only 200ms for quick detection
-        } else {
-            // Release mode: 500ms, 1000ms, 2000ms for detailed monitoring
-            //listOf(500, 1000, 2000)
-            listOf(500)
-        }
+        // 700ms aligns with Google's "frozen frame" threshold in Android Vitals.
+        val threshold = 700
 
-        // Create multiple ANRWatchDog instances for different thresholds
-        thresholds.forEach { threshold ->
-            ANRWatchDog(threshold)
-                .setIgnoreDebugger(true)
-                .setANRListener {
-                    L.w { "ANR(${threshold}ms) detected: ${it.stackTraceToString()}" }
-                    if (!BuildConfig.DEBUG) { // only report in release mode
-                        // Create a custom exception with ANR threshold info for better filtering
-                        val anrException = Exception("ANR(${threshold}ms)_main_thread_blocking - ${it.message}")
-                        anrException.initCause(it)
+        ANRWatchDog(threshold)
+            .setIgnoreDebugger(true)
+            .setANRListener { anrError ->
+                L.w { "ANR(${threshold}ms) detected: ${anrError.stackTraceToString()}" }
+            }
+            .setReportMainThreadOnly()
+            .start()
+    }
 
-                        // Record the exception without modifying global custom keys
-                        FirebaseCrashlytics.getInstance().recordException(anrException)
-                    }
-                }
-                .setReportMainThreadOnly()
-                .start()
+    private fun scheduleGrayConfigUpdateCheck() {
+        val userData = userManager.getUserData() ?: return
+        launch(Dispatchers.IO) {
+            FeatureGrayManager.checkUpdateConfigFromServer(userData.lastUseTime)
         }
+    }
+
+    private fun shouldCheckScreenLockForCall(): Boolean {
+        val incomingCallNeedsLock = inComingCallStateManager.isActivityShowing() && inComingCallStateManager.isNeedAppLock()
+        val activeCallNeedsLock = onGoingCallStateManager.isInCalling() && onGoingCallStateManager.needAppLock
+        return incomingCallNeedsLock || activeCallNeedsLock
+    }
+
+    private fun checkDebuggerAndHook() {
+        if (BuildConfig.DEBUG) return
+        val timestamp = System.currentTimeMillis()
+        val hasDebugger = SecurityLib.checkDebuggerConnected()
+        val hasHook = SecurityLib.checkHookFramework()
+        val consumeTime = System.currentTimeMillis() - timestamp
+        L.i { "[security] security check result: consumeTime=$consumeTime, hasDebugger=$hasDebugger, hasHook=$hasHook" }
+        if (hasDebugger || hasHook) {
+            SecurityLib.terminateAppProcess()
+        }
+    }
+
+    private fun startTracerPidMonitor() {
+        if (BuildConfig.DEBUG) return
+        SecurityLib.startTracerPidMonitor()
     }
 }

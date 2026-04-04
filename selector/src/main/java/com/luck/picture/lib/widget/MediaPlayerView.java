@@ -1,5 +1,7 @@
 package com.luck.picture.lib.widget;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.media.AudioManager;
@@ -84,7 +86,7 @@ public class MediaPlayerView extends FrameLayout implements SurfaceHolder.Callba
             }
             mediaPlayer.prepareAsync();
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[MediaPlayerView] start error:");
         }
     }
 

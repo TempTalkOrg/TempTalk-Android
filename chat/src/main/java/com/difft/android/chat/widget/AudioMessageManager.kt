@@ -2,17 +2,19 @@ package com.difft.android.chat.widget
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.PlaybackParams
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.message.TextChatMessage
 import difft.android.messageserialization.model.isAudioMessage
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.subjects.PublishSubject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,14 +29,22 @@ object AudioMessageManager {
     const val PLAY_STATUS_PLAYED = 0
     const val PLAY_STATUS_NOT_PLAY = 1
 
-    private val mPlayStatusUpdateSubject = PublishSubject.create<Pair<TextChatMessage, Int>>()
+    // Available playback speeds
+    val PLAYBACK_SPEEDS = listOf(1.0f, 1.5f, 2.0f)
 
-    private fun emitPlayStatusUpdate(message: TextChatMessage, status: Int) = mPlayStatusUpdateSubject.onNext(message to status)
+    private val _playStatusUpdate = MutableSharedFlow<Pair<TextChatMessage, Int>>(replay = 0, extraBufferCapacity = 64)
+    val playStatusUpdate: SharedFlow<Pair<TextChatMessage, Int>> = _playStatusUpdate
 
-    val playStatusUpdate: Observable<Pair<TextChatMessage, Int>> = mPlayStatusUpdateSubject
+    private fun emitPlayStatusUpdate(message: TextChatMessage, status: Int) {
+        _playStatusUpdate.tryEmit(message to status)
+    }
 
-    private val _progressUpdate = MutableSharedFlow<Pair<TextChatMessage, Float>>(replay = 0)
+    private val _progressUpdate = MutableSharedFlow<Pair<TextChatMessage, Float>>(replay = 0, extraBufferCapacity = 64)
     val progressUpdate: SharedFlow<Pair<TextChatMessage, Float>> = _progressUpdate
+
+    // Playback speed state flow - for UI observation
+    private val _playbackSpeed = MutableStateFlow(1.0f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
     private var mediaPlayer: MediaPlayer? = null
     var currentPlayingMessage: TextChatMessage? = null
@@ -50,6 +60,44 @@ object AudioMessageManager {
         ProximitySensorManager.setAudioDeviceChangeListener(object : ProximitySensorManager.AudioDeviceChangeListener {
             override fun onAudioDeviceChanged(isNear: Boolean) {}
         })
+    }
+
+    /**
+     * Set the playback speed and apply it immediately if audio is playing
+     * @param speed The playback speed (1.0f, 1.5f, or 2.0f)
+     */
+    fun setPlaybackSpeed(speed: Float) {
+        if (speed !in PLAYBACK_SPEEDS) return
+        _playbackSpeed.value = speed
+        applyPlaybackSpeed()
+    }
+
+    /**
+     * Cycle to the next playback speed (1.0 -> 1.5 -> 2.0 -> 1.0)
+     * @return The new speed value
+     */
+    fun cyclePlaybackSpeed(): Float {
+        val currentIndex = PLAYBACK_SPEEDS.indexOf(_playbackSpeed.value)
+        val nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.size
+        val newSpeed = PLAYBACK_SPEEDS[nextIndex]
+        setPlaybackSpeed(newSpeed)
+        return newSpeed
+    }
+
+    /**
+     * Apply the current playback speed to the media player
+     */
+    private fun applyPlaybackSpeed() {
+        try {
+            mediaPlayer?.let { player ->
+                if (player.isPlaying || isPaused) {
+                    val params = PlaybackParams().setSpeed(_playbackSpeed.value)
+                    player.playbackParams = params
+                }
+            }
+        } catch (e: Exception) {
+            L.e { "[AudioMessageManager] applyPlaybackSpeed Exception: ${e.stackTraceToString()}" }
+        }
     }
 
     // 初始化 MediaPlayer，并准备播放
@@ -69,13 +117,16 @@ object AudioMessageManager {
         playJob?.cancel()
         playJob = appScope.launch(Dispatchers.IO) {
             try {
-                // 检查是否需要解密文件
-                decryptIfNeeded(filePath, message)
-
-                if (!File(filePath).exists()) {
-                    L.e { "[AudioMessageManager] playOrPauseAudio: file not exists $filePath" }
-                    releasePlayer()
-                    return@launch
+                val encryptFile = File("$filePath.encrypt")
+                val decryptedBytes: ByteArray? = if (encryptFile.exists()) {
+                    FileDecryptionUtil.decryptToBytes(encryptFile, message.attachment?.key)
+                } else {
+                    if (!File(filePath).exists()) {
+                        L.e { "[AudioMessageManager] playOrPauseAudio: file not exists $filePath" }
+                        releasePlayer()
+                        return@launch
+                    }
+                    null
                 }
 
                 withContext(Dispatchers.Main) {
@@ -91,7 +142,7 @@ object AudioMessageManager {
                         }
                         currentPlayingMessage = message
                         currentFilePath = filePath
-                        startPlaying(message, filePath)
+                        startPlaying(message, filePath, decryptedBytes)
                     } else {
                         // 如果是同一个音频，则暂停或恢复播放
                         if (mediaPlayer?.isPlaying == true) {
@@ -109,8 +160,8 @@ object AudioMessageManager {
     }
 
     // 开始播放音频
-    private fun startPlaying(message: TextChatMessage, filePath: String) {
-        if (filePath.isEmpty() || !File(filePath).exists()) {
+    private fun startPlaying(message: TextChatMessage, filePath: String, decryptedBytes: ByteArray? = null) {
+        if (decryptedBytes == null && (filePath.isEmpty() || !File(filePath).exists())) {
             L.e { "[AudioMessageManager] startPlaying: file not exists $filePath" }
             releasePlayer()
             return
@@ -132,13 +183,20 @@ object AudioMessageManager {
             }
             
             mediaPlayer?.apply {
-                setDataSource(filePath) // 设置音频文件的 URL
+                if (decryptedBytes != null) {
+                    setDataSource(ByteArrayMediaDataSource(decryptedBytes))
+                } else {
+                    setDataSource(filePath)
+                }
                 setOnCompletionListener {
                     onPlayComplete()
                 }
                 setOnPreparedListener { player ->
                     prepareTimeoutJob?.cancel() // 取消超时任务
                     try {
+                        // Apply playback speed before starting
+                        val params = PlaybackParams().setSpeed(_playbackSpeed.value)
+                        player.playbackParams = params
                         player.start() // 开始播放
                         emitPlayStatusUpdate(message, PLAY_STATUS_START)
                         startUpdatingProgress() // 开始更新进度
@@ -189,6 +247,9 @@ object AudioMessageManager {
             mediaPlayer?.apply {
                 if (isPaused) {
                     seekTo(currentPlayPosition) // 恢复到暂停时的进度
+                    // Apply playback speed before resuming
+                    val params = PlaybackParams().setSpeed(_playbackSpeed.value)
+                    playbackParams = params
                     start()
                     isPaused = false
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_START)
@@ -227,45 +288,56 @@ object AudioMessageManager {
 
     // 播放完成后调用
     private fun onPlayComplete() {
-        currentPlayingMessage?.let {
+        val completedMessage = currentPlayingMessage
+        completedMessage?.let {
             L.d { "[AudioMessageManager] COMPLETE: ${it.id}" }
             emitPlayStatusUpdate(it, PLAY_STATUS_COMPLETE)
+            deleteCurrentFile(it)
         }
-        stopAudio()
-    }
 
-    // 停止播放当前音频
-    private fun stopAudio() {
+        // Reset state - but DON'T cancel playJob because auto-play might have already started
+        currentFilePath = null
+        currentPlayingMessage = null
+        isPaused = false
+        currentPlayPosition = 0
+        currentProgress = 0f
+
         try {
-            mediaPlayer?.apply {
-                if (isPlaying) {
-                    pause()
-                    currentPlayPosition = currentPosition // 保存当前播放进度
-                }
-                stop() // 停止播放
-                reset() // 重置播放器
-            }
+            mediaPlayer?.reset()  // Reset for reuse, don't release
         } catch (e: Exception) {
-            L.e { "[AudioMessageManager] stopAudio IllegalStateException: ${e.stackTraceToString()}" }
-        } finally {
-            releasePlayer()
+            L.e { "[AudioMessageManager] onPlayComplete reset error: ${e.message}" }
         }
+
+        ProximitySensorManager.stop()
+        progressJob?.cancel()
+        progressJob = null
+        prepareTimeoutJob?.cancel()
+        prepareTimeoutJob = null
     }
 
     // 删除当前播放的文件
     fun deleteCurrentFile(message: TextChatMessage) {
-        val canDeleteOriginFile = message.attachment?.isAudioMessage() == true && message.sendStatus == SendType.Sent.rawValue
-        if (!canDeleteOriginFile) return
+        if (message.attachment?.isAudioMessage() != true) return
         currentFilePath?.let { path ->
-            try {
-                val file = File(path)
-                if (file.exists()) {
-                    file.delete()
-                }
-                L.i { "[AudioMessageManager] delete decrypted audio file success" }
-            } catch (e: Exception) {
-                L.e { "[AudioMessageManager] Failed to delete file: ${e.message}" }
+            deleteDecryptedFile(path)
+        }
+    }
+
+    /**
+     * 删除指定路径的临时解密文件。
+     * 仅当对应的 .encrypt 加密源文件存在时才删除，确保只清理临时解密副本，不影响加密主文件。
+     */
+    fun deleteDecryptedFile(filePath: String) {
+        val encryptFile = File("$filePath.encrypt")
+        if (!encryptFile.exists()) return
+        try {
+            val file = File(filePath)
+            if (file.exists()) {
+                file.delete()
             }
+            L.i { "[AudioMessageManager] delete decrypted audio file success" }
+        } catch (e: Exception) {
+            L.e { "[AudioMessageManager] Failed to delete file: ${e.message}" }
         }
     }
 

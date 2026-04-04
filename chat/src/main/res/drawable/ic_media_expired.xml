@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 过期图标 - 圆形+斜线 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 圆形外圈 -->
+    <path
+        android:pathData="M12,12m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2"
+        android:fillColor="@color/transparent"
+        android:strokeColor="@color/t.disable"
+        android:strokeLineCap="round" />
+    <!-- 斜线 (从右上到左下) -->
+    <path
+        android:pathData="M18,6L6,18"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2"
+        android:fillColor="@color/transparent"
+        android:strokeColor="@color/t.disable"
+        android:strokeLineCap="round" />
+</vector>

@@ -16,29 +16,48 @@ class ChatMessageContainerView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
+    /**
+     * Container width passed from ViewHolder for precise width calculation.
+     * Set this before the view is measured (e.g., during bind).
+     * 0 means use displayMetrics as fallback.
+     */
+    var containerWidth: Int = 0
+
+    /**
+     * Track the last bound message ID. Padding reset only happens when
+     * the message changes (different item reusing ViewHolder), not on
+     * re-measure of the same message (e.g., scroll adjustments).
+     */
+    private var lastBoundMessageId: String? = null
+
+    fun bindMessageId(messageId: String) {
+        if (messageId != lastBoundMessageId) {
+            lastBoundMessageId = messageId
+            resetAllPaddingsToDefault()
+        }
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+
         // First measure to get initial sizes
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
 
-        // Get the time view and its width
-        val timeView = findViewById<View>(R.id.cl_message_time) ?: return
-        val timeViewWidth = timeView.measuredWidth
+        // Time wrapper holds icon + cl_message_time; used for margin adjustments
+        val timeWrapper = findViewById<View>(R.id.ll_time_wrapper) ?: return
+        if (timeWrapper.visibility != VISIBLE) return
 
-        // Check if time view is not visible or has zero width
-        if (timeView.visibility != VISIBLE || timeViewWidth == 0) {
-            // Reset all paddings to default when no time view is displayed
-            val paddingChanged = resetAllPaddingsToDefault()
-
-            // Re-measure if padding changed
-            if (paddingChanged) {
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-            }
-
-            return
+        val clMessageTime = findViewById<View>(R.id.cl_message_time)
+        val icon = findViewById<View>(R.id.iv_confidential_icon)
+        var timeViewWidth = if (clMessageTime != null && clMessageTime.visibility == VISIBLE) clMessageTime.measuredWidth else 0
+        // Confidential icon visible: fixed offset covers icon(22) + gap(3) + margin(8) + buffer(7)
+        if (icon != null && icon.visibility == VISIBLE) {
+            timeViewWidth += 40.dp
         }
 
+        if (timeViewWidth == 0) return
+
         // Calculate the maximum possible width for content
-        val effectiveMaxWidth = calculateEffectiveMaxWidth(widthMeasureSpec)
+        val effectiveMaxWidth = calculateEffectiveMaxWidth()
 
         // Determine if we need time view below based on the last visible content view
         var needsExtraBottomSpace = false
@@ -58,28 +77,16 @@ class ChatMessageContainerView @JvmOverloads constructor(
                     needsExtraBottomSpace = shouldPlaceTimeBelowText(tv, timeViewWidth, effectiveMaxWidth)
                     needsRemeasure = adjustTextPadding(tv, needsExtraBottomSpace, timeViewWidth)
                 }
-            } else {
-                // Check forward content last
-                val forwardContent = findViewById<View>(R.id.cl_forward_content)
-                val tvForwardContent = findViewById<View>(R.id.tv_forward_content)
-                val forwardContentCover = findViewById<View>(R.id.v_forward_cover)
-                if (tvForwardContent?.visibility == VISIBLE && forwardContentCover?.visibility != VISIBLE) {
-                    val messageForwardView = forwardContent.findViewById<View>(R.id.messageForwardView)
-                    messageForwardView?.let { forwardView ->
-                        needsExtraBottomSpace = shouldPlaceTimeBelowForward(forwardView, timeViewWidth, effectiveMaxWidth)
-                        needsRemeasure = adjustForwardPadding(forwardView, needsExtraBottomSpace, timeViewWidth)
-                    }
-                }
             }
         }
 
-        // Adjust time view margin based on needsExtraBottomSpace
-        val timeParams = timeView.layoutParams as? MarginLayoutParams
+        // Adjust time wrapper margin based on needsExtraBottomSpace
+        val timeParams = timeWrapper.layoutParams as? MarginLayoutParams
         timeParams?.let { params ->
             val newMarginTop = if (needsExtraBottomSpace) 0 else (-26).dp
             if (params.topMargin != newMarginTop) {
                 params.topMargin = newMarginTop
-                timeView.layoutParams = params
+                timeWrapper.layoutParams = params
                 needsRemeasure = true
             }
         }
@@ -193,126 +200,13 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
     }
 
-    private fun shouldPlaceTimeBelowForward(forwardView: View, timeViewWidth: Int, effectiveMaxWidth: Int): Boolean {
-        // For forward messages, check the text content inside the forward view
-        // Look for the last line of text in the forward message
-        val forwardTextViews = findTextViewsInForward(forwardView)
-
-        if (forwardTextViews.isNotEmpty()) {
-            // Get the last text view's last line width
-            val lastTextView = forwardTextViews.last()
-            lastTextView.layout?.let { layout ->
-                if (layout.lineCount > 0) {
-                    val lastLineIndex = layout.lineCount - 1
-                    val lastLineWidth = layout.getLineRight(lastLineIndex) - layout.getLineLeft(lastLineIndex)
-
-                    // Check if time can fit on the last line
-                    val totalWidth = lastLineWidth + timeViewWidth
-                    return totalWidth > effectiveMaxWidth
-                }
-            }
-        }
-
-        // Fallback: check the whole forward view width
-        val forwardWidth = forwardView.measuredWidth
-        val totalWidth = forwardWidth + timeViewWidth
-        return totalWidth > effectiveMaxWidth
-    }
-
-    private fun findTextViewsInForward(forwardView: View): List<TextView> {
-        val textViews = mutableListOf<TextView>()
-
-        // Recursively find all TextViews in the forward view
-        fun findTextViewsRecursive(view: View) {
-            if (view is TextView && view.isVisible && view.text.isNotEmpty()) {
-                textViews.add(view)
-            } else if (view is ViewGroup) {
-                for (i in 0 until view.childCount) {
-                    val child = view.getChildAt(i)
-                    if (child.isVisible) {
-                        findTextViewsRecursive(child)
-                    }
-                }
-            }
-        }
-
-        findTextViewsRecursive(forwardView)
-        return textViews
-    }
-
-    private fun adjustForwardPadding(forwardView: View, needsExtraBottomSpace: Boolean, timeViewWidth: Int): Boolean {
-        // Forward views typically have their own padding handled by MessageForwardView
-        // We need to adjust the parent container padding instead
-        val forwardContainer = forwardView.parent as? View ?: return false
-
-        return if (!needsExtraBottomSpace) {
-            // Time is inline - calculate dynamic padding based on actual text widths
-            val forwardTextViews = findTextViewsInForward(forwardView)
-
-            if (forwardTextViews.isNotEmpty()) {
-                // Find the last text view with content
-                val lastTextView = forwardTextViews.last()
-                lastTextView.layout?.let { layout ->
-                    if (layout.lineCount > 0) {
-                        // Get last line width of the last text view
-                        val lastLineIndex = layout.lineCount - 1
-                        val lastLineWidth = layout.getLineRight(lastLineIndex) - layout.getLineLeft(lastLineIndex)
-
-                        // Find max line width across all text views
-                        var maxLineWidth = 0f
-                        forwardTextViews.forEach { tv ->
-                            tv.layout?.let { tvLayout ->
-                                for (i in 0 until tvLayout.lineCount) {
-                                    val lineWidth = tvLayout.getLineRight(i) - tvLayout.getLineLeft(i)
-                                    maxLineWidth = maxOf(maxLineWidth, lineWidth)
-                                }
-                            }
-                        }
-
-                        // Calculate needed padding using formula: lastLine + timeView - maxLine
-                        val neededPadding = ((lastLineWidth + timeViewWidth) - maxLineWidth).toInt()
-                        val finalPadding = maxOf(8.dp, neededPadding) // Ensure minimum padding
-
-                        if (forwardContainer.paddingEnd != finalPadding) {
-//                            forwardContainer.setPaddingRelative(
-//                                forwardContainer.paddingStart,
-//                                forwardContainer.paddingTop,
-//                                finalPadding,
-//                                forwardContainer.paddingBottom
-//                            )
-                            true
-                        } else false
-                    } else false
-                } ?: false
-            } else {
-                // Fallback if no text views found
-                val defaultInlinePadding = timeViewWidth + 3.dp
-                if (forwardContainer.paddingEnd != defaultInlinePadding) {
-                    forwardContainer.setPaddingRelative(
-                        forwardContainer.paddingStart,
-                        forwardContainer.paddingTop,
-                        defaultInlinePadding,
-                        forwardContainer.paddingBottom
-                    )
-                    true
-                } else false
-            }
-        } else {
-            // Time is below - use default padding
-            val defaultPadding = 0.dp
-            if (forwardContainer.paddingEnd != defaultPadding) {
-                forwardContainer.setPaddingRelative(
-                    forwardContainer.paddingStart,
-                    forwardContainer.paddingTop,
-                    defaultPadding,
-                    forwardContainer.paddingBottom
-                )
-                true
-            } else false
-        }
-    }
-
-    private fun calculateEffectiveMaxWidth(widthMeasureSpec: Int): Int {
+    /**
+     * Calculate the maximum possible width for content.
+     * This is NOT the same as measuredWidth - we need to know "how wide CAN this be"
+     * not "how wide IS it currently". Short messages have small measuredWidth but
+     * could still fit the time view on the same line.
+     */
+    private fun calculateEffectiveMaxWidth(): Int {
         // Try to get the parent ChatMessageItemView for more accurate calculations
         val parentView = parent as? ViewGroup
 
@@ -336,8 +230,9 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 }
             }
 
-            // Use screen width as the available width
-            val availableWidth = resources.displayMetrics.widthPixels
+            // Use containerWidth if set, otherwise fallback to displayMetrics
+            val displayWidth = resources.displayMetrics.widthPixels
+            val availableWidth = if (containerWidth > 0) containerWidth else displayWidth
 
             // Get our own margins
             val ourParams = layoutParams as? MarginLayoutParams
@@ -354,8 +249,8 @@ class ChatMessageContainerView @JvmOverloads constructor(
             }
         }
 
-        // Fallback to screen-based calculation if parent info is not available
-        val screenWidth = resources.displayMetrics.widthPixels
+        // Fallback calculation if parent info is not available
+        val screenWidth = if (containerWidth > 0) containerWidth else resources.displayMetrics.widthPixels
         // Account for typical margins: 40dp on one side + 8-12dp on the other
         val marginsDp = 60
         val marginsPixels = (marginsDp * resources.displayMetrics.density).toInt()
@@ -400,27 +295,6 @@ class ChatMessageContainerView @JvmOverloads constructor(
                     reactionsView.paddingBottom
                 )
                 paddingChanged = true
-            }
-        }
-
-        // Reset forward content container padding to default
-        val forwardContent = findViewById<View>(R.id.cl_forward_content)
-        if (forwardContent?.visibility == VISIBLE) {
-            val messageForwardView = forwardContent.findViewById<View>(R.id.messageForwardView)
-            messageForwardView?.let { forwardView ->
-                val forwardContainer = forwardView.parent as? View
-                forwardContainer?.let { container ->
-                    val defaultPadding = 0.dp
-                    if (container.paddingEnd != defaultPadding) {
-                        container.setPaddingRelative(
-                            container.paddingStart,
-                            container.paddingTop,
-                            defaultPadding,
-                            container.paddingBottom
-                        )
-                        paddingChanged = true
-                    }
-                }
             }
         }
 

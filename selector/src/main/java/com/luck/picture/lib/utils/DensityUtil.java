@@ -15,6 +15,8 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import com.luck.picture.lib.immersive.RomUtils;
 
 /**
@@ -30,7 +32,13 @@ public class DensityUtil {
      * @return
      */
     public static int getRealScreenWidth(Context context) {
-        WindowManager wm = (WindowManager) context.getApplicationContext().getSystemService(Context.WINDOW_SERVICE);
+        if (context instanceof Activity) {
+            WindowManager wm = ((Activity) context).getWindowManager();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                return wm.getCurrentWindowMetrics().getBounds().width();
+            }
+        }
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         Point point = new Point();
         wm.getDefaultDisplay().getRealSize(point);
         return point.x;
@@ -43,7 +51,13 @@ public class DensityUtil {
      * @return
      */
     public static int getRealScreenHeight(Context context) {
-        WindowManager wm = (WindowManager) context.getApplicationContext().getSystemService(Context.WINDOW_SERVICE);
+        if (context instanceof Activity) {
+            WindowManager wm = ((Activity) context).getWindowManager();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                return wm.getCurrentWindowMetrics().getBounds().height();
+            }
+        }
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         Point point = new Point();
         wm.getDefaultDisplay().getRealSize(point);
         return point.y;
@@ -115,7 +129,7 @@ public class DensityUtil {
      * Return whether the navigation bar visible.
      * <p>Call it in onWindowFocusChanged will get right result.</p>
      *
-     * @param window The window.
+     * @param context The context.
      * @return {@code true}: yes<br>{@code false}: no
      */
     public static boolean isNavBarVisible(Context context) {
@@ -148,6 +162,7 @@ public class DensityUtil {
                 try {
                     return Settings.Global.getInt(activity.getContentResolver(), "navigationbar_hide_bar_enabled") == 0;
                 } catch (Exception ignore) {
+                    L.w(ignore, () -> "[DensityUtil] isNavigationBarVisible check failed");
                 }
             }
 

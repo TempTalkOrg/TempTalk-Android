@@ -25,7 +25,7 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.signal.imageeditor.core.Bounds;
 import org.signal.imageeditor.core.Renderer;
 import org.signal.imageeditor.core.RendererContext;
@@ -44,7 +44,7 @@ import java.util.concurrent.ExecutionException;
  */
 public final class UriGlideRenderer implements SelectableRenderer {
 
-    private static final String TAG = Log.tag(UriGlideRenderer.class);
+    private static final String TAG = "UriGlideRenderer";
 
     private static final int PREVIEW_DIMENSION_LIMIT = 2048;
     private static final int MAX_BLUR_DIMENSION = 300;
@@ -62,6 +62,7 @@ public final class UriGlideRenderer implements SelectableRenderer {
     private final int maxHeight;
     private final float blurRadius;
     private final RequestListener<Bitmap> bitmapRequestListener;
+    private final Object blurLock = new Object();
 
     private boolean selected;
 
@@ -168,16 +169,19 @@ public final class UriGlideRenderer implements SelectableRenderer {
             blurPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_ATOP));
             blurPaint.setMaskFilter(null);
 
-            if (blurredBitmap == null) {
-                blurredBitmap = blur(bitmap, rendererContext.context, blurRadius);
+            // Synchronize access to blurredBitmap to prevent race conditions
+            synchronized (blurLock) {
+                if (blurredBitmap == null) {
+                    blurredBitmap = blur(bitmap, rendererContext.context, blurRadius);
 
-                blurScaleMatrix.setRectToRect(new RectF(0, 0, blurredBitmap.getWidth(), blurredBitmap.getHeight()),
-                        new RectF(0, 0, bitmap.getWidth(), bitmap.getHeight()),
-                        Matrix.ScaleToFit.FILL);
+                    blurScaleMatrix.setRectToRect(new RectF(0, 0, blurredBitmap.getWidth(), blurredBitmap.getHeight()),
+                            new RectF(0, 0, bitmap.getWidth(), bitmap.getHeight()),
+                            Matrix.ScaleToFit.FILL);
+                }
+
+                rendererContext.canvas.concat(blurScaleMatrix);
+                rendererContext.canvas.drawBitmap(blurredBitmap, 0, 0, blurPaint);
             }
-
-            rendererContext.canvas.concat(blurScaleMatrix);
-            rendererContext.canvas.drawBitmap(blurredBitmap, 0, 0, blurPaint);
             blurPaint.setXfermode(null);
 
             rendererContext.restore();
@@ -193,14 +197,23 @@ public final class UriGlideRenderer implements SelectableRenderer {
             height = Math.min(height, PREVIEW_DIMENSION_LIMIT);
         }
 
-        File imageFile = new File(imageUri.getPath());
-
-        return Glide.with(context)
+        RequestBuilder<Bitmap> requestBuilder = Glide.with(context)
                 .asBitmap()
                 .override(width, height)
                 .centerInside()
-                .addListener(bitmapRequestListener)
-                .load(imageFile);
+                .addListener(bitmapRequestListener);
+
+        // Handle different URI schemes safely
+        String uriPath = imageUri.getPath();
+        if (uriPath != null && !uriPath.isEmpty()) {
+            // For file:// URIs or URIs with valid paths
+            File imageFile = new File(uriPath);
+            return requestBuilder.load(imageFile);
+        } else {
+            // For content:// URIs or other URI schemes, load the URI directly
+            L.w(() -> TAG + " URI path is null or empty, loading URI directly: " + imageUri);
+            return requestBuilder.load(imageUri);
+        }
     }
 
     @Override
@@ -258,12 +271,27 @@ public final class UriGlideRenderer implements SelectableRenderer {
         return matrix;
     }
 
+    /**
+     * Clears the blurred bitmap to free memory after editing is complete.
+     * The blurred bitmap will be recreated if needed during rendering (e.g., when sending).
+     * Does not clear the main bitmap as it's managed by Glide and may be needed for sending.
+     * Thread-safe: synchronized to prevent concurrent access during rendering.
+     */
+    public void clearBlurredBitmap() {
+        synchronized (blurLock) {
+            if (blurredBitmap != null && !blurredBitmap.isRecycled()) {
+                blurredBitmap.recycle();
+            }
+            blurredBitmap = null;
+        }
+    }
+
     private static @NonNull Bitmap blur(Bitmap bitmap, Context context, float blurRadius) {
         Point previewSize = scaleKeepingAspectRatio(new Point(bitmap.getWidth(), bitmap.getHeight()), PREVIEW_DIMENSION_LIMIT);
         Point blurSize = scaleKeepingAspectRatio(new Point(previewSize.x / 2, previewSize.y / 2), MAX_BLUR_DIMENSION);
         Bitmap small = BitmapUtil.createScaledBitmap(bitmap, blurSize.x, blurSize.y);
 
-        Log.d(TAG, "Bitmap: " + bitmap.getWidth() + "x" + bitmap.getHeight() + ", Blur: " + blurSize.x + "x" + blurSize.y);
+        L.d(() -> TAG + " Bitmap: " + bitmap.getWidth() + "x" + bitmap.getHeight() + ", Blur: " + blurSize.x + "x" + blurSize.y);
 
         RenderScript rs = RenderScript.create(context);
         Allocation input = Allocation.createFromBitmap(rs, small);

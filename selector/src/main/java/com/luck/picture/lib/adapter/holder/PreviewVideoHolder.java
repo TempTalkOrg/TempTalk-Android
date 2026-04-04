@@ -38,7 +38,8 @@ public class PreviewVideoHolder extends BasePreviewHolder {
         super(itemView);
         ivPlayButton = itemView.findViewById(R.id.iv_play_video);
         progress = itemView.findViewById(R.id.progress);
-        ivPlayButton.setVisibility(selectorConfig.isPreviewZoomEffect ? View.GONE : View.VISIBLE);
+        // Hide custom play button since ExoPlayer has built-in controls
+        ivPlayButton.setVisibility(View.GONE);
         if (selectorConfig.videoPlayerEngine == null) {
             selectorConfig.videoPlayerEngine = new MediaPlayerEngine();
         }
@@ -156,7 +157,8 @@ public class PreviewVideoHolder extends BasePreviewHolder {
      * 暂停播放
      */
     public void onPause() {
-        ivPlayButton.setVisibility(View.VISIBLE);
+        // Keep play button hidden since ExoPlayer has built-in controls
+        // ivPlayButton.setVisibility(View.VISIBLE);
         if (selectorConfig.videoPlayerEngine != null) {
             selectorConfig.videoPlayerEngine.onPause(videoPlayer);
         }
@@ -192,7 +194,26 @@ public class PreviewVideoHolder extends BasePreviewHolder {
 
         @Override
         public void onPlayerEnd() {
-            playerDefaultUI();
+            // Don't hide PlayerView on video end - keep it visible so user can:
+            // 1. Tap to show/hide controls
+            // 2. Replay via the control bar
+            // playerDefaultUI() will be called when view is detached
+        }
+
+        @Override
+        public void onPlayerTap() {
+            // Handle tap on video player to toggle UI visibility
+            if (mPreviewEventListener != null) {
+                mPreviewEventListener.onBackPressed();
+            }
+        }
+
+        @Override
+        public void onPlayerLongPress() {
+            // Handle long press on video player for save/download
+            if (mPreviewEventListener != null && media != null) {
+                mPreviewEventListener.onLongPressDownload(media);
+            }
         }
     };
 
@@ -223,23 +244,23 @@ public class PreviewVideoHolder extends BasePreviewHolder {
             ViewGroup.LayoutParams layoutParams = videoPlayer.getLayoutParams();
             if (layoutParams instanceof FrameLayout.LayoutParams) {
                 FrameLayout.LayoutParams playerLayoutParams = (FrameLayout.LayoutParams) layoutParams;
-                playerLayoutParams.width = screenWidth;
-                playerLayoutParams.height = screenAppInHeight;
+                playerLayoutParams.width = FrameLayout.LayoutParams.MATCH_PARENT;
+                playerLayoutParams.height = FrameLayout.LayoutParams.MATCH_PARENT;
                 playerLayoutParams.gravity = Gravity.CENTER;
             } else if (layoutParams instanceof RelativeLayout.LayoutParams) {
                 RelativeLayout.LayoutParams playerLayoutParams = (RelativeLayout.LayoutParams) layoutParams;
-                playerLayoutParams.width = screenWidth;
-                playerLayoutParams.height = screenAppInHeight;
+                playerLayoutParams.width = RelativeLayout.LayoutParams.MATCH_PARENT;
+                playerLayoutParams.height = RelativeLayout.LayoutParams.MATCH_PARENT;
                 playerLayoutParams.addRule(RelativeLayout.CENTER_IN_PARENT);
             } else if (layoutParams instanceof LinearLayout.LayoutParams) {
                 LinearLayout.LayoutParams playerLayoutParams = (LinearLayout.LayoutParams) layoutParams;
-                playerLayoutParams.width = screenWidth;
-                playerLayoutParams.height = screenAppInHeight;
+                playerLayoutParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
+                playerLayoutParams.height = LinearLayout.LayoutParams.MATCH_PARENT;
                 playerLayoutParams.gravity = Gravity.CENTER;
             } else if (layoutParams instanceof ConstraintLayout.LayoutParams) {
                 ConstraintLayout.LayoutParams playerLayoutParams = (ConstraintLayout.LayoutParams) layoutParams;
-                playerLayoutParams.width = screenWidth;
-                playerLayoutParams.height = screenAppInHeight;
+                playerLayoutParams.width = ConstraintLayout.LayoutParams.MATCH_PARENT;
+                playerLayoutParams.height = ConstraintLayout.LayoutParams.MATCH_PARENT;
                 playerLayoutParams.topToTop = ConstraintSet.PARENT_ID;
                 playerLayoutParams.bottomToBottom = ConstraintSet.PARENT_ID;
             }
@@ -248,7 +269,8 @@ public class PreviewVideoHolder extends BasePreviewHolder {
 
     private void playerDefaultUI() {
         isPlayed = false;
-        ivPlayButton.setVisibility(View.VISIBLE);
+        // Keep play button hidden since ExoPlayer has built-in controls
+        // ivPlayButton.setVisibility(View.VISIBLE);
         progress.setVisibility(View.GONE);
         coverImageView.setVisibility(View.VISIBLE);
         videoPlayer.setVisibility(View.GONE);

@@ -8,21 +8,19 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import difft.android.messageserialization.model.NotifyMessage
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.rx3.await
-import kotlinx.coroutines.rx3.awaitFirst
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
@@ -55,13 +53,15 @@ import javax.inject.Singleton
 
 @Singleton
 class GroupUpdater @Inject constructor(
-    @ApplicationContext
+    @param:ApplicationContext
     private val context: Context,
     private val messageArchiveManager: MessageArchiveManager,
+    private val conversationSettingsManager: ConversationSettingsManager,
     private val gson: Gson,
     private val dbMessageStore: DBMessageStore,
     private val wcdb: WCDB,
-    @ChativeHttpClientModule.Chat
+    private val groupUtil: GroupUtil,
+    @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
 ) {
     private data class PendingGroupMessage(
@@ -170,7 +170,7 @@ class GroupUpdater @Inject constructor(
         val operatorName: String = if (operator == myId) {
             ResUtils.getString(R.string.you)
         } else {
-            val contactor = ContactorUtil.getContactWithID(context, operator).await()
+            val contactor = ContactorUtil.getContactWithID(context, operator)
             if (contactor.isPresent) contactor.get().getDisplayNameForUI() else ""
         }
 
@@ -354,6 +354,12 @@ class GroupUpdater @Inject constructor(
                     )
                 }
             }
+
+            GroupNotifyDetailType.GroupCriticalAlertChange.value -> {
+                message.data?.group?.criticalAlert?.let {
+                    updateGroupCriticalAlert(groupID, it, groupVersion)
+                }
+            }
         }
 
         // Create and save notify message if needed
@@ -383,7 +389,6 @@ class GroupUpdater @Inject constructor(
 //                //sendAck for messages
 //                removeServerMessage(wrapperData.signalServiceEnvelope.source, wrapperData.signalServiceEnvelope.timestamp)
             } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
                 L.e { "[GroupUpdater] save message exception -> ${e.stackTraceToString()}" }
             }
         }
@@ -407,7 +412,7 @@ class GroupUpdater @Inject constructor(
         if (wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID)) != null) {
             return
         } else {
-            val result = GroupUtil.fetchAndSaveSingleGroupInfo(context, groupID, true).blockingFirst()
+            val result = groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
             L.i { "[GroupUpdater] $result" }
         }
     }
@@ -419,7 +424,7 @@ class GroupUpdater @Inject constructor(
             group.name = newGroupName
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.name, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
-            GroupUtil.emitSingleGroupUpdate(group)
+            groupUtil.emitSingleGroupUpdate(group)
         } else {
             createNewGroupIfNotExist(groupID)
         }
@@ -432,7 +437,7 @@ class GroupUpdater @Inject constructor(
             group.avatar = avatar
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.avatar, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
-            GroupUtil.emitSingleGroupUpdate(group)
+            groupUtil.emitSingleGroupUpdate(group)
         } else {
             createNewGroupIfNotExist(groupID)
         }
@@ -446,7 +451,13 @@ class GroupUpdater @Inject constructor(
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.messageExpiry, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
             messageArchiveManager.updateLocalArchiveTime(For.Group(groupID), messageExpireValue.toLong(), messageClearAnchor)
-            GroupUtil.emitSingleGroupUpdate(group)
+            // 通知 ViewModel 更新
+            conversationSettingsManager.emitConversationSettingUpdate(
+                conversationId = groupID,
+                messageExpiry = messageExpireValue.toLong(),
+                messageClearAnchor = messageClearAnchor
+            )
+            groupUtil.emitSingleGroupUpdate(group)
         } else {
             createNewGroupIfNotExist(groupID)
         }
@@ -459,7 +470,7 @@ class GroupUpdater @Inject constructor(
             group.invitationRule = invitationRule
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.invitationRule, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
-            GroupUtil.emitSingleGroupUpdate(group)
+            groupUtil.emitSingleGroupUpdate(group)
         } else {
             createNewGroupIfNotExist(groupID)
         }
@@ -472,7 +483,7 @@ class GroupUpdater @Inject constructor(
             group.publishRule = publishRule
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.publishRule, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
-            GroupUtil.emitSingleGroupUpdate(group)
+            groupUtil.emitSingleGroupUpdate(group)
         } else {
             createNewGroupIfNotExist(groupID)
         }
@@ -529,7 +540,7 @@ class GroupUpdater @Inject constructor(
                 // Save the updated group back to the database
                 wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq(groupID))
                 wcdb.groupMemberContactor.insertObjects(distinctMembers)
-                GroupUtil.emitSingleGroupUpdate(group)
+                groupUtil.emitSingleGroupUpdate(group)
             }
         } catch (e: Exception) {
             L.e { "[GroupUpdater] Update group members error: ${e.stackTraceToString()}" }
@@ -538,21 +549,34 @@ class GroupUpdater @Inject constructor(
 
     private suspend fun disableGroup(groupID: String) {
         L.i { "[GroupUpdater] Group disable notify, disable group $groupID" }
-        GroupUtil.fetchAndSaveSingleGroupInfo(context, groupID, true).awaitFirst()
+        groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
         // Update cache after disable
         groupVersionCache.remove(groupID)
     }
 
     private suspend fun forceUpdateGroup(groupID: String) {
         L.i { "[GroupUpdater] force Update Group $groupID" }
-        GroupUtil.fetchAndSaveSingleGroupInfo(context, groupID, true).awaitFirst()
+        groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
         // Update cache after force update
         val updatedGroup = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID))
         groupVersionCache[groupID] = updatedGroup?.version ?: -1
     }
 
     private suspend fun getExpiresTime(forWhat: For): Int {
-        val option = messageArchiveManager.getMessageArchiveTime(forWhat).await()
+        val option = messageArchiveManager.getMessageArchiveTime(forWhat)
         return option.toInt()
+    }
+
+    private suspend fun updateGroupCriticalAlert(groupID: String, criticalAlert: Boolean, version: Int) {
+        L.i { "[GroupUpdater] Update group CriticalAlert: $criticalAlert" }
+        val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID))
+        if (group != null) {
+            group.criticalAlert = criticalAlert
+            group.version = version
+            wcdb.group.updateObject(group, arrayOf(DBGroupModel.criticalAlert, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
+            groupUtil.emitSingleGroupUpdate(group)
+        } else {
+            createNewGroupIfNotExist(groupID)
+        }
     }
 }

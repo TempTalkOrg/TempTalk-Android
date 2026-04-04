@@ -1,10 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="login_gray_one">#474D57</color>
-    <color name="login_gray_two">#EAECEF</color>
-    <color name="login_gray_three">#B7BDC6</color>
-    <color name="login_gray_four">#848E9C</color>
-    <color name="login_blue_one">#056FFA</color>
     <color name="login_red_one">#F6465D</color>
-    <color name="login_black_two">#1E2329</color>
 </resources>

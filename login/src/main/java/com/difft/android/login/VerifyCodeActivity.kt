@@ -1,6 +1,7 @@
 package com.difft.android.login
 
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -9,11 +10,12 @@ import android.view.View
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.login.databinding.ActivityVerifyCodeBinding
 import com.difft.android.login.repo.BindRepo
@@ -22,16 +24,14 @@ import com.difft.android.login.viewmodel.LoginViewModel.Companion.DIFFERENT_ACCO
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.viewmodel.Status
-import com.difft.android.base.widget.VerifyCodeView
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.util.TextInfo
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.login.sms.ClipboardOtpHelper
+import com.difft.android.login.sms.SmsRetrieverHelper
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-
+import com.difft.android.base.widget.ToastUtil
 
 @AndroidEntryPoint
 class VerifyCodeActivity : BaseActivity() {
@@ -65,6 +65,8 @@ class VerifyCodeActivity : BaseActivity() {
     private var nonce: String? = null
     private val handle by lazy { Handler(Looper.getMainLooper()) }
     private var timerRunnable: TimerRunnable? = null
+    private var smsRetrieverHelper: SmsRetrieverHelper? = null
+    private var clipboardOtpHelper: ClipboardOtpHelper? = null
 
     @Inject
     lateinit var userManager: UserManager
@@ -92,6 +94,38 @@ class VerifyCodeActivity : BaseActivity() {
         initView()
         startObserve()
         startTimer()
+        startAutoFillHelpers()
+    }
+
+    /**
+     * Start auto-fill helpers based on verification type
+     */
+    private fun startAutoFillHelpers() {
+        // Phone verification: enable SMS Retriever + system autofill hint
+        if (type == TYPE_BIND_PHONE || type == TYPE_CHANGE_PHONE) {
+            // Set autofill hints for phone verification only
+            mBinding.emailCodeView.importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_YES
+            mBinding.emailCodeView.setAutofillHints("smsOTPCode")
+
+            // SMS Retriever for GMS devices with proper SMS format
+            smsRetrieverHelper = SmsRetrieverHelper(this) { code ->
+                runOnUiThread {
+                    mBinding.emailCodeView.setText(code)
+                }
+            }
+            smsRetrieverHelper?.startListening()
+        }
+
+        // Clipboard monitoring for all types (email and phone)
+        clipboardOtpHelper = ClipboardOtpHelper(this) { code ->
+            runOnUiThread {
+                // Only fill if input is empty (avoid overwriting existing input)
+                if (mBinding.emailCodeView.text.isNullOrEmpty()) {
+                    mBinding.emailCodeView.setText(code)
+                }
+            }
+        }
+        clipboardOtpHelper?.startListening()
     }
 
     private fun initView() {
@@ -127,22 +161,20 @@ class VerifyCodeActivity : BaseActivity() {
             showInvalidEmailCodeView(null)
             verifyEmailCode()
         }
-        mBinding.emailCodeView.clearInput()
-        mBinding.emailCodeView.setInputListener(object : VerifyCodeView.OnCodeInputCompleteListener {
-            override fun onTextChange(content: String) {
+        mBinding.emailCodeView.setText("")
+        mBinding.emailCodeView.setOnTextChangeListener { text, isComplete ->
+            if (isComplete) {
+                enableHandleZone()
+            } else {
                 disableHandleZone()
             }
-
-            override fun onComplete(content: String) {
-                enableHandleZone()
-            }
-        })
+        }
 
         // 设置 resendEmail 的点击事件
         mBinding.resendEmail.setOnClickListener {
             if (mBinding.resendEmail.isEnabled) {
-                WaitDialog.show(this@VerifyCodeActivity, "")
-                mBinding.emailCodeView.clearInput()
+                ComposeDialogManager.showWait(this@VerifyCodeActivity, "")
+                mBinding.emailCodeView.setText("")
                 showInvalidEmailCodeView(null)
                 if (fromLogin) {
                     account?.let {
@@ -165,7 +197,7 @@ class VerifyCodeActivity : BaseActivity() {
             handleZone.isEnabled = false
             animationView.visibility = View.GONE
             nextText.visibility = View.VISIBLE
-            nextText.setTextColor(ContextCompat.getColor(this@VerifyCodeActivity, R.color.login_gray_three))
+            nextText.setTextColor(ContextCompat.getColor(this@VerifyCodeActivity, com.difft.android.base.R.color.gray_200))
         }
 
     private fun enableHandleZone() =
@@ -184,7 +216,7 @@ class VerifyCodeActivity : BaseActivity() {
         }
 
     private fun verifyEmailCode() {
-        val code = mBinding.emailCodeView.getResult()
+        val code = mBinding.emailCodeView.text.toString()
         if (fromLogin) {
             account?.let {
                 if (type == TYPE_BIND_PHONE) {
@@ -272,13 +304,13 @@ class VerifyCodeActivity : BaseActivity() {
             when (it.status) {
                 Status.LOADING -> {}
                 Status.SUCCESS -> {
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     startTimer()
                 }
 
                 Status.ERROR -> {
-                    WaitDialog.dismiss()
-                    it.exception?.errorMsg?.let { error -> PopTip.show(error) }
+                    ComposeDialogManager.dismissWait()
+                    it.exception?.errorMsg?.let { error -> ToastUtil.show(error) }
                 }
             }
         }
@@ -291,13 +323,13 @@ class VerifyCodeActivity : BaseActivity() {
             when (it.status) {
                 Status.LOADING -> {}
                 Status.SUCCESS -> {
-                    WaitDialog.dismiss()
+                    ComposeDialogManager.dismissWait()
                     startTimer()
                 }
 
                 Status.ERROR -> {
-                    WaitDialog.dismiss()
-                    it.exception?.errorMsg?.let { error -> PopTip.show(error) }
+                    ComposeDialogManager.dismissWait()
+                    it.exception?.errorMsg?.let { error -> ToastUtil.show(error) }
                 }
             }
         }
@@ -348,83 +380,77 @@ class VerifyCodeActivity : BaseActivity() {
     }
 
     private fun verifyBindAccount() {
-        WaitDialog.show(this@VerifyCodeActivity, "")
+        ComposeDialogManager.showWait(this@VerifyCodeActivity, "")
         val account = account ?: return
         val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
-        if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
-            bindRepo.verifyEmail(basicAuth, account, nonce)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    WaitDialog.dismiss()
-                    if (it.status == 0) {
-                        startTimer()
-                    } else {
-                        PopTip.show(it.reason)
-                    }
-                }, {
-                    WaitDialog.dismiss()
-                    it.printStackTrace()
-                    PopTip.show(it.message)
-                })
-        } else {
-            bindRepo.verifyPhone(basicAuth, account, nonce)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
-                    WaitDialog.dismiss()
-                    if (it.status == 0) {
-                        startTimer()
-                    } else {
-                        PopTip.show(it.reason)
-                    }
-                }, {
-                    WaitDialog.dismiss()
-                    it.printStackTrace()
-                    PopTip.show(it.message)
-                })
+
+        lifecycleScope.launch {
+            try {
+                val result = if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
+                    bindRepo.verifyEmail(basicAuth, account, nonce)
+                } else {
+                    bindRepo.verifyPhone(basicAuth, account, nonce)
+                }
+                ComposeDialogManager.dismissWait()
+                if (result.status == 0) {
+                    startTimer()
+                } else {
+                    result.reason?.let { message -> ToastUtil.show(message) }
+                }
+            } catch (e: Exception) {
+                ComposeDialogManager.dismissWait()
+                L.w { "[VerifyCodeActivity] error: ${e.stackTraceToString()}" }
+                e.message?.let { message -> ToastUtil.show(message) }
+            }
         }
     }
 
     private fun verifyBindAccountCode(code: String) {
         val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+
         if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
             loadingHandleZone()
-            bindRepo.verifyEmailCode(basicAuth, code, nonce)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
+            lifecycleScope.launch {
+                try {
+                    val result = bindRepo.verifyEmailCode(basicAuth, code, nonce)
                     enableHandleZone()
-                    if (it.status == 0) {
+                    if (result.status == 0) {
+                        userManager.update {
+                            this.email = account
+                        }
                         setResult(Activity.RESULT_OK)
                         finish()
                     } else {
-                        showInvalidEmailCodeView(it.reason)
+                        showInvalidEmailCodeView(result.reason)
                     }
-                }, {
-                    it.printStackTrace()
+                } catch (e: Exception) {
+                    L.w { "[VerifyCodeActivity] error: ${e.stackTraceToString()}" }
                     enableHandleZone()
-                    showInvalidEmailCodeView(it.message)
-                })
+                    showInvalidEmailCodeView(e.message)
+                }
+            }
         } else {
             val account = account ?: return
             loadingHandleZone()
-            bindRepo.verifyPhoneCode(basicAuth, account, code, nonce)
-                .compose(RxUtil.getSingleSchedulerComposer())
-                .to(RxUtil.autoDispose(this))
-                .subscribe({
+            lifecycleScope.launch {
+                try {
+                    val result = bindRepo.verifyPhoneCode(basicAuth, account, code, nonce)
                     enableHandleZone()
-                    if (it.status == 0) {
+                    if (result.status == 0) {
+                        userManager.update {
+                            this.phoneNumber = account
+                        }
                         setResult(Activity.RESULT_OK)
                         finish()
                     } else {
-                        showInvalidEmailCodeView(it.reason)
+                        showInvalidEmailCodeView(result.reason)
                     }
-                }, {
-                    it.printStackTrace()
+                } catch (e: Exception) {
+                    L.w { "[VerifyCodeActivity] error: ${e.stackTraceToString()}" }
                     enableHandleZone()
-                    showInvalidEmailCodeView(it.message)
-                })
+                    showInvalidEmailCodeView(e.message)
+                }
+            }
         }
     }
 
@@ -432,26 +458,35 @@ class VerifyCodeActivity : BaseActivity() {
      * 显示不同账号登录提示框
      */
     private fun showDifferentAccountLoginDialog() {
-        MessageDialog.show(
-            R.string.login_different_dialog_title,
-            R.string.login_different_dialog_content,
-            R.string.login_different_dialog_ok_text,
-            R.string.login_different_dialog_cancel_text,
-        )
-            .setCancelable(false)
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.login_different_dialog_title),
+            message = getString(R.string.login_different_dialog_content),
+            confirmText = getString(R.string.login_different_dialog_ok_text),
+            cancelText = getString(R.string.login_different_dialog_cancel_text),
+            cancelable = false,
+            confirmButtonColor = androidx.compose.ui.graphics.Color(
+                ContextCompat.getColor(this@VerifyCodeActivity, com.difft.android.base.R.color.t_error)
+            ),
+            onConfirm = {
                 logoutManager.doLogout()
-                false
-            }
-            .setCancelButton { _, _ ->
+            },
+            onCancel = {
                 finish()
-                false
             }
-            .okTextInfo = TextInfo().apply { fontColor = ContextCompat.getColor(this@VerifyCodeActivity, com.difft.android.base.R.color.t_error) }
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Check clipboard for codes copied while app was in background
+        clipboardOtpHelper?.checkClipboard()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         timerRunnable?.let { handle.removeCallbacks(it) }
+        smsRetrieverHelper?.stopListening()
+        clipboardOtpHelper?.stopListening()
     }
 }

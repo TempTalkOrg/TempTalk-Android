@@ -7,7 +7,7 @@
             <solid android:color="@android:color/transparent" />
             <stroke
                 android:width="2dp"
-                android:color="#CC5E6673" />
+                android:color="@color/live_tag_border" />
             <corners
                 android:bottomLeftRadius="4dp"
                 android:bottomRightRadius="0dp"
@@ -21,8 +21,8 @@
         <shape>
             <gradient
                 android:angle="270"
-                android:startColor="#F84135"
-                android:endColor="#FE7566"
+                android:startColor="@color/error"
+                android:endColor="@color/live_tag_gradient_end"
                 android:type="linear" />
             <corners
                 android:bottomLeftRadius="4dp"

@@ -94,6 +94,8 @@ public final class SelectorConfig {
     public boolean isOpenClickSound;
     public boolean isEmptyResultReturn;
     public boolean isHidePreviewDownload;
+    public boolean isHidePreviewShare;
+    public boolean isShowConfidentialTip;
     public boolean isWithVideoImage;
     public List<String> queryOnlyImageList;
     public List<String> queryOnlyVideoList;
@@ -122,7 +124,6 @@ public final class SelectorConfig {
     public boolean isSyncCover;
     public int ofAllCameraType;
     public boolean isOnlySandboxDir;
-    public boolean isCameraForegroundService;
     public boolean isResultListenerBack;
     public boolean isInjectLayoutResource;
     public boolean isActivityResultBack;
@@ -187,6 +188,7 @@ public final class SelectorConfig {
         isEnablePreviewVideo = true;
         isEnablePreviewAudio = true;
         isHidePreviewDownload = false;
+        isShowConfidentialTip = false;
         isOpenClickSound = false;
         isEmptyResultReturn = false;
         cameraImageFormat = PictureMimeType.JPEG;
@@ -217,7 +219,6 @@ public final class SelectorConfig {
         ofAllCameraType = SelectMimeType.ofAll();
         isOnlySandboxDir = false;
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-        isCameraForegroundService = false;
         isResultListenerBack = true;
         isActivityResultBack = false;
         isCompressEngine = false;

@@ -8,27 +8,28 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
-import com.difft.android.base.fragment.DisposableManageFragment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.smoothScrollToPositionWithHelper
-import com.difft.android.base.user.FloatMenuAction
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
-import org.difft.app.database.wcdb
 import com.difft.android.base.widget.ChativePopupView
 import com.difft.android.base.widget.ChativePopupWindow
-import com.difft.android.call.LCallManager
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.manager.CallDataManager
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatBinding
 import com.difft.android.chat.group.CreateGroupActivity
@@ -41,35 +42,37 @@ import com.difft.android.chat.recent.RoomViewData.Type
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.messageserialization.db.store.ConversationUtils
 import com.difft.android.messageserialization.db.store.DBRoomStore
-import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
+import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
+import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.disposables.Disposable
+import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+
+import kotlinx.coroutines.withContext
+import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
+import org.difft.app.database.wcdb
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
-import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
-import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import javax.inject.Inject
-import kotlin.collections.set
+import dagger.Lazy
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
-class RecentChatFragment : DisposableManageFragment() {
+class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var userManager: UserManager
@@ -95,10 +98,17 @@ class RecentChatFragment : DisposableManageFragment() {
     @Inject
     lateinit var logoutManager: LogoutManager
 
+    @Inject
+    lateinit var callDataManagerLazy: Lazy<CallDataManager>
+
     private lateinit var binding: ChatFragmentRecentChatBinding
     private var popupWindow: PopupWindow? = null
     private lateinit var popupItemList: MutableList<ChativePopupView.Item>
     private val recentChatViewModel: RecentChatViewModel by viewModels(ownerProducer = { requireActivity() })
+
+    private val callDataManager: CallDataManager by lazy {
+        callDataManagerLazy.get()
+    }
 
     private val mAdapter: RecentChatAdapter by lazy {
         object : RecentChatAdapter(requireActivity()) {
@@ -106,21 +116,43 @@ class RecentChatFragment : DisposableManageFragment() {
                 roomViewData: RoomViewData,
                 position: Int
             ) {
+                // Skip processing for instant calls as they don't require chat room navigation
+                if (roomViewData.isInstantCall) {
+                    return
+                }
+
+                // Check if parent Activity supports dual-pane navigation
+                val navigationCallback = activity as? ConversationNavigationCallback
+
                 when (roomViewData.type) {
                     is Type.OneOnOne -> {
-                        L.i { "BH_Lin: onItemClicked - OneOnOne ChattingRoom" }
-                        ChatActivity.startActivity(
-                            requireActivity(),
-                            roomViewData.roomId
-                        )
+                        L.i { "onItemClicked - OneOnOne ChattingRoom" }
+                        if (navigationCallback != null) {
+                            navigationCallback.onOneOnOneConversationSelected(roomViewData.roomId)
+                            if (navigationCallback.isDualPaneMode) {
+                                selectedId = roomViewData.roomId
+                            }
+                        } else {
+                            ChatActivity.startActivity(
+                                requireActivity(),
+                                roomViewData.roomId
+                            )
+                        }
                     }
 
                     is Type.Group -> {
-                        L.i { "BH_Lin: onItemClicked - Group ChattingRoom" }
-                        GroupChatContentActivity.startActivity(
-                            requireActivity(),
-                            roomViewData.roomId
-                        )
+                        L.i { "onItemClicked - Group ChattingRoom" }
+                        if (navigationCallback != null) {
+                            navigationCallback.onGroupConversationSelected(roomViewData.roomId)
+                            if (navigationCallback.isDualPaneMode) {
+                                selectedId = roomViewData.roomId
+                            }
+                        } else {
+                            GroupChatContentActivity.startActivity(
+                                requireActivity(),
+                                roomViewData.roomId
+                            )
+                        }
                     }
                 }
             }
@@ -133,8 +165,6 @@ class RecentChatFragment : DisposableManageFragment() {
         }
     }
 
-    private var callingDispose: Disposable? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -142,37 +172,43 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun registerCallingListener() {
-        callingDispose = LCallManager.callingList
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ callingList ->
+        callDataManager.callingList
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .distinctUntilChanged()
+            .onEach { callingList ->
                 L.d { "[Call] RecentChatFragment registerCallingListener: callingList = $callingList" }
                 val currentList: List<RoomViewData> = recentChatViewModel.allRecentRoomsStateFlow.value
                 sortingChatRoomsByCall(currentList, callingList)
-            }, { it.printStackTrace() })
+            }
+            .launchIn(lifecycleScope)
     }
 
-
-    private fun moveCallingRoomsToTheTop(currentList: List<RoomViewData>, callingList: MutableMap<String, CallData>?): List<RoomViewData> {
+    private fun buildSortedListForCalling(
+        currentList: List<RoomViewData>,
+        callingList: Map<String, CallData>?,
+        instantCallRoomViewData: Map<String, RoomViewData>,
+        instantCallDefaultName: String
+    ): Pair<List<RoomViewData>, Map<String, RoomViewData>> {
         L.d { "[Call] RecentChatFragment moveCallingRoomsToTheTop: callingList = $callingList" }
-        val instantCallRoomViewData = recentChatViewModel.instantCallRoomViewData
+        val workingList = currentList.map { it.copy() }.toMutableList()
+        val instantCallRoomViewDataMap = instantCallRoomViewData.toMutableMap()
         // 如果没有callingList，则清除currentList中的callData 并清除instantCallRoomViewData的记录
         if (callingList.isNullOrEmpty()) {
-            currentList.forEach { item ->
+            workingList.forEach { item ->
                 item.callData = null
             }
-            instantCallRoomViewData.clear()
+            instantCallRoomViewDataMap.clear()
         }
 
         // 针对instant call 创建roomViewData
-        val currentRoomIds: List<String> = currentList.map { it.roomId }.toList()
+        val currentRoomIds: List<String> = workingList.map { it.roomId }.toList()
         callingList?.forEach { callDataMap ->
             val callData = callDataMap.value
             val roomId = callData.roomId
             when (callData.type) {
                 CallType.INSTANT.type -> {
-                    if (!currentRoomIds.contains(roomId) && !instantCallRoomViewData.containsKey(roomId)) {
-                        val callName = callData.callName ?: getString(com.difft.android.call.R.string.call_instant_call_title_default)
+                    if (!currentRoomIds.contains(roomId) && !instantCallRoomViewDataMap.containsKey(roomId)) {
+                        val callName = callData.callName ?: instantCallDefaultName
                         val roomViewData = RoomViewData(
                             roomId = roomId,
                             type = Type.Group,
@@ -185,13 +221,13 @@ class RecentChatFragment : DisposableManageFragment() {
                             isInstantCall = true,
                             callData = callData
                         )
-                        instantCallRoomViewData[roomId] = roomViewData
+                        instantCallRoomViewDataMap[roomId] = roomViewData
                     }
                 }
             }
         }
 
-        currentList.forEach { item ->
+        workingList.forEach { item ->
             val conversationId = item.roomId
             val callData = item.callData
             if (callData != null) {
@@ -200,7 +236,7 @@ class RecentChatFragment : DisposableManageFragment() {
                 if (!roomId.isNullOrEmpty()) {
                     if (callingList?.containsKey(roomId) != true) {
                         item.callData = null
-                        instantCallRoomViewData.remove(roomId)
+                        instantCallRoomViewDataMap.remove(roomId)
                     } else if ((callData.type == CallType.INSTANT.type && !callingList.containsKey(item.roomId))) {
                         item.callData = null
                     }
@@ -235,28 +271,28 @@ class RecentChatFragment : DisposableManageFragment() {
         val sortedList = ArrayList<RoomViewData>()
 
         // filter the pinned rooms
-        val pinnedRooms = currentList.filter { item ->
+        val pinnedRooms = workingList.filter { item ->
             item.isPinned && item.callData == null
         }
         pinnedRooms.sortedByDescending { item ->
             item.pinnedTime
         }
         // filter the meeting rooms
-        val meetingRooms = currentList.filter { item ->
+        val meetingRooms = workingList.filter { item ->
             item.callData != null && item.callData?.type != CallType.INSTANT.type
         }
         // filter the others rooms
-        val otherRooms = currentList.filter { item ->
+        val otherRooms = workingList.filter { item ->
             item.callData == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
         }
 
         // add instant call rooms
-        val currentInstantCallRooms = currentList.filter { item ->
+        val currentInstantCallRooms = workingList.filter { item ->
             item.callData != null && item.callData?.type == CallType.INSTANT.type
         }
-        if (instantCallRoomViewData.isNotEmpty()) {
+        if (instantCallRoomViewDataMap.isNotEmpty()) {
             val existingRoomIds = currentInstantCallRooms.map { it.roomId }.toSet()
-            val newInstantRooms = instantCallRoomViewData.values.filterNot { it.roomId in existingRoomIds }
+            val newInstantRooms = instantCallRoomViewDataMap.values.filterNot { it.roomId in existingRoomIds }
             val roomsToAdd = if (newInstantRooms.isNotEmpty()) {
                 currentInstantCallRooms + newInstantRooms
             } else {
@@ -272,21 +308,28 @@ class RecentChatFragment : DisposableManageFragment() {
         sortedList.addAll(meetingRooms.sortedByDescending { it.lastActiveTime })
         // add pinned rooms
         sortedList.addAll(pinnedRooms.sortedByDescending { it.lastActiveTime })
-        // add other rooms
+        // add other rooms (sorted by lastActiveTime descending)
         sortedList.addAll(otherRooms.sortedByDescending { it.lastActiveTime })
-        return sortedList
+        return sortedList to instantCallRoomViewDataMap
     }
 
-    private fun sortingChatRoomsByCall(currentList: List<RoomViewData>, callingList: MutableMap<String, CallData>? = null) {
+    private fun submitSortedChatRooms(sortedList: List<RoomViewData>) {
         val items = mutableListOf<ListItem>()
         items.add(ListItem.SearchInput)
-        val sortedList = moveCallingRoomsToTheTop(currentList, callingList)
         items.addAll(sortedList.map { ListItem.ChatItem(it) })
-        mAdapter.submitList(items) {
-            if (callingDispose == null) {
-                registerCallingListener()
-            }
+        mAdapter.submitList(items)
+    }
+
+    private suspend fun sortingChatRoomsByCall(currentList: List<RoomViewData>, callingList: Map<String, CallData>? = null) {
+        val instantSnapshot = recentChatViewModel.instantCallRoomViewData.toMap()
+        val instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
+        val (sortedList, updatedInstantMap) = withContext(Dispatchers.Default) {
+            buildSortedListForCalling(currentList, callingList, instantSnapshot, instantCallDefaultName)
         }
+        if (!isAdded || view == null || !this::binding.isInitialized) return
+        recentChatViewModel.instantCallRoomViewData.clear()
+        recentChatViewModel.instantCallRoomViewData.putAll(updatedInstantMap)
+        submitSortedChatRooms(sortedList)
     }
 
     override fun onCreateView(
@@ -315,18 +358,20 @@ class RecentChatFragment : DisposableManageFragment() {
 
         observeChatWSConnection()
 
-        recentChatViewModel.allRecentRoomsStateFlow.onEach { list ->
-            L.i { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
-            sortingChatRooms(list)
-        }.launchIn(lifecycleScope)
+        recentChatViewModel.allRecentRoomsStateFlow
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { list ->
+                L.i { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
+                sortingChatRooms(list)
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        recentChatViewModel.createNote(requireActivity())
+        recentChatViewModel.createNote()
 
         RecentChatUtil.chatDoubleTab
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                val layoutManager = binding.recyclerViewRecentMessage.layoutManager as? LinearLayoutManager ?: return@subscribe
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach {
+                val layoutManager = binding.recyclerViewRecentMessage.layoutManager as? LinearLayoutManager ?: return@onEach
                 val firstVisible = layoutManager.findFirstVisibleItemPosition()
 
                 val firstUnreadItemPosition = mAdapter.currentList.indexOfFirst { data ->
@@ -352,18 +397,25 @@ class RecentChatFragment : DisposableManageFragment() {
                     if (canScrollDown) {
                         binding.recyclerViewRecentMessage.smoothScrollToPositionWithHelper(requireContext(), nextUnreadItemPosition, 100f)
                     } else {
-                        // 如果无法向下滑动，不使用动画方式滚动，防止跳动
                         binding.recyclerViewRecentMessage.scrollToPosition(nextUnreadItemPosition)
                     }
                 }
-            }, { it.printStackTrace() })
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        TextSizeUtil.textSizeChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mAdapter.notifyDataSetChanged()
-            }, { it.printStackTrace() })
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { mAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    mAdapter.updateCallBarTick()
+                    delay(1000)
+                }
+            }
+        }
     }
 
     override fun onResume() {
@@ -373,17 +425,24 @@ class RecentChatFragment : DisposableManageFragment() {
 
         recentChatViewModel.retrieveCallingList()
 
-        mAdapter.startUpdateCallBar()
+        // Restore selected state for dual-pane mode
+        val navigationCallback = activity as? ConversationNavigationCallback
+        if (navigationCallback?.isDualPaneMode == true) {
+            mAdapter.selectedId = navigationCallback.currentSelectedConversationId
+        }
+    }
+
+    override fun updateDualPaneSelection(selectedId: String?) {
+        mAdapter.selectedId = selectedId
     }
 
     override fun onPause() {
         super.onPause()
 
         ConversationUtils.isConversationListVisible = false
-        mAdapter.stopUpdateCallBar()
     }
 
-    private fun initActions(floatMenuActions: List<FloatMenuAction>? = null) {
+    private fun initActions() {
         popupItemList = mutableListOf<ChativePopupView.Item>().apply {
             add(
                 ChativePopupView.Item(
@@ -426,20 +485,6 @@ class RecentChatFragment : DisposableManageFragment() {
                     recentChatViewModel.markAllAsRead(requireActivity())
                     popupWindow?.dismiss()
                 })
-
-
-            floatMenuActions?.forEach { menu ->
-                add(
-                    ChativePopupView.Item(
-                        drawableUrl = menu.iconUrl,
-                        label = if (LanguageUtils.getLanguage(requireContext()).language == "zh") menu.name?.zhCn else menu.name?.enUs
-                    ) {
-                        if (!menu.jumpUrl.isNullOrEmpty()) {
-//                        WebActivity.startActivity(requireActivity(), menu.jumpUrl!!)
-                        }
-                        popupWindow?.dismiss()
-                    })
-            }
         }
         binding.addOptions.setOnClickListener {
             popupWindow = ChativePopupWindow.showAsDropDown2(
@@ -450,72 +495,84 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun checkDevices() {
-        Single.fromCallable {
-            ApplicationDependencies.getSignalServiceAccountManager().devices
-        }
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({}, { e ->
-                e.printStackTrace()
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    ApplicationDependencies.getSignalServiceAccountManager().devices
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[RecentChatFragment] checkDevices error: ${e.stackTraceToString()}" }
                 if (e is AuthorizationFailedException) {
                     L.i { "[Message] AuthorizationFailedException" }
                     logoutManager.doLogoutWithoutRemoveData()
                 }
-            })
+            }
+        }
     }
 
-    private var inactiveDeviceDialog: MessageDialog? = null
+    private var inactiveDeviceDialog: ComposeDialog? = null
 
     //显示设备非活跃激活提示对话框
     private fun showInactiveDeviceDialog() {
         inactiveDeviceDialog?.dismiss()
         inactiveDeviceDialog = null
 
-        inactiveDeviceDialog = MessageDialog.show(R.string.activate_device_title, R.string.activate_device_tips, R.string.activate_device)
-            .setCancelable(false)
-            .setOkButton { _, _ ->
-                recentChatViewModel.activateDevice()
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({
-                        if (it.status == 0) {
-                            TipDialog.show(R.string.activate_device_success, WaitDialog.TYPE.SUCCESS)
+        inactiveDeviceDialog = ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.activate_device_title),
+            message = getString(R.string.activate_device_tips),
+            confirmText = getString(R.string.activate_device),
+            cancelable = false,
+            showCancel = false,
+            onConfirm = {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            recentChatViewModel.activateDevice()
+                        }
+                        if (!isAdded || view == null) return@launch
+                        if (result.status == 0) {
+                            ToastUtil.show(R.string.activate_device_success)
                             inactiveDeviceDialog?.dismiss()
                             inactiveDeviceDialog = null
                         } else {
-                            PopTip.show(it.reason)
+                            result.reason?.let { message -> ToastUtil.show(message) }
                         }
-                    }) {
-                        it.printStackTrace()
-                        L.e { "activate Device fail:" + it.stackTraceToString() }
-                        PopTip.show(it.message)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        if (!isAdded || view == null) return@launch
+                        L.e { "activate Device fail:" + e.stackTraceToString() }
+                        e.message?.let { message -> ToastUtil.show(message) }
                     }
-                true
+                }
             }
+        )
     }
 
 
-
-
-    private fun sortingChatRooms(
+    private suspend fun sortingChatRooms(
         list: List<RoomViewData>
     ) {
-        // 根据livekit call再次进行排序
-        val sortedListByCall = moveCallingRoomsToTheTop(list, LCallManager.getCallListData())
-
-        val items = mutableListOf<ListItem>()
-
-        items.add(ListItem.SearchInput)
-        items.addAll(sortedListByCall.map { ListItem.ChatItem(it) })
-
-        mAdapter.submitList(items)
+        val callingList = callDataManager.getCallListData()
+        val instantSnapshot = recentChatViewModel.instantCallRoomViewData.toMap()
+        val instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
+        val (sortedList, updatedInstantMap) = withContext(Dispatchers.Default) {
+            buildSortedListForCalling(list, callingList, instantSnapshot, instantCallDefaultName)
+        }
+        if (!isAdded || view == null || !this::binding.isInitialized) return
+        recentChatViewModel.instantCallRoomViewData.clear()
+        recentChatViewModel.instantCallRoomViewData.putAll(updatedInstantMap)
+        submitSortedChatRooms(sortedList)
     }
 
-    @OptIn(FlowPreview::class)
     private fun observeChatWSConnection() {
         webSocketManager.getWebSocketConnection()
             .webSocketConnectionState
-            .debounce(500)
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .distinctUntilChanged()
             .onEach { state ->
                 L.i { "[ws][RecentChatFragment] chat webSocketConnectionState changed:$state" }
                 when (state) {
@@ -551,24 +608,79 @@ class RecentChatFragment : DisposableManageFragment() {
     }
 
     private fun leaveGroup(group: GroupModel) {
-        groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({}, { it.printStackTrace() })
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.group_leave),
+            message = getString(R.string.group_leave_notice),
+            confirmText = getString(R.string.group_leave_leave),
+            cancelText = getString(R.string.group_leave_cancel),
+            cancelable = false,
+            onConfirm = {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    ComposeDialogManager.showWait(requireActivity())
+                    try {
+                        val response = withContext(Dispatchers.IO) {
+                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                        }
+                        if (!response.isSuccess()) {
+                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[RecentChatFragment] leaveGroup error: ${e.stackTraceToString()}" }
+                        ToastUtil.show(R.string.chat_net_error)
+                    } finally {
+                        ComposeDialogManager.dismissWait()
+                    }
+                }
+            }
+        )
     }
 
     private fun disbandGroup(group: GroupModel) {
-        MessageDialog.show(R.string.group_disband, R.string.group_disband_tips, R.string.group_disband_disband, R.string.group_leave_cancel)
-            .setOkButton { dialog, v ->
-                groupRepo.deleteGroup(group.gid)
-                    .compose(RxUtil.getSingleSchedulerComposer())
-                    .to(RxUtil.autoDispose(this))
-                    .subscribe({}, { it.printStackTrace() })
-                false
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.group_disband),
+            message = getString(R.string.group_disband_tips),
+            confirmText = getString(R.string.group_disband_disband),
+            cancelText = getString(R.string.group_leave_cancel),
+            cancelable = false,
+            onConfirm = {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    ComposeDialogManager.showWait(requireActivity())
+                    try {
+                        val response = withContext(Dispatchers.IO) {
+                            groupRepo.deleteGroup(group.gid)
+                        }
+                        if (!response.isSuccess()) {
+                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[RecentChatFragment] disbandGroup error: ${e.stackTraceToString()}" }
+                        ToastUtil.show(R.string.chat_net_error)
+                    } finally {
+                        ComposeDialogManager.dismissWait()
+                    }
+                }
             }
+        )
     }
 
     private fun showItemActionsPop(rootView: View, data: RoomViewData, touchX: Int, touchY: Int) {
+        viewLifecycleOwner.lifecycleScope.launch {
+        val groupData = if (data.type is Type.Group) {
+            withContext(Dispatchers.IO) {
+                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.roomId))
+                if (group != null && group.status == 0) {
+                    val role = group.members.find { it.id == globalServices.myId }?.groupRole
+                    if (role != null) Pair(group, role) else null
+                } else null
+            }
+        } else null
+
         val itemList = mutableListOf<ChativePopupView.Item>().apply {
 
             if (data.isPinned) {
@@ -614,22 +726,19 @@ class RecentChatFragment : DisposableManageFragment() {
                     })
             }
 
-            if (data.type is Type.Group) {
-                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.roomId))
-                if (group != null && group.status == 0) {
-                    val role = group.members.find { it.id == globalServices.myId }?.groupRole
+            if (groupData != null) {
+                val (group, role) = groupData
                     if (role == GROUP_ROLE_OWNER) {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband), requireActivity().getString(R.string.group_disband_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
                             disbandGroup(group)
                             popupWindow?.dismiss()
                         })
                     } else {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband), requireActivity().getString(R.string.group_leave_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
                             leaveGroup(group)
                             popupWindow?.dismiss()
                         })
                     }
-                }
             }
             add(
                 ChativePopupView.Item(
@@ -643,6 +752,7 @@ class RecentChatFragment : DisposableManageFragment() {
                 })
         }
         popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, itemList, touchX, touchY)
+        }
     }
 
 

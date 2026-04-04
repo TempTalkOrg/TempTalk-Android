@@ -5,7 +5,6 @@ import android.database.Cursor;
 import androidx.annotation.NonNull;
 
 import com.difft.android.base.log.lumberjack.L;
-import com.google.firebase.crashlytics.FirebaseCrashlytics;
 
 import net.zetetic.database.DatabaseErrorHandler;
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
@@ -29,10 +28,9 @@ public final class SqlCipherDeletingErrorHandler implements DatabaseErrorHandler
     }
 
     @Override
-    public void onCorruption(SQLiteDatabase db) {
+    public void onCorruption(SQLiteDatabase db, String message) {
         try {
-            L.e(() -> TAG + " Database '" + databaseName + "' corrupted! Message: " + ". Going to try to run some diagnostics.");
-            FirebaseCrashlytics.getInstance().recordException(new RuntimeException("[SqlCipherDeletingErrorHandler] Database '" + databaseName + "' corrupted"));
+            L.e(() -> TAG + " Database '" + databaseName + "' corrupted! Message: " + message + ". Going to try to run some diagnostics.");
 
             L.w(() -> TAG + " ===== PRAGMA integrity_check =====");
             try (Cursor cursor = db.rawQuery("PRAGMA integrity_check", null)) {
@@ -41,7 +39,6 @@ public final class SqlCipherDeletingErrorHandler implements DatabaseErrorHandler
                 }
             } catch (Throwable t) {
                 L.e(() -> TAG + " Failed to do integrity_check!" + t);
-                FirebaseCrashlytics.getInstance().recordException(new RuntimeException("[SqlCipherDeletingErrorHandler] Failed to do integrity_check for database: " + databaseName, t));
             }
 
             L.w(() -> TAG + " ===== PRAGMA cipher_integrity_check =====");
@@ -51,11 +48,9 @@ public final class SqlCipherDeletingErrorHandler implements DatabaseErrorHandler
                 }
             } catch (Throwable t) {
                 L.e(() -> TAG + " Failed to do cipher_integrity_check!" + t);
-                FirebaseCrashlytics.getInstance().recordException(new RuntimeException("[SqlCipherDeletingErrorHandler] Failed to do cipher_integrity_check for database: " + databaseName, t));
             }
         } catch (Throwable t) {
             L.e(() -> TAG + " Failed to run diagnostics!" + t);
-            FirebaseCrashlytics.getInstance().recordException(new RuntimeException("[SqlCipherDeletingErrorHandler] Failed to run diagnostics for database: " + databaseName, t));
         } finally {
             L.w(() -> TAG + " Deleting database " + databaseName);
             ApplicationDependencies.getApplication().deleteDatabase(databaseName);

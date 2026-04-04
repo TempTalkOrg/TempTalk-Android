@@ -14,7 +14,6 @@ import com.difft.android.base.utils.FileUtil;
 import com.luck.picture.lib.entity.LocalMedia;
 
 import util.StreamUtil;
-import util.logging.Log;
 import org.signal.imageeditor.core.model.EditorModel;
 import org.thoughtcrime.securesms.fonts.FontTypefaceProvider;
 import org.thoughtcrime.securesms.mms.SentMediaQuality;
@@ -25,12 +24,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 import top.zibin.luban.Luban;
 
 public final class ImageEditorModelRenderMediaTransform implements MediaTransform {
 
-    private static final String TAG = Log.tag(ImageEditorModelRenderMediaTransform.class);
+    private static final String TAG = "ImageEditorModelRenderMediaTransform";
 
     @Nullable
     private final EditorModel modelToRender;
@@ -59,7 +59,7 @@ public final class ImageEditorModelRenderMediaTransform implements MediaTransfor
                 Uri uri = MyBlobProvider.getInstance()
                         .forData(outputStream.toByteArray())
                         .withMimeType(MediaUtil.IMAGE_JPEG)
-                        .withFileName(media.getFileName())
+                        .withFileName(UUID.randomUUID() + ".jpg")
                         .createForDraftAttachmentAsync(context).get();
 
                 media.setRealPath(uri.getPath());
@@ -69,7 +69,7 @@ public final class ImageEditorModelRenderMediaTransform implements MediaTransfor
                 media.setSize(outputStream.size());
             }
         } catch (Exception e) {
-            L.w(() -> "Failed to render image. Using base image." + e);
+            L.w(e, () -> "Failed to render image. Using base image.");
         } finally {
             if (null != bitmap) {
                 bitmap.recycle();
@@ -83,7 +83,7 @@ public final class ImageEditorModelRenderMediaTransform implements MediaTransfor
                         .load(media.getRealPath())
                         .ignoreBy(100)
                         .setTargetDir(FileUtil.INSTANCE.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY))
-                        .setRenameListener(filePath -> media.getFileName())
+                        .setRenameListener(filePath -> UUID.randomUUID() + ".jpg")
                         .get();
 
                 if (file != null && !file.isEmpty()) {
@@ -91,7 +91,7 @@ public final class ImageEditorModelRenderMediaTransform implements MediaTransfor
                 }
             }
         } catch (IOException e) {
-            L.w(() -> "Failed to compress image. Using base image." + e);
+            L.w(e, () -> "Failed to compress image. Using base image.");
         }
 
         return media;

@@ -1,13 +1,10 @@
 package com.difft.android.base.utils
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
-import android.util.DisplayMetrics
+import androidx.core.content.edit
 import com.difft.android.base.R
 import java.util.Locale
-import androidx.core.content.edit
-import com.difft.android.base.log.lumberjack.L
 
 object LanguageUtils {
 

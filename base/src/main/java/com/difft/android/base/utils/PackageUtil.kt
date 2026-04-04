@@ -3,6 +3,7 @@ package com.difft.android.base.utils
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import com.difft.android.base.log.lumberjack.L
 
 object PackageUtil {
 
@@ -17,7 +18,7 @@ object PackageUtil {
             val applicationInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
             return context.packageManager.getApplicationLabel(applicationInfo).toString()
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[PackageUtil] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -40,7 +41,7 @@ object PackageUtil {
             val context: Context = com.difft.android.base.utils.application
             context.packageManager.getPackageInfo(context.packageName, 0)
         } catch (e: PackageManager.NameNotFoundException) {
-            e.printStackTrace()
+            L.w { "[PackageUtil] error: ${e.stackTraceToString()}" }
             null
         }
     }

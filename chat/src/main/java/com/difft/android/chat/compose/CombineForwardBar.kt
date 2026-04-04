@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
@@ -21,6 +23,8 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
@@ -46,7 +50,8 @@ fun CombineForwardBar(
     @PreviewParameter(StateSelectMessageModelDataProvider::class) stateData: SelectMessageState,
     onForwardClick: () -> Unit = {},
     onCombineClick: () -> Unit = {},
-    onSaveClick: () -> Unit = {}
+    onSaveClick: () -> Unit = {},
+    onRecallClick: () -> Unit = {}
 ) {
     val state:SelectMessageState  = stateData
     Column(
@@ -70,11 +75,13 @@ fun CombineForwardBar(
             )
         }
 
-        // Icons row with weights to distribute space evenly
+        // Icons row with weights to distribute space evenly (4 tabs)
+        // Horizontal padding: 8dp from Row + 4dp from each item = 12dp on edges
+        // Middle spacing: 4dp + 4dp = 8dp between adjacent tabs
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp),
+                .padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             // Forward Icon
@@ -103,6 +110,17 @@ fun CombineForwardBar(
                 onClick = onSaveClick,
                 modifier = Modifier.weight(1f)
             )
+
+            // Recall Icon - Red when enabled, gray when disabled
+            val recallCount = state.recallableMessageIds.size
+            RecallIconWithText(
+                iconPainter = painterResource(R.drawable.chat_message_action_recall),
+                text = stringResource(R.string.chat_message_action_recall),
+                isEnabled = recallCount > 0,
+                count = recallCount,
+                onClick = onRecallClick,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -124,7 +142,7 @@ fun IconWithText(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clickable(enabled = isEnabled) { onClick() }
-            .padding(horizontal = 8.dp)  // Add padding to avoid text overflow
+            .padding(horizontal = 4.dp)
     ) {
         Image(
             painter = iconPainter,
@@ -132,12 +150,60 @@ fun IconWithText(
             modifier = Modifier.size(24.dp),
             colorFilter = ColorFilter.tint(tintColor)
         )
+        Spacer(modifier = Modifier.height(5.dp))
         Text(
             text = text,
-            maxLines = 1,  // Ensure text doesn't overflow
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            maxLines = 2,  // Allow text to wrap to 2 lines
+            overflow = TextOverflow.Ellipsis,
             fontSize = 12.sp,
-            color = tintColor
+            color = tintColor,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * Special icon with text for Recall action
+ * Uses red color when enabled, gray when disabled
+ * Shows count in parentheses after the text
+ */
+@Composable
+fun RecallIconWithText(
+    iconPainter: Painter,
+    text: String,
+    isEnabled: Boolean,
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tintColor = if (isEnabled) {
+        colorResource(id = com.difft.android.base.R.color.t_error) // Red when enabled
+    } else {
+        colorResource(id = com.difft.android.base.R.color.t_disable) // Gray when disabled
+    }
+    // Display text with count in parentheses: "Recall (2)" or just "Recall" if count is 0
+    val displayText = if (count > 0) "$text ($count)" else text
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clickable(enabled = isEnabled) { onClick() }
+            .padding(horizontal = 4.dp)
+    ) {
+        Image(
+            painter = iconPainter,
+            contentDescription = text,
+            modifier = Modifier.size(24.dp),
+            colorFilter = ColorFilter.tint(tintColor)
+        )
+        Spacer(modifier = Modifier.height(5.dp))
+        Text(
+            text = displayText,
+            maxLines = 2,  // Allow text to wrap to 2 lines
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 12.sp,
+            color = tintColor,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -145,5 +211,6 @@ fun IconWithText(
 data class SelectMessageState(
     val editModel: Boolean,
     val selectedMessageIds: Set<String>,
-    val totalMessageCount: Int
+    val totalMessageCount: Int,
+    val recallableMessageIds: Set<String> = emptySet()
 )

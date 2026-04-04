@@ -1,10 +1,7 @@
-/*
- * Copyright (c) 2018.
- * Author：Zhao
- * Email：joeyzhao1005@gmail.com
- */
 
 package com.luck.picture.lib.decoration;
+
+import com.difft.android.base.log.lumberjack.L;
 
 import android.content.Context;
 import android.util.AttributeSet;
@@ -36,7 +33,7 @@ public class WrapContentLinearLayoutManager extends LinearLayoutManager {
         try {
             super.onLayoutChildren(recycler, state);
         } catch (IndexOutOfBoundsException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[WrapContentLinearLayoutManager] onLayoutChildren error:");
         }
     }
 

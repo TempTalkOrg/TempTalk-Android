@@ -4,7 +4,6 @@ import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.chat.fileshare.DownloadReq
 import com.difft.android.chat.fileshare.FileShareRepo
@@ -14,14 +13,12 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import org.difft.app.database.models.DBAttachmentModel
 import util.FileUtils
-import util.concurrent.TTExecutors
 import org.thoughtcrime.securesms.jobmanager.Data
 import org.thoughtcrime.securesms.jobmanager.Job
 import org.thoughtcrime.securesms.util.FileDecryptionUtil
 import org.thoughtcrime.securesms.util.MediaUtil
-import org.thoughtcrime.securesms.util.SaveAttachmentTask
-import org.thoughtcrime.securesms.util.StorageUtil
-import org.thoughtcrime.securesms.util.whispersystems.Base64
+import org.thoughtcrime.securesms.util.SaveAttachmentUtil
+import com.difft.android.base.utils.Base64
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
 import java.io.FileOutputStream
@@ -99,6 +96,8 @@ class DownloadAttachmentJob private constructor(
         val buffer = ByteArray(8192)
 
         val encryptFile = File("$filePath.encrypt")
+        // Ensure parent directory exists before creating file
+        encryptFile.parentFile?.mkdirs()
         if (!encryptFile.exists()) {
             encryptFile.createNewFile()
         } else {
@@ -113,78 +112,161 @@ class DownloadAttachmentJob private constructor(
                 throw Exception("[DownloadAttachmentJob] download attachment fail: ${response.message()}")
             }
 
-            val url = response.body()?.data?.url ?: throw Exception("[DownloadAttachmentJob] download URL is null")
-            val downLoadResponse = fileShareRepo.downloadFromOSS(url).execute()
-
-            if (!downLoadResponse.isSuccessful) {
-                throw Exception("[DownloadAttachmentJob] download attachment fail: ${downLoadResponse.message}")
+            // Check response status code
+            val responseStatus = response.body()?.status
+                ?: throw Exception("[DownloadAttachmentJob] download response body is null, messageId: $messageId")
+            when (responseStatus) {
+                0 -> {
+                    // OK, continue with download
+                }
+                2 -> {
+                    // NO_PERMISSION - File has expired
+                    L.w { "[DownloadAttachmentJob] file has expired (status code: 2)" }
+                    updateAttachmentStatus(AttachmentStatus.EXPIRED.code)
+                    FileUtil.emitProgressUpdate(messageId, -2)
+                    return
+                }
+                else -> {
+                    // Handle other error status codes
+                    val errorMessage = when (responseStatus) {
+                        1 -> "INVALID_PARAMETER"
+                        9 -> "NO_SUCH_FILE"
+                        12 -> "INVALID_FILE"
+                        99 -> "OTHER_ERROR"
+                        else -> "UNKNOWN_ERROR (status: $responseStatus)"
+                    }
+                    throw Exception("[DownloadAttachmentJob] download failed with status code $responseStatus: $errorMessage")
+                }
             }
 
-            val downLoadResponseBody = downLoadResponse.body ?: throw Exception("[DownloadAttachmentJob] download response body is null")
-            downLoadResponseBody.byteStream().let { inputStream ->
-                val encryptOutputStream = FileOutputStream(encryptFile)
+            // 获取URL列表，优先使用urls数组，回退到单个url
+            val downloadData = response.body()?.data
+            val urlsToTry = downloadData?.urls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(downloadData?.url)
+            L.i { "[DownloadAttachmentJob] API response: using ${if (downloadData?.urls?.isNotEmpty() == true) "urls array" else "fallback url"}, total URLs: ${urlsToTry.size}, messageId: $messageId" }
 
+            if (urlsToTry.isEmpty()) {
+                throw Exception("[DownloadAttachmentJob] No download URLs available")
+            }
+
+            var downloadSuccess = false
+            var lastDownloadException: Exception? = null
+
+            for ((index, url) in urlsToTry.withIndex()) {
                 try {
-                    var bytesRead: Int
-                    var totalBytesRead: Long = 0
-                    var lastEmitTime = System.currentTimeMillis()
+                    L.i { "[DownloadAttachmentJob] Attempting download with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
 
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        encryptOutputStream.write(buffer, 0, bytesRead)
-                        totalBytesRead += bytesRead
-                        val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt()
-                        val currentTime = System.currentTimeMillis()
-                        if ((currentTime - lastEmitTime >= 500)) {
-                            L.d { "[DownloadAttachmentJob]===download progress======$totalBytesRead===${downLoadResponseBody.contentLength()}===$progress%" }
-                            FileUtil.emitProgressUpdate(messageId, progress)
-                            lastEmitTime = currentTime
+                    val downLoadResponse = fileShareRepo.downloadFromOSS(url).execute()
+
+                    if (!downLoadResponse.isSuccessful) {
+                        L.w { "[DownloadAttachmentJob] Download failed with URL ${index + 1}/${urlsToTry.size}: ${downLoadResponse.message}, messageId: $messageId, url: $url" }
+                        lastDownloadException = Exception("Download from OSS failed: ${downLoadResponse.message}")
+                        continue
+                    }
+
+                    val downLoadResponseBody = downLoadResponse.body
+                    if (downLoadResponseBody == null) {
+                        L.w { "[DownloadAttachmentJob] Download response body is null with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                        lastDownloadException = Exception("Download response body is null")
+                        continue
+                    }
+
+                    downLoadResponseBody.byteStream().let { inputStream ->
+                        val encryptOutputStream = FileOutputStream(encryptFile)
+
+                        try {
+                            var bytesRead: Int
+                            var totalBytesRead: Long = 0
+                            var lastEmitTime = System.currentTimeMillis()
+                            var lastEmitProgress = 0
+
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                encryptOutputStream.write(buffer, 0, bytesRead)
+                                totalBytesRead += bytesRead
+                                val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt().coerceAtMost(99)
+                                val currentTime = System.currentTimeMillis()
+                                // Update every 50ms or when progress changes by >=5%
+                                if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
+                                    L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/${downLoadResponseBody.contentLength()} = $progress%" }
+                                    FileUtil.emitProgressUpdate(messageId, progress)
+                                    lastEmitTime = currentTime
+                                    lastEmitProgress = progress
+                                }
+                            }
+                        } finally {
+                            inputStream.close()
+                            encryptOutputStream.close()
                         }
                     }
-                } finally {
-                    inputStream.close()
-                    encryptOutputStream.close()
+
+                    L.i { "[DownloadAttachmentJob] Download successful with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                    downloadSuccess = true
+                    break
+
+                } catch (e: Exception) {
+                    L.w { "[DownloadAttachmentJob] Download exception with URL ${index + 1}/${urlsToTry.size}: ${e.message}, messageId: $messageId, url: $url" }
+                    lastDownloadException = e
+                    // 清理可能的部分下载文件
+                    if (encryptFile.exists()) {
+                        encryptFile.delete()
+                        encryptFile.createNewFile()
+                    }
                 }
+            }
 
-                if (shouldDecrypt) {
-                    // 只在需要解密且下载成功后才创建realFile
-                    val realFile = File(filePath).apply {
-                        if (!exists()) {
-                            createNewFile()
-                        } else {
-                            delete()
-                        }
+            if (!downloadSuccess) {
+                throw lastDownloadException ?: Exception("All download URLs failed")
+            }
+
+            if (shouldDecrypt) {
+                // 只在需要解密且下载成功后才创建realFile
+                val realFile = File(filePath).apply {
+                    // Ensure parent directory exists (same as encryptFile, but added for robustness)
+                    parentFile?.mkdirs()
+                    if (!exists()) {
+                        createNewFile()
+                    } else {
+                        delete()
                     }
-                    // 解密后删除加密文件
+                }
+                // 解密后删除加密文件
+                try {
                     FileDecryptionUtil.decryptFile(encryptFile, realFile, fileKey)
                     encryptFile.delete()
+                } catch (e: Exception) {
+                    realFile.delete()
+                    throw e
                 }
+            }
 
-                //判断是否需要自动保存到相册
-                if (autoSave && globalServices.userManager.getUserData()?.saveToPhotos == true) {
-                    L.i { "[DownloadAttachmentJob] need to save: $filePath" }
-                    if (StorageUtil.canWriteToMediaStore()) {
-                        if (File(filePath).exists()) {
-                            val fileUri = File(filePath).toUri()
-                            val saveAttachment = SaveAttachmentTask.Attachment(
-                                fileUri,
-                                MediaUtil.getMimeType(context, fileUri) ?: "",
-                                System.currentTimeMillis(),
-                                FileUtils.getFileName(filePath),
-                                false,
-                                false
-                            )
-                            SaveAttachmentTask(context).executeOnExecutor(TTExecutors.BOUNDED, saveAttachment)
+            // Auto save to photos if enabled
+            // Note: autoSave decision is made at call site considering:
+            // 1. Attachment type (image/video only)
+            // 2. Confidential mode
+            // 3. Conversation-level saveToPhotos setting
+            // 4. Global saveToPhotos setting
+            if (autoSave) {
+                L.i { "[DownloadAttachmentJob] auto save to photos: $filePath" }
+                if (FileUtil.canWriteToMediaStore()) {
+                    if (File(filePath).exists()) {
+                        val fileUri = File(filePath).toUri()
+                        val attachment = SaveAttachmentUtil.Attachment(
+                            uri = fileUri,
+                            contentType = MediaUtil.getMimeType(context, fileUri) ?: "",
+                            date = System.currentTimeMillis(),
+                            fileName = FileUtils.getFileName(filePath),
+                            shouldShowToast = false
+                        )
+                        kotlinx.coroutines.runBlocking {
+                            SaveAttachmentUtil.saveAttachment(context, attachment)
                         }
-                    } else {
-                        L.w { "[DownloadAttachmentJob] cannot write to media store, auto save skipped: $filePath" }
                     }
                 } else {
-                    L.i { "[DownloadAttachmentJob] no need to save: $filePath" }
+                    L.w { "[DownloadAttachmentJob] cannot write to media store, auto save skipped: $filePath" }
                 }
-
-                updateAttachmentStatus(AttachmentStatus.SUCCESS.code)
-                FileUtil.emitProgressUpdate(messageId, 100)
             }
+
+            updateAttachmentStatus(AttachmentStatus.SUCCESS.code)
+            FileUtil.emitProgressUpdate(messageId, 100)
         } catch (e: Exception) {
             L.w { "[DownloadAttachmentJob] download attachment fail: ${e.stackTraceToString()}" }
             updateAttachmentStatus(AttachmentStatus.FAILED.code)

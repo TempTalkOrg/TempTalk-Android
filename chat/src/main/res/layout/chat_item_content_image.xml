@@ -85,45 +85,21 @@
         app:layout_constraintStart_toStartOf="@+id/ll_content"
         app:layout_constraintTop_toTopOf="@+id/ll_content" />
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_fail"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:background="@color/reactions_screen_light_shade_color"
+    <TextView
+        android:id="@+id/tv_blur_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/chat_message_confidential_label_bg"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:text="@string/chat_tap_to_view"
+        android:textColor="@color/t.white"
+        android:textSize="14sp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/ll_content"
         app:layout_constraintEnd_toEndOf="@+id/ll_content"
         app:layout_constraintStart_toStartOf="@+id/ll_content"
-        app:layout_constraintTop_toTopOf="@+id/ll_content">
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/iv_fail"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/chat_icon_message_sending"
-            app:layout_constraintBottom_toTopOf="@+id/tv_fail"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintVertical_chainStyle="packed"
-            app:tint="@color/t.primary" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_fail"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center"
-            android:text="@string/download_failed"
-            android:textColor="@color/t.primary"
-            android:textSize="14sp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/iv_fail"
-            app:layout_constraintVertical_chainStyle="packed" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
+        app:layout_constraintTop_toTopOf="@+id/ll_content" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 

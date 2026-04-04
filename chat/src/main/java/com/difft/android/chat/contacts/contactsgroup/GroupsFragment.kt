@@ -6,31 +6,38 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.chat.databinding.ChatFragmentGroupBinding
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
+import com.difft.android.chat.recent.ConversationNavigationCallback
+import com.difft.android.chat.recent.DualPaneSelectionListener
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.core.Single
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class GroupsFragment : Fragment() {
+class GroupsFragment : Fragment(), DualPaneSelectionListener {
     val binding: ChatFragmentGroupBinding by viewbind()
 
     @Inject
     lateinit var wcdb: WCDB
+
+    @Inject
+    lateinit var groupUtil: GroupUtil
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -56,22 +63,22 @@ class GroupsFragment : Fragment() {
         }
 
 
-        GroupUtil.getGroupsStatusUpdate
-            .startWithItem(true to emptyList())
-            .flatMapSingle { Single.fromCallable { wcdb.group.getAllObjects(DBGroupModel.status.eq(0)) } }
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ groups ->
+        groupUtil.getGroupsStatusUpdate
+            .onEach {
+                loadGroups()
                 binding.smartRefreshLayout.finishRefresh()
-                mAdapter.submitList(groups)
-            }, {
-                it.printStackTrace()
-            })
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        GroupUtil.singleGroupsUpdate
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({ group ->
+        // Load groups on every STARTED lifecycle (handles config changes / split-screen)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                loadGroups()
+            }
+        }
+
+        groupUtil.singleGroupsUpdate
+            .onEach { group ->
                 val list = mAdapter.currentList.toMutableList()
                 if (group.status == 0) {
                     val pos = list.indexOfFirst { group.gid == it.gid }
@@ -83,35 +90,62 @@ class GroupsFragment : Fragment() {
                 } else {
                     list.removeIf { it.gid == group.gid }
                 }
+                submitSortedList(list)
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
 
+        TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { mAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
+    }
 
-                mAdapter.submitList(list)
-            }, {
-                it.printStackTrace()
-            })
+    override fun onResume() {
+        super.onResume()
+        val navigationCallback = activity as? ConversationNavigationCallback
+        if (navigationCallback?.isDualPaneMode == true) {
+            mAdapter.selectedId = navigationCallback.currentSelectedConversationId
+        }
+    }
 
-        TextSizeUtil.textSizeChange
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                mAdapter.notifyDataSetChanged()
-            }, { it.printStackTrace() })
+    override fun updateDualPaneSelection(selectedId: String?) {
+        mAdapter.selectedId = selectedId
     }
 
     private val mAdapter: GroupsAdapter by lazy {
         object : GroupsAdapter() {
             override fun onItemClick(group: GroupModel) {
-                GroupChatContentActivity.startActivity(
-                    this@GroupsFragment.requireActivity(),
-                    group.gid
-                )
+                // Use ConversationNavigationCallback for dual-pane support
+                val navigationCallback = activity as? ConversationNavigationCallback
+                if (navigationCallback != null) {
+                    navigationCallback.onGroupConversationSelected(group.gid)
+                    if (navigationCallback.isDualPaneMode) {
+                        selectedId = group.gid
+                    }
+                } else {
+                    GroupChatContentActivity.startActivity(
+                        this@GroupsFragment.requireActivity(),
+                        group.gid
+                    )
+                }
             }
         }
     }
 
     private fun syncGroupInfo() {
         lifecycleScope.launch(Dispatchers.IO) {
-            GroupUtil.syncAllGroupAndAllGroupMembers(requireContext(), forceFetch = true, syncMembers = true)
+            groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = true, syncMembers = true)
         }
+    }
+
+    private suspend fun loadGroups() {
+        val groups = withContext(Dispatchers.IO) {
+            wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
+        }
+        submitSortedList(groups)
+    }
+
+    private fun submitSortedList(list: List<GroupModel>) {
+        mAdapter.submitList(list.sortedBy { it.name })
     }
 }

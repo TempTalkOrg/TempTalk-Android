@@ -4,14 +4,22 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutAttachMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.canAutoSaveAttachment
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
-import difft.android.messageserialization.model.AttachmentStatus
 import com.hi.dhl.binding.viewbind
+import difft.android.messageserialization.model.AttachmentStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import org.thoughtcrime.securesms.util.viewFile
@@ -22,53 +30,109 @@ class AttachMessageView @JvmOverloads constructor(
 
     val binding: LayoutAttachMessageViewBinding by viewbind(this)
 
+    private var progressJob: Job? = null
+    private var currentAttachmentId: String? = null
+    private var currentMessage: TextChatMessage? = null
+
     fun setupAttachmentView(message: TextChatMessage) {
+        currentAttachmentId = message.id
+        currentMessage = message
+
         val attachment = message.attachment ?: return
 
         val fileName: String = attachment.fileName ?: ""
         val attachmentPath = FileUtil.getMessageAttachmentFilePath(message.id) + fileName
 
-        if (attachment.size > FileUtil.MAX_SUPPORT_FILE_SIZE) {
-            binding.tvMaxLimit.visibility = View.VISIBLE
-            binding.llContent.visibility = View.GONE
+        binding.open.visibility = View.INVISIBLE
+        binding.progress.visibility = View.INVISIBLE
+        binding.tvDownloadHint.visibility = View.INVISIBLE
 
-            binding.tvMaxLimit.text = context.getString(R.string.max_support_file_size_50)
-        } else {
-            binding.fail.visibility = View.INVISIBLE
-            binding.open.visibility = View.INVISIBLE
-            binding.progress.visibility = View.INVISIBLE
-            binding.attachmentSize.visibility = View.INVISIBLE
-            binding.attachmentFail.visibility = View.INVISIBLE
+        binding.attachmentName.text = attachment.fileName
+        binding.attachmentSize.text = FileUtil.readableFileSize(attachment.size.toLong())
 
-            binding.attachmentName.text = attachment.fileName
+        val progress = message.getAttachmentProgress()
+        val isFileValid = FileUtil.isFileValid(attachmentPath)
 
-
-            binding.attachmentSize.visibility = View.VISIBLE
-            binding.attachmentSize.text = FileUtil.readableFileSize(attachment.size.toLong())
-
-            val progress = FileUtil.progressMap[message.id]
-            val isFileValid = FileUtil.isFileValid(attachmentPath)
-
-            if (isFileValid) {
-                binding.open.visibility = View.VISIBLE
-                binding.open.setOnClickListener {
-                    context.viewFile(attachmentPath)
-                }
+        val isCurrentDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+        if (!isCurrentDeviceSend) {
+            // Priority 1: Show expired view if file has expired
+            val isExpired = if (progress != null) {
+                progress == -2
+            } else {
+                attachment.status == AttachmentStatus.EXPIRED.code
             }
-            if (attachment.status != AttachmentStatus.FAILED.code
-                && progress != -1
-                && attachment.status != AttachmentStatus.SUCCESS.code
-                && progress != 100
-                || !isFileValid
-            ) {
-                if (progress == null) {
-                    downloadAttachment(message, attachmentPath)
-                } else {
-                    binding.progress.visibility = View.VISIBLE
-                    binding.progress.setProgress(progress)
-                }
+
+            if (isExpired) {
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.file_expired)
+                return
+            }
+
+            // Priority 2: Show fail view if download failed
+            val isFailed = if (progress != null) {
+                progress == -1
+            } else {
+                attachment.status == AttachmentStatus.FAILED.code
+            }
+
+            if (isFailed) {
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.download_failed)
+                return
+            }
+
+            // Priority 2: Show download prompt for files > 10M
+            val fileSize = attachment.size
+            val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
+
+            if (isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null) {
+                // Show download prompt (reuse fail view with different text)
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.chat_tap_to_download)
+                return
             }
         }
+
+        if (isFileValid) {
+            binding.open.visibility = View.VISIBLE
+            binding.open.setOnClickListener {
+                context.viewFile(attachmentPath)
+            }
+        }
+
+        // Priority 3: Show progress or auto download (for files <= 10M)
+        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
+            if (progress == null) {
+                if (!isCurrentDeviceSend) {
+                    downloadAttachment(message, attachmentPath)
+                }
+            } else {
+                binding.progress.visibility = View.VISIBLE
+                binding.progress.setProgress(progress)
+            }
+        }
+
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (progressJob == null) {
+            findViewTreeLifecycleOwner()?.lifecycleScope?.launch {
+                FileUtil.progressUpdate
+                    .filter { it == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            currentMessage?.let { setupAttachmentView(it) }
+                        }
+                    }
+            }?.also { progressJob = it }
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        progressJob?.cancel()
+        progressJob = null
+        super.onDetachedFromWindow()
     }
 
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {
@@ -81,7 +145,7 @@ class AttachMessageView @JvmOverloads constructor(
                     message.attachment?.authorityId ?: 0,
                     key,
                     message.shouldDecrypt(),
-                    message.canAutoSaveAttachment()
+                    false // Attachment files should never auto-save to photos
                 )
             )
         }

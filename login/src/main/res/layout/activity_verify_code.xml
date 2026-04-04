@@ -65,14 +65,24 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/loginHint">
 
-        <com.difft.android.base.widget.VerifyCodeView
+        <com.difft.android.login.widget.VerificationCodeEditText
             android:id="@+id/emailCodeView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="49dp">
+            android:layout_width="304dp"
+            android:layout_height="44dp"
+            android:layout_gravity="center_horizontal"
+            android:inputType="number"
+            android:maxLength="6"
+            app:psw_show_cursor="true"
+            app:psw_text_color="@color/t.primary"
+            app:psw_background_color="@android:color/transparent"
+            app:psw_border_color="@color/line"
+            app:psw_border_selected_color="@color/t.info"
+            app:psw_border_width="1dp"
+            app:psw_border_radius="8dp"
+            app:psw_item_margin="8dp">
 
             <requestFocus />
-        </com.difft.android.base.widget.VerifyCodeView>
+        </com.difft.android.login.widget.VerificationCodeEditText>
 
         <TextView
             android:id="@+id/errorHint"
@@ -150,7 +160,7 @@
         android:enabled="false"
         android:focusable="true"
         android:text="@string/login_email_code_resend"
-        android:textColor="@color/login_blue_one"
+        android:textColor="@color/primary"
         android:textSize="12sp"
         app:layout_constraintBottom_toBottomOf="@+id/emailNotReceived"
         app:layout_constraintEnd_toEndOf="parent"

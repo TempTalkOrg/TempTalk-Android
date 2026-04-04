@@ -1,8 +1,12 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
 }
 
@@ -15,10 +19,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     kapt {
         correctErrorTypes = true
     }
@@ -29,8 +29,19 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
+    testFixtures {
+        enable = true
+    }
+
+    // Workaround: kotlin-kapt does not register a Kotlin compilation task for
+    // the testFixtures source set. Include testFixtures Kotlin sources in the
+    // unit-test compilation so tests can use shared infrastructure.
+    sourceSets.getByName("test") {
+        java.srcDir("src/testFixtures/kotlin")
     }
 
     buildTypes {
@@ -49,12 +60,37 @@ android {
     }
 
     packaging {
-        resources.excludes.addAll(setOf("libsignal_jni.dylib", "signal_jni.dll"))
-        jniLibs.pickFirsts.add("lib/arm64-v8a/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/armeabi-v7a/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/x86/libc++_shared.so")
-        jniLibs.pickFirsts.add("lib/x86_64/libc++_shared.so")
+        // Exclude non-Android platform libraries (following Signal's approach)
+        jniLibs {
+            excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll",
+                "**/libsignal_jni_testing.so"
+            )
+            pickFirsts += setOf(
+                "lib/arm64-v8a/libc++_shared.so",
+                "lib/armeabi-v7a/libc++_shared.so",
+                "lib/x86/libc++_shared.so",
+                "lib/x86_64/libc++_shared.so"
+            )
+        }
+        resources {
+            excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll"
+            )
+        }
     }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
+    }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/base"))
 }
 
 dependencies {
@@ -64,7 +100,6 @@ dependencies {
     api(libs.gson)
     api(libs.retrofit)
     api(libs.retrofit.converter.gson)
-    api(libs.retrofit.adapter.rxjava3)
     api(libs.retrofit.converter.scalars)
 
     // AndroidX Core
@@ -85,13 +120,10 @@ dependencies {
     // Hilt
     api(libs.hilt.android)
     kapt(libs.hilt.compiler)
-
-    // RxJava
-    api(libs.bundles.rxjava)
+    kapt(libs.kotlin.metadata.jvm)
 
     // Coroutines
     api(libs.kotlinx.coroutines.android)
-    api(libs.kotlinx.coroutines.rx3)
 
     // UI
     api(libs.binding)
@@ -101,18 +133,11 @@ dependencies {
 
     // 日志
     api(libs.timber)
-    api(platform(libs.firebase.bom))
-    api(libs.firebase.crashlytics.ktx)
     api(libs.slf4j.api)
     api(libs.logback.android)
 
     // 安全
     api(libs.security.crypto)
-    api(libs.firebase.analytics.ktx)
-
-    // 第三方UI组件
-    api(libs.mn.password.edit.text)
-    api(libs.dialogx)
 
     // 刷新布局
     api(libs.bundles.smart.refresh)
@@ -129,18 +154,34 @@ dependencies {
 
     // 其他
     api(libs.libphonenumber)
-    implementation("net.java.dev.jna:jna:5.17.0@aar")
+    api(libs.dtproto)
+    api(libs.keyboard.visibility.event)
 
     // Protobuf
     api(libs.protobuf.javalite)
     api(libs.protobuf.kotlin.lite)
 
-    // 测试相关
-    testApi(libs.junit)
-    testApi(libs.kotlinx.coroutines.test)
-    testApi(libs.kotlin.test)
-    testApi(libs.robolectric)
-    androidTestApi(libs.androidx.test.junit)
-    androidTestApi(libs.androidx.test.espresso.core)
-    androidTestApi(libs.bundles.compose.test)
+    // Foldable screen support
+    api(libs.androidx.window)
+
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(platform(libs.compose.bom))
+    debugImplementation(libs.compose.ui.test.manifest)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    // testFixtures source set dependencies
+    testFixturesImplementation(libs.junit)
+    testFixturesImplementation(libs.kotlinx.coroutines.test)
+    testFixturesImplementation(libs.mockk)
 }

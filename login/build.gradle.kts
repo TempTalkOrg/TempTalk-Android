@@ -1,8 +1,12 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
 }
 
@@ -24,35 +28,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     kapt {
         correctErrorTypes = true
     }
 
     viewBinding.isEnabled = true
 
-    val flavorDimensionType = "environment"
-    val flavorDimensionChannel = "channel"
-    flavorDimensions += setOf(flavorDimensionType, flavorDimensionChannel)
+    val flavorDimensionEnvironment = "environment"
+    flavorDimensions += flavorDimensionEnvironment
 
     productFlavors {
         create("TTDev") {
-            dimension = flavorDimensionType
+            dimension = flavorDimensionEnvironment
         }
         create("TTOnline") {
-            dimension = flavorDimensionType
-        }
-        create("google") {
-            dimension = flavorDimensionChannel
-        }
-        create("official") {
-            dimension = flavorDimensionChannel
-        }
-        create("insider") {
-            dimension = flavorDimensionChannel
+            dimension = flavorDimensionEnvironment
         }
     }
 
@@ -60,12 +50,23 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
-    }
     buildFeatures {
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
+    }
+}
+
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/login"))
 }
 
 dependencies {
@@ -77,22 +78,35 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlin.metadata.jvm)
 
     // Login specific dependencies
-    implementation(libs.signal.client)
-    implementation(libs.protobuf.javalite)
-    
+    implementation(libs.signal.android)
+
     // Retrofit (explicit for KAPT)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
-    implementation(libs.retrofit.adapter.rxjava3)
 
     // PictureSelector
     implementation(project(":selector"))
     implementation(libs.picture.selector.ucrop)
     implementation(libs.picture.selector.compress)
 
-    // 测试依赖已通过base模块提供
-
-    implementation(libs.keyboard.visibility.event)
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
+    // Compose test
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Roborazzi
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 }

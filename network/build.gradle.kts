@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -23,12 +25,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = libs.versions.jvmTarget.get()
-    }
-
     kapt {
         correctErrorTypes = true
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
     defaultConfig {
         multiDexEnabled = true
@@ -40,16 +42,25 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.jvmTarget.get()))
+    }
+}
+
 hilt {
     enableAggregatingTask = true
 }
 
 fun getVersionFlag(): String {
-    var versionFlag = System.getenv("versionFlag")
-    if(versionFlag.isNullOrEmpty()){
-        versionFlag = "cinnamon"
+    if (properties.contains("versionFlag")) {
+        return properties["versionFlag"].toString()
     }
-    return versionFlag
+    val envValue = System.getenv("versionFlag")
+    if (!envValue.isNullOrEmpty()) {
+        return envValue
+    }
+    return "cinnamon"
 }
 
 dependencies {
@@ -59,12 +70,10 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlin.metadata.jvm)
 
     // Network specific dependencies
     implementation(libs.okhttp.logging.interceptor)
-    implementation(libs.bouncycastle)
-    implementation(libs.okhttp.tls)
-    implementation(libs.dnsjava)
 
     // JWT
     implementation(libs.jwtdecode)
@@ -72,9 +81,18 @@ dependencies {
     // Protobuf
     implementation(libs.protobuf.kotlin.lite)
     implementation(libs.bundles.jackson)
-    implementation(libs.signal.client)
+    implementation(libs.signal.android)
 
-    // 测试依赖已通过base模块提供
+    // Test dependencies
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.hilt.android.testing)
+    kaptTest(libs.hilt.compiler)
+    testImplementation(testFixtures(project(":base")))
 }
 protobuf {
     protoc {

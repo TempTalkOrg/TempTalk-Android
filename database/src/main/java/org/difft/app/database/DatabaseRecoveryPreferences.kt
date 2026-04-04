@@ -9,7 +9,7 @@ import javax.inject.Singleton
 
 @Singleton
 class DatabaseRecoveryPreferences @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
     private val sharedPreferences: SharedPreferences by lazy {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)

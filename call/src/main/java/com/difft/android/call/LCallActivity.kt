@@ -1,118 +1,89 @@
-/*
- * Copyright 2023-2024 LiveKit, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.difft.android.call
 
 import android.annotation.SuppressLint
-import android.app.PictureInPictureParams
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.util.Rational
+import android.provider.Settings
 import android.view.WindowManager
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.res.colorResource
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
-import com.difft.android.base.android.permission.PermissionUtil.registerPermission
-import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
-import com.difft.android.base.call.LCallConstants
+import com.difft.android.base.common.ScreenshotDetector
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.AppTheme
+import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.base.user.AutoLeave
 import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.user.CountdownTimer
 import com.difft.android.base.user.PromptReminder
+import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.WindowSizeClassUtil
+import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.user.defaultBarrageTexts
-import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.data.BottomCallEndAction
+import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
-import com.difft.android.call.data.CallStatus
-import com.difft.android.call.exception.DisconnectException
-import com.difft.android.call.exception.NetworkConnectionPoorException
-import com.difft.android.call.exception.StartCallException
-import com.difft.android.call.service.ForegroundService
-import com.difft.android.call.ui.MainPageWithBottomControlView
-import com.difft.android.call.ui.MainPageWithTopStatusView
-import com.difft.android.call.ui.ShowBottomCallEndView
-import com.difft.android.call.ui.ShowHandsUpBottomView
-import com.difft.android.call.ui.ShowItemsBottomView
+import com.difft.android.call.data.DialogActionType
+import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.ui.CallContent
+import com.difft.android.call.manager.ProximitySensorManager
+import com.difft.android.call.manager.CallDialogManager
+import com.difft.android.call.manager.PictureInPictureManager
+import com.difft.android.call.handler.CallErrorHandler
+import com.difft.android.call.handler.CallExitHandler
+import com.difft.android.call.handler.InviteCallHandler
+import com.difft.android.call.handler.CallActionHandler
+import com.difft.android.call.handler.InviteRequestState
+import com.difft.android.call.manager.CallLifecycleObserver
+import com.difft.android.call.manager.CallServiceManager
+import com.difft.android.call.manager.CallCleanupManager
+import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.manager.CallRingtoneManager
+import com.difft.android.call.manager.CallVibrationManager
+import com.difft.android.call.manager.ContactorCacheManager
+import com.difft.android.call.receiver.CallActivityBroadcastReceiver
+import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
+import com.difft.android.call.ui.InviteViewState
+import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.call.util.ScreenDeviceUtil
 import com.difft.android.network.config.GlobalConfigsManager
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.PopTip
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
-import com.kongzue.dialogx.util.TextInfo
+import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 import dagger.hilt.android.AndroidEntryPoint
-import io.livekit.android.audio.AudioSwitchHandler
-import io.livekit.android.room.Room
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
-import io.reactivex.rxjava3.schedulers.Schedulers
-import kotlinx.coroutines.*
-import org.difft.android.libraries.denoise_filter.DenoisePluginAudioProcessor
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import java.util.concurrent.TimeUnit
+import dagger.Lazy
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 
+/**
+ * 通话 Activity
+ * 
+ * 负责管理通话界面的生命周期、UI 交互和资源管理。
+ * 通过委托模式将业务逻辑分散到各个 Manager 类中，保持代码清晰和可维护性。
+ * 
+ * 主要职责：
+ * - 管理 Activity 生命周期
+ * - 初始化和管理各种 Manager（错误处理、退出处理、服务管理等）
+ * - 处理用户交互事件（点击、返回键等）
+ * - 管理 UI 状态和 Compose 组件
+ * - 协调各个 Manager 之间的交互
+ */
 @AndroidEntryPoint
 class LCallActivity : AppCompatActivity() {
 
@@ -122,25 +93,39 @@ class LCallActivity : AppCompatActivity() {
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
 
-    private val mySelfId: String by lazy {
-        globalServices.myId
-    }
+    @Inject
+    lateinit var userManager: UserManager
 
-    private var callType: String = ""
+    @Inject
+    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+
+    @Inject
+    lateinit var callDataManagerLazy: Lazy<CallDataManager>
+
+    @Inject
+    lateinit var vibrationManager: CallVibrationManager
+
+    @Inject
+    lateinit var ringtoneManager: CallRingtoneManager
+
+    @Inject
+    lateinit var contactorCacheManager: ContactorCacheManager
+
+    private val callDataManager: CallDataManager by lazy {
+        callDataManagerLazy.get()
+    }
 
     private lateinit var callIntent: CallIntent
 
-    private var conversationId: String? = null
-
     private val callRole: CallRole by lazy {
-        if(callIntent.callRole == CallRole.CALLER.type) CallRole.CALLER else CallRole.CALLEE
+        if (callIntent.callRole == CallRole.CALLER.type) CallRole.CALLER else CallRole.CALLEE
     }
 
     private val callConfig: CallConfig by lazy {
-        globalConfigsManager.getNewGlobalConfigs()?.data?.call?: CallConfig(autoLeave = AutoLeave(promptReminder = PromptReminder()), chatPresets = defaultBarrageTexts, chat = CallChat(), countdownTimer = CountdownTimer())
+        globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(autoLeave = AutoLeave(promptReminder = PromptReminder()), chatPresets = defaultBarrageTexts, chat = CallChat(), countdownTimer = CountdownTimer())
     }
 
-    private val autoHideTimeout:Long by lazy {
+    private val autoHideTimeout: Long by lazy {
         callConfig.chat?.autoHideTimeout ?: CallChat().autoHideTimeout
     }
 
@@ -148,15 +133,45 @@ class LCallActivity : AppCompatActivity() {
         callConfig.muteOtherEnabled
     }
 
-    private var countdownDispose: Disposable? = null
+    private val audioProcessor = AudioPipelineProcessor()
 
-    private val audioProcessor = DenoisePluginAudioProcessor()
+    private var pictureInPictureManager: PictureInPictureManager? = null
 
-    private lateinit var pipBuilderParams: PictureInPictureParams.Builder
+    private var proximitySensorManager: ProximitySensorManager? = null
 
-    private lateinit var sensorManager: SensorManager
-    private var proximitySensor: Sensor? = null
-    private var proximitySensorListener: SensorEventListener? = null
+    private var screenshotDetector: ScreenshotDetector? = null
+    private var windowFocusLostAt: Long = 0L
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        windowFocusLostAt = if (hasFocus) 0L else System.currentTimeMillis()
+    }
+
+    private var callErrorHandler: CallErrorHandler? = null
+
+    private var callExitHandler: CallExitHandler? = null
+
+    private var callActionHandler: CallActionHandler? = null
+
+    private var callLifecycleObserver: CallLifecycleObserver? = null
+
+    private lateinit var backPressedCallback: OnBackPressedCallback
+
+    private var callDialogManager: CallDialogManager? = null
+
+    private var inviteCallManager: InviteCallHandler? = null
+
+    private var callServiceManager: CallServiceManager? = null
+
+    private var callCleanupManager: CallCleanupManager? = null
+
+    private var callActivityBroadcastReceiver: CallActivityBroadcastReceiver? = null
+
+    private var screenUnlockBroadcastReceiver: ScreenUnlockBroadcastReceiver? = null
+
+    private lateinit var appUnlockListener: (Boolean) -> Unit
+
+    private val callbackId = "LCallActivity_${System.identityHashCode(this)}"
 
     private val viewModel: LCallViewModel by viewModelByFactory {
         LCallViewModel(
@@ -169,498 +184,443 @@ class LCallActivity : AppCompatActivity() {
         )
     }
 
+
+    /**
+     * Activity 创建时的初始化
+     *
+     * @param savedInstanceState 保存的实例状态，如果 Activity 被重建则不为 null
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         L.i { "[Call] LCallActivity: onCreate" }
-        callIntent = getCallIntent()
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        inCalling = true
-        LCallManager.dismissWaitDialog()
 
-        viewModel.getRoomId()?.let { setCurrentRoomId(it) }
+        // After process death (e.g. native crash), the system may restore this Activity from
+        // the separate call task. All in-memory call state (OnGoingCallStateManager, LiveKit Room)
+        // is gone, so continuing would start a ghost ForegroundService with no real call behind it.
+        if (savedInstanceState != null && !onGoingCallStateManager.isInCalling()) {
+            L.w { "[Call] LCallActivity: Restored after process death with no active call, finishing" }
+            finish()
+            return
+        }
 
-        viewModel.setPipModeEnabled(isInPictureInPictureMode)
+        // 占位 content，确保 ViewTreeLifecycleOwner 已设置，避免 initializeView 中 CallWaitDialogUtil
+        //（ComposeDialogManager 将 ComposeView 加入 content）时出现 ViewTreeLifecycleOwner not found crash
+        setContentView(android.widget.FrameLayout(this))
 
-        if (savedInstanceState == null){
-            if(callRole == CallRole.CALLEE){
+        // 1. Intent 处理
+        handleIntent(savedInstanceState)
+
+        // 2. 初始化错误处理器
+        initializeErrorHandler()
+
+        // 3. 初始化退出处理器
+        initializeExitHandler()
+
+        // 3.5. 初始化动作处理器
+        initializeCallActionHandler()
+
+        // 4. 状态初始化
+        initializeState()
+
+        // 4. UI 初始化
+        initializeView()
+
+        // 5. 管理器初始化
+        initializeManagers()
+
+        // 5.5. 初始化生命周期观察者
+        initializeLifecycleObserver()
+
+        // 5.6. 初始化清理管理器
+        initializeCleanupManager()
+
+        // 6. 监听器注册
+        registerListeners()
+
+        // 7. 窗口设置
+        configureWindow()
+    }
+
+    /**
+     * 初始化通话状态
+     */
+    private fun initializeState() {
+        // 仅在非宽屏设备上强制竖屏，宽屏设备允许自由旋转以撑满全屏
+        if (!WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        onGoingCallStateManager.setIsInCalling(true)
+
+        if (isAppLockEnabled()) {
+            onGoingCallStateManager.setNeedAppLock(callIntent.needAppLock)
+        } else {
+            onGoingCallStateManager.setNeedAppLock(false)
+        }
+
+        // 不再在此处统一 dismiss：来自 joinCall/startCall 时由 setContent 前 dismiss，其他入口无弹窗
+
+        viewModel.getRoomId()?.let {
+            onGoingCallStateManager.setCurrentRoomId(it)
+        }
+
+        viewModel.callUiController.setPipModeEnabled(isInPictureInPictureMode)
+        onGoingCallStateManager.setIsInPipMode(isInPictureInPictureMode)
+    }
+
+    /**
+     * 初始化错误处理器
+     * 
+     * 创建 [CallErrorHandler] 实例，用于统一处理通话过程中的错误。
+     * 错误处理器会在发生错误时显示错误提示，并在必要时结束通话。
+     */
+    private fun initializeErrorHandler() {
+        callErrorHandler = CallErrorHandler(
+            activity = this,
+            lifecycleScope = lifecycleScope,
+            callIntent = callIntent,
+            onEndCall = { endCallAndClearResources() },
+        )
+    }
+
+    /**
+     * 初始化退出处理器
+     * 
+     * 创建 [CallExitHandler] 实例，用于统一处理退出通话的逻辑。
+     * 退出处理器会根据不同的退出类型（离开、结束等）执行相应的清理操作。
+     */
+    private fun initializeExitHandler() {
+        callExitHandler = CallExitHandler(
+            viewModel = viewModel,
+            callToChatController = callToChatController,
+            onGoingCallStateManager = onGoingCallStateManager,
+            callDataManager = callDataManager,
+            callIntent = callIntent,
+            callRole = callRole,
+            conversationId = onGoingCallStateManager.getConversationId(),
+            callType = onGoingCallStateManager.callType().ifEmpty { callIntent.callType },
+            onEndCall = { endCallAndClearResources() }
+        )
+    }
+
+    /**
+     * 初始化通话动作处理器
+     * 
+     * 创建 [CallActionHandler] 实例，用于统一处理通话控制动作（接听、拒绝、挂断等）。
+     * 动作处理器会处理来自广播接收器或其他来源的通话控制请求。
+     */
+    private fun initializeCallActionHandler() {
+        callActionHandler = CallActionHandler(
+            viewModel = viewModel,
+            onGoingCallStateManager = onGoingCallStateManager,
+            callRingtoneManager = ringtoneManager,
+            callIntent = callIntent,
+            callRole = callRole,
+            conversationId = onGoingCallStateManager.getConversationId(),
+            onExitClick = { params -> handleExitClick(params) },
+            onEndCall = { endCallAndClearResources() },
+            onShowTip = { message, onDismiss -> showStyledPopTip(message, onDismiss) }
+        )
+    }
+
+    /**
+     * 处理传入的 Intent
+     * 
+     * 解析 Intent 并初始化通话参数。仅在 Activity 首次创建时处理 Intent，
+     * 如果 Activity 因配置变更（如屏幕旋转）而重建，则跳过处理以避免重复初始化。
+     * 
+     * @param savedInstanceState 保存的实例状态，用于判断是否为首次创建
+     */
+    private fun handleIntent(savedInstanceState: Bundle?) {
+        callIntent = getCallIntent()
+        if (savedInstanceState == null) {
+            L.i { "[Call] LCallActivity: Processing intent" }
+            if (callRole == CallRole.CALLEE) {
                 LCallManager.stopIncomingCallService(callIntent.roomId, tag = "accept: has in call activity")
+            } else {
+                if (callIntent.action == CallIntent.Action.START_CALL && callIntent.callType == CallType.ONE_ON_ONE.type) {
+                    callIntent.conversationId?.let { conversationId ->
+                        viewModel.addAwaitingJoinInvitees(listOf(conversationId))
+                    }
+                }
             }
             logIntent(callIntent)
             processIntent(callIntent)
-        }else {
+        } else {
             L.i { "[Call] LCallActivity: Activity likely rotated, not processing intent" }
         }
-
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        registerCallActivityReceiver()
-        callPermission.launchMultiplePermission(PermissionUtil.callPermissions)
-
-        initializePictureInPictureParams()
-
-        initializeFaceFittingScreen()
     }
 
+    /**
+     * 初始化各种管理器
+     * 
+     * 按顺序初始化以下管理器：
+     * - 服务管理器：管理前台服务
+     * - 画中画管理器：管理 PIP 模式
+     * - 距离传感器管理器：检测手机是否靠近脸部
+     * - 对话框管理器：统一管理对话框显示
+     * - 邀请管理器：管理邀请用户加入通话
+     */
+    private fun initializeManagers() {
+        initializeCallServiceManager()
+        initializePictureInPictureManager()
+        initializeProximitySensor()
+        initializeDialogManager()
+        initializeInviteCallManager()
+    }
+
+    /**
+     * 注册各种监听器
+     * 
+     * 注册以下监听器：
+     * - 通话广播接收器：接收通话相关的广播事件
+     * - 返回键处理：拦截返回键并尝试进入 PIP 模式
+     * - 应用锁监听器：监听应用锁状态变化
+     * - 屏幕解锁广播接收器：监听屏幕解锁事件
+     */
+    private fun registerListeners() {
+        registerCallActivityReceiver()
+        registerOnBackPressedHandler()
+        registerAppUnlockListener()
+        registerScreenUnlockReceiver()
+    }
+
+    /**
+     * 配置窗口属性
+     * 
+     * 设置以下窗口属性：
+     * - 保持屏幕常亮
+     * - 允许在锁屏界面显示
+     * - 解锁时自动点亮屏幕
+     * - 键盘不调整窗口大小（由 Compose 的 imePadding 处理）
+     */
+    private fun configureWindow() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Don't let keyboard resize the Activity content - we handle IME insets manually in Compose
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+        allowOnLockScreen()
+    }
+
+    /**
+     * 从 Intent 中解析通话 Intent
+     * 
+     * @return 解析后的 [CallIntent] 对象
+     */
     private fun getCallIntent(): CallIntent {
         return CallIntent(intent)
     }
 
+    /**
+     * 处理通话 Intent
+     * 
+     * 根据 Intent 的 action 类型处理不同的通话场景：
+     * - START_CALL：发起通话
+     * - JOIN_CALL：加入通话
+     * 
+     * 设置通话类型和会话 ID。
+     * 
+     * @param callIntent 解析后的通话 Intent
+     */
     private fun processIntent(callIntent: CallIntent) {
-        if(callIntent.action == CallIntent.Action.START_CALL || callIntent.action == CallIntent.Action.JOIN_CALL) {
-            if (callType.isEmpty()) {
-                callType = callIntent.callType
+        if (callIntent.action == CallIntent.Action.START_CALL || callIntent.action == CallIntent.Action.JOIN_CALL) {
+            if (onGoingCallStateManager.callType().isEmpty()) {
+                onGoingCallStateManager.setCallType(callIntent.callType)
             }
-            conversationId = callIntent.conversationId
-            mConversationId = conversationId
+            onGoingCallStateManager.setConversationId(callIntent.conversationId)
         }
     }
 
+    /**
+     * 记录 Intent 信息到日志
+     * 
+     * @param callIntent 要记录的通话 Intent
+     */
     private fun logIntent(callIntent: CallIntent) {
         L.d { "[Call] LCallActivity logIntent:$callIntent" }
     }
 
-    private fun initView() {
+    /**
+     * 初始化 UI
+     * 
+     * 设置 Compose UI 内容，包括：
+     * - 通话房间信息
+     * - 屏幕分享状态
+     * - 各种回调处理（点击、邀请、退出等）
+     * 
+     * 注意：前台服务的启动已移至 [initializeCallServiceManager] 中。
+     */
+    private fun initializeView() {
         L.i { "[Call] LCallActivity initView" }
-        setContent {
-            val room = viewModel.room
-            val isUserSharingScreen by viewModel.isParticipantSharedScreen.collectAsState()
-            Content(
-                room,
-                audioSwitchHandler = viewModel.audioHandler,
-                isUserSharingScreen = isUserSharingScreen
-            )
+        if (!callIntent.callWaitDialogShown) {
+            CallWaitDialogUtil.show(this)
         }
-
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    viewModel.error.collect {
-                        if (it != null) {
-                            when (it) {
-                                is CancellationException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error CancellationException: $it" }
-                                    viewModel.dismissError()
-                                }
-                                is SocketTimeoutException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error SocketTimeoutException: $it" }
-                                    showStyledPopTip(getString(R.string.call_connect_timeout_tip), onDismiss = { viewModel.dismissError() })
-                                }
-
-                                is DisconnectException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error DisconnectException: ${it.message}" }
-                                    lifecycleScope.launch {
-                                        delay(2000L)
-                                        endCallAndClearResources()
-                                    }
-                                }
-
-                                is NetworkConnectionPoorException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error ConnectionPoorException: ${it.message}" }
-                                    it.message?.let { message ->
-                                        showStyledPopTip(message, onDismiss = { viewModel.dismissError() })
-                                    }
-                                }
-
-                                is StartCallException -> {
-                                    handleStartCallException(it)
-                                }
-
-                                is UnknownHostException -> {
-                                    L.e { "[call] LCallActivity, viewModel.error UnknownHostException: ${it.message}" }
-                                    showStyledPopTip(getString(R.string.call_connect_exception_error), onDismiss = { viewModel.dismissError() })
-                                }
-
-                                else -> {
-                                    L.e { "[call] LCallActivity, viewModel.error OtherException: ${it.message}" }
-                                    showStyledPopTip(getString(R.string.call_other_exception_error), onDismiss = { viewModel.dismissError() })
-                                }
-                            }
-                        }
-                    }
-                }
-
-                launch {
-                    viewModel.isParticipantSharedScreen.collect {
-                        L.i { "[call] LCallActivity, viewModel.isParticipantSharedScreen: $it" }
-                        LCallManager.setCallScreenSharing(it)
-                    }
-                }
-
-                launch {
-                    viewModel.callStatus.collect {
-                        L.i {"[Call] LCallActivity Show CallingEnd Reminder"}
-                        if(it == CallStatus.CONNECTED){
-                            currentRoomId?.let {
-                                callToChatController.cancelNotificationById(currentRoomId.hashCode())
-                            }
-                        }
-                    }
-                }
-
-                launch {
-                    viewModel.isNoSpeakSoloTimeout.collect {
-                        if(it){
-                            if(!isShowCallingEndReminder ){
-                                L.i {"[Call] LCallActivity Show CallingEnd Reminder"}
-                                isShowCallingEndReminder = true
-                                callConfig.let { config ->
-                                    val waitingSeconds = config.autoLeave.runAfterReminderTimeout
-                                    val secondsToLeaveMeeting = waitingSeconds / 1000
-                                    showCallingEndReminder(secondsToLeaveMeeting)
-                                }
-                            }
-                        }else{
-                            if(isShowCallingEndReminder){
-                                L.i {"[Call] LCallActivity dismiss CallingEnd Reminder"}
-                                dismissCallingEndReminder()
-                            }
-                        }
-                    }
+            withContext(Dispatchers.Default) {
+                viewModel.room
+            }
+            withContext(Dispatchers.Main) {
+                CallWaitDialogUtil.dismiss()
+                setContent {
+                    val room = viewModel.room
+                    val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
+                    CallContent(
+                        room = room,
+                        viewModel = viewModel,
+                        audioSwitchHandler = viewModel.audioHandler,
+                        inviteCallHandler = inviteCallManager,
+                        isUserSharingScreen = isUserSharingScreen,
+                        callConfig = callConfig,
+                        callIntent = callIntent,
+                        callRole = callRole,
+                        conversationId = onGoingCallStateManager.getConversationId(),
+                        autoHideTimeout = autoHideTimeout,
+                        muteOtherEnabled = muteOtherEnabled,
+                        audioProcessor = audioProcessor,
+                        onScreenClick = { handleScreenClick() },
+                        onCallTypeChanged = {
+                            onGoingCallStateManager.setCallType(it)
+                            updateScreenshotListeningState()
+                        },
+                        onInviteUsersClick = { handleInviteUsersClick() },
+                        onWindowZoomOutClick = { handleWindowZoomOutClick() },
+                        onInviteViewAction = { handleInviteViewAction(it)},
+                        onExitClick = { params, callEndType -> handleExitClick(params, callEndType) },
+                        onBottomCallEndAction = { action -> handleBottomCallEndAction(action) }
+                    )
                 }
             }
         }
-
-        startOngoingCallService()
     }
-
-    private var isShowCallingEndReminder: Boolean = false
-
-    private var callEndReminderDialog: MessageDialog? = null
 
     private val handler = Handler(Looper.getMainLooper())
 
 
-    private fun dismissCallingEndReminder() {
-        callEndReminderDialog?.dismiss()
-        isShowCallingEndReminder = false
-        callEndReminderDialog = null
-        if (countdownDispose?.isDisposed == false) {
-            countdownDispose?.dispose()
-        }
-    }
-
-    @SuppressLint("AutoDispose")
-    private fun showCallingEndReminder(secondsToLeaveMeeting: Long = 180L) {
-        var remainingSecondsToLeaveMeeting = secondsToLeaveMeeting
-        // Show dialog to remind user to speak
-        if (callEndReminderDialog == null) {
-            remainingSecondsToLeaveMeeting = secondsToLeaveMeeting
-            val title = if(viewModel.room.remoteParticipants.isEmpty()){
-                getString(R.string.call_single_person_timeout_reminder)
-            }else{
-                getString(R.string.call_all_mute_timeout_reminder)
-            }
-
-            callEndReminderDialog =
-                MessageDialog.build().setTitle(title)
-                    .setMessage("${remainingSecondsToLeaveMeeting}s left")
-                    .setCancelable(false)
-                    .setOkButton(getString(R.string.call_reminder_button_continue)) { dialog, _ ->
-                        viewModel.resetNoBodySpeakCheck()
-                        if(viewModel.callTypeStateFlow.value == CallType.ONE_ON_ONE.type){
-                            viewModel.room.remoteParticipants.values.firstOrNull()?.let { participant ->
-                                viewModel.sendContinueCallRtmMessage(participant)
-                            }
-                        }
-                        dismissCallingEndReminder()
-                        true
-                    }
-                    .setCancelButton(getString(R.string.call_reminder_button_exit)) { dialog, _ ->
-                        currentRoomId?.let { roomId ->
-                            val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callTypeStateFlow.value, conversationId)
-                            handleExitClick(callExitParams)
-                        }
-                        true
-                    }.setDialogLifecycleCallback(object :
-                        DialogLifecycleCallback<MessageDialog>() {
-                        override fun onShow(dialog: MessageDialog?) {
-                            super.onShow(dialog)
-                            dialog?.apply {
-                                cancelTextInfo?.fontColor =
-                                    ContextCompat.getColor(
-                                        this@LCallActivity,
-                                        com.difft.android.base.R.color.t_error_night
-                                    )
-                            }
-                        }
-
-                        override fun onDismiss(dialog: MessageDialog?) {
-                            super.onDismiss(dialog)
-                            if (countdownDispose?.isDisposed == false) {
-                                countdownDispose?.dispose()
-                            }
-                        }
-                    })
-
-            if (viewModel.isInPipMode()) {
-                val intent = CallIntent.Builder(this, LCallActivity::class.java)
-                    .withAction(CallIntent.Action.BACK_TO_CALL)
-                    .withIntentFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT).build()
-
-                startActivity(intent)
-                handler.postDelayed({
-                    remainingSecondsToLeaveMeeting = secondsToLeaveMeeting
-                    callEndReminderDialog?.setMessage("${remainingSecondsToLeaveMeeting}s left")
-                    callEndReminderDialog?.show()
-                }, 2000)
-            } else {
-                callEndReminderDialog?.show()
-            }
+    /**
+     * 处理屏幕点击事件
+     * 
+     * 根据当前 UI 状态切换显示：
+     * - 如果显示简单弹幕且底部工具栏可见，则隐藏弹幕
+     * - 否则切换顶部状态栏和底部工具栏的显示状态
+     */
+    private fun handleScreenClick() {
+        val showBottomToolBarViewEnabled = viewModel.callUiController.showBottomToolBarViewEnabled.value
+        if (viewModel.callUiController.showSimpleBarrageEnabled.value && showBottomToolBarViewEnabled) {
+            viewModel.callUiController.setShowSimpleBarrageEnabled(false)
         } else {
-            remainingSecondsToLeaveMeeting -= 1
-            callEndReminderDialog?.setMessage("${remainingSecondsToLeaveMeeting}s left")
-            if (remainingSecondsToLeaveMeeting <= 0) {
-                endCallAndClearResources()
-            }
-        }
-
-        countdownDispose = Observable.interval(1, TimeUnit.SECONDS, Schedulers.io())
-            .take(secondsToLeaveMeeting + 1) // 发射 countDownSeconds + 1 次，因为区间是从 0 开始的
-            .map { secondsToLeaveMeeting - it } // 将发射的数字转换为剩余的秒数
-            .observeOn(AndroidSchedulers.mainThread()) // 切换到主线程来更新 UI 或执行其他操作
-            .subscribe({ remainingSeconds ->
-                callEndReminderDialog?.setMessage("${remainingSeconds}s left")
-                if (remainingSeconds <= 0) {
-                    endCallAndClearResources()
-                }
-            }, { throwable ->
-                // 处理错误
-                L.e {"[Call] LCallActivity showCallingEndReminder countdownDispose error:"+throwable.message}
-            }, {
-                // 倒计时结束
-            })
-
-    }
-
-    @Composable
-    fun Content(
-        room: Room? = null,
-        audioSwitchHandler: AudioSwitchHandler? = null,
-        isUserSharingScreen: Boolean = false,
-    ) {
-        var parentSize by remember { mutableStateOf(Size(0f, 0f))}
-        val interactionSource = remember { MutableInteractionSource() }
-        val showControlBarEnabled by viewModel.showControlBarEnabled.collectAsState(true)
-        val currentCallType by viewModel.callTypeStateFlow.collectAsState()
-
-        fun handleClickScreen() {
-            viewModel.showControlBarEnabled.value = !showControlBarEnabled
-        }
-
-        LaunchedEffect(currentCallType) {
-            callType = currentCallType
-        }
-
-        AppTheme(darkTheme = true) {
-            ConstraintLayout(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(colorResource(id = com.difft.android.base.R.color.gray_1000))
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                    ) { handleClickScreen() }
-            ) {
-                val (speakerView) = createRefs()
-                room?.let {
-                    // 根据 callType 渲染不同的 UI
-                    when (currentCallType) {
-                        // 1v1 Call UI布局逻辑
-                        CallType.ONE_ON_ONE.type -> {
-                            Surface(
-                                modifier = Modifier
-                                    .constrainAs(speakerView) {
-                                        top.linkTo(parent.top)
-                                        start.linkTo(parent.start)
-                                        end.linkTo(parent.end)
-                                        bottom.linkTo(parent.bottom)
-                                        width = Dimension.fillToConstraints
-                                        height = Dimension.fillToConstraints
-                                    }
-                                    .onGloballyPositioned { coordinates ->
-                                        parentSize = Size(
-                                            coordinates.size.width.toFloat(),
-                                            coordinates.size.height.toFloat()
-                                        )
-                                    }
-                            ){
-                                // 1v1 Call UI布局逻辑
-                                SingleParticipantCallPage(viewModel, room, muteOtherEnabled, autoHideTimeout, callConfig, conversationId, callIntent.callerId, callRole, handleInviteUsersClick = { handleInviteUsersClick()})
-                                // 顶部和底部Control View
-                                RenderTopAndBottomOverlays(isOneVOneCall = true, isUserSharingScreen, audioSwitchHandler)
-                                // 底部raise hand view
-                                ShowHandsUpBottomView(viewModel, onDismiss = { viewModel.setShowHandsUpBottomViewEnabled(false) })
-
-                                ShowItemsBottomView(viewModel, isOneVOneCall = true, onDismiss = { viewModel.setShowToolBarBottomViewEnable(false) }, deNoiseCallBack = { enable -> audioProcessor.setEnabled(enable) }, handleInviteUsersClick = { handleInviteUsersClick() })
-                            }
-                        }
-                        else -> { // 多人通话逻辑
-                            Surface(
-                                modifier = Modifier.constrainAs(speakerView) {
-                                    top.linkTo(parent.top)
-                                    start.linkTo(parent.start)
-                                    end.linkTo(parent.end)
-                                    bottom.linkTo(parent.bottom)
-                                    width = Dimension.fillToConstraints
-                                    height = Dimension.fillToConstraints
-                                }
-                            ) {
-                                // 多人 Call UI布局逻辑
-                                MultiParticipantCallPage(viewModel, room, muteOtherEnabled, autoHideTimeout, callConfig, handleInviteUsersClick = { handleInviteUsersClick() })
-                                // 顶部和底部Control View
-                                RenderTopAndBottomOverlays(isOneVOneCall = false, isUserSharingScreen, audioSwitchHandler)
-                                // 底部raise hand view
-                                ShowHandsUpBottomView(viewModel, onDismiss = { viewModel.setShowHandsUpBottomViewEnabled(false) })
-
-                                ShowItemsBottomView(viewModel, isOneVOneCall = false, onDismiss = { viewModel.setShowToolBarBottomViewEnable(false) }, deNoiseCallBack = { enable -> audioProcessor.setEnabled(enable)}, handleInviteUsersClick = { handleInviteUsersClick() })
-
-                                ShowBottomCallEndView(
-                                    viewModel,
-                                    onDismiss = {
-                                        viewModel.setShowBottomCallEndViewEnable(false)
-                                        viewModel.setShowControlBarEnabled(true)
-                                    },
-                                    onClickItem = { action ->
-                                        handleBottomCallEndAction(action)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-            }
+            val showTopStatusViewEnabled = viewModel.callUiController.showTopStatusViewEnabled.value
+            viewModel.callUiController.setShowTopStatusViewEnabled(!showTopStatusViewEnabled)
+            viewModel.callUiController.setShowBottomToolBarViewEnabled(!showBottomToolBarViewEnabled)
         }
     }
 
 
     companion object {
-        var isInForeground = false
-        private var inCalling = false
-        private var inCallEnding = false
-        private var currentRoomId: String? = null
-        private var mConversationId: String? = null
         const val ACTION_IN_CALLING_CONTROL = "ACTION_IN_CALLING_CONTROL"
         const val EXTRA_CONTROL_TYPE = "EXTRA_CONTROL_TYPE"
         const val EXTRA_PARAM_ROOM_ID = "EXTRA_PARAM_ROOM_ID"
         private const val DEFAULT_FONT_SCALE = 1.0f
-
-        fun isInCalling(): Boolean {
-            return inCalling
-        }
-
-        /**
-         * Returns whether the call is in the process of ending.
-         * This state is true between call termination initiation and final cleanup.
-         */
-        fun isInCallEnding(): Boolean {
-            return inCallEnding
-        }
-
-        fun getCurrentRoomId(): String? {
-            return currentRoomId
-        }
-
-        fun setCurrentRoomId(roomId: String?) {
-            currentRoomId = roomId
-        }
-
-        fun getConversationId(): String? {
-            return mConversationId
-        }
-
+        private const val SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
     }
 
-    private val callPermission = registerPermission {
-        onMeetingPermissionForCallResult(it)
-    }
-
-    private fun onMeetingPermissionForCallResult(permissionState: PermissionUtil.PermissionState) {
-        when (permissionState) {
-            PermissionUtil.PermissionState.Denied -> {
-                L.i { "onMeetingPermissionForCallResult: Denied" }
-                showErrorAndFinish(getString(R.string.no_permission_camera_and_voice_tip))
-            }
-
-            PermissionUtil.PermissionState.Granted -> {
-                L.i { "onMeetingPermissionForCallResult: Granted" }
-                // Setup compose view.
-                initView()
-            }
-
-            PermissionUtil.PermissionState.PermanentlyDenied -> {
-                L.i { "onMeetingPermissionForCallResult: PermanentlyDenied" }
-                showErrorAndFinish(getString(R.string.no_permission_camera_and_voice_tip))
-            }
-        }
-    }
-
-    private fun showErrorAndFinish(tips: String) {
-        TipDialog.show(tips, WaitDialog.TYPE.WARNING, 4000).dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-            override fun onDismiss(dialog: WaitDialog?) {
-                endCallAndClearResources()
-            }
-        }
-    }
-
-
+    /**
+     * 用户离开 Activity 时的回调
+     * 
+     * 当用户按下 Home 键或切换到其他应用时触发。
+     * 如果当前没有显示权限对话框，则尝试进入 PIP 模式或显示权限提示。
+     */
     @SuppressLint("MissingSuperCall")
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         L.i { "[Call] LCallActivity onUserLeaveHint" }
-        enterPipModeIfPossible(tag = "onUserLeaveHint")
-    }
-
-    @SuppressLint("MissingSuperCall")
-    override fun onBackPressed() {
-        L.i { "[Call] LCallActivity onBackPressed" }
-        if(!enterPipModeIfPossible(tag = "onBackPressed")){
-            super.onBackPressed()
+        if (viewModel.isRequestingPermission()) {
+            L.i { "[Call] LCallActivity onUserLeaveHint ignored (permission dialog showing)" }
+            return
         }
+
+        showPipPermissionToastOrEnterPipMode("onUserLeaveHint")
     }
 
+    /**
+     * Activity 销毁时的清理
+     * 
+     * 委托给 [CallCleanupManager] 执行所有资源清理操作，包括：
+     * - 移除生命周期观察者
+     * - 清理 UI 资源（对话框、返回键回调）
+     * - 释放管理器资源（传感器、PIP、广播接收器）
+     * - 停止服务和清理系统资源
+     * - 重置状态和清理监听器
+     * 
+     * 最后清理所有引用，防止内存泄漏。
+     */
     override fun onDestroy() {
         super.onDestroy()
         L.i { "[Call] LCallActivity onDestroy start." }
-        countdownDispose?.takeIf { !it.isDisposed }?.dispose()
-        callEndReminderDialog?.takeIf { it.isShow }?.apply {
-            dismiss()
-            this@LCallActivity.callEndReminderDialog = null
-        }
+        
+        // 执行统一清理
+        callCleanupManager?.cleanup(
+            lifecycleObserver = callLifecycleObserver,
+            dialogManager = callDialogManager,
+            handler = handler,
+            proximitySensorManager = proximitySensorManager,
+            pictureInPictureManager = pictureInPictureManager,
+            callActivityBroadcastReceiver = callActivityBroadcastReceiver,
+            screenUnlockBroadcastReceiver = screenUnlockBroadcastReceiver,
+            serviceManager = callServiceManager,
+            onGoingCallStateManager = onGoingCallStateManager,
+            callDataManager = callDataManager,
+            ringtoneManager = ringtoneManager,
+            vibrationManager = vibrationManager,
+            contactorCacheManager = contactorCacheManager,
+            callControlMessageManager = onGoingCallStateManager,
+            audioProcessor = audioProcessor,
+            viewModel = viewModel,
+            backPressedCallback = if (::backPressedCallback.isInitialized) backPressedCallback else null
+        )
 
-        LCallManager.stopRingTone()
-        LCallManager.stopVibration()
-        unregisterReceiver(lCallActivityReceiver)
-        LCallManager.clearContactorCache()
-        LCallManager.clearControlMessage()
-        LCallManager.setCallScreenSharing(false)
+        // 清理引用，防止内存泄漏
+        callLifecycleObserver = null
+        callDialogManager = null
+        proximitySensorManager = null
+        pictureInPictureManager = null
+        callActivityBroadcastReceiver = null
+        screenUnlockBroadcastReceiver = null
+        callServiceManager = null
+        callCleanupManager = null
+        screenshotDetector?.release()
+        screenshotDetector = null
 
-        stopOngoingCallService()
-
-        inCalling = false
-        inCallEnding = false
-        currentRoomId = null
-        isInForeground = false
-
-        audioProcessor.release()
-
-        proximitySensorListener = null
-
-        viewModel.getRoomId()?.let { roomId ->
-            LCallManager.updateCallingState(roomId, false)
-        }
         L.i { "[Call] LCallActivity onDestroy end." }
     }
 
-    private fun endCallAndClearResources(){
-        inCallEnding = true
-        viewModel.doExitClear()
-        finishAndRemoveTask()
+
+    /**
+     * 结束通话并清理资源
+     * 
+     * 设置退出状态，调用 ViewModel 的清理方法，然后立即关闭 Activity。
+     * ViewModel 的清理操作（包括重 I/O 操作）已在 viewModelScope 中执行。
+     * 
+     * 注意：此方法会立即关闭 Activity，不会等待清理完成。
+     */
+    private fun endCallAndClearResources() {
+        // 设置退出状态（MutableStateFlow 是线程安全的）
+        onGoingCallStateManager.setIsInCallEnding(true)
+        
+        runOnUiThread {
+            // 调用 ViewModel 的清理方法，重 I/O 操作已在 viewModelScope 中执行
+            viewModel.doExitClear()
+            // 立即 finish Activity
+            finishAndRemoveTask()
+        }
     }
 
+    /**
+     * 重写 getResources 强制重置 fontScale 为 1.0f，
+     * 避免系统字体缩放导致通话界面布局错乱。
+     * updateConfiguration 已 deprecated 但无等效的 per-access 替代 API。
+     */
+    @Suppress("DEPRECATION")
     override fun getResources(): Resources {
         val res = super.getResources()
-        // 适配字体缩放问题，字体缩放会导致布局错乱，此处重置为默认值1.0f
-        if(res.configuration.fontScale != DEFAULT_FONT_SCALE){
+        if (res.configuration.fontScale != DEFAULT_FONT_SCALE) {
             val newConfig = Configuration(res.configuration)
             newConfig.fontScale = DEFAULT_FONT_SCALE
             res.updateConfiguration(newConfig, res.displayMetrics)
@@ -668,6 +628,15 @@ class LCallActivity : AppCompatActivity() {
         return res
     }
 
+    /**
+     * PIP 模式状态变化回调
+     * 
+     * 当 Activity 进入或退出 PIP 模式时调用。
+     * 委托给 [PictureInPictureManager] 处理 PIP 模式变化。
+     * 
+     * @param isInPictureInPictureMode 是否处于 PIP 模式
+     * @param newConfig 新的配置信息
+     */
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean, newConfig: Configuration
@@ -676,261 +645,127 @@ class LCallActivity : AppCompatActivity() {
             isInPictureInPictureMode, newConfig
         )
 
-        L.i { "[Call] LCallActivity onPictureInPictureModeChanged isInPictureInPictureMode:$isInPictureInPictureMode" }
-        runOnUiThread {
-            viewModel.setPipModeEnabled(isInPictureInPictureMode)
-        }
-
-        if (lifecycle.currentState == Lifecycle.State.CREATED) {
-            if(!isInPictureInPictureMode) {
-
-                // 20241003@w ------------------------------------------------->
-                // Purpose: Don't terminate the call when the user clicks the PIP "Close" button and the screen is locked
-                // Link to issue: https://github.com/difftim/difft-android/issues/1332
-                if(LCallManager.isScreenLocked(this)) {
-                    L.i { "[Call] LCallActivity onPictureInPictureModeChanged - Lifecycle.State.CREATED - Screen is locked" }
-                } else {
-                    //when user click on Close button of PIP this will trigger, do what you want here
-//                    hangUpTheCall(tag = "onPictureInPictureModeChanged - Lifecycle.State.CREATED")
-
-                    currentRoomId?.let { roomId ->
-                        val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callTypeStateFlow.value, conversationId)
-                        handleExitClick(callExitParams)
-                    }
-
-                }
-                // 20241003@w -------------------------------------------------<
-            }
-        } else if (lifecycle.currentState == Lifecycle.State.STARTED) {
-            //when PIP maximize this will trigger
-            L.d { "[Call] LCallActivity onPictureInPictureModeChanged - Lifecycle.State.STARTED" }
-        }
-
+        pictureInPictureManager?.onPictureInPictureModeChanged(
+            isInPictureInPictureMode,
+            newConfig,
+            isScreenLocked = ScreenDeviceUtil.isScreenLocked(this)
+        )
+        updateScreenshotListeningState()
     }
 
+    /**
+     * 注册应用锁监听器
+     * 
+     * 监听应用锁状态变化。当用户通过应用锁解锁时，更新状态管理器中的应用锁状态。
+     */
+    private fun registerAppUnlockListener() {
+        appUnlockListener = {
+            if (it) {
+                // 用户刚刚通过应用锁解锁
+                onGoingCallStateManager.setNeedAppLock(false)
+            }
+        }
+        AppLockCallbackManager.addListener(callbackId, appUnlockListener)
+    }
 
-    @SuppressLint("WrongConstant")
+    /**
+     * 注册通话 Activity 广播接收器
+     * 
+     * 注册 [CallActivityBroadcastReceiver] 以接收以下广播：
+     * - 推流限制提示
+     * - 通话超时通知
+     * - 通话控制动作（接听、拒绝、挂断等）
+     */
     private fun registerCallActivityReceiver() {
-        val filter = IntentFilter()
-        filter.addAction(LCallConstants.CALL_NOTIFICATION_PUSH_STREAM_LIMIT)
-        filter.addAction(LCallConstants.CALL_ONGOING_TIMEOUT)
-        filter.addAction(ACTION_IN_CALLING_CONTROL)
-        ContextCompat.registerReceiver(this, lCallActivityReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-    }
-
-    private val lCallActivityReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-
-                LCallConstants.CALL_NOTIFICATION_PUSH_STREAM_LIMIT -> {
-                    L.i { "[Call] LCallActivity lCallActivityReceiver CALL_NOTIFICATION_PUSH_STREAM_LIMIT" }
-                    showStyledPopTip(getString(R.string.call_push_stream_limit_tip), onDismiss = {})
+        callActivityBroadcastReceiver = CallActivityBroadcastReceiver(
+            onPushStreamLimit = {
+                showStyledPopTip(getString(R.string.call_push_stream_limit_tip), onDismiss = {})
+            },
+            onOngoingTimeout = { roomId ->
+                if (roomId == onGoingCallStateManager.getCurrentRoomId()) {
+                    showStyledPopTip(getString(R.string.call_callee_action_noanswer), onDismiss = { endCallAndClearResources() })
                 }
-
-                LCallConstants.CALL_ONGOING_TIMEOUT -> {
-                    L.i { "[Call] LCallActivity lCallActivityReceiver CALL_ONGOING_TIMEOUT" }
-                    val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_ROOM_ID)
-                    if(roomId != null && roomId == currentRoomId){
-                        showStyledPopTip(getString(R.string.call_callee_action_noanswer), onDismiss = { endCallAndClearResources() })
-                    }
-                }
-
-                ACTION_IN_CALLING_CONTROL -> {
-                    val controlType = intent.getStringExtra(EXTRA_CONTROL_TYPE) ?: ""
-                    val roomId = intent.getStringExtra(EXTRA_PARAM_ROOM_ID) ?: ""
-                    handleCallAction(controlType, roomId)
-                }
+            },
+            onCallControl = { actionType, roomId ->
+                handleCallAction(actionType, roomId)
             }
-        }
+        )
+        callActivityBroadcastReceiver?.register(this)
     }
 
+    /**
+     * 注册屏幕解锁广播接收器
+     * 
+     * 注册 [ScreenUnlockBroadcastReceiver] 以监听屏幕解锁事件。
+     * 当屏幕解锁时，将通话界面带回前台。
+     */
+    private fun registerScreenUnlockReceiver() {
+        screenUnlockBroadcastReceiver = ScreenUnlockBroadcastReceiver (
+            onBringCallActivityToFront = { LCallManager.bringCallScreenToFront(this) },
+            onGoingCallStateManager = onGoingCallStateManager
+        )
+        screenUnlockBroadcastReceiver?.register(this)
+    }
 
+    /**
+     * 处理通话控制动作
+     * 
+     * 委托给 [CallActionHandler] 处理通话控制动作（接听、拒绝、挂断等）。
+     * 
+     * @param actionType 动作类型（接听、拒绝、挂断等）
+     * @param roomId 房间 ID
+     */
     private fun handleCallAction(actionType: String, roomId: String) {
-        L.i { "[Call] LCallActivity handleCallAction actionType:$actionType roomId:${roomId}" }
-        if(actionType == CallActionType.DECLINE.type){
-            currentRoomId?.let { roomId ->
-                val callExitParams = CallExitParams(roomId, callIntent.callerId, callRole, viewModel.callTypeStateFlow.value, conversationId)
-                handleExitClick(callExitParams)
-            }
-            return
-        }
-        if (!inCallEnding && isInCalling() && roomId == currentRoomId) {
-            inCallEnding = true
-            when (actionType) {
-                CallActionType.CALLEND.type, CallActionType.REJECT.type -> {
-                    stopOngoingCallService()
-                    if (shouldStopCallerRingTone()) {
-                        LCallManager.stopRingTone(tag = "reject: callee reject the call")
-                    }
-                    LCallManager.playHangupRingTone(viewModel)
-                    val messageTip = if (actionType == CallActionType.REJECT.type) {
-                        R.string.call_callee_action_reject
-                    } else {
-                        R.string.call_callee_action_hangup
-                    }
-                    showStyledPopTip(getString(messageTip), onDismiss = { endCallAndClearResources() })
-                }
-                CallActionType.HANGUP.type -> {
-                    stopOngoingCallService()
-                    LCallManager.playHangupRingTone(viewModel)
-                    showStyledPopTip(getString(R.string.call_callee_action_hangup), onDismiss = { endCallAndClearResources() })
-                }
-            }
-        }
+        callActionHandler?.handleCallAction(actionType, roomId)
     }
 
-    fun showStyledPopTip(message: String, onDismiss: () -> Unit = {}) {
-        PopTip.build()
-            .setBackgroundColor(ContextCompat.getColor(this, com.difft.android.base.R.color.bg2_night))
-            .setMessage(message)
-            .setMessageTextInfo(TextInfo().apply {
-                fontColor = ContextCompat.getColor(this@LCallActivity, com.difft.android.base.R.color.t_primary_night)
-            })
-            .show()
-            .dialogLifecycleCallback = object : DialogLifecycleCallback<PopTip?>() {
-            override fun onDismiss(dialog: PopTip?) {
-                onDismiss()
-            }
-        }
-    }
-
-
-    private fun shouldStopCallerRingTone() = callRole == CallRole.CALLER && viewModel.getCallDuration() == 0L
-
-
-    @Composable
-    fun RenderTopAndBottomOverlays(isOneVOneCall: Boolean, isUserSharingScreen: Boolean, audioSwitchHandler: AudioSwitchHandler?){
-        val isOverlayVisible by viewModel.showControlBarEnabled.collectAsState(true)
-        val isInPipMode by viewModel.isInPipMode.collectAsState(false)
-
-        // 顶部悬浮控件布局逻辑
-        MainPageWithTopStatusView(viewModel, isInPipMode, isOneVOneCall, isOverlayVisible, isUserSharingScreen, callConfig, callIntent, windowZoomOutAction = {
-            handleWindowZoomOutClick()
-        })
-
-        if(!isInPipMode){
-            // 底部悬浮控件布局逻辑
-            MainPageWithBottomControlView(viewModel, isOneVOneCall, isOverlayVisible, isUserSharingScreen, audioSwitchHandler, { callType, callEndType ->
-                viewModel.getRoomId()?.let { roomId ->
-                    val callExitParams = CallExitParams(
-                        roomId,
-                        callIntent.callerId,
-                        callRole,
-                        callType,
-                        conversationId
-                    )
-                    handleExitClick(callExitParams, callEndType)
-                }
-            })
-        }
-    }
-
-    private fun sendCancelCallMessage(onComplete: () -> Unit){
-        L.d { "[Call] LCallActivity sendCancelCallMessage" }
-        currentRoomId?.let { roomId ->
-            callToChatController.cancelCall(callIntent.callerId, callRole, viewModel.callTypeStateFlow.value, roomId, conversationId){
-                onComplete()
-            }
-        }
-    }
-
+    /**
+     * 处理退出通话点击事件
+     * 
+     * 委托给 [CallExitHandler] 处理退出通话的逻辑。
+     * 如果退出处理器未初始化，则直接结束通话。
+     * 
+     * @param params 退出参数，包含房间 ID、呼叫者 ID、通话角色等信息
+     * @param callEndType 通话结束类型（离开或结束），默认为离开
+     */
     private fun handleExitClick(
         params: CallExitParams,
-        callEndType: LCallManager.CallEndType? = LCallManager.CallEndType.LEAVE,
-        ){
-        // 尝试获取通话列表中的通话信息
-        val callInfo = LCallManager.getCallListData()?.get(params.roomId)?.let { callData ->
-            callData.copy(type = callData.type)
-        }
-
-        // 如果通话信息不存在，或会议重连中，则直接结束通话并清理资源
-        if (callInfo == null || viewModel.callStatus.value == CallStatus.RECONNECTING) {
-            endCallAndClearResources()
-            return
-        }
-
-        // 检查通话类型，如果是非1v1通话，则直接结束通话并清理资源
-        if (callInfo.type != CallType.ONE_ON_ONE.type && callEndType == LCallManager.CallEndType.LEAVE) {
-            endCallAndClearResources()
-            return
-        }
-
-        // 根据通话状态和角色发送不同的消息或执行操作
-        viewModel.callStatus.value.let { status ->
-            if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED){
-                // 通话中：发送挂断消息并结束通话
-                LCallManager.removeCallData(params.roomId)
-                L.i { "[Call] LCallActivity send hangUpCall CallMessage roomId:${params.roomId}" }
-                viewModel.sendHangUpRtmMessage()
-                params.roomId?.let { roomId ->
-                    callToChatController.hangUpCall(params.callerId, callRole, callType, roomId, conversationId, viewModel.getCurrentCallUidList(), onComplete = { endCallAndClearResources() } )
-                }
-            }else{
-                // 通话未开始：根据角色发送取消消息或直接结束通话
-                when (callRole) {
-                    CallRole.CALLER -> {
-                        // 主叫：发送取消消息
-                        sendCancelCallMessage {
-                            // 取消回调（结束后清理资源）
-                            endCallAndClearResources()
-                        }
-                    }
-                    else -> {
-                        // 被叫或其他角色：直接结束通话
-                        endCallAndClearResources()
-                    }
-                }
+        callEndType: CallEndType? = CallEndType.LEAVE,
+    ) {
+        callExitHandler?.handleExit(params, callEndType ?: CallEndType.LEAVE)
+            ?: run {
+                L.w { "[Call] LCallActivity: CallExitHandler is not initialized, ending call directly" }
+                endCallAndClearResources()
             }
-        }
     }
 
-    private fun handleInviteUsersClick(){
+    /**
+     * 处理邀请用户点击事件
+     * 
+     * 委托给 [InviteCallHandler] 处理邀请用户加入通话的业务逻辑。
+     * 如果成功邀请，可能会进入 PIP 模式。
+     */
+    private fun handleInviteUsersClick() {
         L.d { "[Call] LCallActivity handleInviteUsersClick" }
-        lifecycleScope.launch {
-            val excludedIds = mutableListOf<String>()
-            // 排除自己
-            callToChatController.getMySelfUid().let {
-                excludedIds.add(it)
-            }
-            // 排除已经在会议中的参与者
-            val remoteParticipants = viewModel.room.remoteParticipants.keys.sortedBy { it.value }
-            remoteParticipants.forEach { remoteParticipant ->
-                remoteParticipant.value.let {
-                    var userId = it
-                    if (userId.contains(".")) {
-                        userId = userId.split(".")[0]
-                    }
-                    excludedIds.add(userId)
-                }
-            }
-
-            enterPipModeIfPossible(tag = "onInvitePeople")
-
-            if(viewModel.callTypeStateFlow.value == CallType.ONE_ON_ONE.type || viewModel.callTypeStateFlow.value == CallType.INSTANT.type){
-                val mySelfName = withContext(Dispatchers.Default){
-                    LCallManager.getDisplayNameById(mySelfId) ?: mySelfId
-                }
-                val roomName = "${mySelfName}${getString(R.string.call_instant_call_title)}"
-                currentRoomId?.let { roomId ->
-                    callToChatController.inviteUsersToTheCall(this@LCallActivity, roomId, roomName, viewModel.getE2eeKey(), CallType.INSTANT.type, conversationId, ArrayList(excludedIds))
-                }
-            }else{
-                currentRoomId?.let { roomId ->
-                    callToChatController.inviteUsersToTheCall(this@LCallActivity, roomId, callIntent.roomName, viewModel.getE2eeKey(), CallType.GROUP.type, conversationId, ArrayList(excludedIds))
-                }
-            }
-        }
+        inviteCallManager?.inviteUsers(context = this)
     }
 
-    private fun handleWindowZoomOutClick(){
+    /**
+     * 处理窗口缩小点击事件
+     */
+    private fun handleWindowZoomOutClick() {
         L.d { "[Call] LCallActivity handleWindowZoomOutClick" }
-        // 20230417@w --------------------------------------------------------------------->
-        // Purpose: Show dialog to notify user that PIP is not supported on this device
-        // link to issue: https://jira.toolsfdg.net/projects/WEATOOL/issues/WEATOOL-44
-        if (isSystemPipEnabledAndAvailable()) {
+        // 尝试进入 PIP 模式。首先检查是否有"在其他应用上层显示"权限，
+        if (!Settings.canDrawOverlays(this)) {
+            // 如果权限不足，显示权限提示对话框。
+            showPipPermissionToastOrEnterPipMode("windowZoomOut")
+            return
+        }
+        // 然后检查系统是否支持 PIP 模式。
+        if (pictureInPictureManager?.isSystemPipEnabledAndAvailable() == true) {
             enterPipModeIfPossible(tag = "windowZoomOut")
         } else {
-            // show alert dialog
+            // 如果系统不支持 PIP，显示不支持提示对话框。
             AlertDialog.Builder(this)
                 .setMessage(R.string.call_pip_not_supported_message)
                 .setPositiveButton(android.R.string.ok) { dialog, _ ->
@@ -939,256 +774,442 @@ class LCallActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateOngoingCallNotification(useCallStyle: Boolean) {
-        L.i { "[Call] LCallActivity service updateOngoingCallNotification" }
-        if (!ForegroundService.isServiceRunning) {
-            L.i { "[Call] LCallActivity service updateOngoingCallNotification - ForegroundService is not running" }
-            return
-        }
-        try {
-            val intent = Intent(this, ForegroundService::class.java).apply {
-                action = ForegroundService.ACTION_UPDATE_NOTIFICATION
-                putExtra(ForegroundService.EXTRA_USE_CALL_STYLE, useCallStyle)
-            }
-            callToChatController.startForegroundService(this, intent)
-        } catch (e: Exception) {
-            L.e { "[Call] LCallActivity service updateOngoingCallNotification Failed to update ongoing call notification: ${e.message}" }
-        }
-    }
-
+    /**
+     * 处理新的 Intent
+     * 
+     * 当 Activity 已经存在且收到新的 Intent 时调用（例如从通知栏启动）。
+     * 解析新的 Intent 并处理通话参数。
+     * 
+     * @param intent 新的 Intent
+     */
     override fun onNewIntent(intent: Intent) {
         val callIntent = getCallIntent()
-        L.d { "[Call] LCallActivity onNewIntent:$callIntent" }
         super.onNewIntent(intent)
         logIntent(callIntent)
         processIntent(callIntent)
     }
 
+    /**
+     * Activity 暂停时的回调
+     */
     override fun onPause() {
         super.onPause()
         L.i { "[Call] LCallActivity onPause" }
-        isInForeground = false
-        if(!inCallEnding){
-            updateOngoingCallNotification(true)
+        // 更新前台状态为 false
+        onGoingCallStateManager.setIsInForeground(false)
+        // 如果通话未结束，更新通知为通话样式（用于后台显示）
+        if (!onGoingCallStateManager.isInCallEnding()) {
+            callServiceManager?.updateOngoingCallNotification(true)
         }
-
-        sensorManager.unregisterListener(proximitySensorListener)
+        // 注销传感器监听器，防止内存泄漏
+        proximitySensorManager?.unregister()
+        screenshotDetector?.stopListening()
     }
 
+    /**
+     * Activity 恢复时的回调
+     */
     override fun onResume() {
         super.onResume()
         L.i { "[Call] LCallActivity onResume" }
+        // 如果通话正在进行，更新前台服务类型（确保权限授予后服务类型正确）
+        if (onGoingCallStateManager.isInCalling()) {
+            callServiceManager?.updateForegroundServiceType()
+        }
 
-        proximitySensor?.let {
-            sensorManager.registerListener(
-                proximitySensorListener,
-                it,
-                SensorManager.SENSOR_DELAY_NORMAL
+        // 注册传感器监听器
+        proximitySensorManager?.register()
+
+        // 更新前台状态为 true
+        onGoingCallStateManager.setIsInForeground(true)
+        // 更新通知为普通样式（前台时不需要通话样式通知）
+        callServiceManager?.updateOngoingCallNotification(false)
+
+        // 如果之前正在请求权限，重置权限请求状态
+        if (viewModel.isRequestingPermission()) {
+            viewModel.callUiController.setRequestPermissionStatus(false)
+        }
+        updateScreenshotListeningState()
+    }
+
+    private fun updateScreenshotListeningState() {
+        val conversationId = callIntent.conversationId
+        if (conversationId.isNullOrEmpty()) {
+            screenshotDetector?.stopListening()
+            return
+        }
+
+        val callType = resolveCurrentCallType(conversationId)
+        val isInstantCall = callType?.isInstant() == true
+        val isInPipMode = onGoingCallStateManager.isInPipMode() || isInPictureInPictureMode
+        val isInForeground = onGoingCallStateManager.isInForeground.value
+
+        if (isInstantCall || isInPipMode || !isInForeground) {
+            screenshotDetector?.stopListening()
+            return
+        }
+
+        if (screenshotDetector == null) {
+            screenshotDetector = ScreenshotDetector(
+                activity = this,
+                coroutineScope = lifecycleScope,
+                onScreenshotDetected = {
+                    L.i { "[Call][Screenshot] Screenshot detected, sending notification" }
+                    handleScreenshotDetected()
+                }
             )
         }
-
-        isInForeground = true
-        updateOngoingCallNotification(false)
+        screenshotDetector?.startListening()
     }
 
-
-    private fun isSystemPipEnabledAndAvailable(): Boolean {
-        return Build.VERSION.SDK_INT >= 26 && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
-    }
-
-    private fun tryToSetPictureInPictureParams() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                setPictureInPictureParams(pipBuilderParams.build())
-            } catch (e: Exception) {
-                L.i { "[call] tryToSetPictureInPictureParams System lied about having PiP available. $e" }
-            }
+    private fun handleScreenshotDetected() {
+        val conversationId = callIntent.conversationId ?: return
+        val callType = resolveCurrentCallType(conversationId) ?: return
+        if (callType.isInstant() || onGoingCallStateManager.isInPipMode() || isInPictureInPictureMode) {
+            return
         }
+        val focusLostDuration = if (windowFocusLostAt > 0L) System.currentTimeMillis() - windowFocusLostAt else 0L
+        if (windowFocusLostAt > 0L && focusLostDuration >= SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS) {
+            L.i { "[Call][Screenshot] Skipped: focus lost ${focusLostDuration}ms ago (notification panel open)" }
+            return
+        }
+        callToChatController.sendScreenshotNotification(conversationId, callType)
     }
 
-    private fun initializePictureInPictureParams() {
-        if (isSystemPipEnabledAndAvailable()) {
-            val aspectRatio = Rational(16, 9)
-            pipBuilderParams = PictureInPictureParams.Builder()
-            pipBuilderParams.setAspectRatio(aspectRatio)
+    private fun resolveCurrentCallType(conversationId: String): CallType? {
+        val type = onGoingCallStateManager.callType().ifEmpty { callIntent.callType }
+        val resolved = CallType.fromString(type)
+        if (resolved != null) {
+            return resolved
+        }
+        return if (ValidatorUtil.isGid(conversationId)) CallType.GROUP else CallType.ONE_ON_ONE
+    }
 
-            if (Build.VERSION.SDK_INT >= 31) {
-                lifecycleScope.launch {
-                    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                        launch {
-                            pipBuilderParams.setAutoEnterEnabled(true)
-                            tryToSetPictureInPictureParams()
-                        }
-                    }
+    /**
+     * 初始化画中画管理器
+     * 用于管理 PIP 模式的初始化和状态
+     */
+    private fun initializePictureInPictureManager() {
+        pictureInPictureManager = PictureInPictureManager(
+            activity = this,
+            lifecycleScope = lifecycleScope,
+            lifecycle = lifecycle,
+            onPipModeChanged = { isInPipMode ->
+                viewModel.callUiController.setPipModeEnabled(isInPipMode)
+                onGoingCallStateManager.setIsInPipMode(isInPipMode)
+            },
+            onPipClosed = {
+                onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
+                    val callExitParams = CallExitParams(
+                        roomId,
+                        callIntent.callerId,
+                        callRole,
+                        onGoingCallStateManager.callType(),
+                        onGoingCallStateManager.getConversationId()
+                    )
+                    handleExitClick(callExitParams)
                 }
-            } else {
-                tryToSetPictureInPictureParams()
             }
-        }
+        )
+        pictureInPictureManager?.initialize()
     }
 
+    /**
+     * 尝试进入画中画（PIP）模式
+     * 
+     * 仅在 Android O（API 26）及以上版本支持。
+     * 委托给 [PictureInPictureManager] 处理 PIP 模式进入逻辑。
+     * 
+     * @param tag 调用标签，用于日志记录，便于追踪调用来源
+     * @return 是否成功进入 PIP 模式
+     */
     private fun enterPipModeIfPossible(tag: String? = null): Boolean {
-        L.i { "[Call] LCallActivity enterPipModeIfPossible tag:$tag" }
-        if (isSystemPipEnabledAndAvailable()) {
-            try {
-                enterPictureInPictureMode(pipBuilderParams.build())
-            } catch (e: Exception) {
-                L.i { "[Call] enterPipModeIfPossible Device lied to us about supporting PiP, $e" }
-                return false
-            }
-            return true
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            pictureInPictureManager?.enterPipMode(tag) ?: false
+        } else {
+            false
         }
-        return false
     }
 
+    /**
+     * 倒计时结束时的震动反馈
+     * 
+     * 在倒计时结束时触发震动，提供触觉反馈。
+     * 需要震动权限，如果没有权限则直接返回。
+     * 
+     * 使用 CallVibrationManager 进行单次短震动。
+     */
     fun countDownEndVibrate() {
         if (checkSelfPermission(android.Manifest.permission.VIBRATE) != PackageManager.PERMISSION_GRANTED) {
             return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            LCallManager.getVibratorService().vibrate(VibrationEffect.createOneShot(200L, 200))
-        }else{
-            val pattern = longArrayOf(200L)
-            LCallManager.getVibratorService().vibrate(pattern, -1)
-        }
+        vibrationManager.vibrateOnce(200L, 200)
     }
 
+    /**
+     * 创建通话退出参数
+     * 
+     * 根据当前通话状态创建 [CallExitParams] 对象，用于退出通话时传递参数。
+     * 
+     * @return 包含房间 ID、呼叫者 ID、通话角色、通话类型和会话 ID 的退出参数对象
+     */
     private fun createCallExitParams() = CallExitParams(
         viewModel.getRoomId(),
         callIntent.callerId,
         callRole,
-        callType,
-        conversationId
+        onGoingCallStateManager.callType(),
+        onGoingCallStateManager.getConversationId()
     )
 
+    /**
+     * 处理底部通话结束动作
+     * 
+     * 根据用户选择的动作执行相应操作：
+     * - [BottomCallEndAction.END_CALL]：结束通话
+     * - [BottomCallEndAction.LEAVE_CALL]：离开通话
+     * - 其他：取消操作，恢复底部工具栏显示
+     * 
+     * @param action 用户选择的通话结束动作
+     */
     private fun handleBottomCallEndAction(action: BottomCallEndAction) {
-        when(action) {
+        when (action) {
             BottomCallEndAction.END_CALL -> {
                 L.i { "[call] LCallActivity onClick End" }
-                handleExitClick(
-                    createCallExitParams(),
-                    LCallManager.CallEndType.END
-                )
-                viewModel.setShowBottomCallEndViewEnable(false)
+                if(viewModel.hasOtherActiveSpeaker()) {
+                    viewModel.callUiController.setShowBottomCallEndViewEnable(false)
+                    callDialogManager?.showEndCallForAllDialog({ actionType ->
+                        when (actionType) {
+                            DialogActionType.ON_CONFIRM -> {
+                                handleExitClick(
+                                    createCallExitParams(),
+                                    CallEndType.END
+                                )
+                            }
+                            DialogActionType.ON_CANCEL -> {
+                                callDialogManager?.dismissEndCallForAllDialog()
+                            }
+                        }
+                    })
+                } else {
+                    handleExitClick(
+                        createCallExitParams(),
+                        CallEndType.END
+                    )
+                    viewModel.callUiController.setShowBottomCallEndViewEnable(false)
+                }
             }
+
             BottomCallEndAction.LEAVE_CALL -> {
                 L.i { "[call] LCallActivity onClick Leave" }
                 handleExitClick(
                     createCallExitParams(),
-                    LCallManager.CallEndType.LEAVE
+                    CallEndType.LEAVE
                 )
-                viewModel.setShowBottomCallEndViewEnable(false)
+                viewModel.callUiController.setShowBottomCallEndViewEnable(false)
             }
+
             else -> {
-                viewModel.setShowBottomCallEndViewEnable(false)
-                viewModel.setShowControlBarEnabled(true)
+                viewModel.callUiController.setShowBottomCallEndViewEnable(false)
+                viewModel.callUiController.setShowBottomToolBarViewEnabled(true)
             }
         }
     }
 
-    /**
-     * Initializes proximity sensor to detect when phone is near face during calls
-     * to disable screen touches and dim display to prevent accidental input
-     */
-    private fun initializeFaceFittingScreen() {
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-
-        if (proximitySensor == null) {
-            L.i { "[Call]: Proximity sensor not available" }
-        } else {
-            proximitySensorListener = object : SensorEventListener {
-                override fun onSensorChanged(event: SensorEvent?) {
-                    event?.let {
-                        val distance = it.values[0]
-
-                        val sensor = proximitySensor ?: return
-                        val maximumRange = sensor.maximumRange
-                        L.d { "[Call]: onSensorChanged distance=$distance, maximumRange=$maximumRange" }
-
-                        if (distance < maximumRange) {
-                            if (viewModel.isParticipantSharedScreen.value) {
-                                L.i { "[Call]: onSensorChanged - in screen sharing, return" }
-                                return // 当在屏幕共享时，不处理
+    private fun handleInviteViewAction(action: InviteViewState) {
+        when (action) {
+            InviteViewState.INVITE -> {
+                viewModel.callUiController.setShowInviteViewEnable(false)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    inviteCallManager?.inviteMembers(
+                        callback = { state, invitees ->
+                            L.i { "[Call] invite call state: $state invitees:$invitees" }
+                            if (state == InviteRequestState.SUCCESS) {
+                                if (onGoingCallStateManager.callType() != CallType.GROUP.type) {
+                                    viewModel.callUiController.setCriticalAlertEnable(true)
+                                }
+                                viewModel.addAwaitingJoinInvitees(invitees)
                             }
-                            disableWindowForTouchAndKeepScreenOn()
-                        } else {
-                            enableWindowForTouchAndKeepScreenOn()
+                            val isOneOneCall = onGoingCallStateManager.callType() == CallType.ONE_ON_ONE.type
+                            if (state == InviteRequestState.SUCCESS && isOneOneCall) {
+                                viewModel.switchToInstantCall()
+                                viewModel.stopRingToneAndTimeoutCheck()
+                                viewModel.handleConnectedState()
+                            }
+                            inviteCallManager?.resetState()
                         }
-                    }
+                    )
                 }
-
-                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-                }
+            }
+            InviteViewState.DISMISS -> {
+                viewModel.callUiController.setShowInviteViewEnable(false)
+                inviteCallManager?.resetState()
             }
         }
     }
 
     /**
-     * Called when the device is close to the user's face to disable touch and keep screen on
-     * 1. Add FLAG_NOT_TOUCHABLE to disable all touch events
-     * 2. Keep screen on (FLAG_KEEP_SCREEN_ON)
-     * 3. Set screen brightness to minimum (0.0f)
+     * 初始化距离传感器管理器
+     * 用于检测通话时手机是否靠近脸部，防止误触
      */
-    private fun disableWindowForTouchAndKeepScreenOn() {
-        // disable touch
-        window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
-        // adjust the screen brightness to minimum
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.attributes = window.attributes.apply {
-            screenBrightness = 0.0f
-        }
+    private fun initializeProximitySensor() {
+        proximitySensorManager = ProximitySensorManager(
+            activity = this,
+            isScreenSharingProvider = { viewModel.callUiController.isShareScreening.value }
+        )
+        proximitySensorManager?.initialize()
     }
 
     /**
-     * This method is called when the device is moved away from the user to restore normal screen interaction and brightness settings.
-     * 1. Clear the window's not-touchable flag (FLAG_NOT_TOUCHABLE) to restore touch functionality.
-     * 2. Keep the screen on (FLAG_KEEP_SCREEN_ON).
-     * 3. Restore the screen brightness to the system default value (BRIGHTNESS_OVERRIDE_NONE).
+     * 初始化对话框管理器
+     * 统一管理所有对话框，简化状态管理
      */
-    private fun enableWindowForTouchAndKeepScreenOn() {
-        window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.attributes = window.attributes.apply {
-            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        }
+    private fun initializeDialogManager() {
+        callDialogManager = CallDialogManager(
+            activity = this,
+            lifecycleScope = lifecycleScope,
+            viewModel = viewModel,
+            callIntent = callIntent,
+            callRole = callRole,
+            onGoingCallStateManager = onGoingCallStateManager,
+            userManager = userManager,
+            onExitCall = { params -> handleExitClick(params) },
+            onEndCall = { endCallAndClearResources() }
+        )
     }
 
-    private fun startOngoingCallService() {
-        L.i { "[Call] LCallActivity service startOngoingCallService" }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceIntent = Intent(this, ForegroundService::class.java)
-            try {
-                callToChatController.startForegroundService(this, serviceIntent)
-            } catch (e: Exception) {
-                L.e { "[Call] LCallActivity service Failed to start foreground service: ${e.message}" }
+    /**
+     * 初始化邀请用户管理器
+     * 统一管理邀请用户加入通话的业务逻辑
+     */
+    private fun initializeInviteCallManager() {
+        inviteCallManager = InviteCallHandler(
+            viewModel = viewModel,
+            callToChatController = callToChatController,
+            contactorCacheManager = contactorCacheManager,
+            callIntent = callIntent,
+            scope = lifecycleScope
+        )
+    }
+
+    /**
+     * 初始化生命周期观察者
+     * 统一管理 ViewModel 状态的生命周期监听
+     */
+    private fun initializeLifecycleObserver() {
+        callLifecycleObserver = CallLifecycleObserver(
+            viewModel = viewModel,
+            onGoingCallStateManager = onGoingCallStateManager,
+            callToChatController = callToChatController,
+            callErrorHandler = callErrorHandler,
+            callDialogManager = callDialogManager,
+            callConfig = callConfig
+        )
+        lifecycle.addObserver(callLifecycleObserver!!)
+    }
+
+    /**
+     * 初始化清理管理器
+     * 统一管理 Activity 销毁时的资源清理
+     */
+    private fun initializeCleanupManager() {
+        callCleanupManager = CallCleanupManager(
+            lifecycle = lifecycle,
+            context = this,
+            callbackId = callbackId
+        )
+    }
+
+    /**
+     * 初始化服务管理器
+     * 统一管理通话前台服务的启动、停止和更新
+     */
+    private fun initializeCallServiceManager() {
+        callServiceManager = CallServiceManager(
+            context = this,
+            callToChatController = callToChatController
+        )
+        callServiceManager?.startOngoingCallService()
+    }
+
+    /**
+     * 更新前台服务类型
+     * 当权限授予后更新服务类型，确保服务可以在后台使用麦克风/摄像头
+     * 此方法供外部（如 Compose UI）调用
+     */
+    fun updateForegroundServiceType() {
+        callServiceManager?.updateForegroundServiceType()
+    }
+
+
+    /**
+     * 注册返回键处理
+     * 
+     * 拦截返回键事件，尝试进入 PIP 模式或显示权限提示对话框。
+     * 防止用户意外退出通话界面。
+     */
+    private fun registerOnBackPressedHandler() {
+        backPressedCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                L.i { "[Call] LCallActivity intercept on back press" }
+                showPipPermissionToastOrEnterPipMode("back pressed")
             }
+        }
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
+    }
+
+    /**
+     * 显示 PIP 权限提示或进入 PIP 模式
+     * 
+     * 委托给 [CallDialogManager] 显示 PIP 权限提示对话框。
+     * 如果用户授予权限，则尝试进入 PIP 模式。
+     * 
+     * @param tag 调用标签，用于日志记录
+     */
+    private fun showPipPermissionToastOrEnterPipMode(tag: String?) {
+        callDialogManager?.showPipPermissionDialog(tag) { enterPipModeIfPossible(it) }
+    }
+
+    /**
+     * 允许在锁屏界面显示
+     * 
+     * 设置窗口标志，使 Activity 可以在锁屏界面显示，并在解锁时自动点亮屏幕。
+     * Android O MR1 及以上版本使用新的 API。
+     */
+    private fun allowOnLockScreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
         } else {
-            val serviceIntent = Intent(this, ForegroundService::class.java)
-            startService(serviceIntent)
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
         }
     }
 
-    private fun stopOngoingCallService() {
-        if (!ForegroundService.isServiceRunning) {
-            return
-        }
-        L.i { "[Call] LCallActivity service stopOngoingCallService" }
-        try {
-            val serviceIntent = Intent(application, ForegroundService::class.java)
-            application.stopService(serviceIntent)
-        } catch (e: Exception) {
-            L.e { "[Call] LCallActivity service Failed to stop ongoing call service: ${e.message}" }
-        }
+    /**
+     * 检查用户是否设置了应用锁（图案或密码）。
+     * 
+     * @return 如果应用锁已启用返回 true，否则返回 false
+     */
+    private fun isAppLockEnabled(): Boolean {
+        if (!::userManager.isInitialized) return false
+        val user = userManager.getUserData() ?: return false
+        val hasPattern = !user.pattern.isNullOrEmpty()
+        val hasPasscode = !user.passcode.isNullOrEmpty()
+        return hasPattern || hasPasscode
     }
 
-    private fun handleStartCallException(exception: Exception) {
-        L.e { "[call] LCallActivity, viewModel.error StartCallException: ${exception.message}" }
-        val tipTextInfo = if (callIntent.action == CallIntent.Action.START_CALL)
-            getString(R.string.call_start_failed_tip)
-        else
-            getString(R.string.call_join_failed_tip)
-
-        showStyledPopTip(tipTextInfo, onDismiss = { endCallAndClearResources() })
+    /**
+     * 显示 Toast 提示消息，并在显示后执行回调。
+     * 
+     * @param message 要显示的消息文本
+     * @param onDismiss 消息显示后的回调，默认为空操作
+     */
+    fun showStyledPopTip(message: String, onDismiss: () -> Unit = {}) {
+        ToastUtil.show(message)
+        onDismiss()
     }
 }

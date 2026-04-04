@@ -1,12 +1,15 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="chat_message_confidential_message">[消息]</string>
+    <string name="confidential_preview_tip">查看后，消息将消失</string>
     <string name="chat_message_attachment">[附件]</string>
     <string name="chat_message_image">[图片]</string>
     <string name="chat_message_video">[视频]</string>
     <string name="chat_message_audio">[语音]</string>
     <string name="chat_message_contact_card">[个人名片]</string>
     <string name="chat_message_chat_history">[聊天记录]</string>
+    <string name="chat_message_unsupported">[不支持的消息类型，请升级到最新版本。]</string>
     <string name="chat_history">聊天记录</string>
+    <string name="chat_favorites">收藏</string>
 
     <!-- DateUtils -->
     <string name="DateUtils_just_now">刚刚</string>

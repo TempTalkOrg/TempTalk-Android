@@ -22,33 +22,4 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!--    <androidx.appcompat.widget.AppCompatEditText-->
-    <!--        android:id="@+id/edittext_search_input"-->
-    <!--        android:layout_width="0dp"-->
-    <!--        android:layout_height="wrap_content"-->
-    <!--        android:background="@drawable/chat_fragment_search_input_bg_search_input"-->
-    <!--        android:drawableStart="@drawable/chat_fragment_search_input_ic_search_input"-->
-    <!--        android:drawablePadding="6dp"-->
-    <!--        android:drawableTint="@color/t.disable"-->
-    <!--        android:hint="Search"-->
-    <!--        android:textColorHint="@color/t.disable"-->
-    <!--        android:textSize="14sp"-->
-    <!--        app:layout_constraintBottom_toBottomOf="parent"-->
-    <!--        app:layout_constraintEnd_toEndOf="parent"-->
-    <!--        app:layout_constraintStart_toStartOf="parent"-->
-    <!--        app:layout_constraintTop_toTopOf="parent" />-->
-
-    <!--    <androidx.appcompat.widget.AppCompatImageButton-->
-    <!--        android:id="@+id/button_clear"-->
-    <!--        android:layout_width="wrap_content"-->
-    <!--        android:layout_height="wrap_content"-->
-    <!--        android:layout_marginEnd="12dp"-->
-    <!--        android:background="@null"-->
-    <!--        android:src="@drawable/chat_fragment_search_input_ic_search_clear"-->
-    <!--        android:tint="@color/t.disable"-->
-    <!--        app:layout_constraintBottom_toBottomOf="parent"-->
-    <!--        app:layout_constraintEnd_toEndOf="@+id/edittext_search_input"-->
-    <!--        app:layout_constraintTop_toTopOf="parent"-->
-    <!--        app:layout_constraintVertical_bias="0.489" />-->
-
 </androidx.constraintlayout.widget.ConstraintLayout>

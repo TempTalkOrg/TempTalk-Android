@@ -1,5 +1,7 @@
 package com.luck.picture.lib.utils;
 
+import com.difft.android.base.log.lumberjack.L;
+
 /**
  * @author：luck
  * @date：2019-11-12 14:27
@@ -11,6 +13,7 @@ public class ValueOf {
         try {
             value = o.toString();
         } catch (Exception e) {
+            L.w(e, () -> "[ValueOf] toString failed");
         }
 
         return value;

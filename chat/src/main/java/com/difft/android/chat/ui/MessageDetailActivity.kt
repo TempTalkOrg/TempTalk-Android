@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
 import org.difft.app.database.attachment
@@ -20,7 +21,6 @@ import org.difft.app.database.wcdb
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.databinding.ActivityMessageDetailBinding
-import com.difft.android.chat.message.parseReadInfo
 import com.difft.android.chat.message.parseReceiverIds
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -71,7 +71,7 @@ class MessageDetailActivity : BaseActivity() {
                     initView(messageModel)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                L.w { "[MessageDetailActivity] loadMessage error: ${e.stackTraceToString()}" }
             }
         }
     }
@@ -104,6 +104,7 @@ class MessageDetailActivity : BaseActivity() {
             setTime(message.timeStamp, binding.tvTime1)
             setTime(message.systemShowTimestamp, binding.tvTime3)
             setTime(message.readTime, binding.tvTime4)
+            binding.tvExpiresInSeconds.text = message.expiresInSeconds.toString()
 
             if (message.roomId != globalServices.myId) {
                 initMessageReadInfo(message)
@@ -131,7 +132,8 @@ class MessageDetailActivity : BaseActivity() {
             setTime(message.timeStamp, binding.tvReceivedTime1)
             setTime(message.receivedTimeStamp, binding.tvReceivedTime2)
             setTime(message.systemShowTimestamp, binding.tvReceivedTime3)
-            setTime(message.readTime, binding.tvTime4)
+            setTime(message.readTime, binding.tvReceivedTime4)
+            binding.tvReceivedExpiresInSeconds.text = message.expiresInSeconds.toString()
         }
 
         binding.llShare.visibility = View.GONE
@@ -169,31 +171,28 @@ class MessageDetailActivity : BaseActivity() {
                 listOf(message.roomId)
             }
 
-            val receivers = wcdb.getContactorsFromAllTable(receiverIds)
+            var receivers = wcdb.getContactorsFromAllTable(receiverIds)
 
             val readInfoList = wcdb.getReadInfoList(message.roomId).filter { it.readPosition >= message.systemShowTimestamp }
+
+            // 普通群消息：如果 receiverIds 缺失但有 readInfoList，直接用 readInfoList 中的 uid 获取联系人（排除自己）
+            if (message.roomType == 1 && message.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
+                if (receivers.isEmpty() && readInfoList.isNotEmpty()) {
+                    L.w { "Group message receiverIds is null, messageId: ${message.id}, systemShowTimestamp: ${message.systemShowTimestamp}" }
+                    val readUserIds = readInfoList.map { it.uid }.filter { it != globalServices.myId }
+                    receivers = wcdb.getContactorsFromAllTable(readUserIds)
+                }
+            }
 
             withContext(Dispatchers.Main) {
                 var readList: List<ContactorModel>? = null
                 var unreadList: List<ContactorModel>? = null
 
-                //group message
+                //group message（机密消息与普通消息使用相同的已读逻辑）
                 if (message.roomType == 1) {
-                    if (message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                        val readInfos = parseReadInfo(message.readInfo)
-
-                        if (readInfos.isNullOrEmpty()) {
-                            unreadList = receivers
-                        } else {
-                            val readUserIds = readInfos.keys.toSet()
-                            readList = receivers.filter { readUserIds.contains(it.id) }
-                            unreadList = receivers.filter { !readUserIds.contains(it.id) }
-                        }
-                    } else {
-                        val readUserIds = readInfoList.map { it.uid }.toSet()
-                        readList = receivers.filter { readUserIds.contains(it.id) }
-                        unreadList = receivers.filter { !readUserIds.contains(it.id) }
-                    }
+                    val readUserIds = readInfoList.map { it.uid }.toSet()
+                    readList = receivers.filter { readUserIds.contains(it.id) }
+                    unreadList = receivers.filter { !readUserIds.contains(it.id) }
                 } else {
                     if (message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
                         unreadList = receivers

@@ -9,7 +9,7 @@ import android.opengl.GLES20;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.video.interfaces.MediaInput;
 
 import java.nio.ByteBuffer;
@@ -18,7 +18,7 @@ import java.nio.ByteOrder;
 @RequiresApi(api = 23)
 final class VideoThumbnailsExtractor {
 
-  private static final String TAG = Log.tag(VideoThumbnailsExtractor.class);
+  private static final String TAG = "VideoThumbnailsExtractor";
 
   interface Callback {
     void durationKnown(long duration);
@@ -80,8 +80,8 @@ final class VideoThumbnailsExtractor {
           outputHeightRotated = outputHeight;
         }
 
-        Log.i(TAG, "video :" + width + "x" + height + " " + rotation);
-        Log.i(TAG, "output: " + outputWidthRotated + "x" + outputHeightRotated);
+        L.i(() -> TAG + "video :" + width + "x" + height + " " + rotation);
+        L.i(() -> TAG + "output: " + outputWidthRotated + "x" + outputHeightRotated);
 
         outputSurface = new OutputSurface(outputWidthRotated, outputHeightRotated, true);
 
@@ -94,7 +94,7 @@ final class VideoThumbnailsExtractor {
         if (mediaFormat.containsKey(MediaFormat.KEY_DURATION)) {
           duration = mediaFormat.getLong(MediaFormat.KEY_DURATION);
         } else {
-          Log.w(TAG, "Video is missing duration!");
+          L.w(() -> TAG + "Video is missing duration!");
         }
 
         callback.durationKnown(duration);
@@ -102,7 +102,7 @@ final class VideoThumbnailsExtractor {
         doExtract(extractor, decoder, outputSurface, outputWidthRotated, outputHeightRotated, duration, thumbnailCount, callback);
       }
     } catch (Throwable t) {
-      Log.w(TAG, t);
+      L.w(t, () -> TAG);
       callback.failed();
     } finally {
       if (outputSurface != null) {
@@ -112,9 +112,9 @@ final class VideoThumbnailsExtractor {
         try {
           decoder.stop();
         } catch (MediaCodec.CodecException codecException) {
-          Log.w(TAG, "Decoder stop failed: " + codecException.getDiagnosticInfo(), codecException);
+          L.w(codecException, () -> TAG + " Decoder stop failed: " + codecException.getDiagnosticInfo());
         } catch (IllegalStateException ise) {
-          Log.w(TAG, "Decoder stop failed", ise);
+          L.w(ise, () -> TAG + " Decoder stop failed");
         }
         decoder.release();
       }
@@ -139,7 +139,7 @@ final class VideoThumbnailsExtractor {
     int samplesExtracted  = 0;
     int thumbnailsCreated = 0;
 
-    Log.i(TAG, "doExtract started");
+    L.i(() -> TAG + "doExtract started");
     final ByteBuffer pixelBuf = ByteBuffer.allocateDirect(outputWidth * outputHeight * 4);
     pixelBuf.order(ByteOrder.LITTLE_ENDIAN);
 
@@ -154,13 +154,14 @@ final class VideoThumbnailsExtractor {
           if (sampleSize < 0 || samplesExtracted >= thumbnailCount) {
             decoder.queueInputBuffer(inputBufIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
             inputDone = true;
-            Log.i(TAG, "input done");
+            L.i(() -> TAG + "input done");
           } else {
             final long presentationTimeUs = extractor.getSampleTime();
             decoder.queueInputBuffer(inputBufIndex, 0, sampleSize, presentationTimeUs, 0 /*flags*/);
             samplesExtracted++;
-            extractor.seekTo(duration * samplesExtracted / thumbnailCount, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
-            Log.i(TAG, "seek to " + duration * samplesExtracted / thumbnailCount + ", actual " + extractor.getSampleTime());
+            final int currentSamplesExtracted = samplesExtracted;
+            extractor.seekTo(duration * currentSamplesExtracted / thumbnailCount, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+            L.i(() -> TAG + "seek to " + duration * currentSamplesExtracted / thumbnailCount + ", actual " + extractor.getSampleTime());
           }
         }
       }
@@ -169,7 +170,7 @@ final class VideoThumbnailsExtractor {
       try {
         outputBufIndex = decoder.dequeueOutputBuffer(info, TIMEOUT_USEC);
       } catch (IllegalStateException e) {
-        Log.w(TAG, "Decoder not in the Executing state, or codec is configured in asynchronous mode.", e);
+        L.w(e, () -> TAG + " Decoder not in the Executing state, or codec is configured in asynchronous mode.");
         throw new TranscodingException("Decoder not in the Executing state, or codec is configured in asynchronous mode.", e);
       }
 
@@ -193,15 +194,16 @@ final class VideoThumbnailsExtractor {
             pixelBuf.rewind();
             bitmap.copyPixelsFromBuffer(pixelBuf);
 
-            if (!callback.publishProgress(thumbnailsCreated, bitmap)) {
+            final int currentThumbnailsCreated = thumbnailsCreated;
+            if (!callback.publishProgress(currentThumbnailsCreated, bitmap)) {
               break;
             }
-            Log.i(TAG, "publishProgress for frame " + thumbnailsCreated + " at " + info.presentationTimeUs + " (target " + duration * thumbnailsCreated / thumbnailCount + ")");
+            L.i(() -> TAG + "publishProgress for frame " + currentThumbnailsCreated + " at " + info.presentationTimeUs + " (target " + duration * currentThumbnailsCreated / thumbnailCount + ")");
           }
           thumbnailsCreated++;
         }
       }
     }
-    Log.i(TAG, "doExtract finished");
+    L.i(() -> TAG + "doExtract finished");
   }
 }

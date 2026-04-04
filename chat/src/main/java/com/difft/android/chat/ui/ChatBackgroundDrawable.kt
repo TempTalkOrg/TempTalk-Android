@@ -13,7 +13,7 @@ import org.thoughtcrime.securesms.util.ViewUtil
 
 class ChatBackgroundDrawable(
     context: Context,
-    private val view: View,
+    private val view: View? = null, // 改为可空，只有当drawSystemBars为true时才需要
     private val drawSystemBars: Boolean = false // 新增参数，控制是否绘制系统栏
 ) : Drawable() {
 
@@ -31,12 +31,12 @@ class ChatBackgroundDrawable(
         val drawableWidth = backgroundDrawable.intrinsicWidth
         val drawableHeight = backgroundDrawable.intrinsicHeight
 
-        // 使用ViewUtil获取状态栏和导航栏高度
-        val statusBarHeight = ViewUtil.getStatusBarHeight(view)
-        val navigationBarHeight = ViewUtil.getNavigationBarHeight(view)
+        // 只有当需要绘制系统栏背景且view不为空时才获取高度
+        val statusBarHeight = if (drawSystemBars && view != null) ViewUtil.getStatusBarHeight(view) else 0
+        val navigationBarHeight = if (drawSystemBars && view != null) ViewUtil.getNavigationBarHeight(view) else 0
 
         // 根据参数决定是否绘制系统栏背景
-        if (drawSystemBars) {
+        if (drawSystemBars && view != null) {
             // 1. 绘制状态栏背景（bg1颜色）
             canvas.drawRect(0f, 0f, bounds.width().toFloat(), statusBarHeight.toFloat(), paint)
 

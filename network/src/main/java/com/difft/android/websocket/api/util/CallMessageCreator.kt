@@ -12,8 +12,6 @@ import com.difft.android.base.utils.globalServices
 import difft.android.messageserialization.For
 import com.google.protobuf.ByteString
 import com.google.protobuf.kotlin.toByteStringUtf8
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.schedulers.Schedulers
 import com.difft.android.websocket.api.ConversationManager
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor.Companion.MESSAGE_CURRENT_VERSION
@@ -26,14 +24,14 @@ import org.whispersystems.signalservice.internal.push.CallMessageKt.reject
 import org.whispersystems.signalservice.internal.push.callMessage
 import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.encryptContent
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
 @Singleton
 class CallMessageCreator @Inject constructor(
-    @Named("message_sender_max_envelope_size")
+    @param:Named("message_sender_max_envelope_size")
     private val maxEnvelopeSize: Long,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val conversationManager: ConversationManager,
@@ -44,7 +42,7 @@ class CallMessageCreator @Inject constructor(
         globalServices.myId
     }
 
-    fun createCallMessage(
+    suspend fun createCallMessage(
         forWhat: For?,
         callType: CallType,
         callRole: CallRole?,
@@ -58,7 +56,7 @@ class CallMessageCreator @Inject constructor(
         callUidList: List<String> = emptyList(),
         createCallMsg: Boolean = false,
         createdAt: Long = 0L,
-    ): Single<CallEncryptResult> = Single.fromCallable {
+    ): CallEncryptResult {
         var publicKeyInfos: List<PublicKeyInfo>? = null
         if ((callType.isGroup() || callType.isOneOnOne())) {
             if (callActionType?.isJoined() == true && forWhat != null) {
@@ -102,8 +100,22 @@ class CallMessageCreator @Inject constructor(
         }
 
         if (publicKeyInfos.isNullOrEmpty()) {
-            L.w { "[Call][NewSignalServiceMessageSender] publicKeyInfos is null" }
-            return@fromCallable EMPTY_CALL_ENCRYPT_RESULT
+            L.w { "[Call] publicKeyInfos is null" }
+            return EMPTY_CALL_ENCRYPT_RESULT
+        }
+
+        // Filter out PublicKeyInfo with empty identityKey to prevent rust encryption exception
+        publicKeyInfos = publicKeyInfos.filter { info ->
+            val isValid = info.identityKey.isNotBlank()
+            if (!isValid) {
+                L.w { "[Call] Filtering out PublicKeyInfo with empty identityKey for uid: ${info.uid}" }
+            }
+            isValid
+        }
+
+        if (publicKeyInfos.isEmpty()) {
+            L.e { "[Call] No valid public key info available after filtering (all identityKeys were empty)" }
+            return EMPTY_CALL_ENCRYPT_RESULT
         }
 
         val publishKeys: Map<String, String> = publicKeyInfos.associate { it.uid to it.identityKey }
@@ -113,8 +125,8 @@ class CallMessageCreator @Inject constructor(
         }
 
         if (encInfos.isNullOrEmpty()) {
-            L.w { "[Call][NewSignalServiceMessageSender] call encInfos is null" }
-            return@fromCallable EMPTY_CALL_ENCRYPT_RESULT
+            L.w { "[Call] call encInfos is null" }
+            return EMPTY_CALL_ENCRYPT_RESULT
         }
 
         var cipherMessages: MutableList<CipherMessage> = publicKeyInfos.map { publicKeyInfo ->
@@ -180,7 +192,7 @@ class CallMessageCreator @Inject constructor(
                                 this.calling = calling {
                                     conversationId?.let {
                                         this.conversationId = conversationId {
-                                            this.number = if(publicKeyInfo.uid == myUid) it else publicKeyInfo.uid
+                                            this.number = if(publicKeyInfo.uid == myUid) it else myUid
                                         }
                                     }
                                     roomId?.firstOrNull()?.let { this.roomId = it }
@@ -254,8 +266,8 @@ class CallMessageCreator @Inject constructor(
             cipherMessages.removeIf { it.uid != myUid }
         }
 
-        CallEncryptResult(cipherMessages, encInfos, Base64.encodeBytes(encryptCallKeyResult.eKey))
-    }.subscribeOn(Schedulers.io())
+        return CallEncryptResult(cipherMessages, encInfos, Base64.encodeBytes(encryptCallKeyResult.eKey))
+    }
 
     private fun intsToByteHigh(highValue: Int, lowValue: Int): Byte {
         return ((highValue shl 4 or lowValue) and 0xFF).toByte()

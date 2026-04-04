@@ -2,6 +2,8 @@ package util;
 
 import androidx.annotation.NonNull;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import util.logging.Scrubber;
 
 import java.io.ByteArrayOutputStream;
@@ -77,7 +79,9 @@ public final class ExceptionUtil {
       try {
         String service = message.substring(message.lastIndexOf('.') + 1, message.length() - 1);
         message = service + " did not call startForeground";
-      } catch (Exception ignored) {}
+      } catch (Exception ignored) {
+        L.w(() -> "[ExceptionUtil] parse service name failed" + ignored);
+      }
     }
 
     combinedTrace[originalTrace.length]     = new StackTraceElement("[[ ↑↑ Original Trace ↑↑ ]]", "", "", 0);

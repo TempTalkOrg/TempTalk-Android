@@ -1,6 +1,4 @@
 /**
- * Copyright (C) 2011 Whisper Systems
- * Copyright (C) 2013 Open Whisper Systems
  * <p>
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,11 +25,10 @@ import androidx.annotation.Nullable;
 import com.difft.android.base.log.lumberjack.L;
 
 import org.signal.libsignal.protocol.InvalidKeyException;
-import org.signal.libsignal.protocol.ecc.Curve;
 import org.signal.libsignal.protocol.ecc.ECKeyPair;
 import org.signal.libsignal.protocol.ecc.ECPrivateKey;
 import org.signal.libsignal.protocol.ecc.ECPublicKey;
-import org.thoughtcrime.securesms.util.Base64;
+import com.difft.android.base.utils.Base64;
 import org.thoughtcrime.securesms.util.Util;
 
 import java.io.IOException;
@@ -118,7 +115,7 @@ public class MasterSecretUtil {
             return new MasterSecret(new SecretKeySpec(encryptionSecret, "AES"),
                     new SecretKeySpec(macSecret, "HmacSHA1"));
         } catch (GeneralSecurityException | IOException e) {
-            L.w(e::toString);
+            L.w(e, () -> "[MasterSecretUtil] getMasterSecret decrypt error: ");
             return null; //XXX
         }
     }
@@ -133,7 +130,7 @@ public class MasterSecretUtil {
             ECPrivateKey djbPrivateKey = null;
 
             if (djbPublicBytes != null) {
-                djbPublicKey = Curve.decodePoint(djbPublicBytes, 0);
+                djbPublicKey = new ECPublicKey(djbPublicBytes, 0);
             }
 
             if (masterSecret != null) {
@@ -153,7 +150,7 @@ public class MasterSecretUtil {
     public static AsymmetricMasterSecret generateAsymmetricMasterSecret(Context context,
                                                                         MasterSecret masterSecret) {
         MasterCipher masterCipher = new MasterCipher(masterSecret);
-        ECKeyPair keyPair = Curve.generateKeyPair();
+        ECKeyPair keyPair = ECKeyPair.generate();
 
         save(context, ASYMMETRIC_LOCAL_PUBLIC_DJB, keyPair.getPublicKey().serialize());
         save(context, ASYMMETRIC_LOCAL_PRIVATE_DJB, masterCipher.encryptKey(keyPair.getPrivateKey()));
@@ -181,7 +178,7 @@ public class MasterSecretUtil {
             return new MasterSecret(new SecretKeySpec(encryptionSecret, "AES"),
                     new SecretKeySpec(macSecret, "HmacSHA1"));
         } catch (GeneralSecurityException e) {
-            L.w(e::toString);
+            L.w(e, () -> "[MasterSecretUtil] generateMasterSecret error: ");
             return null;
         }
     }
@@ -244,7 +241,7 @@ public class MasterSecretUtil {
             SecretKey key = generator.generateKey();
             return key.getEncoded();
         } catch (NoSuchAlgorithmException ex) {
-            L.w(ex::toString);
+            L.w(ex, () -> "[MasterSecretUtil] generateEncryptionSecret error: ");
             return null;
         }
     }
@@ -254,7 +251,7 @@ public class MasterSecretUtil {
             KeyGenerator generator = KeyGenerator.getInstance("HmacSHA1");
             return generator.generateKey().getEncoded();
         } catch (NoSuchAlgorithmException e) {
-            L.w(e::toString);
+            L.w(e, () -> "[MasterSecretUtil] generateMacSecret error: ");
             return null;
         }
     }
@@ -285,7 +282,7 @@ public class MasterSecretUtil {
             if (scaledIterationTarget < MINIMUM_ITERATION_COUNT) return MINIMUM_ITERATION_COUNT;
             else return scaledIterationTarget;
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            L.w(e::toString);
+            L.w(e, () -> "[MasterSecretUtil] generateIterationCount error: ");
             return MINIMUM_ITERATION_COUNT;
         }
     }

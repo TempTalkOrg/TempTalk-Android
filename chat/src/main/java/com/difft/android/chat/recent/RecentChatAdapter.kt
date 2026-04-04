@@ -26,17 +26,17 @@ import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
+import com.difft.android.chat.contacts.data.isOfficialBotId
 import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
 import com.difft.android.chat.group.getAvatarData
 import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import difft.android.messageserialization.model.MENTIONS_TYPE_ALL
 import difft.android.messageserialization.model.MENTIONS_TYPE_ME
-import com.kongzue.dialogx.dialogs.PopTip
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.disposables.Disposable
-import java.util.concurrent.TimeUnit
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.LCallManager.EntryPoint
+import com.difft.android.call.state.OnGoingCallStateManager
+import dagger.hilt.android.EntryPointAccessors
 
 abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolean = false) : ListAdapter<ListItem, RecyclerView.ViewHolder>(
     object : DiffUtil.ItemCallback<ListItem>() {
@@ -100,6 +100,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                 chatHolder.bind(
                     searchKey,
                     data,
+                    isSelected = selectedId != null && data.roomId == selectedId,
                     { onItemClicked(data, position - 2) }, // Adjust position
                     { onItemLongClicked(holder.itemView, data, position - 2, lastTouchX, lastTouchY) })
             }
@@ -120,23 +121,20 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
     }
 
     private var recyclerView: RecyclerView? = null
-    private var updateDisposable: Disposable? = null
-
-    fun startUpdateCallBar() {
-        updateDisposable = Observable.interval(1, 1, TimeUnit.SECONDS)
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe {
-                updateVisibleViewHolders()
-            }
-    }
-
-    fun stopUpdateCallBar() {
-        updateDisposable?.dispose()
+    fun updateCallBarTick() {
+        updateVisibleViewHolders()
     }
 
     private fun updateVisibleViewHolders() {
-        for (i in 0 until itemCount) {
-            (recyclerView?.findViewHolderForAdapterPosition(i) as? RecentChatViewHolder)?.let { holder ->
+        val rv = recyclerView ?: return
+        val layoutManager = rv.layoutManager ?: return
+        val first = (layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.findFirstVisibleItemPosition() ?: 0
+        val last = (layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
+            ?.findLastVisibleItemPosition() ?: (itemCount - 1)
+
+        for (i in first..last) {
+            (rv.findViewHolderForAdapterPosition(i) as? RecentChatViewHolder)?.let { holder ->
                 getItem(i)?.also { data ->
                     val recentChatViewData = (data as? ListItem.ChatItem)?.data ?: return@also
                     holder.updateCallBarDuration(recentChatViewData)
@@ -154,6 +152,19 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         super.onDetachedFromRecyclerView(recyclerView)
         this.recyclerView = null
     }
+
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val oldId = field
+            field = value
+            currentList.forEachIndexed { index, item ->
+                val itemId = (item as? ListItem.ChatItem)?.data?.roomId
+                if (itemId != null && (itemId == oldId || itemId == value)) {
+                    notifyItemChanged(index)
+                }
+            }
+        }
 
     private var searchKey: String = ""
 
@@ -177,24 +188,12 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
 }) {
 
     private val binding = ChatFragmentRecentChatListItemBinding.bind(itemView)
+    private var currentIsSelected: Boolean = false
 
     @SuppressLint("ClickableViewAccessibility")
-    fun bind(searchKey: String, data: RoomViewData, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
-        if (TextSizeUtil.isLager()) {
-            binding.textviewLabel.textSize = 24f
-            binding.textviewTimer.textSize = 24f
-            binding.textviewDate.textSize = 21f
-            binding.textviewAt.textSize = 21f
-            binding.textviewDetail.textSize = 21f
-            binding.textviewMissedNumber.textSize = 12f
-        } else {
-            binding.textviewLabel.textSize = 16f
-            binding.textviewTimer.textSize = 16f
-            binding.textviewDate.textSize = 14f
-            binding.textviewAt.textSize = 14f
-            binding.textviewDetail.textSize = 14f
-            binding.textviewMissedNumber.textSize = 10f
-        }
+    fun bind(searchKey: String, data: RoomViewData, isSelected: Boolean = false, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
+        currentIsSelected = isSelected
+        updateTextSizes(TextSizeUtil.isLarger)
 
         if (isForSearch && searchKey.isNotEmpty()) {
             binding.textviewLabel.setHighLightText(data.roomName.toString(), searchKey)
@@ -218,17 +217,19 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             is RoomViewData.Type.OneOnOne -> {
                 binding.imageviewAvatar.visibility = View.VISIBLE
                 if (data.roomId == myID) {
+                    binding.imageviewBotBadge.isVisible = false
                     binding.imageviewAvatar.showFavorites()
                     if (searchKey.isNotEmpty()) {
                         binding.textviewLabel.setHighLightText(
-                            binding.root.context.getString(R.string.chat_favorites),
+                            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites),
                             searchKey
                         )
                     } else {
                         binding.textviewLabel.text =
-                            binding.root.context.getString(R.string.chat_favorites)
+                            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites)
                     }
                 } else {
+                    binding.imageviewBotBadge.isVisible = data.roomId.isOfficialBotId()
                     val contactAvatar = data.roomAvatarJson?.getContactAvatarData()
                     binding.imageviewAvatar.setAvatar(
                         contactAvatar?.getContactAvatarUrl(),
@@ -242,6 +243,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             is RoomViewData.Type.Group -> {
                 binding.imageviewGroupAvatar.visibility = View.VISIBLE
                 binding.imageviewGroupAvatar.setAvatar(data.roomAvatarJson?.getAvatarData(), true, data.groupMembersNumber, data.roomId)
+                binding.imageviewBotBadge.isVisible = false
             }
         }
 
@@ -251,11 +253,12 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         }
         binding.textviewDetail.isVisible = !data.isInstantCall
 
-        if (!isForSearch && data.isPinned) {
-            binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
-        } else {
-            binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg1))
+        val bgColorRes = when {
+            isSelected -> com.difft.android.base.R.color.bg3
+            !isForSearch && data.isPinned -> com.difft.android.base.R.color.bg2
+            else -> com.difft.android.base.R.color.bg1
         }
+        binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, bgColorRes))
 
         binding.textviewDate.text = data.lastActiveTimeText
         if (!data.draftPreview.isNullOrEmpty()) {
@@ -271,20 +274,32 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         binding.textviewMissedNumber.text =
             if (data.unreadMessageNum > 99) "99+" else data.unreadMessageNum.toString()
 
+        // 构建标签文本: Critical Alert 在最前面，然后是 mention
+        val alertTagBuilder = StringBuilder()
+
+        // 检查是否有 Critical Alert
+        if (data.criticalAlertType == difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT) {
+            alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_critical_alert))
+        }
+
+        // 检查是否有 mention
         when (data.mentionType) {
             MENTIONS_TYPE_ME -> {
-                binding.textviewAt.visibility = View.VISIBLE
-                binding.textviewAt.text = binding.root.context.getString(R.string.chat_list_at_you)
+                if (alertTagBuilder.isNotEmpty()) alertTagBuilder.append(" ")
+                alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_at_you))
             }
-
             MENTIONS_TYPE_ALL -> {
-                binding.textviewAt.visibility = View.VISIBLE
-                binding.textviewAt.text = binding.root.context.getString(R.string.chat_list_at_all)
+                if (alertTagBuilder.isNotEmpty()) alertTagBuilder.append(" ")
+                alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_at_all))
             }
+        }
 
-            else -> {
-                binding.textviewAt.visibility = View.GONE
-            }
+        // 设置显示
+        if (alertTagBuilder.isNotEmpty()) {
+            binding.textviewAt.visibility = View.VISIBLE
+            binding.textviewAt.text = alertTagBuilder.toString()
+        } else {
+            binding.textviewAt.visibility = View.GONE
         }
 
         showMissingNumber(data.unreadMessageNum, data.isMuted)
@@ -297,6 +312,24 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             true
         }
         updateCallBarDuration(data)
+    }
+
+    private fun updateTextSizes(isLarger: Boolean) {
+        if (isLarger) {
+            binding.textviewLabel.textSize = 24f
+            binding.textviewTimer.textSize = 24f
+            binding.textviewDate.textSize = 21f
+            binding.textviewAt.textSize = 21f
+            binding.textviewDetail.textSize = 21f
+            binding.textviewMissedNumber.textSize = 12f
+        } else {
+            binding.textviewLabel.textSize = 16f
+            binding.textviewTimer.textSize = 16f
+            binding.textviewDate.textSize = 14f
+            binding.textviewAt.textSize = 14f
+            binding.textviewDetail.textSize = 14f
+            binding.textviewMissedNumber.textSize = 10f
+        }
     }
 
     private fun applyDraftStyle(content: String, context: Context): SpannableString {
@@ -338,32 +371,45 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         if (callData != null) {
             val roomId = callData.roomId
             if (!roomId.isNullOrEmpty()) {
-                if(!data.isPinned) {
+                if(!currentIsSelected && !data.isPinned) {
                     binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
                 }
                 binding.callBarDuration.isVisible = true
-                val showTime = LCallManager.callingTime.value?.takeIf { it.first == roomId }?.second
+                val callStateManager = getCallStateManager()
+                val showTime = callStateManager.getCallingTime(roomId)
                 setupCallingJoinButton(binding.callBarDuration, showTime)
                 binding.callBarDuration.setOnClickListener {
-                    if (!LCallActivity.isInCalling()) {
+                    if (!callStateManager.isInCalling()) {
                         L.i { "[call] CallBar Joining call for roomId:${roomId}." }
-                        LCallManager.joinCall(activity, roomId)
+                        LCallManager.joinCall(activity, callData) { status ->
+                            if(!status) {
+                                L.e { "[Call] CallBar join call failed." }
+                                ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
+                            }
+                        }
                     } else {
-                        if (LCallActivity.getCurrentRoomId() == roomId) {
+                        if (callStateManager.getCurrentRoomId() == roomId) {
                             L.i { "[call] CallBar Bringing back current call for roomId:${roomId}." }
-                            LCallManager.bringInCallScreenBack(ApplicationHelper.instance.applicationContext)
+                            LCallManager.bringCallScreenToFront(ApplicationHelper.instance.applicationContext)
                         } else {
-                            PopTip.show(com.difft.android.call.R.string.call_newcall_tip)
+                            ToastUtil.show(com.difft.android.call.R.string.call_newcall_tip)
                         }
                     }
                 }
             }
         } else {
-            if(!data.isPinned) {
+            if(!currentIsSelected && !data.isPinned) {
                 binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg1))
             }
             binding.callBarDuration.isVisible = false
         }
+    }
+
+    private fun getCallStateManager(): OnGoingCallStateManager {
+        val entryPoint = EntryPointAccessors.fromApplication<EntryPoint>(
+            activity.applicationContext
+        )
+        return entryPoint.onGoingCallStateManager
     }
 
 }

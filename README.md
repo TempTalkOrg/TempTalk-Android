@@ -135,7 +135,6 @@ Release builds require signing key configuration, supported through environment 
 ## Documentation
 
 - [Build Guide](BuildGuide.md) - Cross-platform build instructions
-- [构建指南](BuildGuide_CN.md) - 跨平台构建说明 (中文)
 
 ## Acknowledgments
 

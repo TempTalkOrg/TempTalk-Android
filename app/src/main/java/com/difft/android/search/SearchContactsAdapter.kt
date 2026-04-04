@@ -58,7 +58,7 @@ class SearchContactViewHolder(parentView: ViewGroup) : RecyclerView.ViewHolder(r
     fun bind(searchKey: String, data: ContactorModel, onItemClickListener: View.OnClickListener) {
         if (data.id == globalServices.myId) {
             binding.avatarView.showFavorites()
-            binding.tvName.setHighLightText(binding.root.context.getString(R.string.chat_favorites), searchKey)
+            binding.tvName.setHighLightText(binding.root.context.getString(com.difft.android.base.R.string.chat_favorites), searchKey)
         } else {
             binding.avatarView.setAvatar(data)
             binding.tvName.setHighLightText(data.getDisplayNameForUI(), searchKey)

@@ -1,5 +1,7 @@
 package com.luck.picture.lib;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -14,7 +16,6 @@ import android.os.Bundle;
 import android.os.Vibrator;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
@@ -38,8 +39,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator;
 import androidx.viewpager2.widget.MarginPageTransformer;
 import androidx.viewpager2.widget.ViewPager2;
 
-import com.kongzue.dialogx.dialogs.MessageDialog;
-import com.kongzue.dialogx.dialogs.PopTip;
+import com.difft.android.base.widget.ComposeDialogManager;
 import com.luck.picture.lib.adapter.PicturePreviewAdapter;
 import com.luck.picture.lib.adapter.holder.BasePreviewHolder;
 import com.luck.picture.lib.adapter.holder.PreviewGalleryAdapter;
@@ -84,7 +84,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
+import com.difft.android.base.widget.ToastUtil;
 /**
  * @author：luck
  * @date：2021/11/18 10:13 下午
@@ -797,7 +797,7 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
 
                 requireActivity().startActivity(Intent.createChooser(intent, currentMedia.getFileName()));
             } catch (Exception e) {
-                Log.w("Share", "share File error: " + Log.getStackTraceString(e));
+                L.w(e, () -> "Share: share File error");
             }
         });
     }
@@ -936,7 +936,7 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
                         }
                         mGalleryAdapter.notifyItemMoved(fromPosition, toPosition);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        L.w(e, () -> "[PictureSelectorPreviewFragment] onMove gallery item error:");
                     }
                     return true;
                 }
@@ -1156,7 +1156,50 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
         tvSelected.setVisibility(View.GONE);
         bottomNarBar.setVisibility(View.GONE);
         completeSelectView.setVisibility(View.GONE);
-        ivShare.setVisibility(View.VISIBLE);
+        ivShare.setVisibility(selectorConfig.isHidePreviewShare ? View.GONE : View.VISIBLE);
+
+        if (selectorConfig.isShowConfidentialTip) {
+            addConfidentialTipView();
+        }
+
+        // Default to fullscreen mode with titlebar hidden
+        if (selectorConfig.isPreviewFullScreenMode) {
+            initHiddenTitleBar();
+        }
+    }
+
+    private void addConfidentialTipView() {
+        View root = getView();
+        if (!(root instanceof ConstraintLayout)) return;
+        ConstraintLayout parent = (ConstraintLayout) root;
+
+        com.difft.android.base.widget.ConfidentialTipView tipView =
+                new com.difft.android.base.widget.ConfidentialTipView(requireContext());
+        tipView.setId(View.generateViewId());
+
+        int bottomMargin = DensityUtil.dip2px(requireContext(), 80);
+        ConstraintLayout.LayoutParams params = new ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                ConstraintLayout.LayoutParams.WRAP_CONTENT);
+        params.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+        params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+        params.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+        params.bottomMargin = bottomMargin;
+        parent.addView(tipView, params);
+    }
+
+    /**
+     * Initialize titlebar as hidden for fullscreen preview mode
+     */
+    private void initHiddenTitleBar() {
+        titleBar.post(() -> {
+            // Set initial state: titlebar hidden (translated up by its height)
+            titleBar.setTranslationY(-titleBar.getHeight());
+            for (View view : mAnimViews) {
+                view.setAlpha(0.0F);
+            }
+            showFullScreenStatusBar();
+        });
     }
 
     protected PicturePreviewAdapter createAdapter() {
@@ -1411,12 +1454,17 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
                     content = getString(R.string.ps_prompt_image_content);
                 }
 
-                MessageDialog.show(
-                        getString(R.string.ps_prompt),
-                        content,
-                        getString(R.string.ps_confirm),
-                        getString(R.string.ps_cancel)
-                ).setOkButtonClickListener((dialog, v) -> {
+                ComposeDialogManager.showMessageDialogForJava(
+                    getActivity(),
+                    getString(R.string.ps_prompt),
+                    content,
+                    getString(R.string.ps_confirm),
+                    getString(R.string.ps_cancel),
+                    true,
+                    true,
+                    new kotlin.jvm.functions.Function0<kotlin.Unit>() {
+                        @Override
+                        public kotlin.Unit invoke() {
                             String path = media.getAvailablePath();
                             if (PictureMimeType.isHasHttp(path)) {
                                 showLoading();
@@ -1434,15 +1482,18 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
                                         } else {
                                             errorMsg = getString(R.string.ps_save_image_error);
                                         }
-                                        PopTip.show(errorMsg);
+                                        ToastUtil.INSTANCE.show(errorMsg);
                                     } else {
                                         new PictureMediaScannerConnection(requireActivity(), realPath);
-                                        PopTip.show(getString(R.string.ps_save_success));
+                                        ToastUtil.INSTANCE.show(getString(R.string.ps_save_success));
                                     }
                                 }
                             });
-                            return false;
+                            return kotlin.Unit.INSTANCE;
                         }
+                    },
+                    null,
+                    null
                 );
             }
         }

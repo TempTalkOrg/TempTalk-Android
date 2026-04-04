@@ -6,15 +6,16 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
+import com.difft.android.call.handler.InviteRequestState
 import difft.android.messageserialization.For
-import io.reactivex.rxjava3.core.Observable
+import kotlinx.coroutines.flow.Flow
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
 import java.util.ArrayList
 import java.util.Optional
 
 interface LCallToChatController {
-    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, onComplete: () -> Unit)
+    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, isNeedAppLock: Boolean, onComplete: (Boolean) -> Unit)
 
     fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit)
 
@@ -34,23 +35,38 @@ interface LCallToChatController {
 
     fun getMySelfUid(): String
 
-    fun getSingleGroupInfo(context: Context, conversationId: String): Optional<GroupModel>
-
-    fun inviteUsersToTheCall(context: Context, roomId: String, roomName: String, e2eeKey: ByteArray?, callType: String, conversationId: String?, excludedIds: ArrayList<String>)
+    suspend fun getSingleGroupInfo(conversationId: String): GroupModel?
 
     fun cancelNotificationById(notificationId: Int)
 
-    fun showCallNotification(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType)
+    fun showCallNotification(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, isNeedAppLock: Boolean)
 
     fun isNotificationShowing(notificationId: Int): Boolean
 
     fun sendOrCreateCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For, callType: CallType, createCallMsg: Boolean, inviteeLIst: List<String> = emptyList())
 
+    /**
+     * 发送截屏通知消息到对应会话
+     * @param conversationId 会话ID
+     * @param callType 会议类型
+     */
+    fun sendScreenshotNotification(conversationId: String, callType: CallType)
+
+    /**
+     * 创建本地 Critical Alert 文本消息
+     * @param systemShowTimestamp 服务端时间戳
+     * @param timestamp 消息时间戳
+     * @param fromWho 消息发送者
+     * @param forWhat 消息所属会话
+     * @param sourceDevice 消息所属设备类型
+     */
+    suspend fun createCriticalAlertMessage(systemShowTimestamp: Long, timestamp: Long, fromWho: For, forWhat: For, sourceDevice: Int)
+
     fun getLocalPrivateKey(): ByteArray?
 
     fun getTheirPublicKey(uid: String): String?
 
-    fun restoreIncomingCallActivityIfIncoming()
+    fun restoreIncomingCallScreenIfActive()
 
     fun isAppForegrounded(): Boolean
 
@@ -58,8 +74,23 @@ interface LCallToChatController {
 
     fun isIncomingCallNotifying(roomId: String): Boolean
 
-    fun getContactsUpdateListener(): Observable<List<String>>
+    fun getContactsUpdateListener(): Flow<List<String>>
+
+    fun getGroupsUpdateListener(): Flow<GroupModel>
 
     fun startForegroundService(context: Context, intent: Intent)
 
+    fun getIncomingCallRoomId(): String?
+
+    fun dismissCriticalAlertIfActive()
+
+    fun dismissCriticalAlert(conversationId: String)
+
+    fun cancelCriticalAlertNotification(conversationId: String? = null)
+
+    fun inviteCall(roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?, callback: (InviteRequestState) -> Unit = {})
+
+    fun isBotId(id: String): Boolean
+
+    fun contactorListSortedByPinyin(list : List<ContactorModel>): List<ContactorModel>
 }

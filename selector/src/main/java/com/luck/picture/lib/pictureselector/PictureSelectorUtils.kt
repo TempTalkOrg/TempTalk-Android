@@ -1,12 +1,9 @@
 package com.luck.picture.lib.pictureselector
 
 import android.content.Context
-import androidx.core.content.ContextCompat
 import com.difft.android.base.utils.LanguageUtils
 import com.luck.picture.lib.language.LanguageConfig
 import com.luck.picture.lib.style.PictureSelectorStyle
-import com.luck.picture.lib.style.SelectMainStyle
-import com.luck.picture.lib.style.TitleBarStyle
 
 object PictureSelectorUtils {
     fun getSelectorStyle(context: Context): PictureSelectorStyle {

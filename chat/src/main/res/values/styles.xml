@@ -89,4 +89,23 @@
     </style>
 
 
+    <!-- Text Preview Activity Theme with fade animation -->
+    <style name="Theme.TextPreview" parent="Theme.Chative">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@style/TextPreviewAnimation</item>
+        <!-- Selection handle color -->
+        <item name="colorControlActivated">@color/primary</item>
+    </style>
+
+    <style name="TextPreviewAnimation" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/text_preview_fade_in</item>
+        <item name="android:activityOpenExitAnimation">@anim/text_preview_fade_out</item>
+        <item name="android:activityCloseEnterAnimation">@anim/text_preview_fade_in</item>
+        <item name="android:activityCloseExitAnimation">@anim/text_preview_fade_out</item>
+    </style>
+
 </resources>

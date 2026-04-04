@@ -1,6 +1,6 @@
 package com.difft.android.websocket.api.util
 
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import java.io.IOException
 import java.security.InvalidAlgorithmParameterException
 import java.security.InvalidKeyException

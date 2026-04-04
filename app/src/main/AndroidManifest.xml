@@ -43,11 +43,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-
+    <!-- Remove unused screen capture permission from LiveKit SDK -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+        tools:node="remove" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -77,17 +78,6 @@
         android:theme="@style/Theme.Chative"
         tools:replace="android:label,android:allowBackup"
         tools:targetApi="33">
-
-        <!-- debug模式下关闭firebase自动上报功能 -->
-        <meta-data
-            android:name="firebase_analytics_collection_enabled"
-            android:value="${FIREBASE_ANALYTICS_ENABLED}" />
-        <meta-data
-            android:name="firebase_crashlytics_collection_enabled"
-            android:value="${FIREBASE_CRASHLYTICS_ENABLED}" />
-        <meta-data
-            android:name="firebase_performance_collection_enabled"
-            android:value="${FIREBASE_PERFORMANCE_ENABLED}" />
 
         <uses-library
             android:name="org.apache.http.legacy"
@@ -120,11 +110,15 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+        <!-- Note: orientation|screenLayout|screenSize removed from configChanges to allow
+             proper layout switching between single-pane and dual-pane modes on rotation/fold -->
         <activity
             android:name=".IndexActivity"
-            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:configChanges="touchscreen|keyboard|keyboardHidden"
             android:exported="false"
-            android:launchMode="singleTask" />
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity" />
         <activity
             android:name=".setting.PrivacySettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -134,11 +128,19 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
+            android:name=".setting.BackgroundConnectionSettingsActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+        <activity
             android:name=".setting.NotificationContentDisplaySettingsActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.ChatSettingsActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+        <activity
+            android:name=".setting.VoicePlaybackSpeedSettingsActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
@@ -162,9 +164,11 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
+        <!-- Note: orientation|screenLayout|screenSize removed from configChanges to allow
+             proper camera preview re-initialization on rotation/fold -->
         <activity
             android:name=".chat.invite.ScanActivity"
-            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:configChanges="touchscreen|keyboard|keyboardHidden"
             android:exported="false" />
         <activity
             android:name=".search.SearchActivity"
@@ -193,8 +197,11 @@
             android:name=".login.ScreenLockActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:launchMode="singleInstance"
-            android:windowSoftInputMode="adjustResize" />
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize"
+            tools:ignore="LockedOrientationActivity" />
 
         <activity
             android:name=".setting.SetPasscodeTimeoutActivity"
@@ -202,19 +209,57 @@
             android:exported="false" />
 
         <activity
-            android:name=".call.LIncomingCallActivity"
+            android:name=".setting.ScreenLockSettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
+            android:name=".setting.SetPatternActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity" />
+
+
+        <activity
+            android:name=".call.LIncomingCallActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
             android:exported="false"
             android:launchMode="singleInstance"
             android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:supportsPictureInPicture="true"
             android:taskAffinity="com.difft.android.call.task" />
 
         <activity
+            android:name=".call.CriticalAlertActivity"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
+            android:launchMode="singleTask"
+            android:theme="@style/TransparentActivityTheme"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity" />
+
+        <activity
             android:name=".setting.TestActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
+
+        <activity
+            android:name=".setting.DialogTestActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
+            android:name=".setting.SetCustomIdActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -226,31 +271,21 @@
                 android:resource="@xml/provider_paths" />
         </provider>
 
-        <receiver
-            android:name=".call.InComingNewCallActionReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="difft.intent.action.RECEIVE_CALL_OPERATION_ACCEPT" />
-                <action android:name="difft.intent.action.RECEIVE_NEW_CALL_OPERATION_REJECT" />
-            </intent-filter>
-        </receiver>
+        <!-- Override UCrop library Activity configuration to prevent direct external launch -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:exported="false"
+            tools:replace="android:exported" />
+        <activity
+            android:name="com.yalantis.ucrop.UCropMultipleActivity"
+            android:exported="false"
+            tools:replace="android:exported" />
+
         <!--        <activity-->
         <!--            android:name="com.michaelflisar.lumberjack.view.LumberjackViewerActivity"-->
         <!--            android:exported="false"-->
         <!--            android:theme="@style/LumberjackTheme"-->
         <!--            tools:replace="android:exported" />-->
-
-        <service
-            android:name="com.difft.android.push.MyFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name="com.difft.android.setting.AppUpgradeService"
-            android:exported="false" />
 
     </application>
 

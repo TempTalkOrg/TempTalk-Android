@@ -8,9 +8,7 @@ import android.util.DisplayMetrics
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -23,7 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,13 +35,16 @@ import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.util.ViewUtil
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.Participant
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.withContext
 
 
@@ -55,43 +56,43 @@ fun ScreenShareSpeakerView(
     shareScreenUser: Participant,
     callConfig: CallConfig,
 ) {
+    val contactorCacheManager = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    }
+
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val isInPipMode by viewModel.isInPipMode.collectAsState(false)
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val activeSpeaker by viewModel.primarySpeaker.collectAsState(shareScreenUser)
     val context = LocalContext.current
 
     var screenSize by remember { mutableStateOf(ScreenSize(0, 0)) }
 
-    val speakerViewWith = 120.dp
-    val speakerViewHeight = 90.dp
+    val speakerViewWith = LCallUiConstants.SCREEN_SHARE_FLOATING_VIEW_WIDTH.dp
+    val speakerViewHeight = LCallUiConstants.SCREEN_SHARE_FLOATING_VIEW_HEIGHT.dp
 
     var dragViewOffsetX: Float by remember {
         mutableFloatStateOf(ViewUtil.dpToPx(12).toFloat())
     }
     var dragViewOffsetY: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(24).toFloat()) }
 
-    val coroutineScope = rememberCoroutineScope()
-
     var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
 
     val showSpeaker = activeSpeaker?:shareScreenUser
 
     LaunchedEffect(showSpeaker) {
-        coroutineScope.launch {
-            showSpeaker.identity?.value?.let {
-                userDisplayInfo = LCallManager.getParticipantDisplayInfo(context, it)
-            }
+        showSpeaker.identity?.value?.let {
+            userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, it)
         }
     }
 
-    val countDownEnabled by viewModel.countDownEnabled.collectAsState(false)
+    val countDownEnabled by viewModel.timerManager.countDownEnabled.collectAsState(false)
+    val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
+    val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
 
     LaunchedEffect(isLandscape) {
         if(isLandscape){
-            coroutineScope.launch {
-                screenSize = getScreenSizeAsync(context)
-            }
+            screenSize = getScreenSizeAsync(context)
         }
     }
 
@@ -153,7 +154,9 @@ fun ScreenShareSpeakerView(
                         },
                         room = viewModel.room,
                         showSpeaker = showSpeaker,
-                        userDisplayInfo = userDisplayInfo
+                        userDisplayInfo = userDisplayInfo,
+                        speakingEnabled = speakingEnabled,
+                        reconnectCount = reconnectCount,
                     )
 
                     if(countDownEnabled) {

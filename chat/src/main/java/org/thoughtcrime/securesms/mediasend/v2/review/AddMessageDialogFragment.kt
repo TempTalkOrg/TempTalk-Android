@@ -3,6 +3,7 @@ package org.thoughtcrime.securesms.mediasend.v2.review
 import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
+import androidx.core.content.ContextCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
@@ -25,7 +26,7 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 
         binding.content.addAMessageInput.addTextChangedListener(afterTextChanged = {
-            viewModel.setMessage(it)
+            viewModel.setMessage(it?.toString())
         })
 
         binding.content.addAMessageInput.setText(requireArguments().getCharSequence(ARG_INITIAL_TEXT))
@@ -34,6 +35,21 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
 
         val confirm: View = view.findViewById(R.id.confirm_button)
         confirm.setOnClickListener { dismissAllowingStateLoss() }
+
+        applyConfidentialStyle()
+    }
+
+    private fun applyConfidentialStyle() {
+        val isConfidential = viewModel.state.value?.confidentialMode == 1
+        val input = binding.content.addAMessageInput
+        val inputAreaContainer = input.parent as View
+        if (isConfidential) {
+            inputAreaContainer.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg_confidential_area))
+            input.setBackgroundResource(R.drawable.chat_msg_input_bg_confidential)
+        } else {
+            inputAreaContainer.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1))
+            input.setBackgroundResource(R.drawable.chat_msg_input_field_bg)
+        }
     }
 
     override fun onResume() {
@@ -45,7 +61,7 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         if (isResumed) {
-            viewModel.setMessage(binding.content.addAMessageInput.text)
+            viewModel.setMessage(binding.content.addAMessageInput.text?.toString())
         }
     }
 

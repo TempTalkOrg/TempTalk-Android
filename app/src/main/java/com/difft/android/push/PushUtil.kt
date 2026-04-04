@@ -1,51 +1,60 @@
 package com.difft.android.push
 
-import android.annotation.SuppressLint
-import android.text.TextUtils
+import android.content.Context
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.RxUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.application
-import com.difft.android.base.utils.globalServices
-import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.BindPushTokenRequestBody
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
+import javax.inject.Singleton
 
-object PushUtil {
-    @SuppressLint("CheckResult")
-    fun sendRegistrationToServer(tpnID: String?, fcmID: String?, onComplete: (() -> Unit)? = null) {
-        val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(application).httpClient()
-        val type = if (!TextUtils.isEmpty(fcmID)) {
-            "fcm_v2"
-        } else if (!TextUtils.isEmpty(tpnID)) {
-            "onlytpn"
-        } else {
-            ""
-        }
-        chatHttpClient.httpService.fetchBindPushToken(SecureSharedPrefsUtil.getBasicAuth(), type, BindPushTokenRequestBody(tpnID, fcmID))
-            .compose(RxUtil.getSingleSchedulerComposer())
-            .subscribe({ result ->
-                if (result.status == 0) {
-                    L.i { "[Push]绑定token成功" }
-                    globalServices.userManager.update {
-                        this.fcmEnable = true
-                    }
-                }
-                onComplete?.invoke()
-            }, {
-                L.e { "[Push]绑定token失败" + it.message }
-                it.printStackTrace()
-                onComplete?.invoke()
-            })
+/**
+ * FCM 初始化结果状态
+ */
+sealed class FcmInitResult {
+    /** 初始状态，尚未开始 */
+    data object Idle : FcmInitResult()
+
+    /** 正在初始化中 */
+    data object Loading : FcmInitResult()
+
+    /** Google Play Services 不可用 */
+    data class PlayServicesUnavailable(val statusCode: Int) : FcmInitResult()
+
+    /** FCM token 获取成功 */
+    data class Success(val token: String) : FcmInitResult()
+
+    /** FCM token 获取失败或超时 */
+    data class Failure(val reason: String) : FcmInitResult()
+}
+
+/**
+ * Push 工具类（F-Droid 构建版本）
+ * FCM 在此构建中不可用，消息通知依赖 WebSocket 后台长连接实现。
+ */
+@Singleton
+class PushUtil @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+) {
+    private val _fcmInitResult = MutableStateFlow<FcmInitResult>(FcmInitResult.Idle)
+    val fcmInitResult: StateFlow<FcmInitResult> = _fcmInitResult.asStateFlow()
+
+    private var dialogShownInSession = false
+
+    fun canShowFcmUnavailableDialog(): Boolean = !dialogShownInSession
+
+    fun markFcmUnavailableDialogShown() {
+        dialogShownInSession = true
     }
 
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        @ChativeHttpClientModule.Chat
-        fun httpClient(): ChativeHttpClient
+    fun initFCMPush() {
+        L.d { "[Push] FCM not available in this build, will prompt background connection" }
+        // 触发现有的 handleFcmUnavailable() 流程，引导用户开启后台连接
+        _fcmInitResult.value = FcmInitResult.PlayServicesUnavailable(0)
+    }
+
+    suspend fun sendRegistrationToServer(fcmID: String) {
+        L.d { "[Push] FCM not available in this build" }
     }
 }

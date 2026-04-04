@@ -54,7 +54,7 @@ public final class KeyStoreHelper {
             }
         } catch (Exception e) {
 //            throw new AssertionError(e);
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] seal error: ");
         }
         return null;
     }
@@ -71,7 +71,7 @@ public final class KeyStoreHelper {
                 return null;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] unseal error: ");
             //      throw new AssertionError(e);
         }
         return null;
@@ -96,7 +96,7 @@ public final class KeyStoreHelper {
 
             return keyGenerator.generateKey();
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] createKeyStoreEntry error: ");
 //            throw new AssertionError(e);
         }
         return null;
@@ -110,12 +110,12 @@ public final class KeyStoreHelper {
             // Attempt 1
             return getSecretKey(keyStore);
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] getKeyStoreEntry attempt1 error: ");
             try {
                 // Attempt 2
                 return getSecretKey(keyStore);
             } catch (Exception e2) {
-                e2.printStackTrace();
+                L.w(e2, () -> "[KeyStoreHelper] getKeyStoreEntry attempt2 error: ");
 //                throw new AssertionError(e2);
             }
         }
@@ -132,11 +132,11 @@ public final class KeyStoreHelper {
             return null;
         }
 //        catch (UnrecoverableKeyException e) {
-//            e.printStackTrace();
+//            L.w(e::toString);
 ////            throw e;
 //        }
         catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] getSecretKey error: ");
 //            throw new AssertionError(e);
         }
 
@@ -149,7 +149,7 @@ public final class KeyStoreHelper {
             keyStore.load(null);
             return keyStore;
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] getKeyStore error: ");
 //            throw new AssertionError(e);
         }
         return null;
@@ -164,7 +164,7 @@ public final class KeyStoreHelper {
             return ks.containsAlias(KEY_ALIAS) && ks.entryInstanceOf(KEY_ALIAS, KeyStore.SecretKeyEntry.class);
         } catch (Exception e) {
 //            throw new AssertionError(e);
-            e.printStackTrace();
+            L.w(e, () -> "[KeyStoreHelper] hasKeyStoreEntry error: ");
         }
         return false;
     }
@@ -198,7 +198,7 @@ public final class KeyStoreHelper {
                 return JsonUtils.toJson(this);
             } catch (IOException e) {
 //                throw new AssertionError(e);
-                e.printStackTrace();
+                L.w(e, () -> "[KeyStoreHelper.SealedData] serialize error: ");
             }
             return null;
         }
@@ -207,7 +207,7 @@ public final class KeyStoreHelper {
             try {
                 return JsonUtils.fromJson(value, SealedData.class);
             } catch (IOException e) {
-                e.printStackTrace();
+                L.w(e, () -> "[KeyStoreHelper.SealedData] fromString error: ");
 //                throw new AssertionError(e);
             }
             return null;

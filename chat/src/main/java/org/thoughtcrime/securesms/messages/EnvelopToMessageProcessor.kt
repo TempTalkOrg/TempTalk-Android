@@ -6,7 +6,6 @@ import difft.android.messageserialization.model.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,7 +17,7 @@ class EnvelopToMessageProcessor @Inject constructor(
     private val messageContentProcessor: MessageContentProcessor,
 ) {
 
-    suspend fun process(envelope: Envelope, tag: String) = withContext(Dispatchers.IO) {
+    suspend fun process(envelope: Envelope, tag: String) = withContext(Dispatchers.Default) {
         return@withContext try {
             envelope.takeIf {
                 envelopSizeNotExceedOneMillion(it, tag)
@@ -27,7 +26,6 @@ class EnvelopToMessageProcessor @Inject constructor(
             }?.processContentToMessage(tag)?.compatTimestamp()
         } catch (e: Exception) {
             L.e { "[Message][${tag}] decrypt&process message ${envelope.timestamp} exception -> ${e.stackTraceToString()}" }
-            FirebaseCrashlytics.getInstance().recordException(Exception("Message processing failed - timestamp: ${envelope.timestamp}, tag: $tag e:${e.stackTraceToString()}"))
             throw e
         }
     }

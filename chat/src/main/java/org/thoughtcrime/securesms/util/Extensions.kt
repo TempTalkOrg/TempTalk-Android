@@ -9,7 +9,7 @@ import util.ScreenLockUtil
 import java.io.File
 
 fun Context.viewFile(path: String) {
-    ScreenLockUtil.noNeedShowScreenLock = true
+    ScreenLockUtil.temporarilyDisabled = true
     val context = this
     try {
         val uri = FileProvider.getUriForFile(
@@ -26,14 +26,13 @@ fun Context.viewFile(path: String) {
         }
         context.startActivity(intent)
     } catch (e: Exception) {
-        L.w { "view File error:" + e.stackTraceToString() }
-        e.printStackTrace()
+        L.w(e) { "view File error:" }
         context.shareFile(path)
     }
 }
 
 fun Context.shareFile(path: String) {
-    ScreenLockUtil.noNeedShowScreenLock = true
+    ScreenLockUtil.temporarilyDisabled = true
     try {
         val uri = FileProvider.getUriForFile(
             this,
@@ -51,13 +50,12 @@ fun Context.shareFile(path: String) {
 
         startActivity(shareIntent)
     } catch (e: Exception) {
-        L.w { "share File error:" + e.stackTraceToString() }
-        e.printStackTrace()
+        L.w(e) { "share File error:" }
     }
 }
 
 fun Context.shareText(content: String?) {
-    ScreenLockUtil.noNeedShowScreenLock = true
+    ScreenLockUtil.temporarilyDisabled = true
     val context = this
     try {
         val sendIntent: Intent = Intent().apply {
@@ -67,7 +65,6 @@ fun Context.shareText(content: String?) {
         }
         context.startActivity(sendIntent)
     } catch (e: Exception) {
-        L.w { "share text error:" + e.stackTraceToString() }
-        e.printStackTrace()
+        L.w(e) { "share text error:" }
     }
 }

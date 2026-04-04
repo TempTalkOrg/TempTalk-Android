@@ -8,15 +8,31 @@
     <string name="settings_screen_lock">屏幕锁</string>
     <string name="settings_screen_lock_timeout">屏幕锁超时</string>
     <string name="settings_screen_lock_timeout_instant">立即</string>
-    <string name="settings_screen_lock_tips">使用密码解锁屏幕。密码可以不同于系统密码，因此如果有人设法得到了系统密码，但他仍然无法访问%s。此外，内容预览也会在app切换时被遮盖。</string>
-    <string name="settings_passcode_tips">请设置解锁码（4–10 位数字）。\n下次解锁%s时需输入此解锁码。</string>
+    <string name="settings_screen_lock_tips">使用密码或图案解锁屏幕。密码可以不同于系统密码，因此如果有人设法得到了系统密码，但他仍然无法访问Yelling。此外，内容预览也会在app切换时被遮盖。</string>
+    <string name="settings_pattern_lock">手势密码</string>
+    <string name="settings_passcode_lock">数字密码</string>
+    <string name="settings_pattern_show_path">手势轨迹</string>
+    <string name="settings_pattern_draw_title">创建手势密码</string>
+    <string name="settings_pattern_draw_subtitle">绘制解锁图案</string>
+    <string name="settings_pattern_confirm_title">确认手势密码</string>
+    <string name="settings_pattern_confirm_subtitle">请再次绘制图案</string>
+    <string name="settings_pattern_too_short">请至少连接4个点</string>
+    <string name="settings_pattern_not_match">两次绘制图案不一致，请重新绘制</string>
+    <string name="settings_pattern_success_title">手势密码已启用</string>
+    <string name="settings_passcode_success_title">数字密码已启用</string>
+    <string name="settings_pattern_disabled_title">手势密码已关闭</string>
+    <string name="settings_passcode_disabled_title">数字密码已关闭</string>
+    <string name="settings_passcode_tips">请设置数字密码（4–10 位数字）。\n下次解锁%1$s时需输入此数字密码。</string>
     <string name="settings_passcode_confirm_again">请再次输入以确认。</string>
     <string name="settings_passcode_confirm">确认</string>
     <string name="settings_passcode_error_tips">密码不匹配。</string>
-    <string name="settings_passcode_success">成功!</string>
-    <string name="settings_passcode_success_tips">请妥善保存此代码。</string>
-    <string name="settings_passcode_forget_tips">若遗失解锁码，必须退出账户或重新安装应用。</string>
-    <string name="settings_passcode_got_it">我明白了</string>
+    <string name="settings_passcode_forget_tips">如果忘记密码，可以尝试使用另一种解锁方式。若两者都忘记，则需要重新登录账号。</string>
+    <string name="settings_bind_account_prompt_title">绑定手机或邮箱</string>
+    <string name="settings_bind_account_prompt_message">下次忘记密码时可通过手机或邮箱找回。</string>
+    <string name="settings_bind_account_prompt_bind">立即绑定</string>
+    <string name="settings_bind_account_prompt_not_now">现在不要</string>
+    <string name="settings_bind_account_choice_title">绑定手机或邮箱</string>
+    <string name="settings_bind_account_choice_message">为避免忘记密码导致无法进入，请在开启屏幕锁前绑定邮箱或手机号。</string>
 
     <string name="settings_new_key_tips">%s您所有的数据包括消息都是使用此密钥加密的。</string>
     <string name="settings_new_key_time_info">🔐 %s\n</string>
@@ -24,13 +40,25 @@
     <string name="settings_new_key_time_format">yyyy-MM-dd HH:mm:ss</string>
 
     <string name="settings_about">关于</string>
-    <string name="settings_contact_ID">账号ID</string>
+    <string name="settings_contact_ID">联系人 ID</string>
+    <string name="settings_contact_ID_SWITCH">允许被搜索</string>
+    <string name="settings_contact_ID_status_success">设置成功</string>
+    <string name="settings_contact_ID_status_failed">设置失败</string>
+    <string name="settings_contact_ID_title">编辑联系人 ID</string>
+    <string name="settings_contact_ID_button_save">保存</string>
+    <string name="settings_contact_ID_input_hint">输入联系人 ID</string>
+    <string name="settings_contact_ID_valid_tip">· 长度为 6–20 个字符 \n· 须以字母或下划线开头 \n· 仅可使用字母、数字、下划线或减号 \n· 每 3 个月可修改一次</string>
+    <string name="settings_contact_ID_status_uid_limited">该 ID 每 3 个月只能修改一次。</string>
+    <string name="settings_contact_ID_status_uid_exists">该 ID 已被占用，请尝试其他，或使用 %s。</string>
+    <string name="settings_contact_ID_status_uid_invalid_1">必须以字母或“_”开头。请换一个再试。</string>
+    <string name="settings_contact_ID_status_uid_invalid_2">仅支持字母、数字、“_”或“-”。请换一个再试。</string>
+    <string name="settings_contact_ID_status_uid_length_invalid">长度需为 6–20 个字符。请换一个再试。</string>
     <string name="settings_information">信息</string>
     <string name="settings_version">版本</string>
     <string name="settings_build_version">构建版本</string>
     <string name="settings_build_time">构建时间</string>
     <string name="settings_check_new_version">检查新版本</string>
-    <string name="settings_obtain_desktop_version">获取桌面版本</string>
+    <string name="settings_obtain_desktop_version">网站</string>
 
     <string name="settings_version_is_latest">当前版本已是最新版本</string>
     <string name="settings_new_version_found">发现新版本</string>
@@ -72,7 +100,7 @@
     <string name="language_restart">重启</string>
 
     <string name="status_upgrade_downolad_failed">更新包下载失败</string>
-    <string name="status_upgrade_downloading">更新包后台下载中</string>
+    <string name="status_upgrade_downloading">更新下载中…</string>
     <string name="status_upgrade_install_failed">更新包安装失败</string>
     <string name="status_upgrade_filename_error">文件名包含非法字符</string>
     <string name="status_upgrade_download_success">更新包下载成功，是否安装？</string>

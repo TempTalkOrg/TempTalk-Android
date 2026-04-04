@@ -1,6 +1,4 @@
 /**
- * Copyright (C) 2011 Whisper Systems
- * Copyright (C) 2013 Open Whisper Systems
  * <p>
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,11 +19,9 @@ import androidx.annotation.NonNull;
 
 import com.difft.android.base.log.lumberjack.L;
 
-import util.Hex;
 import org.signal.libsignal.protocol.InvalidMessageException;
-import org.signal.libsignal.protocol.ecc.Curve;
 import org.signal.libsignal.protocol.ecc.ECPrivateKey;
-import org.thoughtcrime.securesms.util.Base64;
+import com.difft.android.base.utils.Base64;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -89,7 +85,7 @@ public class MasterCipher {
     public ECPrivateKey decryptKey(byte[] key)
             throws org.signal.libsignal.protocol.InvalidKeyException {
         try {
-            return Curve.decodePrivatePoint(decryptBytes(key));
+            return new ECPrivateKey(decryptBytes(key));
         } catch (InvalidMessageException ime) {
             throw new org.signal.libsignal.protocol.InvalidKeyException(ime);
         }
@@ -123,23 +119,6 @@ public class MasterCipher {
             return null;
         }
 
-    }
-
-    public boolean verifyMacFor(String content, byte[] theirMac) {
-        byte[] ourMac = getMacFor(content);
-        L.i(() -> "Our Mac: " + Hex.toString(ourMac));
-        L.i(() -> "Thr Mac: " + Hex.toString(theirMac));
-        return Arrays.equals(ourMac, theirMac);
-    }
-
-    public byte[] getMacFor(String content) {
-        L.w(() -> "Macing: " + content);
-        try {
-            Mac mac = getMac(masterSecret.getMacKey());
-            return mac.doFinal(content.getBytes());
-        } catch (GeneralSecurityException ike) {
-            throw new AssertionError(ike);
-        }
     }
 
     private byte[] decodeAndDecryptBytes(String body) throws InvalidMessageException {

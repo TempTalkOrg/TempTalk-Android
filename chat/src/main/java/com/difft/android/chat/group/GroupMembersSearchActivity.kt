@@ -1,24 +1,28 @@
 package com.difft.android.chat.group
 
-
 import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.utils.RxUtil
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import org.difft.app.database.members
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.databinding.ActivitySearchGroupMemberBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import io.reactivex.rxjava3.subjects.PublishSubject
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.GroupMemberContactorModel
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -37,11 +41,14 @@ class GroupMembersSearchActivity : BaseActivity() {
     @Inject
     lateinit var wcdb: WCDB
 
+    @Inject
+    lateinit var groupUtil: GroupUtil
+
     private val groupId: String by lazy {
         intent.getStringExtra("groupId") ?: ""
     }
 
-    private val searchSubject = PublishSubject.create<String>()
+    private val searchFlow = MutableSharedFlow<String>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val mSearchGroupMemberAdapter: SearchGroupMemberAdapter by lazy {
         object : SearchGroupMemberAdapter() {
@@ -56,26 +63,27 @@ class GroupMembersSearchActivity : BaseActivity() {
         initView()
     }
 
+    @OptIn(FlowPreview::class)
     private fun initView() {
         mBinding.ibBack.setOnClickListener { finish() }
 
         mBinding.edittextSearchInput.addTextChangedListener {
-            searchSubject.onNext(it.toString().trim())
+            searchFlow.tryEmit(it.toString().trim())
         }
 
-        searchSubject
-            .debounce(300, TimeUnit.MILLISECONDS)//防止频繁触发搜索
-            .distinctUntilChanged()
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                resetButtonClear()
-                if (it.isNotEmpty()) {
-                    search(it)
-                } else {
-                    showNoResults(getString(R.string.search_messages_default_tips))
+        lifecycleScope.launch {
+            searchFlow
+                .debounce(300)
+                .distinctUntilChanged()
+                .collect {
+                    resetButtonClear()
+                    if (it.isNotEmpty()) {
+                        search(it)
+                    } else {
+                        showNoResults(getString(R.string.search_messages_default_tips))
+                    }
                 }
-            }, { it.printStackTrace() })
+        }
 
         mBinding.recyclerviewChatHistory.apply {
             this.layoutManager = LinearLayoutManager(this@GroupMembersSearchActivity)
@@ -89,33 +97,26 @@ class GroupMembersSearchActivity : BaseActivity() {
     }
 
     private fun search(key: String) {
-        GroupUtil.getSingleGroupInfo(this, groupId)
-            .map {
-                if (it.isPresent) {
-                    val result = it.get().members.filter { member ->
-                        member.displayName?.contains(key, true) == true ||
-                                member.remark?.contains(key, true) == true ||
-                                member.id?.contains(key, true) == true
-                    }
-                    result
-                } else {
-                    emptyList()
-                }
-            }
-            .compose(RxUtil.getSchedulerComposer())
-            .to(RxUtil.autoDispose(this))
-            .subscribe({
-                if (it.isNullOrEmpty()) {
+        lifecycleScope.launch {
+            try {
+                val group = groupUtil.getSingleGroupInfo(groupId)
+                val results = group?.members?.filter { member ->
+                    member.displayName?.contains(key, true) == true ||
+                            member.remark?.contains(key, true) == true ||
+                            member.id?.contains(key, true) == true
+                } ?: emptyList()
+                if (results.isEmpty()) {
                     showNoResults(getString(R.string.search_no_results_found))
                 } else {
                     mBinding.recyclerviewChatHistory.visibility = View.VISIBLE
-                    mSearchGroupMemberAdapter.submitList(it)
+                    mSearchGroupMemberAdapter.submitList(results)
                     mBinding.tvTips.visibility = View.GONE
                 }
-            }, {
+            } catch (e: Exception) {
                 showNoResults(getString(R.string.search_no_results_found))
-                it.printStackTrace()
-            })
+                L.w { "[GroupMembersSearchActivity] search error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     private fun resetButtonClear() {

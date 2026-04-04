@@ -1,6 +1,4 @@
-/*
- * Copyright (C) https://github.com/sannies/mp4parser/blob/master/LICENSE
- *
+/* *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -48,7 +46,7 @@ import org.mp4parser.streaming.output.mp4.DefaultBoxes;
 import org.mp4parser.tools.Mp4Arrays;
 import org.mp4parser.tools.Mp4Math;
 import org.mp4parser.tools.Path;
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -285,14 +283,15 @@ final class Mp4Writer extends DefaultBoxes implements SampleSink {
         while (!(tracksFragmentQueue = chunkBuffers.get((currentStreamingTrack = this.source.get(0)))).isEmpty()) {
           final ChunkContainer currentFragmentContainer = tracksFragmentQueue.remove();
           writeChunkContainer(currentFragmentContainer);
-          Log.d(TAG, "write chunk " + currentStreamingTrack.getHandler() + ". duration " + (double) currentFragmentContainer.duration / currentStreamingTrack.getTimescale());
+          final StreamingTrack logTrack = currentStreamingTrack;
+          L.d(() -> TAG + "write chunk " + logTrack.getHandler() + ". duration " + (double) currentFragmentContainer.duration / logTrack.getTimescale());
           final long ts = Objects.requireNonNull(nextChunkWriteStartTime.get(currentStreamingTrack)) + currentFragmentContainer.duration;
           nextChunkWriteStartTime.put(currentStreamingTrack, ts);
-          Log.d(TAG, currentStreamingTrack.getHandler() + " track advanced to " + (double) ts / currentStreamingTrack.getTimescale());
+          L.d(() -> TAG + logTrack.getHandler() + " track advanced to " + (double) ts / logTrack.getTimescale());
           sortTracks();
         }
       } else {
-        Log.d(TAG, streamingTrack.getHandler() + " track delayed, queue size is " + chunkQueue.size());
+        L.d(() -> TAG + streamingTrack.getHandler() + " track delayed, queue size is " + chunkQueue.size());
       }
     }
 
@@ -375,7 +374,7 @@ final class Mp4Writer extends DefaultBoxes implements SampleSink {
 
     sampleNumbers.put(streamingTrack, sampleNumber);
     samples.clear();
-    Log.d(TAG, "chunk container created for " + streamingTrack.getHandler() + ". mdat size: " + cc.mdat.size + ". chunk duration is " + (double) cc.duration / streamingTrack.getTimescale());
+    L.d(() -> TAG + "chunk container created for " + streamingTrack.getHandler() + ". mdat size: " + cc.mdat.size + ". chunk duration is " + (double) cc.duration / streamingTrack.getTimescale());
     return cc;
   }
 

@@ -6,12 +6,14 @@ import android.os.Bundle
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -37,6 +39,8 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.NotificationContentDisplayType
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,7 +64,9 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            DifftTheme(useSecondaryBackground = true) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -73,18 +79,12 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
         }
 
         Column(
-            Modifier.Companion
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize().systemBarsPadding()
         ) {
-            ToolBar()
+            TitleBar(
+                titleText = getString(com.difft.android.chat.R.string.notification_content),
+                onBackClick = { finish() }
+            )
 
             ItemViews(currentType) { newType ->
                 // 更新用户设置
@@ -96,67 +96,6 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
                 // 返回上一页
                 finish()
             }
-        }
-    }
-
-    @Preview
-    @Composable
-    private fun ToolBar() {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.Companion.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier.Companion
-                .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            R.color.bg1
-                        )
-                    )
-                )
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier.Companion
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackPressedDispatcher.onBackPressed()
-                    },
-                imageVector = ImageVector.Companion.vectorResource(id = com.difft.android.chat.R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = getString(com.difft.android.chat.R.string.notification_content),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        LocalContext.current, R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.Companion.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
         }
     }
 

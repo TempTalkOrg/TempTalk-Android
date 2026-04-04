@@ -14,16 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import com.difft.android.call.ScaleType
-import com.difft.android.call.VideoItemTrackSelector
-import com.difft.android.call.ViewType
+import com.difft.android.base.utils.WindowSizeClassUtil
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -33,17 +33,25 @@ fun ScreenSharingView(
     room: Room,
     participant: Participant,
     modifier: Modifier = Modifier,
+    reconnectCount: Int = 0,
 ){
     val context = LocalContext.current
     val activity = context.getActivity() ?: return
+    val coroutineScope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
+        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
         hideSystemBars(activity.window)
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         room.localParticipant.deviceRotation = 90
         onDispose {
+            WindowCompat.setDecorFitsSystemWindows(activity.window, true)
             showSystemBars(activity.window)
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            if (!WindowSizeClassUtil.shouldUseDualPaneLayout(activity)) {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
             room.localParticipant.deviceRotation = null
         }
     }
@@ -55,13 +63,14 @@ fun ScreenSharingView(
         contentAlignment = Alignment.Center )
     {
         VideoItemTrackSelector(
+            coroutineScope = coroutineScope,
             room = room,
             participant = participant,
-            // Specifies this view should display screen sharing content
             sourceType = Track.Source.SCREEN_SHARE,
             scaleType = ScaleType.FitInside,
-            viewType = ViewType.Surface,
+            viewType = ViewType.ScreenShare,
             draggable = true,
+            reconnectCount = reconnectCount,
         )
 
     }
@@ -94,7 +103,8 @@ fun showSystemBars(window: Window) {
             controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     } else {
-        @Suppress("DEPRECATION") window.decorView.systemUiVisibility =
-            (View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
     }
 }

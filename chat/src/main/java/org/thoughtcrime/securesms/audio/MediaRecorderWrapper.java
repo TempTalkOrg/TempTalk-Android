@@ -43,7 +43,7 @@ public class MediaRecorderWrapper implements Recorder {
             recorder.prepare();
             recorder.start();
         } catch (RuntimeException e) {
-            L.w(() -> "Unable to start recording" + e);
+            L.w(e, () -> "Unable to start recording");
             recorder.release();
             recorder = null;
             StreamUtil.close(outputFileDescriptor);

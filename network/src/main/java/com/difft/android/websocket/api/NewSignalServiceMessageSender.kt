@@ -7,8 +7,8 @@ import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.messages.SendMessageResult
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
 import com.difft.android.websocket.api.push.exceptions.UnregisteredUserException
-import com.difft.android.websocket.api.services.MessagingService
 import com.difft.android.websocket.api.services.NewMessagingService
+import com.difft.android.websocket.internal.ServiceResponseProcessor
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor.Companion.MESSAGE_CURRENT_VERSION
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor.Companion.MESSAGE_MINIMUM_SUPPORTED_VERSION
@@ -16,13 +16,13 @@ import com.difft.android.websocket.api.util.RustEncryptionException
 import com.difft.android.websocket.api.util.SignalServiceContentCreator
 import com.difft.android.websocket.api.util.toOutgoingReadPositionEntity
 import com.difft.android.websocket.api.websocket.WebSocketUnavailableException
-import com.difft.android.websocket.internal.configuration.SignalServiceConfiguration
+import com.difft.android.websocket.internal.configuration.ServiceConfig
 import com.difft.android.websocket.internal.push.NewOutgoingPushMessage
 import com.difft.android.websocket.internal.push.PushServiceSocket
 import com.difft.android.websocket.internal.push.exceptions.InvalidUnidentifiedAccessHeaderException
 import com.difft.android.websocket.internal.push.exceptions.MismatchedDevicesException
 import com.difft.android.websocket.internal.push.exceptions.StaleDevicesException
-import com.difft.android.websocket.util.Base64
+import com.difft.android.base.utils.Base64
 import com.google.protobuf.ByteString
 import difft.android.messageserialization.For
 import org.signal.libsignal.protocol.InvalidKeyException
@@ -43,9 +43,9 @@ import javax.inject.Singleton
 
 @Singleton
 class NewSignalServiceMessageSender @Inject constructor(
-    urls: SignalServiceConfiguration,
+    serviceConfig: ServiceConfig,
     private val messagingService: NewMessagingService,
-    @Named("message_sender_max_envelope_size")
+    @param:Named("message_sender_max_envelope_size")
     private val maxEnvelopeSize: Long,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val conversationManager: ConversationManager,
@@ -55,7 +55,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         private const val RETRY_COUNT = 3
     }
 
-    private val socket = PushServiceSocket(urls, true)
+    private val socket = PushServiceSocket(serviceConfig, true)
     private val localAddress: For = For.Account(globalServices.myId)
     private val contentCreator: SignalServiceContentCreator = SignalServiceContentCreator(maxEnvelopeSize)
 
@@ -69,7 +69,7 @@ class NewSignalServiceMessageSender @Inject constructor(
      * @throws org.signal.libsignal.protocol.UntrustedIdentityException
      * @throws IOException
      */
-    fun sendDataMessage(
+    suspend fun sendDataMessage(
         recipient: For,
         room: For,
         message: SignalServiceProtos.DataMessage,
@@ -80,6 +80,17 @@ class NewSignalServiceMessageSender @Inject constructor(
         val timestamp = message.timestamp
         val content = contentCreator.createFrom(message)
 
+        // 1v1 messages (including memo): generate syncContent encrypted with own public key for server to distribute to other devices
+        val syncContent: String? = if (recipient is For.Account) {
+            if (conversationManager.hasPublicKeyInfoData(room).not()) {
+                L.i { "[Message] generateSyncContent: updating public key info for room ${room.id}" }
+                conversationManager.updatePublicKeyInfoData(room)
+            }
+            generateSyncContent(content, room, recipient.id, timestamp)
+        } else {
+            null
+        }
+
         val result: SendMessageResult = sendMessage(
             recipient,
             room,
@@ -88,38 +99,76 @@ class NewSignalServiceMessageSender @Inject constructor(
             false,
             Optional.empty(),
             Optional.empty(),
-            notification
+            notification,
+            syncContent
         )
         L.i { "[Message] sendDataMessage result is Success: ${result.success}" }
-        if (result.success != null && result.success.isNeedsSync) {
-            L.i { "[Message] sendDataMessage need also send sync message, now start send sync message" }
-            val syncMessageContent = createMultiDeviceSentTranscriptContent(
-                content,
-                Optional.of(recipient.id),
-                timestamp,
-                result.success.systemShowTimestamp,
-                result.success.sequenceId
-            )
-            val result1 = sendMessage(
-                localAddress,
-                room,
-                timestamp,
-                syncMessageContent,
-                false,
-                Optional.empty(),
-                Optional.empty(),
-                notification
-            )
-            L.i { "[Message] sendDataMessage send sync message is Success: ${result1.isSuccess()}" }
-            if (!result1.isSuccess()) {
-                throw IOException("send sync message error")
-            }
-        }
+        // v4 API: server handles sync for both 1v1 and group messages
         return result
     }
 
+    /**
+     * Generate syncContent: encrypt sync message content with own public key.
+     * This content is sent with v4 API, server distributes it to other devices.
+     */
+    private suspend fun generateSyncContent(
+        content: Content,
+        room: For,
+        recipientId: String,
+        timestamp: Long
+    ): String? {
+        return try {
+            val syncMessageContent = createMultiDeviceSentTranscriptContent(
+                content,
+                Optional.of(recipientId),
+                timestamp
+            )
+
+            // Get own public key from room's public key list (1v1 room contains [peer, self] keys)
+            val publicKeyInfos = conversationManager.getPublicKeyInfos(room)
+            val myPublicKey = publicKeyInfos.firstOrNull { it.uid == localAddress.id }?.identityKey
+
+            if (myPublicKey.isNullOrBlank()) {
+                L.w { "[Message] generateSyncContent: my public key not found in room ${room.id}, skip syncContent" }
+                return null
+            }
+
+            val encryptedMessage = messageEncryptor.encryptOneToOneMessage(
+                syncMessageContent.toByteArray(),
+                myPublicKey
+            )
+
+            val encryptedMessageContent = encryptContent {
+                version = MESSAGE_CURRENT_VERSION
+                cipherText = ByteString.copyFrom(encryptedMessage.cipherText)
+                eKey = ByteString.copyFrom(encryptedMessage.eKey)
+                identityKey = ByteString.copyFrom(encryptedMessage.identityKey)
+                signedEKey = ByteString.copyFrom(encryptedMessage.signedEKey)
+            }
+
+            val syncContentString = Base64.encodeBytes(
+                byteArrayOf(
+                    intsToByteHigh(
+                        MESSAGE_CURRENT_VERSION,
+                        MESSAGE_MINIMUM_SUPPORTED_VERSION
+                    )
+                ) + encryptedMessageContent.toByteArray()
+            )
+
+            L.i { "[Message] generateSyncContent: successfully generated syncContent for room ${room.id}" }
+            syncContentString
+        } catch (e: Exception) {
+            L.e { "[Message] generateSyncContent failed: ${e.stackTraceToString()}" }
+            null
+        }
+    }
+
     private fun createMultiDeviceSentTranscriptContent(
-        content: Content?, recipient: Optional<String>, timestamp: Long, serverTimestamp: Long, sequenceId: Long
+        content: Content?,
+        recipient: Optional<String>,
+        timestamp: Long,
+        serverTimestamp: Long? = null,
+        sequenceId: Long? = null
     ): Content {
         val dataMessage =
             if (content != null && content.hasDataMessage()) content.dataMessage else null
@@ -127,8 +176,8 @@ class NewSignalServiceMessageSender @Inject constructor(
             syncMessage = syncMessage {
                 sent = SyncMessageKt.sent {
                     this.timestamp = timestamp
-                    this.serverTimestamp = serverTimestamp
-                    this.sequenceId = sequenceId
+                    serverTimestamp?.let { this.serverTimestamp = it }
+                    sequenceId?.let { this.sequenceId = it }
                     if (recipient.isPresent) {
                         this.destination = recipient.get()
                     }
@@ -154,7 +203,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         }
     }
 
-    private fun sendMessage(
+    private suspend fun sendMessage(
         recipient: For,
         room: For,
         timestamp: Long,
@@ -163,6 +212,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         readPositionEntity: Optional<NewOutgoingPushMessage.ReadPositionEntity>,
         realSourceEntity: Optional<NewOutgoingPushMessage.RealSourceEntity>,
         notification: NewOutgoingPushMessage.Notification?,
+        syncContent: String? = null,  // 1v1消息的同步内容（v4接口使用）
     ): SendMessageResult {
         val startTime = System.currentTimeMillis()
 
@@ -176,21 +226,22 @@ class NewSignalServiceMessageSender @Inject constructor(
                     readReceipt,
                     readPositionEntity.orElse(null),
                     realSourceEntity.orElse(null),
+                    syncContent,  // 传递 syncContent
                 )
                 try {
                     val response = if (recipient is For.Group) {
-                        MessagingService.SendResponseProcessor(
+                        ServiceResponseProcessor.DefaultProcessor(
                             messagingService.sendToGroup(
                                 newOutgoingMessage,
                                 recipient.id,
-                            ).blockingGet()
+                            )
                         ).resultOrThrow
                     } else {
-                        MessagingService.SendResponseProcessor(
+                        ServiceResponseProcessor.DefaultProcessor(
                             messagingService.send(
                                 newOutgoingMessage,
                                 recipient.id,
-                            ).blockingGet()
+                            )
                         ).resultOrThrow
                     }
                     if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
@@ -199,6 +250,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                         L.w { error }
                         conversationManager.updateConversationMemberData(room)
                         conversationManager.updatePublicKeyInfoData(room)
+                        continue // Retry with updated key info
                     } else {
                         return SendMessageResult.success(
                             recipient.id,
@@ -210,21 +262,21 @@ class NewSignalServiceMessageSender @Inject constructor(
                         )
                     }
                 } catch (e: InvalidUnidentifiedAccessHeaderException) {
-                    L.e { "[Message] [sendMessage][$timestamp] InvalidUnidentifiedAccessHeaderException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] InvalidUnidentifiedAccessHeaderException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: UnregisteredUserException) {
-                    L.e { "[Message] [sendMessage][$timestamp] UnregisteredUserException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] UnregisteredUserException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: MismatchedDevicesException) {
-                    L.e { "[Message] [sendMessage][$timestamp] MismatchedDevicesException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] MismatchedDevicesException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: StaleDevicesException) {
-                    L.e { "[Message] [sendMessage][$timestamp] StaleDevicesException (${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] StaleDevicesException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: WebSocketUnavailableException) {
-                    L.e { "[Message] [sendMessage][$timestamp] Pipe unavailable, falling back... (${e.javaClass.simpleName}: ${e.message})" }
+                    L.e { "[Message] [sendMessage][$timestamp] Pipe unavailable, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
                 } catch (e: IOException) {
-                    L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.message})" }
+                    L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
                 }
                 val response = socket.sendMessageNew(newOutgoingMessage, recipient)
                 if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
@@ -233,6 +285,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                     L.w { error }
                     conversationManager.updateConversationMemberData(room)
                     conversationManager.updatePublicKeyInfoData(room)
+                    continue // Retry with updated key info
                 } else {
                     return SendMessageResult.success(
                         recipient.id,
@@ -244,24 +297,35 @@ class NewSignalServiceMessageSender @Inject constructor(
                     )
                 }
             } catch (afe: NonSuccessfulResponseCodeException) {
-                L.e { "[Message] [sendMessage][$timestamp] NonSuccessfulResponseCodeException. (${afe.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] NonSuccessfulResponseCodeException. (${afe.stackTraceToString()})" }
                 throw afe
             } catch (ike: InvalidKeyException) {
-                L.e { "[Message] [sendMessage][$timestamp] Invalid key exception. (${ike.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] Invalid key exception. (${ike.stackTraceToString()})" }
             } catch (mde: MismatchedDevicesException) {
-                L.e { "[Message] [sendMessage][$timestamp] Handling mismatched devices.(${mde.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] Handling mismatched devices.(${mde.stackTraceToString()})" }
             } catch (ste: StaleDevicesException) {
-                L.e { "[Message] [sendMessage][$timestamp] Handling stale devices.(${ste.message})" }
+                L.e { "[Message] [sendMessage][$timestamp] Handling stale devices.(${ste.stackTraceToString()})" }
             } catch (re: RustEncryptionException) {
-                val error = "[Message] [sendMessage][$timestamp] Rust encryption exception. (${re.message})"
-                L.e { error }
+                val errorMessage = re.stackTraceToString()
+                val isKeyLengthError = errorMessage.contains("KeyDataLengthException", ignoreCase = true)
+
+                if (isKeyLengthError) {
+                    L.e { "[Message] [sendMessage][$timestamp] Rust encryption key length exception. (${errorMessage})" }
+                    L.w { "[Message] [sendMessage][$timestamp] Forcing public key update (attempt ${i + 1}/$RETRY_COUNT)" }
+
+                    // Force update public key data
+                    conversationManager.updateConversationMemberData(room)
+                    conversationManager.updatePublicKeyInfoData(room)
+                } else {
+                    L.e { "[Message] [sendMessage][$timestamp] Rust encryption exception. (${errorMessage})" }
+                }
             }
         }
 
         throw IOException("Failed to resolve conflicts after $RETRY_COUNT attempts!")
     }
 
-    private fun createNewOutgoingPushMessage(
+    private suspend fun createNewOutgoingPushMessage(
         recipient: For,
         room: For,
         content: Content,
@@ -269,6 +333,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         readReceipt: Boolean,
         readPositionEntity: NewOutgoingPushMessage.ReadPositionEntity?,
         realSourceEntity: NewOutgoingPushMessage.RealSourceEntity?,
+        syncContent: String? = null,  // 1v1消息的同步内容（v4接口使用）
     ): NewOutgoingPushMessage {
         if (conversationManager.hasPublicKeyInfoData(room).not()) {
             if (!conversationManager.updatePublicKeyInfoData(room)) {
@@ -278,7 +343,19 @@ class NewSignalServiceMessageSender @Inject constructor(
             L.i { "[Message] public key info is ready" }
         }
         val publicKeyInfos: List<PublicKeyInfo> = conversationManager.getPublicKeyInfos(room)
-        val contentString = if (messageEncryptor.enableLegacyContent()) Base64.encodeBytes(content.toByteArray()) else null
+            .filter { info ->
+                val isValid = info.identityKey.isNotBlank()
+                if (!isValid) {
+                    L.w { "[Message] Filtering out PublicKeyInfo with empty identityKey for uid: ${info.uid}" }
+                }
+                isValid
+            }
+
+        if (publicKeyInfos.isEmpty()) {
+            val error = "No valid public key info available after filtering (all identityKeys were empty)"
+            L.e { error }
+            throw IOException(error)
+        }
 
         val msgType = getMsgType(content)
 
@@ -320,7 +397,7 @@ class NewSignalServiceMessageSender @Inject constructor(
             else if (content.dataMessage.contactCount > 0) DetailMessageType.Contact
             else if (content.dataMessage.hasRecall()) DetailMessageType.Recall
             else if (content.dataMessage.hasReaction()) DetailMessageType.Reaction
-            else if (content.dataMessage.hasCard()) DetailMessageType.Card
+            else if (content.dataMessage.hasScreenShot()) DetailMessageType.Screenshot
             else if (content.dataMessage.messageMode == SignalServiceProtos.Mode.CONFIDENTIAL) DetailMessageType.Confidential
             else DetailMessageType.Unknown
         } else DetailMessageType.Unknown
@@ -387,18 +464,31 @@ class NewSignalServiceMessageSender @Inject constructor(
             if (room is For.Account) room.id else null,
             if (room is For.Group) room.id else null,
         )
+
+        L.i {
+            "[Message] Creating outgoing push message. " +
+                    "timestamp=$timestamp, " +
+                    "msgType=$msgType (${Envelope.MsgType.forNumber(msgType)?.name ?: "UNKNOWN"}), " +
+                    "detailMessageType=${detailMessageType.value} (${detailMessageType.name}), " +
+                    "recipientCount=${recipients.size}, " +
+                    "conversationType=${if (room is For.Group) "group" else "dm"}, " +
+                    "hasSyncContent=${syncContent != null}"
+        }
+
         return NewOutgoingPushMessage.Builder()
             .type(Envelope.Type.ENCRYPTEDTEXT_VALUE)
             .msgType(msgType)
             .detailMessageType(detailMessageType.value)
-            .legacyContent(contentString)
             .content(encryptContentString)
             .recipients(recipients)
             .realSource(realSourceEntity)
             .conversation(conversation)
             .readReceipt(readReceipt)
             .readPositions(readPositionEntity?.let { listOf() } ?: emptyList())
-            .timestamp(timestamp).notification(notification).build()
+            .timestamp(timestamp)
+            .notification(notification)
+            .syncContent(syncContent)  // 1v1消息的同步内容（v4接口使用）
+            .build()
     }
 
     private fun getMsgType(content: Content): Int {
@@ -434,30 +524,41 @@ class NewSignalServiceMessageSender @Inject constructor(
      * @param recipient The sender of the received message you're acknowledging.
      * @param message   The read receipt to deliver.
      * @param group if the receipt is for a group message. then this value is not null, then used in later flow
+     * @param sendReceiptToSender Whether to send read receipt to the message sender
+     * @param sendSyncToSelf Whether to send sync message to self's other devices
      */
-    fun sendReceipt(
+    suspend fun sendReceipt(
         recipient: For,
         room: For,
         message: ReceiptMessage,
         readMessages: List<SyncMessage.Read>,
-    ): SendMessageResult {
-        val content: Content = createReceiptContent(message)
-
+        sendReceiptToSender: Boolean = true,
+        sendSyncToSelf: Boolean = true
+    ) {
         val sendTimeStamp = System.currentTimeMillis()
-        val result = sendMessage(
-            recipient,
-            room,
-            sendTimeStamp,
-            content,
-            message.type == ReceiptMessage.Type.READ,
-            Optional.ofNullable(message.readPosition.toOutgoingReadPositionEntity()),
-            Optional.ofNullable(null),
-            null
-        )
-        L.i { "[Message] sendDataMessage result success is ${result.isSuccess()}" }
-        if (result.success != null) {
+
+        // 1. 发送已读回执给对方（如果需要）
+        if (sendReceiptToSender) {
+            val content: Content = createReceiptContent(message)
+            val receiptResult = sendMessage(
+                recipient,
+                room,
+                sendTimeStamp,
+                content,
+                message.type == ReceiptMessage.Type.READ,
+                Optional.ofNullable(message.readPosition.toOutgoingReadPositionEntity()),
+                Optional.ofNullable(null),
+                null
+            )
+            L.i { "[Message] sendReceiptToSender result success is ${receiptResult.isSuccess()}" }
+        } else {
+            L.i { "[Message] Skip sending read receipt to sender" }
+        }
+
+        // 2. 发送同步消息给自己的其他设备（如果需要）
+        if (sendSyncToSelf) {
             val syncMessageContent = createMultiDeviceReadContent(readMessages)
-            val result1 = sendMessage(
+            val syncResult = sendMessage(
                 localAddress,
                 room,
                 sendTimeStamp,
@@ -467,9 +568,10 @@ class NewSignalServiceMessageSender @Inject constructor(
                 Optional.ofNullable(null),
                 null
             )
-            L.i { "[Message] sendSyncMessage result is " + result1.isSuccess() }
+            L.i { "[Message] sendSyncToSelf result is " + syncResult.isSuccess() }
+        } else {
+            L.i { "[Message] Skip sending sync message to self" }
         }
-        return result
     }
 
     private fun createReceiptContent(message: ReceiptMessage): Content {
@@ -489,7 +591,7 @@ class NewSignalServiceMessageSender @Inject constructor(
         return ((highValue shl 4 or lowValue) and 0xFF).toByte()
     }
 
-    fun sendClientNotifyMessage(
+    suspend fun sendClientNotifyMessage(
         recipient: For,
         room: For,
         message: SignalServiceProtos.NotifyMessage

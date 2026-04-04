@@ -6,7 +6,7 @@ import android.util.AttributeSet
 import android.view.View
 import android.widget.FrameLayout
 import com.difft.android.chat.R
-import util.logging.Log.tag
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.util.createDefaultCubicBezierInterpolator
 
 /**
@@ -53,6 +53,6 @@ class VideoEditorPlayButtonLayout @JvmOverloads constructor(context: Context, at
 
     companion object {
         @Suppress("unused")
-        private val TAG = tag(VideoEditorPlayButtonLayout::class.java)
+        private val TAG = L.tag(VideoEditorPlayButtonLayout::class.java)
     }
 }

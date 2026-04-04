@@ -5,7 +5,7 @@
 
 package util;
 
-import util.logging.Log;
+import com.difft.android.base.log.lumberjack.L;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
@@ -19,7 +19,7 @@ import java.io.OutputStream;
  */
 public final class StreamUtil {
 
-  private static final String TAG = Log.tag(StreamUtil.class);
+  private static final String TAG = "StreamUtil";
 
   private StreamUtil() {}
 
@@ -29,7 +29,7 @@ public final class StreamUtil {
     try {
       closeable.close();
     } catch (IOException e) {
-      Log.w(TAG, e);
+      L.w(e, () -> TAG);
     }
   }
 

@@ -15,7 +15,6 @@ import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ProfileRequestBody
 import com.difft.android.network.requests.SignInRequestBody
-import io.reactivex.rxjava3.core.Single
 import com.difft.android.websocket.internal.push.PreKeyState
 import com.difft.android.websocket.internal.util.JsonUtil
 import javax.inject.Inject
@@ -33,40 +32,40 @@ class LoginRepo @Inject constructor() {
         httpClient.getService(LoginService::class.java)
     }
 
-    fun getNonceInfo(): Single<BaseResponse<NonceInfo>> =
+    suspend fun getNonceInfo(): BaseResponse<NonceInfo> =
         loginService.getNonceInfo()
 
-    fun generateNonceCode(nonceInfoRequest: NonceInfoRequestBody): Single<BaseResponse<GenerateNonceCodeResponse>> =
+    suspend fun generateNonceCode(nonceInfoRequest: NonceInfoRequestBody): BaseResponse<GenerateNonceCodeResponse> =
         loginService.generateNonceCode(nonceInfoRequest)
 
-    fun verifyInvitationCode(code: String): Single<BaseResponse<CodeResponse>> =
+    suspend fun verifyInvitationCode(code: String): BaseResponse<CodeResponse> =
         loginService.verifyInvitationCode(code)
 
-    fun signIn(vcode: String, basicAuth: String, signalingKey: String, name: String, registrationId: Int): Single<BaseResponse<Any>> =
+    suspend fun signIn(vcode: String, basicAuth: String, signalingKey: String, name: String, registrationId: Int): BaseResponse<Any> =
         loginService.signin(vcode, basicAuth, SignInRequestBody(signalingKey, name, true, registrationId))
 
-    fun verifyEmail(email: String): Single<BaseResponse<Any>> =
+    suspend fun verifyEmail(email: String): BaseResponse<Any> =
         loginService.verifyEmail(mapOf("email" to email))
 
-    fun verifyEmailCode(email: String, emailCode: String): Single<BaseResponse<EmailVerifyData>> =
+    suspend fun verifyEmailCode(email: String, emailCode: String): BaseResponse<EmailVerifyData> =
         loginService.verifyEmailCode(mapOf("email" to email, "verificationCode" to emailCode))
 
-    fun verifyPhone(phone: String): Single<BaseResponse<Any>> =
+    suspend fun verifyPhone(phone: String): BaseResponse<Any> =
         loginService.verifyPhone(mapOf("phone" to phone))
 
-    fun verifyPhoneCode(phone: String, phoneCode: String): Single<BaseResponse<EmailVerifyData>> =
+    suspend fun verifyPhoneCode(phone: String, phoneCode: String): BaseResponse<EmailVerifyData> =
         loginService.verifyPhoneCode(mapOf("phone" to phone, "verificationCode" to phoneCode))
 
-    fun registerPreKeys(basicAuth: String, preKeyState: PreKeyState): Single<BaseResponse<Any>> =
+    suspend fun registerPreKeys(basicAuth: String, preKeyState: PreKeyState): BaseResponse<Any> =
         loginService.registerPreKeys(basicAuth, JsonUtil.toJson(preKeyState))
 
-    fun renewIdentityKey(token: String, body: String): Single<BaseResponse<Any>> = loginService.resetIdentity(token, body)
+    suspend fun renewIdentityKey(token: String, body: String): BaseResponse<Any> = loginService.resetIdentity(token, body)
 
     private val httpService by lazy {
         httpClient.getService(HttpService::class.java)
     }
 
-    fun setProfile(): Single<BaseResponse<Any>> {
+    suspend fun setProfile(): BaseResponse<Any> {
         return httpService.fetchSetProfile(
             SecureSharedPrefsUtil.getBasicAuth(),
             ProfileRequestBody(

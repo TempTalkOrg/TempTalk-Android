@@ -1,6 +1,5 @@
 package org.thoughtcrime.securesms.jobs
 
-import android.os.Bundle
 import android.text.TextUtils
 import android.util.Base64
 import com.difft.android.PushTextSendJobFactory
@@ -8,41 +7,21 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.MD5Utils
+import com.difft.android.base.utils.RecallResultTracker
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.SecureSharedPrefsUtil
-import org.difft.app.database.delete
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.members
-import org.difft.app.database.wcdb
 import com.difft.android.chat.common.SendType
-import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.fileshare.UploadInfoReq
 import com.difft.android.chat.group.GroupUtil
-import difft.android.messageserialization.For
-import difft.android.messageserialization.model.AttachmentStatus
-import difft.android.messageserialization.model.MENTIONS_ALL_ID
-import difft.android.messageserialization.model.TextMessage
-import difft.android.messageserialization.model.isAttachmentMessage
-import difft.android.messageserialization.model.isAudioMessage
+import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.network.requests.ProgressListener
 import com.difft.android.network.requests.ProgressRequestBody
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
-import okhttp3.RequestBody
-import org.difft.app.database.models.DBGroupMemberContactorModel
-import org.difft.app.database.models.DBMessageModel
-import util.FileUtils
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobmanager.Data
-import org.thoughtcrime.securesms.jobmanager.Job
-import org.thoughtcrime.securesms.util.DataMessageCreator
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
@@ -50,12 +29,41 @@ import com.difft.android.websocket.internal.push.NotificationType
 import com.difft.android.websocket.internal.push.OutgoingPushMessage
 import com.difft.android.websocket.internal.push.OutgoingPushMessage.PassThrough
 import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.tencent.wcdb.base.Value
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+import difft.android.messageserialization.For
+import difft.android.messageserialization.model.Attachment
+import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.MENTIONS_ALL_ID
+import difft.android.messageserialization.model.TextMessage
+import difft.android.messageserialization.model.isAttachmentMessage
+import difft.android.messageserialization.model.isAudioMessage
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import okhttp3.RequestBody
+import org.difft.app.database.delete
+import org.difft.app.database.members
+import org.difft.app.database.models.DBAttachmentModel
+import org.difft.app.database.models.DBGroupMemberContactorModel
+import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.wcdb
+import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
+import org.thoughtcrime.securesms.jobmanager.Data
+import org.thoughtcrime.securesms.jobmanager.Job
+import org.thoughtcrime.securesms.util.DataMessageCreator
+import util.FileUtils
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.security.MessageDigest
-import java.util.Random
+import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
@@ -74,6 +82,9 @@ class PushTextSendJob @AssistedInject constructor(
     private val gson: Gson,
     private val newSignalServiceMessageSender: NewSignalServiceMessageSender,
     private val dataMessageCreator: DataMessageCreator,
+    private val localMessageCreator: LocalMessageCreator,
+    private val messageStore: difft.android.messageserialization.MessageStore,
+    private val groupUtil: GroupUtil,
 ) : PushSendJob(parameters ?: buildParameters(textMessage.forWhat, textMessage.isAttachmentMessage())) {
 
     @dagger.hilt.EntryPoint
@@ -111,10 +122,10 @@ class PushTextSendJob @AssistedInject constructor(
                 textMessage.receiverIds = globalServices.gson.toJson(receiverIds)
             }
         }
-        updateSendStatus(SendType.Sending.rawValue)
+        updateMessage(SendType.Sending.rawValue)
     }
 
-    public override fun onPushSend() {
+    public override suspend fun onPushSend() {
         try {
             // 如果有附件，先上传附件
             if (textMessage.isAttachmentMessage()) {
@@ -142,62 +153,58 @@ class PushTextSendJob @AssistedInject constructor(
             result.success?.let {
                 if (textMessage.recall != null) {// recall消息成功，需要删除对应消息
                     wcdb.message.getFirstObject(DBMessageModel.id.eq(textMessage.id))?.delete()
-                } else if (!textMessage.reactions.isNullOrEmpty()) { // emoji reaction消息成功，更新数据
-                    textMessage.reactions?.firstOrNull()?.let { reaction ->
-                        ApplicationDependencies.getMessageStore().updateMessageReaction(textMessage.forWhat.id, reaction, null, null)
-                    }
+                    RecallResultTracker.emitResult(textMessage.id, true)
                 } else {
                     textMessage.systemShowTimestamp = it.systemShowTimestamp
                     textMessage.notifySequenceId = it.notifySequenceId
                     textMessage.sequenceId = it.sequenceId
                 }
-                updateSendStatus(SendType.Sent.rawValue)
+                updateMessage(SendType.Sent.rawValue)
             } ?: {
-                updateSendStatus(SendType.SentFailed.rawValue)
+                if (textMessage.recall != null) {
+                    RecallResultTracker.emitResult(textMessage.id, false)
+                }
+                updateMessage(SendType.SentFailed.rawValue)
             }
         } catch (e: Exception) {
             L.e { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Send message exception, Exception: ${e.stackTraceToString()}, RetryCount: $runAttempt" }
 
             // 处理已知的特定异常，这些异常不需要重试
             if (e is NonSuccessfulResponseCodeException) {
-                when (e.code) {
-                    430 -> {
-                        updateSendStatus(SendType.SentFailed.rawValue)
-                        return // 不重试，直接返回
-                    }
+                val shouldReturn = when (e.code) {
+                    430 -> true
 
                     432 -> { // 非好友限制为每天最多发送三条消息
-                        ContactorUtil.createNonFriendLimitMessage(textMessage.forWhat)
-                        updateSendStatus(SendType.SentFailed.rawValue)
-                        return // 不重试，直接返回
+                        appScope.launch { localMessageCreator.createNonFriendLimitMessage(textMessage.forWhat) }
+                        true
                     }
 
                     404 -> {
                         if (e is AccountOfflineException) {
                             when (e.status) {
-                                10105 -> { // 对方离线
-                                    ContactorUtil.createOfflineMessage(
-                                        textMessage.forWhat,
-                                        TTNotifyMessage.NOTIFY_ACTION_TYPE_OFFLINE
-                                    )
+                                10105 -> appScope.launch { // 对方离线
+                                    localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_OFFLINE)
                                 }
 
-                                10110 -> { // 对方账号注销
-                                    ContactorUtil.createOfflineMessage(
-                                        textMessage.forWhat,
-                                        TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED
-                                    )
+                                10110 -> appScope.launch { // 对方账号注销
+                                    localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_UNREGISTERED)
                                 }
                             }
                         } else { // 账号不可用
-                            ContactorUtil.createOfflineMessage(
-                                textMessage.forWhat,
-                                TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED
-                            )
+                            appScope.launch { localMessageCreator.createOfflineMessage(textMessage.forWhat, TTNotifyMessage.NOTIFY_ACTION_TYPE_ACCOUNT_DISABLED) }
                         }
-                        updateSendStatus(SendType.SentFailed.rawValue)
-                        return // 不重试，直接返回
+                        true
                     }
+                    
+                    else -> false
+                }
+                
+                if (shouldReturn) {
+                    if (textMessage.recall != null) {
+                        RecallResultTracker.emitResult(textMessage.id, false)
+                    }
+                    updateMessage(SendType.SentFailed.rawValue)
+                    return // 不重试，直接返回
                 }
             }
 
@@ -206,7 +213,10 @@ class PushTextSendJob @AssistedInject constructor(
                 throw e
             } else {
                 L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Exception no need to retry, failing directly, RetryCount: $runAttempt, Exception: ${e.stackTraceToString()}" }
-                updateSendStatus(SendType.SentFailed.rawValue)
+                if (textMessage.recall != null) {
+                    RecallResultTracker.emitResult(textMessage.id, false)
+                }
+                updateMessage(SendType.SentFailed.rawValue)
             }
         }
         reportSendCostTime()
@@ -261,25 +271,74 @@ class PushTextSendJob @AssistedInject constructor(
         )
     }
 
-    private fun updateSendStatus(status: Int) {
-        if (textMessage.recall != null) return
-        if (textMessage.screenShot != null) return
-        if (textMessage.reactions?.isNotEmpty() == true) return
+    /**
+     * Update message with server timestamps and send status.
+     * This method replaces the old updateSendStatus approach by:
+     * 1. First trying to insert the message if it doesn't exist (putWhenNonExist)
+     * 2. Then updating timestamps and status in one database operation
+     */
+    private fun updateMessage(status: Int) {
+        // Skip update for reaction and recall messages
+        if (textMessage.recall != null || textMessage.reactions?.isNotEmpty() == true) {
+            return
+        }
 
-        ApplicationDependencies.getMessageStore().updateSendStatus(textMessage, status).blockingAwait()
+        L.i { "[Message] Updating message ${textMessage.id} - " + "roomId: ${textMessage.forWhat.id}, " + "systemShowTimestamp: ${textMessage.systemShowTimestamp}, " + "status: $status" }
+
+        textMessage.sendType = status
+
+        // Try to insert the message if it doesn't exist
+        messageStore.putWhenNonExist(textMessage)
+
+        // Update both timestamps and send status in one operation
+        wcdb.message.updateRow(
+            arrayOf(
+                Value(textMessage.systemShowTimestamp),
+                Value(textMessage.notifySequenceId),
+                Value(textMessage.sequenceId),
+                Value(status),
+                Value(textMessage.systemShowTimestamp)  // readTime = systemShowTimestamp for self-sent messages
+            ),
+            arrayOf(
+                DBMessageModel.systemShowTimestamp,
+                DBMessageModel.notifySequenceId,
+                DBMessageModel.sequenceId,
+                DBMessageModel.sendType,
+                DBMessageModel.readTime
+            ),
+            DBMessageModel.id.eq(textMessage.id)
+        )
+        RoomChangeTracker.trackRoom(textMessage.forWhat.id, RoomChangeType.MESSAGE)
     }
 
-    private fun updateAttachmentStatus(status: Int) {
-        val attachment = textMessage.attachments?.firstOrNull() ?: return
-        attachment.status = status
-        ApplicationDependencies.getAttachmentStore().putAttachment(textMessage.id, attachment).blockingAwait()
+    /**
+     * Update attachment with all relevant fields (authorityId, key, digest, status).
+     * Uses updateRow instead of DELETE + INSERT to avoid WCDB soft-delete issues.
+     */
+    private fun updateAttachment(attachment: Attachment) {
+        wcdb.attachment.updateRow(
+            arrayOf(
+                Value(attachment.authorityId),
+                Value(attachment.key),
+                Value(attachment.digest),
+                Value(attachment.status)
+            ),
+            arrayOf(
+                DBAttachmentModel.authorityId,
+                DBAttachmentModel.key,
+                DBAttachmentModel.digest,
+                DBAttachmentModel.status
+            ),
+            DBAttachmentModel.id.eq(attachment.id).and(DBAttachmentModel.messageId.eq(textMessage.id))
+        )
     }
 
     private fun uploadAttachment() {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
         attachment.path ?: return
 
-        updateAttachmentStatus(AttachmentStatus.LOADING.code)
+        attachment.status = AttachmentStatus.LOADING.code
+        updateAttachment(attachment)
         FileUtil.emitProgressUpdate(textMessage.id, 0)
 
         val buffer = ByteArray(8192)
@@ -306,10 +365,10 @@ class PushTextSendJob @AssistedInject constructor(
             val digest256 = MessageDigest.getInstance("SHA-256")
             digest256.update(originKey)
             val fileHashByte = digest256.digest()
-            val fileHash = com.difft.android.websocket.util.Base64.encodeBytes(fileHashByte)
+            val fileHash = com.difft.android.base.utils.Base64.encodeBytes(fileHashByte)
 
             val iv = ByteArray(16)
-            Random().nextBytes(iv)
+            SecureRandom().nextBytes(iv)
             val ivParameterSpec = IvParameterSpec(iv)
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             val aesKeySpec = SecretKeySpec(originKey, 0, 32, "AES")
@@ -338,32 +397,59 @@ class PushTextSendJob @AssistedInject constructor(
                 recipientIds.add(textMessage.forWhat.id)
                 recipientIds.add(globalServices.myId)
             } else {
-                val group = GroupUtil.getSingleGroupInfo(context, textMessage.forWhat.id, false).blockingFirst()
-                if (group.isPresent) {
-                    group.get().members.forEach { member ->
-                        recipientIds.add(member.id)
-                    }
+                val group = runBlocking { groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false) }
+                group?.members?.forEach { member ->
+                    recipientIds.add(member.id)
                 }
             }
 
             var lastEmitTime = System.currentTimeMillis()
+            var lastEmitProgress = 0
             val fileExistResponse = fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, recipientIds)).execute()
             if (fileExistResponse.isSuccessful) {
                 fileExistResponse.body()?.data?.let { res ->
                     if (!res.exists) {
-                        val urlString = res.url
-                        val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
-                            override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
-                                val currentTime = System.currentTimeMillis()
-                                if ((currentTime - lastEmitTime >= 500)) {
-                                    FileUtil.emitProgressUpdate(textMessage.id, progress)
-                                    lastEmitTime = currentTime
+                        // 获取URL列表，优先使用urls数组，回退到单个url
+                        val urlsToTry = res.urls?.takeIf { it.isNotEmpty() } ?: listOf(res.url)
+                        L.i { "[PushTextSendJob] Upload API response: using ${if (res.urls?.isNotEmpty() == true) "urls array" else "fallback url"}, total URLs: ${urlsToTry.size}, messageId: ${textMessage.id}" }
+
+                        var uploadSuccess = false
+                        var lastUploadException: Exception? = null
+
+                        for ((index, urlString) in urlsToTry.withIndex()) {
+                            try {
+                                L.i { "[PushTextSendJob] Attempting upload with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: $urlString" }
+
+                                val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
+                                    override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
+                                        val currentTime = System.currentTimeMillis()
+                                        // Update every 50ms or when progress changes by >=5%
+                                        if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
+                                            FileUtil.emitProgressUpdate(textMessage.id, progress)
+                                            lastEmitTime = currentTime
+                                            lastEmitProgress = progress
+                                        }
+                                    }
+                                })
+
+                                val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
+
+                                if (uploadToOSSCallResponse.isSuccessful) {
+                                    L.i { "[PushTextSendJob] Upload successful with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: $urlString" }
+                                    uploadSuccess = true
+                                    break
+                                } else {
+                                    L.w { "[PushTextSendJob] Upload failed with URL ${index + 1}/${urlsToTry.size}: ${uploadToOSSCallResponse.message}, messageId: ${textMessage.id}, url: $urlString" }
+                                    lastUploadException = IOException("uploadToOSSCall execute fail: ${uploadToOSSCallResponse.message}")
                                 }
+                            } catch (e: Exception) {
+                                L.w { "[PushTextSendJob] Upload exception with URL ${index + 1}/${urlsToTry.size}: ${e.message}, messageId: ${textMessage.id}, url: $urlString" }
+                                lastUploadException = e
                             }
-                        })
-                        val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
-                        if (!uploadToOSSCallResponse.isSuccessful) {
-                            throw IOException("uploadToOSSCall execute fail" + uploadToOSSCallResponse.message)
+                        }
+
+                        if (!uploadSuccess) {
+                            throw lastUploadException ?: IOException("All upload URLs failed")
                         }
 
                         val md5 = MessageDigest.getInstance("md5")
@@ -372,40 +458,62 @@ class PushTextSendJob @AssistedInject constructor(
                         }
                         attachment.digest = md5.digest()
 
+                        // 判断附件类型
+                        val attachmentType = when {
+                            attachment.isAudioMessage() -> AttachmentUploadType.VOICE
+                            fileSize > 200 * 1024 * 1024 -> AttachmentUploadType.LARGE
+                            else -> AttachmentUploadType.NORMAL
+                        }
+
                         val uploadInfoCallResponse = fileShareRepo.uploadInfo(
                             UploadInfoReq(
-                                SecureSharedPrefsUtil.getToken(), recipientIds,
-                                res.attachmentId, fileHash,
-                                FileUtils.bytesToHex(attachment.digest), "MD5", "SHA-256", "SHA-512", "AES-CBC-256", fileSize
+                                token = SecureSharedPrefsUtil.getToken(),
+                                numbers = recipientIds,
+                                attachmentId = res.attachmentId,
+                                fileHash = fileHash,
+                                cipherHash = FileUtils.bytesToHex(attachment.digest),
+                                cipherHashType = "MD5",
+                                hashAlg = "SHA-256",
+                                keyAlg = "SHA-512",
+                                encAlg = "AES-CBC-256",
+                                fileSize = fileSize,
+                                attachmentType = attachmentType
                             )
                         ).execute()
                         if (uploadInfoCallResponse.isSuccessful) {
-                            attachment.authorityId = uploadInfoCallResponse.body()?.data?.authorizeId ?: 0
+                            attachment.authorityId = uploadInfoCallResponse.body()?.data?.authorizeId?.takeIf { it != 0L }
+                                ?: throw IOException("uploadInfo response has invalid authorizeId, messageId: ${textMessage.id}")
                         } else {
                             L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} upload attachment fail${uploadInfoCallResponse.message()}" }
                             throw IOException("upload attachment fail" + uploadInfoCallResponse.message())
                         }
                     } else {
+                        if (res.authorizeId == 0L) {
+                            throw IOException("isExist response has invalid authorizeId for existing file, messageId: ${textMessage.id}")
+                        }
                         attachment.digest = FileUtils.decodeDigestHex(res.cipherHash)
                         attachment.authorityId = res.authorizeId
                     }
-                }
+                } ?: throw IOException("isExist response data is null, messageId: ${textMessage.id}")
             } else {
                 L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} upload attachment fail${fileExistResponse.message()}" }
                 throw IOException("check attachment is exist fail" + fileExistResponse.message())
             }
             attachment.key = originKey
+            attachment.status = AttachmentStatus.SUCCESS.code
+            updateAttachment(attachment)
 
-            updateAttachmentStatus(AttachmentStatus.SUCCESS.code)
-
-            //语音消息不要删除加密文件
-            if (textMessage.attachments?.firstOrNull()?.isAudioMessage() != true) {
+            if (textMessage.attachments?.firstOrNull()?.isAudioMessage() == true) {
+                // 语音消息：保留 .encrypt 用于回放，删除明文原始文件
+                file.delete()
+            } else {
                 encryptFile.delete()
             }
             FileUtil.emitProgressUpdate(textMessage.id, 100)
         } catch (e: Exception) {
             L.e { "[PushTextSendJob] Upload failed, RetryCount: $runAttempt, Exception: ${e.stackTraceToString()}" }
-            updateAttachmentStatus(AttachmentStatus.FAILED.code)
+            attachment.status = AttachmentStatus.FAILED.code
+            updateAttachment(attachment)
             FileUtil.emitProgressUpdate(textMessage.id, -1)
             throw e
         } finally {
@@ -418,13 +526,16 @@ class PushTextSendJob @AssistedInject constructor(
 
     override fun onFailure() {
         L.w { "[Message] Job最终失败 - MessageID: ${textMessage.id}, Target: ${textMessage.forWhat.id}, 最终重试次数: ${getRunAttempt()}, JobID: ${getId()}" }
-        updateSendStatus(SendType.SentFailed.rawValue)
+        if (textMessage.recall != null) {
+            RecallResultTracker.emitResult(textMessage.id, false)
+        }
+        updateMessage(SendType.SentFailed.rawValue)
     }
 
     class Factory : Job.Factory<PushTextSendJob> {
 
         @dagger.hilt.EntryPoint
-        @InstallIn(dagger.hilt.components.SingletonComponent::class)
+        @InstallIn(SingletonComponent::class)
         interface EntryPoint {
             fun getPushTextJobFactory(): PushTextSendJobFactory
         }
@@ -454,21 +565,12 @@ class PushTextSendJob @AssistedInject constructor(
 
     private fun reportSendCostTime() {
         L.i { "[Message] send text cost time totally: ${System.currentTimeMillis() - parameters.createTime}, the actually cost time: ${System.currentTimeMillis() - startExecuteTime}" }
-        Bundle().apply {
-            putLong(MESSAGE_SENT_COST_TIME, System.currentTimeMillis() - parameters.createTime)
-            putLong(MESSAGE_SENT_COST_TIME_ACTUALLY, System.currentTimeMillis() - startExecuteTime)
-        }.let {
-            FirebaseAnalytics.getInstance(context).logEvent(MESSAGE_SENT_COST_TIME, it)
-        }
     }
 
     companion object {
         const val KEY = "PushTextSendJob"
         private const val KEY_MESSAGE_OUT = "message_out"
         private const val KEY_NOTIFICATION = "notification"
-        private const val MESSAGE_SENT_COST_TIME = "message_sent_cost_time"
-        private const val MESSAGE_SENT_COST_TIME_ACTUALLY = "message_sent_cost_time_actually"
-
         private fun buildParameters(forWhat: For, isAttachment: Boolean): Parameters {
             return Parameters.Builder()
                 .setQueue("[$KEY::${forWhat.id}]" + (if (isAttachment) "::MEDIA" else ""))

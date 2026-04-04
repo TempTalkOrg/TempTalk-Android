@@ -12,6 +12,7 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import difft.android.messageserialization.MessageStore
 import com.difft.android.network.config.WsTokenManager
+import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -22,15 +23,18 @@ import org.thoughtcrime.securesms.util.ForegroundServiceUtil
 import org.thoughtcrime.securesms.util.MessageNotificationUtil
 import org.thoughtcrime.securesms.websocket.WebSocketManager
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.system.exitProcess
 
+@Singleton
 class LogoutManagerImpl @Inject constructor(
     private val userManager: UserManager,
     private var messageStore: MessageStore,
     private val messageNotificationUtil: MessageNotificationUtil,
     private val wsTokenManager: WsTokenManager,
     private val appIconBadgeManager: AppIconBadgeManager,
-    private val webSocketManager: WebSocketManager
+    private val webSocketManager: WebSocketManager,
+    private val coordinator: DomainSpeedTestCoordinator
 ) : LogoutManager {
     override fun doLogout() {
         performLogout(clearAllData = true)
@@ -49,6 +53,11 @@ class LogoutManagerImpl @Inject constructor(
                 // 只清除登录凭证
                 userManager.update(true) {
                     this.baseAuth = null
+
+                    this.passcode = null
+                    this.passcodeAttempts = 0
+                    this.pattern = null
+                    this.patternAttempts = 0
                 }
                 SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)
             }
@@ -56,6 +65,7 @@ class LogoutManagerImpl @Inject constructor(
 
             messageNotificationUtil.cancelAllNotifications()
             wsTokenManager.clearToken()
+            coordinator.resetSession()
             stopMessageService()
             webSocketManager.stop()
 
@@ -77,7 +87,7 @@ class LogoutManagerImpl @Inject constructor(
         WCDBSecureSharedPrefsUtil(application).clear()
         messageStore.deleteDatabase()
 
-        FileUtil.clearAllFiles()
+        FileUtil.clearAllFilesExceptLogs()
     }
 
     private fun stopMessageService() {

@@ -6,13 +6,15 @@ import java.util.regex.Pattern
 
 data class StackData(
     val stackTrace: List<StackTraceElement>,
-    val callStackIndex: Int
+    val callStackIndex: Int,
+    val disableLine: Boolean
 ) {
 
     constructor(
         t: Throwable,
-        callStackIndex: Int
-    ) : this(t.stackTrace.toList(), callStackIndex)
+        callStackIndex: Int,
+        disableLine: Boolean = false
+    ) : this(t.stackTrace.toList(), callStackIndex, disableLine)
 
     companion object {
         private val ANONYMOUS_CLASS = Pattern.compile("(\\$\\d+)+$")
@@ -52,10 +54,10 @@ data class StackData(
     // ------------------------
 
     fun getLink(): String {
-        var link = "(${element?.fileName}:${element?.lineNumber})"
+        var link = "(${element?.fileName}${if (disableLine) "" else ":${element?.lineNumber}"})"
         // AndroidStudio does not support 2 clickable links...
         element2?.let {
-            link += " | (${it.fileName}:${it.lineNumber})"
+            link += " | (${it.fileName}${if (disableLine) "" else ":${it.lineNumber}"})"
         }
         return link
     }

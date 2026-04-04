@@ -7,6 +7,8 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -165,6 +167,7 @@ public class LightStatusBarUtils {
                 }
             }
         } catch (Exception e) {
+            L.w(e, () -> "[LightStatusBarUtils] setAndroidNativeLightStatusBar failed");
         }
     }
 

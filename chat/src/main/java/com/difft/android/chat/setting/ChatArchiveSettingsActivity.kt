@@ -14,14 +14,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rxjava3.subscribeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,22 +33,22 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
+import com.difft.android.base.ui.TitleBar
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.MessageArchiveUtil
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
-import com.kongzue.dialogx.dialogs.MessageDialog
+import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -93,7 +94,9 @@ class ChatArchiveSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            MainContent()
+            DifftTheme(useSecondaryBackground = true) {
+                MainContent()
+            }
         }
         setContentView(composeView)
     }
@@ -103,25 +106,18 @@ class ChatArchiveSettingsActivity : BaseActivity() {
     private fun MainContent() {
         val target = chatSettingViewModel.conversation // 直接使用构造方法传递的conversation
 
-        val selectedOption = MessageArchiveUtil
-            .archiveTimeUpdate
-            .filter { it.first == target.id }
-            .map { it.second }
-            .subscribeAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
+        // 从 ViewModel 的 conversationSet 中获取 messageExpiry
+        val selectedOption = chatSettingViewModel.conversationSet
+            .map { it?.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime() }
+            .collectAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
 
         Column(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            LocalContext.current,
-                            com.difft.android.base.R.color.bg_setting
-                        )
-                    )
-                )
+            Modifier.fillMaxSize().systemBarsPadding()
         ) {
-            ToolBar()
+            TitleBar(
+                titleText = getString(R.string.disappearing_messages),
+                onBackClick = { finish() }
+            )
 
             ItemViews(target, selectedOption) { newOption ->
                 // 如果选择的时间没有发生变化，不触发任何操作
@@ -133,67 +129,6 @@ class ChatArchiveSettingsActivity : BaseActivity() {
             }
 
             ExplainView()
-        }
-    }
-
-    @Preview
-    @Composable
-    private fun ToolBar() {
-        val context = LocalContext.current
-
-        val tintBackIc = remember {
-            ColorFilter.tint(
-                Color(
-                    ContextCompat.getColor(
-                        context,
-                        com.difft.android.base.R.color.t_primary
-                    )
-                )
-            )
-        }
-        ConstraintLayout(
-            modifier = Modifier
-                .height(Dp(52F))
-                .fillMaxSize()
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            com.difft.android.base.R.color.bg1
-                        )
-                    )
-                )
-        ) {
-            val (icBack, title) = createRefs()
-            Image(
-                modifier = Modifier
-                    .constrainAs(icBack) {
-                        start.linkTo(parent.start, margin = 16.dp)
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .clickable {
-                        onBackPressedDispatcher.onBackPressed()
-                    },
-                imageVector = ImageVector.vectorResource(id = R.drawable.chat_contact_detail_ic_back),
-                contentDescription = "ic go back",
-                colorFilter = tintBackIc
-            )
-            Text(
-                text = getString(R.string.disappearing_messages),
-                fontSize = 20.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                color = Color(
-                    ContextCompat.getColor(
-                        LocalContext.current, com.difft.android.base.R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.constrainAs(title) {
-                    start.linkTo(icBack.end, margin = 16.dp)
-                    top.linkTo(icBack.top)
-                    bottom.linkTo(icBack.bottom)
-                },
-            )
         }
     }
 
@@ -337,10 +272,15 @@ class ChatArchiveSettingsActivity : BaseActivity() {
             getString(R.string.chat_archive_shorten_time_message)
         }
 
-        MessageDialog.show(title, message, getString(R.string.chat_dialog_ok), getString(R.string.chat_dialog_cancel))
-            .setOkButton { _, _ ->
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = title,
+            message = message,
+            confirmText = getString(R.string.chat_dialog_ok),
+            cancelText = getString(R.string.chat_dialog_cancel),
+            onConfirm = {
                 onConfirm()
-                false
             }
+        )
     }
 }

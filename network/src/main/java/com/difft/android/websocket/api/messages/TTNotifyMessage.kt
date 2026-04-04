@@ -1,10 +1,7 @@
-/*
- * Copyright (C) 2014-2016 Open Whisper Systems
- *
- * Licensed according to the LICENSE file in this repository.
- */
+
 package com.difft.android.websocket.api.messages
 
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.google.gson.JsonElement
 
 /**
@@ -32,6 +29,10 @@ data class TTNotifyMessage(
         //        const val NOTIFY_MESSAGE_TYPE_PASSCODE = 15 // passcodeNotify
         const val NOTIFY_MESSAGE_TYPE_CALL_END = 17 // call end notify
         const val NOTIFY_MESSAGE_TYPE_RESET_IDENTITY_KEY = 19 // reset Identity Key
+
+        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 // critical alert
+
+        const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2 = 22 // new critical alert
 
         //本地创建 type
         const val NOTIFY_MESSAGE_TYPE_LOCAL = 10000
@@ -89,7 +90,6 @@ data class Data(
     var topicId: String? = null,
     var source: String? = null,
     var conversationId: String? = null,
-    var groupPins: List<GroupPin>? = null,
     var concatNumbers: String? = null,
     var endTimestamp: Long = 0,
     val invitorId: String? = null,
@@ -99,7 +99,13 @@ data class Data(
     val roomId: String? = null,
     val resetIdentityKeyTime: Long = 0,
     val messageClearAnchor: Long = 0,
-)
+    val timestamp: Long = 0,
+    val serverTimestamp: Long = 0,
+    val alertTitle: String? = null,
+    val alertBody: String? = null,
+    val showCriticalAlert: Boolean = false,
+    val sourceDevice: Int = DEFAULT_DEVICE_ID,
+    )
 
 data class Group(
     val action: Int,
@@ -116,11 +122,13 @@ data class Group(
     val privateChat: Boolean,
     val anyoneChangeAutoClear: Boolean,
     val autoClear: Boolean,
-    val messageClearAnchor: Long
-)
+    val messageClearAnchor: Long,
+    val criticalAlert: Boolean = false,
+    )
 
 data class Member(
     val uid: String?,
+    val customUid: String?,
     val displayName: String?,
     val rapidRole: Int,
     val role: Int,
@@ -138,12 +146,11 @@ data class Member(
 data class PublicConfigs(
     val meetingVersion: Int = 0,
     val publicName: String = "",
-    val msgEncVersion: Int = 0
+    val msgEncVersion: Int = 0,
 )
 
 data class PrivateConfigs(
-    val globalNotification: Int?,
-    val saveToPhotos: Boolean
+    val globalNotification: Int?
 )
 
 data class OperatorInfo(

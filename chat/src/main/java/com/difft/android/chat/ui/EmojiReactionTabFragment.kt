@@ -1,6 +1,7 @@
 package com.difft.android.chat.ui
 
 import android.os.Bundle
+import com.difft.android.base.log.lumberjack.L
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -61,9 +62,10 @@ class EmojiReactionTabFragment : Fragment() {
                     val contacts = withContext(Dispatchers.IO) {
                         wcdb.getContactorsFromAllTable(userIds!!).distinctBy { contact -> contact.id }
                     }
+                    if (!isAdded || view == null) return@launch
                     mContactsAdapter.submitList(contacts)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    L.w { "[EmojiReactionTabFragment] error: ${e.stackTraceToString()}" }
                 }
             }
         } else {

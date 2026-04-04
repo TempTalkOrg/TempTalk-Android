@@ -39,7 +39,14 @@ public class MessageModel {
      * Text(0), // type value 0 means the message is a text message
      * Attachment(1), // type value 1 means the message is a file
      * Notify(2) // type value 2 means the message is a notify message,
+     * Unsupported(100) // type value 100 means the message requires a newer client version
      */
+    public static final int TYPE_TEXT = 0;
+    public static final int TYPE_ATTACHMENT = 1;
+    public static final int TYPE_NOTIFY = 2;
+    public static final int TYPE_CONFIDENTIAL_PLACEHOLDER = 3; // Confidential message read by recipient, awaiting sender confirmation to delete
+    public static final int TYPE_UNSUPPORTED = 100;
+
     @WCDBField
     public int type;
 
@@ -62,9 +69,6 @@ public class MessageModel {
     public String atPersons;
 
     @WCDBField
-    public String readInfo;
-
-    @WCDBField
     public String fromWho;
 
     @WCDBIndex
@@ -85,9 +89,6 @@ public class MessageModel {
     public Long forwardContextDatabaseId;
 
     @WCDBField
-    public Long cardModelDatabaseId;
-
-    @WCDBField
     public int playStatus;//是否已经播放过，默认已播放，1未播放
 
     @WCDBField
@@ -96,14 +97,30 @@ public class MessageModel {
     @WCDBField
     public String receiverIds;//接收者id集合 数组序列化
 
+    /**
+     * Critical Alert 消息类型
+     * 0: 普通消息（非 Critical Alert）
+     * 1: Critical Alert 消息
+     * 预留其他值用于后续扩展
+     */
+    @WCDBField
+    public int criticalAlertType;
+
+    /**
+     * Screenshot notification JSON data
+     * Stores ScreenShot object as JSON string containing RealSource info
+     */
+    @WCDBField
+    public String screenShotJson;
+
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof MessageModel that)) return false;
-        return timeStamp == that.timeStamp && systemShowTimestamp == that.systemShowTimestamp && receivedTimeStamp == that.receivedTimeStamp && type == that.type && sendType == that.sendType && expiresInSeconds == that.expiresInSeconds && notifySequenceId == that.notifySequenceId && sequenceId == that.sequenceId && mode == that.mode && roomType == that.roomType && playStatus == that.playStatus && readTime == that.readTime && Objects.equals(id, that.id) && Objects.equals(messageText, that.messageText) && Objects.equals(atPersons, that.atPersons) && Objects.equals(readInfo, that.readInfo) && Objects.equals(fromWho, that.fromWho) && Objects.equals(roomId, that.roomId) && Objects.equals(quoteDatabaseId, that.quoteDatabaseId) && Objects.equals(forwardContextDatabaseId, that.forwardContextDatabaseId) && Objects.equals(cardModelDatabaseId, that.cardModelDatabaseId) && Objects.equals(receiverIds, that.receiverIds);
+        return timeStamp == that.timeStamp && systemShowTimestamp == that.systemShowTimestamp && receivedTimeStamp == that.receivedTimeStamp && type == that.type && sendType == that.sendType && expiresInSeconds == that.expiresInSeconds && notifySequenceId == that.notifySequenceId && sequenceId == that.sequenceId && mode == that.mode && roomType == that.roomType && playStatus == that.playStatus && readTime == that.readTime && criticalAlertType == that.criticalAlertType && Objects.equals(id, that.id) && Objects.equals(messageText, that.messageText) && Objects.equals(atPersons, that.atPersons) && Objects.equals(fromWho, that.fromWho) && Objects.equals(roomId, that.roomId) && Objects.equals(quoteDatabaseId, that.quoteDatabaseId) && Objects.equals(forwardContextDatabaseId, that.forwardContextDatabaseId) && Objects.equals(receiverIds, that.receiverIds) && Objects.equals(screenShotJson, that.screenShotJson);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, timeStamp, systemShowTimestamp, receivedTimeStamp, messageText, type, sendType, expiresInSeconds, notifySequenceId, sequenceId, mode, atPersons, readInfo, fromWho, roomId, roomType, quoteDatabaseId, forwardContextDatabaseId, cardModelDatabaseId, playStatus, readTime, receiverIds);
+        return Objects.hash(id, timeStamp, systemShowTimestamp, receivedTimeStamp, messageText, type, sendType, expiresInSeconds, notifySequenceId, sequenceId, mode, atPersons, fromWho, roomId, roomType, quoteDatabaseId, forwardContextDatabaseId, playStatus, readTime, receiverIds, criticalAlertType, screenShotJson);
     }
 }

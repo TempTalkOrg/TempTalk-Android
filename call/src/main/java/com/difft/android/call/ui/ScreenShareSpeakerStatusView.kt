@@ -3,13 +3,13 @@ package com.difft.android.call.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,9 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import coil3.compose.rememberAsyncImagePainter
-import com.difft.android.call.LCallManager
-import com.difft.android.call.LocalImageLoaderProvider
 import com.difft.android.call.R
+import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -34,44 +33,32 @@ import io.livekit.android.util.flow
 
 
 @Composable
-fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant, userName: String?) {
+fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant, userName: String?, speakingEnabled: Boolean = true) {
 
     val imageLoader = LocalImageLoaderProvider.localImageLoader()
 
     val activeSpeakerVideoTracks by activeSpeaker::videoTrackPublications.flow.collectAsState(initial = emptyList())
-    val videoPubs = activeSpeakerVideoTracks.filter { (pub) -> pub.subscribed }
-        .map { (pub) -> pub }
-    val screenSharePub = videoPubs.firstOrNull { pub -> pub.source == Track.Source.SCREEN_SHARE }
+    val videoPubs by remember { derivedStateOf { activeSpeakerVideoTracks.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
+    val screenSharePub by remember { derivedStateOf { videoPubs.firstOrNull { pub -> pub.source == Track.Source.SCREEN_SHARE } } }
 
     val activeSpeakerAudioTracks by activeSpeaker::audioTrackPublications.flow.collectAsState(initial = emptyList())
-    val audioPubs = activeSpeakerAudioTracks.filter { (pub) -> pub.subscribed }
-        .map { (pub) -> pub }
+    val audioPubs by remember { derivedStateOf { activeSpeakerAudioTracks.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
+    val audioPub by remember { derivedStateOf { audioPubs.firstOrNull { pub -> pub.source == Track.Source.MICROPHONE } } }
 
-    val audioPub = audioPubs.firstOrNull { pub -> pub.source == Track.Source.MICROPHONE }
-
-    var isScreenSharing by remember { mutableStateOf(false) }
+    val isScreenSharing by remember { derivedStateOf { screenSharePub != null } }
     var audioMuted by remember { mutableStateOf(true) }
     val isActiveSpeakerSpeaking by activeSpeaker::isSpeaking.flow.collectAsState()
+    val effectiveIsSpeaking = isActiveSpeakerSpeaking && speakingEnabled
 
     // monitor audio muted state
     LaunchedEffect(audioPub) {
-        if (audioPub != null) {
-            audioPub::muted.flow.collect { muted -> audioMuted = muted }
-        }
-    }
-
-    LaunchedEffect(screenSharePub) {
-        if (screenSharePub != null) {
-            isScreenSharing = true
-        }else {
-            isScreenSharing = false
-        }
+        val pub = audioPub ?: return@LaunchedEffect
+        pub::muted.flow.collect { muted -> audioMuted = muted }
     }
 
     ConstraintLayout(
         modifier = modifier
             .height(24.dp)
-            .wrapContentWidth()
             .clip(shape = RoundedCornerShape(4.dp))
             .background(
                 colorResource(id = com.difft.android.base.R.color.bg1_night).copy(alpha = 0.8f)
@@ -86,17 +73,18 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
                 contentDescription = "",
                 modifier = Modifier
                     .constrainAs(shareStatusView) {
-                        start.linkTo(parent.start, 6.dp)
+                        start.linkTo(parent.start, 4.dp)
                         centerVerticallyTo(parent)
                     }
                     .size(16.dp),
+                tint = Color.White
             )
         }
 
         // 使用when表达式简化条件判断
         val painter = when {
             audioMuted -> painterResource(id = R.drawable.call_icon_microphone_close)
-            !isActiveSpeakerSpeaking -> painterResource(id = R.drawable.ic_silent)
+            !effectiveIsSpeaking -> painterResource(id = R.drawable.ic_silent)
             else -> rememberAsyncImagePainter(model = R.drawable.speaking, imageLoader = imageLoader)
         }
 
@@ -121,16 +109,16 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
             tint = tintColor
         )
 
-        val username = "${userName ?: LCallManager.convertToBase58UserName(activeSpeaker.identity?.value)}"
+        val username = "${userName ?: IdUtil.convertToBase58UserName(activeSpeaker.identity?.value)}"
 
         Text(
             modifier = Modifier
                 .constrainAs(userNameView){
                     start.linkTo(speakStatusView.end)
-                    end.linkTo(parent.end, 6.dp)
+                    end.linkTo(parent.end, 4.dp)
                     centerVerticallyTo(parent)
                 },
-            text = StringUtil.getShowUserName(username, 14),
+            text = StringUtil.truncateWithEllipsis(username, 9),
             fontSize = 12.sp,
             color = Color.White,
             maxLines = 1,

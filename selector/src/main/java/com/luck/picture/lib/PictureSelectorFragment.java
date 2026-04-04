@@ -1,5 +1,7 @@
 package com.luck.picture.lib;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.annotation.SuppressLint;
 import android.app.Service;
 import android.os.Bundle;
@@ -1123,7 +1125,7 @@ public class PictureSelectorFragment extends PictureCommonFragment
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PictureSelectorFragment] handleCameraResult error:");
         } finally {
             isCameraCallback = false;
         }

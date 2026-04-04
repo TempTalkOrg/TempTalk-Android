@@ -1,26 +1,25 @@
 package com.difft.android.chat.invite
 
-import android.app.Activity
+import com.difft.android.base.log.lumberjack.L
 import android.text.TextUtils
 import android.util.Base64
-import androidx.lifecycle.LifecycleOwner
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 
-import com.difft.android.base.utils.RxUtil
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.R
-import com.kongzue.dialogx.dialogs.MessageDialog
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
-import io.reactivex.rxjava3.core.Single
-import org.signal.libsignal.protocol.ecc.Curve
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.util.TextSecurePreferences
 import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
 import javax.inject.Inject
 import javax.inject.Singleton
-
+import com.difft.android.base.widget.ToastUtil
 @Singleton
 class LinkDeviceUtils @Inject constructor(
     private val encryptionDataManager: EncryptionDataManager
@@ -29,59 +28,52 @@ class LinkDeviceUtils @Inject constructor(
     /**
      * mac扫码登录
      */
-    fun linkDevice(activity: Activity, ephemeralId: String?, publicKeyEncoded: String?, needFinish: Boolean = false) {
+    fun linkDevice(activity: FragmentActivity, ephemeralId: String?, publicKeyEncoded: String?, needFinish: Boolean = false) {
         if (!TextUtils.isEmpty(ephemeralId) && !TextUtils.isEmpty(publicKeyEncoded)) {
-            MessageDialog.show(
-                activity.getString(R.string.link_device),
-                activity.getString(R.string.link_device_tips),
-                activity.getString(R.string.link_new_device),
-                activity.getString(R.string.link_device_cancel)
-            )
-                .setOkButton { _, _ ->
-                    Single.fromCallable {
-                        val accountManager = ApplicationDependencies.getSignalServiceAccountManager()
-                        val verificationCode = accountManager.newDeviceVerificationCode
-                        val publicKey = Curve.decodePoint(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
-                        val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
-                        val id = globalServices.myId
-                        accountManager.addDevice(
-                            ephemeralId,
-                            publicKey,
-                            aciIdentityKeyPair,
-                            verificationCode,
-                            id
-                        )
-                    }
-                        .compose(RxUtil.getSingleSchedulerComposer())
-                        .to(RxUtil.autoDispose(activity as LifecycleOwner))
-                        .subscribe({
+            ComposeDialogManager.showMessageDialog(
+                context = activity,
+                title = activity.getString(R.string.link_device),
+                message = activity.getString(R.string.link_device_tips),
+                confirmText = activity.getString(R.string.link_new_device),
+                cancelText = activity.getString(R.string.link_device_cancel),
+                onConfirm = {
+                    activity.lifecycleScope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                val accountManager = ApplicationDependencies.getSignalServiceAccountManager()
+                                val verificationCode = accountManager.newDeviceVerificationCode
+                                val publicKey = ECPublicKey(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
+                                val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
+                                val id = globalServices.myId
+                                accountManager.addDevice(
+                                    ephemeralId,
+                                    publicKey,
+                                    aciIdentityKeyPair,
+                                    verificationCode,
+                                    id
+                                )
+                            }
                             TextSecurePreferences.setMultiDevice(activity, true)
-
                             if (needFinish) {
                                 activity.finish()
                             }
-                        }, { e ->
-                            e.printStackTrace()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            L.w { "[LinkDeviceUtils] addDevice error: ${e.stackTraceToString()}" }
                             TextSecurePreferences.setMultiDevice(activity, false)
-
+                            e.message?.let { ToastUtil.showLong(it) }
                             if (needFinish) {
-                                TipDialog.show(e.message, WaitDialog.TYPE.ERROR, 2000).dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-                                    override fun onDismiss(dialog: WaitDialog?) {
-                                        activity.finish()
-                                    }
-                                }
-                            } else {
-                                TipDialog.show(e.message, WaitDialog.TYPE.ERROR)
+                                activity.finish()
                             }
-                        })
-                    false
-                }
-                .setCancelButton { _, _ ->
+                        }
+                    }
+                },
+                onCancel = {
                     if (needFinish) {
                         activity.finish()
                     }
-                    false
-                }
+                })
         }
     }
 

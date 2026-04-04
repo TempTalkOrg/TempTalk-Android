@@ -8,23 +8,27 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.BaseActivity
 import com.difft.android.chat.R
-import com.kongzue.dialogx.dialogs.TipDialog
-import com.kongzue.dialogx.dialogs.WaitDialog
-import com.kongzue.dialogx.interfaces.DialogLifecycleCallback
 import com.luck.picture.lib.entity.LocalMedia
 import util.getParcelableArrayListExtraCompat
-import util.logging.Log
+import com.difft.android.base.log.lumberjack.L
 import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
 import org.thoughtcrime.securesms.mediasend.v2.review.MediaReviewFragment
 import org.thoughtcrime.securesms.util.FullscreenHelper
 import org.thoughtcrime.securesms.util.WindowUtil
+import com.difft.android.base.widget.ToastUtil
 
 class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
 
+    // Disable auto padding - this Activity uses fullscreen layout with FullscreenHelper
+    override fun shouldApplySystemBarsPadding(): Boolean = false
+
     companion object {
-        private val TAG = Log.tag(MediaSelectionActivity::class.java)
+        private val TAG = L.tag(MediaSelectionActivity::class.java)
 
         const val MEDIA = "media"
+        const val EXTRA_CONFIDENTIAL_MODE = "confidential_mode"
+        const val EXTRA_SHOW_CONFIDENTIAL_TOGGLE = "show_confidential_toggle"
+        const val EXTRA_CONVERSATION_ID = "conversation_id"
 
         fun startActivity(activity: Context, media: List<LocalMedia>) {
             val intent = Intent(activity, MediaSelectionActivity::class.java).apply {
@@ -40,6 +44,8 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
     }
 
     lateinit var viewModel: MediaSelectionViewModel
+    var conversationId: String = ""
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,8 +56,11 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
         WindowUtil.setStatusBarColor(window, Color.TRANSPARENT)
 
         val initialMedia: List<LocalMedia> = intent.getParcelableArrayListExtraCompat(MEDIA, LocalMedia::class.java) ?: listOf()
+        val confidentialMode = intent.getIntExtra(EXTRA_CONFIDENTIAL_MODE, 0)
+        val showConfidentialToggle = intent.getBooleanExtra(EXTRA_SHOW_CONFIDENTIAL_TOGGLE, false)
+        conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: ""
 
-        val factory = MediaSelectionViewModel.Factory(initialMedia, MediaSelectionRepository(this))
+        val factory = MediaSelectionViewModel.Factory(initialMedia, MediaSelectionRepository(this), confidentialMode, showConfidentialToggle)
         viewModel = ViewModelProvider(this, factory)[MediaSelectionViewModel::class.java]
 
 //        onBackPressedDispatcher.addCallback(OnBackPressed())
@@ -75,13 +84,9 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
     }
 
     override fun onSendError(error: Throwable) {
-        TipDialog.show(R.string.operation_failed, WaitDialog.TYPE.WARNING, 3000)
-            .dialogLifecycleCallback = object : DialogLifecycleCallback<WaitDialog?>() {
-            override fun onDismiss(dialog: WaitDialog?) {
-                setResult(RESULT_CANCELED)
-                finish()
-            }
-        }
+        ToastUtil.showLong(R.string.operation_failed)
+        setResult(RESULT_CANCELED)
+        finish()
     }
 
     override fun onNoMediaSelected() {

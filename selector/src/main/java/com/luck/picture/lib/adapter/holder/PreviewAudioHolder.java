@@ -1,5 +1,7 @@
 package com.luck.picture.lib.adapter.holder;
 
+import com.difft.android.base.log.lumberjack.L;
+
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Handler;
@@ -191,7 +193,7 @@ public class PreviewAudioHolder extends BasePreviewHolder {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    L.w(e, () -> "[PreviewAudioHolder] onItemClick error:");
                 }
             }
         });
@@ -224,7 +226,7 @@ public class PreviewAudioHolder extends BasePreviewHolder {
             mPlayer.start();
             isPausePlayer = false;
         } catch (IOException e) {
-            e.printStackTrace();
+            L.w(e, () -> "[PreviewAudioHolder] startPlayer error:");
         }
     }
 

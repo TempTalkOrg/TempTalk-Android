@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,9 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintLayout
-import com.difft.android.call.ScaleType
-import com.difft.android.call.VideoItemTrackSelector
-import com.difft.android.call.ViewType
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.data.CallUserDisplayInfo
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
@@ -41,7 +39,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun FloatingWindowSpeakerView(modifier: Modifier = Modifier, room: Room, showSpeaker: Participant, userDisplayInfo: CallUserDisplayInfo) {
+fun FloatingWindowSpeakerView(modifier: Modifier = Modifier, room: Room, showSpeaker: Participant, userDisplayInfo: CallUserDisplayInfo, speakingEnabled: Boolean = true, reconnectCount: Int = 0) {
 
     var speakerVideoMuted by remember { mutableStateOf(true) }
 
@@ -80,6 +78,8 @@ fun FloatingWindowSpeakerView(modifier: Modifier = Modifier, room: Room, showSpe
     ){
         val (userView, statusView) = createRefs()
 
+        val speakerStatusViewWithIn = LCallUiConstants.SCREEN_SHARE_FLOATING_VIEW_WIDTH.dp - 8.dp
+
         Column(
             modifier = Modifier
                 .constrainAs(userView) {
@@ -102,13 +102,15 @@ fun FloatingWindowSpeakerView(modifier: Modifier = Modifier, room: Room, showSpe
                 }
                 if (!speakerVideoMuted) {
                     VideoItemTrackSelector(
+                        coroutineScope = scope,
                         modifier = Modifier.background(Color.Transparent),
                         room = room,
                         participant = showSpeaker,
                         sourceType = Track.Source.CAMERA,
                         scaleType = ScaleType.Fill,
                         viewType = ViewType.Texture,
-                        draggable = false
+                        draggable = false,
+                        reconnectCount = reconnectCount,
                     )
                 }
             }
@@ -119,12 +121,13 @@ fun FloatingWindowSpeakerView(modifier: Modifier = Modifier, room: Room, showSpe
                 .constrainAs(statusView) {
                     start.linkTo(parent.start, 4.dp)
                     bottom.linkTo(parent.bottom, 4.dp)
-                }.wrapContentSize(),
+                }
+                .widthIn(max = speakerStatusViewWithIn),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
         ){
-            if(currentSpeaker != null && currentSpeakerName != null){
-                ScreenShareSpeakerStatusView(modifier, currentSpeaker!!, currentSpeakerName)
+            if (currentSpeaker != null && currentSpeakerName != null) {
+                ScreenShareSpeakerStatusView(Modifier, currentSpeaker!!, currentSpeakerName, speakingEnabled = speakingEnabled)
             }
         }
     }

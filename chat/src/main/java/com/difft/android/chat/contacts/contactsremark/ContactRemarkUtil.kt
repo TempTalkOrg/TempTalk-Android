@@ -1,6 +1,7 @@
 package com.difft.android.chat.contacts.contactsremark
 
-import org.thoughtcrime.securesms.util.Base64
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.Base64
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
@@ -21,7 +22,7 @@ object ContactRemarkUtil {
             val encrypted = iv + encryptData
             return Base64.encodeBytes(encrypted)
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[ContactRemarkUtil] error: ${e.stackTraceToString()}" }
         }
         return null
     }
@@ -35,7 +36,7 @@ object ContactRemarkUtil {
             val decData = cipher.doFinal(bytes, 12, bytes.size - 12)
             return String(decData)
         } catch (e: Exception) {
-            e.printStackTrace()
+            L.w { "[ContactRemarkUtil] error: ${e.stackTraceToString()}" }
         }
         return null
     }

@@ -8,16 +8,24 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.databinding.VoiceMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.chat.message.canAutoSaveAttachment
+import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isAudioFile
 import com.hi.dhl.binding.viewbind
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
 import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
 import java.util.Date
@@ -29,24 +37,29 @@ class VoiceMessageView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
 
-    companion object {
-        private const val TAG = "VoiceMessageView"
-    }
-
     val binding: VoiceMessageViewBinding by viewbind(this)
 
     private var message: TextChatMessage? = null
     private var attachmentPath: String = ""
+    private var currentAttachmentId: String? = null
 
+    // Callback for when playback starts on a confidential message (for view receipt)
+    var onConfidentialPlayStarted: ((TextChatMessage) -> Unit)? = null
+    private var hasTriggeredConfidentialPlayStart = false
+
+    // Jobs for lifecycle-aware subscriptions
+    private var downloadProgressJob: Job? = null
+    private var playStatusJob: Job? = null
+    private var audioProgressJob: Job? = null
+    private var amplitudeJob: Job? = null
+
+    @SuppressLint("SetTextI18n")
     fun setAudioMessage(audioMessage: TextChatMessage) {
+        currentAttachmentId = audioMessage.id
         this.message = audioMessage
         val attachment = audioMessage.attachment ?: return
         val fileName: String = attachment.fileName ?: ""
         attachmentPath = FileUtil.getMessageAttachmentFilePath(audioMessage.id) + fileName
-        if (attachment.size > FileUtil.MAX_SUPPORT_FILE_SIZE) {
-            binding.playTime.text = context.getString(R.string.max_support_file_size_50)
-            return
-        }
 
         if (attachment.isAudioFile()) {
             binding.clFileName.visibility = VISIBLE
@@ -56,45 +69,180 @@ class VoiceMessageView @JvmOverloads constructor(
         }
 
         binding.progressBar.visibility = View.GONE
+        binding.tvDownloadHint.visibility = View.GONE
 
-        val progress = FileUtil.progressMap[audioMessage.id]
+        val progress = audioMessage.getAttachmentProgress()
         val isFileValid = FileUtil.isFileValid(attachmentPath) || FileUtil.isFileValid("$attachmentPath.encrypt")
 
-        if (isFileValid && (audioMessage.isMine || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {
+        val isCurrentDeviceSend = audioMessage.isMine && audioMessage.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+        if (!isCurrentDeviceSend) {
+            // Priority 1: Show expired view if file has expired
+            val isExpired = if (progress != null) {
+                progress == -2
+            } else {
+                attachment.status == AttachmentStatus.EXPIRED.code
+            }
+
+            if (isExpired) {
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.file_expired)
+                return
+            }
+
+            // Priority 2: Show fail view if download failed
+            val isFailed = if (progress != null) {
+                progress == -1
+            } else {
+                attachment.status == AttachmentStatus.FAILED.code
+            }
+
+            if (isFailed) {
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                binding.tvDownloadHint.text = context.getString(R.string.download_failed)
+                return
+            }
+
+            // Priority 2: Show download prompt for files > 10M
+            val fileSize = attachment.size
+            val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
+            if (isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null) {
+                // Show download prompt with file size (reuse fail view with different text)
+                binding.tvDownloadHint.visibility = View.VISIBLE
+                val fileSizeText = FileUtil.readableFileSize(fileSize.toLong())
+                binding.tvDownloadHint.text = context.getString(R.string.chat_tap_to_download) + " ($fileSizeText)"
+                return
+            }
+        }
+        // Show content views (they will be properly configured below)
+        binding.playButton.visibility = View.VISIBLE
+        binding.audioWaveProgressBar.visibility = View.VISIBLE
+        binding.playTime.visibility = View.VISIBLE
+
+        if (isFileValid && (isCurrentDeviceSend || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {
             setupAudioView()
         }
-        if (attachment.status != AttachmentStatus.FAILED.code
-            && progress != -1
-            && attachment.status != AttachmentStatus.SUCCESS.code
-            && progress != 100
-            || !isFileValid
-        ) {
+
+        // Priority 3: Show progress or auto download (for files <= 10M)
+        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
             if (progress == null) {
-                downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
+                if (!isCurrentDeviceSend) {
+                    downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
+                }
             } else {
                 binding.progressBar.visibility = View.VISIBLE
                 binding.progressBar.progress = progress
             }
         }
 
-        if (AudioMessageManager.currentPlayingMessage?.id == message?.id) {
-            if (AudioMessageManager.isPaused) {
-                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
-                binding.audioWaveProgressBar.setProgress(AudioMessageManager.currentProgress)
-            } else {
-                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_pause)
-                binding.audioWaveProgressBar.setProgress(AudioMessageManager.currentProgress)
-            }
-        } else {
-            binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
-            binding.audioWaveProgressBar.setProgress(0f)
-//            playTime.text = formatTime(attachment.totalTime ?: 0L)
+        // Sync play state UI - single source of truth
+        syncPlayStateUI()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        setupSubscriptions()
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelSubscriptions()
+        super.onDetachedFromWindow()
+    }
+
+    private fun setupSubscriptions() {
+        val lifecycleScope = findViewTreeLifecycleOwner()?.lifecycleScope ?: return
+
+        // 1. Download progress subscription
+        if (downloadProgressJob == null) {
+            lifecycleScope.launch {
+                FileUtil.progressUpdate
+                    .filter { it == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            message?.let { setAudioMessage(it) }
+                        }
+                    }
+            }.also { downloadProgressJob = it }
         }
 
-        if (AudioMessageManager.currentPlayingMessage?.id == message?.id) {
+        // 2. Play status subscription
+        if (playStatusJob == null) {
+            lifecycleScope.launch {
+                AudioMessageManager.playStatusUpdate
+                    .filter { it.first.id == currentAttachmentId }
+                    .collect {
+                        withContext(Dispatchers.Main) {
+                            syncPlayStateUI()
+                        }
+                    }
+            }.also { playStatusJob = it }
+        }
+
+        // 3. Audio playback progress subscription
+        if (audioProgressJob == null) {
+            lifecycleScope.launch {
+                AudioMessageManager.progressUpdate
+                    .filter { it.first.id == currentAttachmentId }
+                    .collect { (msg, progress) ->
+                        withContext(Dispatchers.Main) {
+                            binding.audioWaveProgressBar.setProgress(progress)
+                            val totalTime = msg.attachment?.totalTime ?: 0L
+                            binding.playTime.text = formatTime((totalTime * (1 - progress)).toLong())
+                        }
+                    }
+            }.also { audioProgressJob = it }
+        }
+
+        // 4. Amplitude extraction complete subscription
+        if (amplitudeJob == null) {
+            lifecycleScope.launch {
+                AudioAmplitudesHelper.amplitudeExtractionComplete
+                    .filter { it.id == currentAttachmentId }
+                    .collect { updatedMessage ->
+                        withContext(Dispatchers.Main) {
+                            message = updatedMessage
+                            binding.audioWaveProgressBar.setAmplitudes(updatedMessage.attachment?.amplitudes ?: emptyList())
+                            binding.playTime.text = formatTime(updatedMessage.attachment?.totalTime ?: 0)
+                        }
+                    }
+            }.also { amplitudeJob = it }
+        }
+    }
+
+    private fun cancelSubscriptions() {
+        downloadProgressJob?.cancel()
+        downloadProgressJob = null
+        playStatusJob?.cancel()
+        playStatusJob = null
+        audioProgressJob?.cancel()
+        audioProgressJob = null
+        amplitudeJob?.cancel()
+        amplitudeJob = null
+    }
+
+    /**
+     * Syncs play state UI based on AudioMessageManager's current state.
+     * This is the single source of truth for play/pause UI states.
+     * Called by both setAudioMessage() and playStatusJob subscription.
+     */
+    private fun syncPlayStateUI() {
+        val msg = message ?: return
+
+        val isCurrentlyPlaying = AudioMessageManager.currentPlayingMessage?.id == msg.id
+
+        if (isCurrentlyPlaying) {
+            if (AudioMessageManager.isPaused) {
+                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
+            } else {
+                binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_pause)
+            }
             binding.audioWaveProgressBar.setProgress(AudioMessageManager.currentProgress)
-            val currentTotalTime = message?.attachment?.totalTime ?: 0L
-            binding.playTime.text = formatTime((currentTotalTime * (1 - AudioMessageManager.currentProgress)).toLong())
+            val totalTime = msg.attachment?.totalTime ?: 0L
+            binding.playTime.text = formatTime((totalTime * (1 - AudioMessageManager.currentProgress)).toLong())
+        } else {
+            // Not playing - show default state
+            binding.playButton.setImageResource(R.drawable.ic_chat_audio_item_play)
+            binding.audioWaveProgressBar.setProgress(0f)
+            binding.playTime.text = formatTime(msg.attachment?.totalTime ?: 0)
         }
     }
 
@@ -127,7 +275,7 @@ class VoiceMessageView @JvmOverloads constructor(
                     audioMessage.attachment?.authorityId ?: 0,
                     key,
                     audioMessage.shouldDecrypt(),
-                    audioMessage.canAutoSaveAttachment()
+                    false // Audio files should never auto-save to photos
                 )
             )
         }
@@ -136,8 +284,13 @@ class VoiceMessageView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     private fun setupPlayButtonClickListener() {
         binding.playButton.setOnClickListener {
-            message?.let {
-                AudioMessageManager.playOrPauseAudio(it, attachmentPath)
+            message?.let { msg ->
+                // Trigger confidential play callback only once when first playing
+                if (!hasTriggeredConfidentialPlayStart) {
+                    hasTriggeredConfidentialPlayStart = true
+                    onConfidentialPlayStarted?.invoke(msg)
+                }
+                AudioMessageManager.playOrPauseAudio(msg, attachmentPath)
             }
         }
 
@@ -181,13 +334,5 @@ class VoiceMessageView @JvmOverloads constructor(
     // 设置游标颜色
     fun setCursorColor(color: Int) {
         binding.audioWaveProgressBar.setCursorColor(color)
-    }
-
-    fun unbind() {
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        unbind()
     }
 }

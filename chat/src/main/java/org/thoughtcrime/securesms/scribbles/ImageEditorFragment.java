@@ -31,13 +31,15 @@ import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.difft.android.base.log.lumberjack.L;
 import com.difft.android.chat.R;
-import com.kongzue.dialogx.dialogs.MessageDialog;
-import com.kongzue.dialogx.dialogs.WaitDialog;
+import com.difft.android.base.widget.ComposeDialogManager;
+
+import kotlin.Unit;
+
+import com.difft.android.base.widget.ComposeDialog;
 
 import util.FontUtil;
-import util.concurrent.TTExecutors;
 import util.concurrent.SimpleTask;
-import util.logging.Log;
+
 import org.signal.imageeditor.core.Bounds;
 import org.signal.imageeditor.core.ColorableRenderer;
 import org.signal.imageeditor.core.ImageEditorView;
@@ -48,7 +50,7 @@ import org.signal.imageeditor.core.model.EditorModel;
 import org.signal.imageeditor.core.renderers.BezierDrawingRenderer;
 import org.signal.imageeditor.core.renderers.FaceBlurRenderer;
 import org.signal.imageeditor.core.renderers.MultiLineTextRenderer;
-import org.signal.libsignal.protocol.util.Pair;
+import android.util.Pair;
 import org.thoughtcrime.securesms.animation.ResizeAnimation;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencies;
 import org.thoughtcrime.securesms.fonts.FontTypefaceProvider;
@@ -60,8 +62,8 @@ import org.thoughtcrime.securesms.mms.SentMediaQuality;
 import org.thoughtcrime.securesms.providers.MyBlobProvider;
 import org.thoughtcrime.securesms.util.MediaUtil;
 import org.thoughtcrime.securesms.util.ParcelUtil;
-import org.thoughtcrime.securesms.util.SaveAttachmentTask;
-import org.thoughtcrime.securesms.util.StorageUtil;
+import org.thoughtcrime.securesms.util.SaveAttachmentUtil;
+import com.difft.android.base.utils.FileUtil;
 import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.ThrottledDebouncer;
 import org.thoughtcrime.securesms.util.ViewUtil;
@@ -73,7 +75,7 @@ import java.util.Objects;
 
 public final class ImageEditorFragment extends Fragment implements ImageEditorHudV2.EventListener, MediaSendPageFragment, TextEntryDialogFragment.Controller {
 
-    private static final String TAG = Log.tag(ImageEditorFragment.class);
+    private static final String TAG = "ImageEditorFragment";
 
     public static final boolean CAN_RENDER_EMOJI = FontUtil.canRenderEmojiAtFontSize(1024);
 
@@ -200,8 +202,11 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
         MediaConstraints mediaConstraints = new PushMediaConstraints(SentMediaQuality.HIGH);
 
-        imageMaxWidth = mediaConstraints.getImageMaxWidth(requireContext());
-        imageMaxHeight = mediaConstraints.getImageMaxHeight(requireContext());
+        // Dynamic size limit based on device memory to prevent OOM
+        // Low memory devices: 1600 (10MB), Normal devices: 2560 (26MB) vs original 4096 (67MB)
+        int baseDimension = org.thoughtcrime.securesms.util.Util.isLowMemory(requireContext()) ? 1600 : 2560;
+        imageMaxWidth = Math.min(baseDimension, mediaConstraints.getImageMaxWidth(requireContext()));
+        imageMaxHeight = Math.min(baseDimension, mediaConstraints.getImageMaxHeight(requireContext()));
     }
 
     @Nullable
@@ -328,12 +333,24 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
                 }
             }
         } else {
-            Log.w(TAG, "Received a bad saved state. Received class: " + state.getClass().getName());
+            L.w(() -> TAG + " Received a bad saved state. Received class: " + state.getClass().getName());
         }
     }
 
     @Override
     public void notifyHidden() {
+    }
+
+    @Override
+    public void onDestroyView() {
+        // Clean up all blurred bitmaps when fragment view is destroyed
+        // This prevents memory leaks when user leaves the editor
+        clearBlurredBitmaps();
+
+        imageEditorView = null;
+        imageEditorHud = null;
+
+        super.onDestroyView();
     }
 
     private void changeEntityColor(int selectedColor) {
@@ -536,8 +553,8 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
         Matrix inverseCropPosition = model.getInverseCropPosition();
 
         if (cachedFaceDetection != null) {
-            if (cachedFaceDetection.first().equals(getUri()) && cachedFaceDetection.second().position.equals(inverseCropPosition)) {
-                renderFaceBlurs(cachedFaceDetection.second());
+            if (cachedFaceDetection.first.equals(getUri()) && cachedFaceDetection.second.position.equals(inverseCropPosition)) {
+                renderFaceBlurs(cachedFaceDetection.second);
                 imageEditorHud.showBlurToast();
                 return;
             } else {
@@ -545,7 +562,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
             }
         }
 
-        WaitDialog.show(requireActivity(), "");
+        ComposeDialogManager.INSTANCE.showWait(requireActivity());
         mainImage.getFlags().setChildrenVisible(false);
 
         SimpleTask.run(getLifecycle(), () -> {
@@ -569,7 +586,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
         }, result -> {
             mainImage.getFlags().reset();
             renderFaceBlurs(result);
-            WaitDialog.dismiss();
+            ComposeDialogManager.dismissWait();
             imageEditorHud.showBlurToast();
         });
     }
@@ -586,16 +603,22 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
     @Override
     public void onCancel() {
         if (hasMadeAnEditThisSession) {
-            MessageDialog.show(
-                    R.string.MediaReviewImagePageFragment__discard_changes,
-                    R.string.MediaReviewImagePageFragment__youll_lose_any_changes,
-                    R.string.MediaReviewImagePageFragment__discard,
-                    android.R.string.cancel
-            ).setOkButton((dialog, v) -> {
-                imageEditorHud.setMode(ImageEditorHudV2.Mode.NONE);
-                controller.onCancelEditing();
-                return false;
-            });
+            ComposeDialogManager.showMessageDialogForJava(
+                    requireActivity(),
+                    getString(R.string.MediaReviewImagePageFragment__discard_changes),
+                    getString(R.string.MediaReviewImagePageFragment__youll_lose_any_changes),
+                    getString(R.string.MediaReviewImagePageFragment__discard),
+                    getString(android.R.string.cancel),
+                    true, // showCancel
+                    true, // cancelable
+                    () -> {
+                        imageEditorHud.setMode(ImageEditorHudV2.Mode.NONE);
+                        controller.onCancelEditing();
+                        return Unit.INSTANCE;
+                    },
+                    null, // onCancel
+                    null  // onDismiss
+            );
         } else {
             imageEditorHud.setMode(ImageEditorHudV2.Mode.NONE);
             controller.onCancelEditing();
@@ -616,11 +639,11 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
 
     @Override
     public void onSave() {
-        SaveAttachmentTask.showWarningDialog(requireContext(), (dialog, view) -> {
-            if (StorageUtil.canWriteToMediaStore()) {
+        SaveAttachmentUtil.showWarningDialog(requireContext(), () -> {
+            if (FileUtil.canWriteToMediaStore()) {
                 performSaveToDisk();
             }
-            return false;
+            return Unit.INSTANCE;
         });
     }
 
@@ -753,16 +776,38 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
     }
 
     private void performSaveToDisk() {
-        SimpleTask.run(this::renderToSingleUseBlob, uri -> {
-            SaveAttachmentTask saveTask = new SaveAttachmentTask(requireContext());
-            SaveAttachmentTask.Attachment attachment = new SaveAttachmentTask.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null, true, true);
-            saveTask.executeOnExecutor(TTExecutors.BOUNDED, attachment);
-        });
-    }
+        // Check view lifecycle before accessing
+        if (imageEditorView == null) {
+            L.w(() -> "[ImageEditor] Cannot save: view is null");
+            return;
+        }
 
-    @WorkerThread
-    public Uri renderToSingleUseBlob() {
-        return renderToSingleUseBlob(requireContext(), imageEditorView.getModel());
+        // Get model on UI thread before passing to worker thread
+        final EditorModel model = imageEditorView.getModel();
+        if (model == null) {
+            L.w(() -> "[ImageEditor] Cannot save: model is null");
+            return;
+        }
+
+        final Context context = getContext();
+        if (context == null) {
+            L.w(() -> "[ImageEditor] Cannot save: context is null");
+            return;
+        }
+
+        SimpleTask.run(() -> renderToSingleUseBlob(context, model), uri -> {
+            // Check if fragment is still attached when callback executes
+            if (!isAdded() || getContext() == null) {
+                L.w(() -> "[ImageEditor] Save completed but fragment is detached");
+                return;
+            }
+
+            SaveAttachmentUtil.saveWithUIFromJava(
+                    requireContext(),
+                    getViewLifecycleOwner(),
+                    new SaveAttachmentUtil.Attachment(uri, MediaUtil.IMAGE_JPEG, System.currentTimeMillis(), null, true, true)
+            );
+        });
     }
 
     @WorkerThread
@@ -779,7 +824,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
                     .withMimeType(MediaUtil.IMAGE_JPEG)
                     .createForDraftAttachmentAsync(context).get();
         } catch (Exception e) {
-            L.w(e::toString);
+            L.w(e, () -> "[ImageEditorFragment] createDraftAttachment error: ");
         }
         return null;
     }
@@ -1021,6 +1066,24 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
             ((SelectableRenderer) editorElement.getRenderer()).onSelected(selected);
         }
         imageEditorView.getModel().setSelected(selected ? editorElement : null);
+    }
+
+    /**
+     * Clears blurred bitmaps from the main image renderer to free memory.
+     * Called after editing is complete to reduce memory footprint.
+     * Blurred bitmaps will be recreated if needed during rendering (e.g., when sending).
+     */
+    public void clearBlurredBitmaps() {
+        if (imageEditorView != null && imageEditorView.getModel() != null) {
+            EditorModel model = imageEditorView.getModel();
+            EditorElement mainImage = model.getMainImage();
+            if (mainImage != null) {
+                Renderer renderer = mainImage.getRenderer();
+                if (renderer instanceof UriGlideRenderer) {
+                    ((UriGlideRenderer) renderer).clearBlurredBitmap();
+                }
+            }
+        }
     }
 
     private final OnBackPressedCallback onBackPressedCallback = new OnBackPressedCallback(false) {

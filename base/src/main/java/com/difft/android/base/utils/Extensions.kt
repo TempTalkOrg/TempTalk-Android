@@ -2,10 +2,14 @@ package com.difft.android.base.utils
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
 import android.os.Process
+import android.view.View
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
 import com.difft.android.base.log.lumberjack.L
@@ -91,6 +95,27 @@ fun Context.getSafeContext(): Context {
             this.applicationContext
         }
     }
+}
+
+/**
+ * Get LifecycleOwner from view tree or context chain.
+ * Handles ContextWrapper scenarios where direct cast fails.
+ */
+fun View.getLifecycleOwner(): LifecycleOwner? {
+    // 1. Try findViewTreeLifecycleOwner first
+    findViewTreeLifecycleOwner()?.let { return it }
+    
+    // 2. Try direct context cast
+    (context as? LifecycleOwner)?.let { return it }
+    
+    // 3. Unwrap context to find Activity (handles ContextThemeWrapper etc.)
+    var ctx = context
+    while (ctx is ContextWrapper) {
+        if (ctx is LifecycleOwner) return ctx
+        ctx = ctx.baseContext
+    }
+    
+    return null
 }
 
 val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
