@@ -1,0 +1,1 @@
+Yelling is an open-source, cross-platform instant messaging app designed for efficient communication. It supports chat, voice and video calls on iOS, macOS, Android, Linux and Windows, keeping you seamlessly connected anytime, anywhere.
