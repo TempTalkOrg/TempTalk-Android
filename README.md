@@ -168,9 +168,3 @@ If you encounter any issues or have questions, please:
 ---
 
 **TempTalk Android** - Making communication simpler and connections more secure.
-
-### Channel Variants
-* **google**: Google Play channel
-* **official**: Official channel
-* **insider**: Insider channel
-* **fdroid**: F-Droid
