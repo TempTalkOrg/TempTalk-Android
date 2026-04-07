@@ -56,8 +56,9 @@ smartRefreshLayout = "2.1.0"
 pictureSelector = "v3.11.2"
 
 dtproto = "3.0.0"
+jna = "5.14.0"
 signalAndroid = "0.86.5"
-signalSqlcipher = "4.6.0-S1"
+sqlcipherAndroid = "4.14.1"
 
 # Jackson
 jacksonDatabind = "2.13.5"
@@ -194,8 +195,9 @@ picture-selector-ucrop = { module = "io.github.lucksiege:ucrop", version.ref = "
 picture-selector-compress = { module = "io.github.lucksiege:compress", version.ref = "pictureSelector" }
 
 dtproto = { module = "com.github.TempTalkOrg:dtproto", version.ref = "dtproto" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 signal-android = { module = "org.signal:libsignal-android", version.ref = "signalAndroid" }
-signal-sqlcipher-android = { module = "org.signal:sqlcipher-android", version.ref = "signalSqlcipher" }
+signal-sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipherAndroid" }
 
 # Jackson
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jacksonDatabind" }

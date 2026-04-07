@@ -1,6 +1,7 @@
 package org.thoughtcrime.securesms.database;
 
 import android.database.Cursor;
+import android.database.sqlite.SQLiteException;
 
 import androidx.annotation.NonNull;
 
@@ -28,7 +29,8 @@ public final class SqlCipherDeletingErrorHandler implements DatabaseErrorHandler
     }
 
     @Override
-    public void onCorruption(SQLiteDatabase db, String message) {
+    public void onCorruption(SQLiteDatabase db, SQLiteException e) {
+        String message = e.getMessage();
         try {
             L.e(() -> TAG + " Database '" + databaseName + "' corrupted! Message: " + message + ". Going to try to run some diagnostics.");
 

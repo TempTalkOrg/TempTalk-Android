@@ -154,7 +154,10 @@ dependencies {
 
     // 其他
     api(libs.libphonenumber)
-    api(libs.dtproto)
+    api(libs.dtproto) {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
+    api(libs.jna) { artifact { type = "aar" } }
     api(libs.keyboard.visibility.event)
 
     // Protobuf

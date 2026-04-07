@@ -2,6 +2,7 @@ package org.thoughtcrime.securesms.database
 
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
+import android.database.sqlite.SQLiteException
 import net.zetetic.database.DatabaseErrorHandler
 import net.zetetic.database.sqlcipher.SQLiteConnection
 import net.zetetic.database.sqlcipher.SQLiteDatabase
@@ -18,7 +19,8 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class SqlCipherErrorHandler(private val databaseName: String) : DatabaseErrorHandler {
 
-    override fun onCorruption(db: SQLiteDatabase, message: String?) {
+    override fun onCorruption(db: SQLiteDatabase, e: SQLiteException) {
+        val message = e.message
         val output = StringBuilder()
         output.append("Database '$databaseName' corrupted! Message: $message. Going to try to run some diagnostics.\n")
 
