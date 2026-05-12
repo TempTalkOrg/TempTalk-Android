@@ -3,7 +3,7 @@ package com.difft.android.call.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,66 +13,47 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
-import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.user.CallConfig
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.globalServices
-import com.difft.android.call.LCallManager
-import com.difft.android.call.LCallUiConstants
-import com.difft.android.call.LCallViewModel
-import com.difft.android.call.data.BarrageMessageConfig
-import com.difft.android.call.data.CallUserDisplayInfo
-import com.difft.android.call.data.MUTE_ACTION_INDEX
-import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
-import com.difft.android.call.util.IdUtil
-import dagger.hilt.android.EntryPointAccessors
-import io.livekit.android.room.Room
-import io.livekit.android.room.participant.LocalParticipant
-import io.livekit.android.room.participant.Participant
-import io.livekit.android.room.track.Track
-import io.livekit.android.util.flow
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import kotlin.collections.contains
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Text
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.globalServices
+import com.difft.android.call.LCallUiConstants
+import com.difft.android.call.LCallViewModel
+import com.difft.android.call.data.BarrageMessageConfig
+import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
+import com.difft.android.call.ui.barrage.BarrageMessageView
+import com.difft.android.call.ui.screenshare.ScreenSharingView
+import io.livekit.android.room.Room
+import io.livekit.android.room.participant.LocalParticipant
+import io.livekit.android.room.participant.Participant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -82,12 +63,19 @@ fun MultiParticipantCallPage(
     room: Room,
     muteOtherEnabled: Boolean = false,
     autoHideTimeout: Long,
-    callConfig: CallConfig
+    callConfig: CallConfig,
+    isDualPane: Boolean = false,
 ) {
-    val participants by viewModel.participants.collectAsState(initial = emptyList())
+    val participantsFlow = remember(viewModel) {
+        viewModel.participants.distinctUntilChanged { old, new ->
+            old.size == new.size && old.zip(new).all { (a, b) -> a.sid == b.sid }
+        }
+    }
+    val participants by participantsFlow.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val whoSharedScreen by viewModel.screenSharingUser.collectAsState()
     val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     val coroutineScope = rememberCoroutineScope()
@@ -97,7 +85,7 @@ fun MultiParticipantCallPage(
         configuration.screenWidthDp > configuration.screenHeightDp
 
     if (!isUserSharingScreen) {
-        if (isWideScreen) {
+        if (isWideScreen && !isInPipMode) {
             WideScreenParticipantLayout(
                 participants = participants,
                 viewModel = viewModel,
@@ -145,17 +133,15 @@ fun MultiParticipantCallPage(
         }
     } else {
         whoSharedScreen?.let { sharedParticipant ->
-            // 显示屏幕分享画面
-            ScreenSharingView( room = room, participant = sharedParticipant, reconnectCount = reconnectCount)
-            // 显示屏幕分享时speaker悬浮窗
-            ScreenShareSpeakerView(viewModel = viewModel, shareScreenUser = sharedParticipant, callConfig = callConfig)
+            ScreenSharingView(room = room, participant = sharedParticipant, reconnectCount = reconnectCount)
+            LaunchedEffect(sharedParticipant.sid) {
+                viewModel.updateScreenShareFallback(sharedParticipant)
+            }
         }
     }
 
-    // 显示弹幕
-    BarrageMessageView(
-        viewModel,
-        config = BarrageMessageConfig(
+    val barrageConfig = remember(callConfig, autoHideTimeout) {
+        BarrageMessageConfig(
             isOneVOneCall = false,
             barrageTexts = callConfig.chatPresets ?: emptyList(),
             displayDurationMillis = autoHideTimeout,
@@ -165,8 +151,15 @@ fun MultiParticipantCallPage(
             emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
             textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
             textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
-        ),
-        { message, type, topic ->
+        )
+    }
+
+    BarrageMessageView(
+        viewModel,
+        config = barrageConfig,
+        isDualPane = isDualPane,
+        isShareScreening = isUserSharingScreen,
+        sendBarrageMessage = { message, type, _ ->
             viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
                 if (status) {
                     if (type == RTM_MESSAGE_TYPE_DEFAULT) {
@@ -177,19 +170,6 @@ fun MultiParticipantCallPage(
                 }
             })
         })
-
-    if(isUserSharingScreen) {
-        // 显示举手提示
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 16.dp, end = 16.dp)
-            ,
-            contentAlignment = Alignment.TopEnd
-        ){
-            ShowHandsUpTipView(viewModel)
-        }
-    }
 }
 
 
@@ -377,177 +357,4 @@ private fun OverflowParticipantCell(
     }
 }
 
-@Composable
-fun MultiParticipantItem(
-    viewModel: LCallViewModel,
-    room: Room,
-    participant: Participant,
-    modifier: Modifier = Modifier,
-    uid: String,
-    muteOtherEnabled: Boolean,
-    onClickMute: () -> Unit,
-    coroutineScope: CoroutineScope
-){
-    val contactorCacheManager = remember {
-        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
-    }
-
-    val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
-    val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
-
-    val videoTrackMap by participant::videoTrackPublications.flow.collectAsState(initial = emptyList())
-    val videoPubs by remember { derivedStateOf { videoTrackMap.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
-
-    // Find the camera video stream to show
-    val videoPub by remember { derivedStateOf { videoPubs.firstOrNull { pub -> pub.source == Track.Source.CAMERA } } }
-
-    var videoMuted by remember { mutableStateOf(true) }
-
-    val context = LocalContext.current
-
-    var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
-
-    var expanded by remember { mutableStateOf(false) }
-
-    fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
-        setExpanded(false)
-        when(index){
-            MUTE_ACTION_INDEX -> onClickMute()
-            else -> {}
-        }
-    }
-
-    suspend fun updateNameAndAvatar(userId: String) {
-        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, userId)
-    }
-
-    fun handleClickScreen() {
-        viewModel.callUiController.setShowTopStatusViewEnabled(
-            !viewModel.callUiController.showTopStatusViewEnabled.value
-        )
-        viewModel.callUiController.setShowBottomToolBarViewEnabled(
-            !viewModel.callUiController.showBottomToolBarViewEnabled.value
-        )
-    }
-
-    // monitor video muted state
-    LaunchedEffect(videoPub) {
-        val pub = videoPub
-        if (pub != null) {
-            pub::muted.flow.collect { muted -> videoMuted = muted }
-        } else {
-            videoMuted = true
-        }
-    }
-
-    LaunchedEffect(uid) {
-        updateNameAndAvatar(uid)
-    }
-
-    LaunchedEffect(uid) {
-        LCallManager.getContactsUpdateListener().collect { updatedIds ->
-            if (updatedIds.contains(IdUtil.getUidByIdentity(uid))) {
-                launch { updateNameAndAvatar(uid) }
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .pointerInput(Unit) {
-                detectTapGestures (
-                    onLongPress = {
-                        if(participant.isMicrophoneEnabled && muteOtherEnabled){
-                            expanded = true
-                        }
-                    },
-                    onPress = {
-                        handleClickScreen()
-                    }
-                )
-            }
-    ) {
-        ConstraintLayout(
-            modifier = modifier
-                .clip(shape = RoundedCornerShape(8.dp))
-                .background(color = DifftTheme.colors.background)
-        ) {
-            val (userView, statusView) = createRefs()
-
-            Column(
-                modifier = Modifier
-                    .constrainAs(userView) {
-                        top.linkTo(parent.top)
-                        bottom.linkTo(parent.bottom)
-                        start.linkTo(parent.start)
-                        end.linkTo(parent.end)
-                        width = Dimension.fillToConstraints
-                        height = Dimension.fillToConstraints
-                    },
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    userDisplayInfo.avatar?.let { avatarImage ->
-                        key (userDisplayInfo.avatar){
-                            AndroidView(
-                                factory = {
-                                    avatarImage
-                                },
-                                modifier = Modifier
-                                    .height(96.dp)
-                                    .width(96.dp)
-                            )
-                        }
-                    }
-                    if (!videoMuted) {
-                        VideoItemTrackSelector(
-                            coroutineScope = coroutineScope,
-                            modifier = Modifier.background(Color.Transparent),
-                            room = room,
-                            participant = participant,
-                            sourceType = Track.Source.CAMERA,
-                            viewType = ViewType.Surface,
-                            draggable = false,
-                            reconnectCount = reconnectCount,
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .constrainAs(statusView){
-                        start.linkTo(parent.start, 4.dp)
-                        bottom.linkTo(parent.bottom, 4.33.dp)
-                    }
-                    .wrapContentWidth()
-                    .height(24.dp)
-                    .background(color = DifftTheme.colors.backgroundElevate, shape = RoundedCornerShape(size = 4.dp))
-                    .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                ShowSpeakerStatusView(participant, userDisplayInfo.name, speakingEnabled = speakingEnabled)
-            }
-        }
-
-        ShowItemOnClickView(listOf("Mute"), expanded, setExpanded = { value -> expanded = value} ,
-            onClickItem = { index ->
-                onClickItem(index,
-                    setExpanded = {value -> expanded = value},
-                    onClickMute= { onClickMute()}
-                )
-            }
-        )
-
-    }
-
-
-}
 

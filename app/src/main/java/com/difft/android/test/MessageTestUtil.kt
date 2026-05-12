@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.members
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
+import com.difft.android.chat.dependencies.ApplicationDependencies
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.random.Random

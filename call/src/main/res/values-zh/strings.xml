@@ -1,13 +1,9 @@
 <resources>
-
-    <string name="no_permission_camera_and_voice_tip">应用没有视频语音的权限，您可以在系统设置的应用权限设置中启用摄像头和麦克风权限。</string>
     <string name="call_pip_not_supported_message">设备不支持画中画模式</string>
     <string name="call_callee_action_reject">对方拒绝</string>
-    <string name="call_callee_action_cancel">对方取消</string>
     <string name="call_callee_action_hangup">会议已结束</string>
     <string name="call_callee_action_noanswer">对方未接听</string>
     <string name="call_newcall_tip">当前正在通话中，挂断当前通话后即可接听。</string>
-    <string name="call_timeout_tip">通话超时</string>
     <string name="call_is_calling_tip">您已在会议中。</string>
     <string name="call_status_calling">等待接听…</string>
     <string name="call_connecting_title">连接中…</string>
@@ -24,7 +20,6 @@
     <string name="call_e2ee_key_error">无法解密通话密钥</string>
     <string name="call_connect_error_ended">通话已结束</string>
     <string name="call_no_internet_connection_tip">当前无网络连接，请检查后重试。</string>
-    <string name="call_other_exception_error">异常错误</string>
     <string name="call_enable_camera_not_implemented_error">当前设备暂不支持打开摄像头，本次通话将以语音方式进行。</string>
     <string name="call_all_mute_timeout_reminder">会议已长时间无人开麦，是否退出会议？</string>
     <string name="call_single_person_timeout_reminder">当前会议无其他参与者，是否退出会议？</string>
@@ -43,22 +38,22 @@
     <string name="call_barrage_message_critical_alert_failed">发送紧急联络失败，请重试。</string>
     <string name="call_barrage_message_critical_alert_limited">发送过于频繁，请稍后重试。</string>
     <string name="call_attendees">参会者</string>
-    <string name="call_barrage_send">发送</string>
-    <string name="call_other_network_poor_tip">当前通话对方网络不佳。</string>
     <string name="call_myself_network_poor_tip">当前通话你的网络不佳。</string>
     <string name="call_current_audio_device">%s ✓</string>
     <string name="call_button_group_leave_meeting">离开</string>
-    <string name="call_button_group_end_meeting">End</string>
-    <string name="call_button_group_end_meeting_tip">您想结束所有人的会议吗？</string>
-    <string name="call_button_group_end_alert_title">结束会议</string>
     <string name="call_button_group_alert_cancel_text">取消</string>
     <string name="call_button_group_alert_end_text">结束</string>
     <string name="call_toolbar_noise_suppression_text">麦克风噪声抑制</string>
     <string name="call_denoise_mode_label">降噪模式</string>
     <string name="call_denoise_mode_standard">标准降噪</string>
     <string name="call_denoise_mode_enhanced">增强降噪</string>
+    <string name="call_voice_changer_label">变音</string>
+    <string name="call_voice_preset_original">未开启(原声)</string>
+    <string name="call_voice_preset_loli">花栗鼠</string>
+    <string name="call_voice_preset_higher">清亮</string>
+    <string name="call_voice_preset_deeper">低沉</string>
+    <string name="call_voice_preset_monster">怪兽</string>
     <string name="call_toolbar_bottom_invite_text">邀请</string>
-    <string name="call_toolbar_bottom_raise_hand_text">举手</string>
     <string name="call_toolbar_bottom_switch_text">翻转</string>
     <string name="call_toolbar_bottom_critical_alert_text">紧急联络</string>
     <string name="call_topbar_critical_alert_entrance_text1">没有回应？</string>
@@ -111,12 +106,8 @@
     <string name="call_camera_permission_deny_title">相机权限已关闭</string>
     <string name="call_microphone_permission_deny_content">请前往系统设置中开启麦克风权限，否则语音功能无法使用。</string>
     <string name="call_camera_permission_deny_content">请前往系统设置中开启相机权限，否则视频功能无法使用。</string>
-    <string name="call_microphone_permission_setting_failed">无法跳转，请在系统设置中手动开启麦克风权限。</string>
-    <string name="call_camera_permission_setting_failed">无法跳转，请在系统设置中手动开启相机权限。</string>
-    <string name="call_permission_button_setting_cancel_tip">缺少必要权限</string>
     <string name="fullscreen_notification_settings_huawei_tip">请在应用设置-其他权限-允许“后台弹窗”权限，以便在锁屏时显示来电界面。</string>
     <string name="fullscreen_notification_settings_xiaomi_tip">请在应用设置-其他权限-允许“后台弹出界面”权限，以便在锁屏时显示来电界面。</string>
-    <string name="fullscreen_notification_settings_honor_tip">请在应用设置-通知管理-允许“横幅通知”权限，以便在锁屏时显示来电界面。</string>
     <string name="fullscreen_notification_settings_mainland_default_tip">请确保在应用设置中开启“横幅通知”，以便在锁屏时显示来电界面。</string>
     <string name="fullscreen_notification_settings_oversea_tip">请允许“全屏通知”权限，以便在锁屏时显示来电界面。</string>
     <string name="fullscreen_notification_no_permission_oversea_tip">请为%s开启“全屏通知”权限，以确保您在设备锁屏时也能正常接听来电。</string>
@@ -130,13 +121,9 @@
     <string name="call_invite_members_title">邀请成员</string>
     <string name="call_invite_members">成员</string>
     <string name="call_invite_add">添加…</string>
-    <string name="call_invite_add_new_member">添加新成员</string>
     <string name="call_invite_search_placeholder">搜索</string>
-    <string name="call_invite_add_contacts">添加联系人</string>
     <string name="call_invite_done">完成</string>
-    <string name="call_invite_cancel">取消</string>
     <string name="call_invite_search_no_result">未找到结果</string>
-    <string name="call_invite_member_tag">已在会议中</string>
     <string name="call_end_forall_toast_title">仍有人正在发言</string>
     <string name="call_end_forall_toast_message">是否确定要结束会议？</string>
     <string name="call_critical_alert_confirm_view_message_group">发送给未入会的群成员。</string>
@@ -145,5 +132,5 @@
     <string name="call_critical_alert_confirm_view_message_invitees">和其他%s人</string>
     <string name="call_critical_alert_confirm_view_button_send">发送</string>
     <string name="call_critical_alert_tooltip">可突破静音和勿扰模式，仅用于紧急情况。</string>
-
+    <string name="call_screen_share_mic_queue">等待发言</string>
 </resources>

@@ -111,7 +111,7 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     override fun attachBaseContext(context: Context) {
-        super.attachBaseContext(LanguageUtils.updateBaseContextLocale(context))
+        super.attachBaseContext(LanguageUtils.createConfiguredContext(context))
     }
 
     override fun onDestroy() {

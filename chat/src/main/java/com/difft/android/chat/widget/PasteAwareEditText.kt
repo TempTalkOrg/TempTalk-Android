@@ -5,7 +5,7 @@ import android.net.Uri
 import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatEditText
 import com.difft.android.base.utils.FileUtil
-import org.thoughtcrime.securesms.util.ServiceUtil
+import com.difft.android.chat.util.ServiceUtil
 
 class PasteAwareEditText @JvmOverloads constructor(
     context: Context,

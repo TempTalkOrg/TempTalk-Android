@@ -16,6 +16,7 @@ data class ContactResponse(
     val signature: String? = null,
     val timeZone: String? = null,
     val remark: String? = null,
+    val remarkAvatar: String? = null,
     val joinedAt: String? = null,
     val sourceDescribe: String? = null,
     val findyouDescribe: String? = null,

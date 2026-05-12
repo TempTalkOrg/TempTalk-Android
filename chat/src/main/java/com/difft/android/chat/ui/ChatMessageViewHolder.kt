@@ -41,12 +41,11 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TranslateStatus
-import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.Util
 import util.TimeFormatter
 
 /**
@@ -321,12 +320,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             if (message !is TextChatMessage) return
 
-            // Set container width and message ID for layout optimization
-            val width = containerWidth
-            (contentContainer as? ChatMessageContainerView)?.apply {
-                this.containerWidth = width
-                bindMessageId(message.id)
-            }
+            // Set container width for precise layout calculation in dual-pane mode
+            (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
 
             // Check if this message is currently playing audio and show speed button
             bindVoiceSpeedButton(message)
@@ -567,8 +562,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 }
             }
             checkboxSelectForUnpin.visibility =
-                if (message.editMode && message.attachment?.isAudioMessage() != true && message.attachment?.isAudioFile() != true) View.VISIBLE
-                else if (message.editMode && (message.attachment?.isAudioMessage() == true || message.attachment?.isAudioFile() == true)) View.INVISIBLE
+                if (message.editMode && message.attachment?.isAudioMessage() != true) View.VISIBLE
+                else if (message.editMode && message.attachment?.isAudioMessage() == true) View.INVISIBLE
                 else View.GONE
         }
 

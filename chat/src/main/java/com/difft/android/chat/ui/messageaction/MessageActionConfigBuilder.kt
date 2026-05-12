@@ -189,8 +189,9 @@ class MessageActionConfigBuilder(
                 actions.add(MessageAction.save(isMediaFile))
             }
             
-            // Multi-select - for non-audio messages
-            if (message.attachment?.isAudioMessage() != true && message.attachment?.isAudioFile() != true) {
+            // Multi-select - voice messages cannot be forwarded, so exclude them.
+            // Voice files (flags=0) are forwardable, so they remain selectable.
+            if (message.attachment?.isAudioMessage() != true) {
                 actions.add(MessageAction.multiSelect())
             }
             

@@ -57,6 +57,7 @@ data class TTNotifyMessage(
         const val NOTIFY_ACTION_TYPE_NON_FRIEND_LIMIT = 10010 //非好友每天只能发3条消息（本地创建）
         const val NOTIFY_ACTION_TYPE_RESET_IDENTITY_KEY = 10011 //重置identity key（本地创建）
         const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012 //Earlier messages expired（本地创建）
+        const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020 // System notice emitted after a forward completes (Android-local convention, not cross-platform)
     }
 }
 
@@ -124,6 +125,9 @@ data class Group(
     val autoClear: Boolean,
     val messageClearAnchor: Long,
     val criticalAlert: Boolean = false,
+    val groupCryptoMode: Int? = null,
+    val encryptedName: String? = null,
+    val encryptedAvatar: String? = null,
     )
 
 data class Member(
@@ -140,7 +144,8 @@ data class Member(
     val name: String?,
     val number: String?,
     val publicConfigs: PublicConfigs?,
-    val privateConfigs: PrivateConfigs?
+    val privateConfigs: PrivateConfigs?,
+    val uidSignature: String? = null,
 )
 
 data class PublicConfigs(
@@ -162,6 +167,7 @@ data class OperatorInfo(
 data class NotifyConversation(
     val version: Int,
     val remark: String?,
+    val remarkAvatar: String?,
     val muteStatus: Int,
     val blockStatus: Int,
     val confidentialMode: Int,

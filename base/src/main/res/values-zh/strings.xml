@@ -12,24 +12,9 @@
     <string name="chat_favorites">收藏</string>
 
     <!-- DateUtils -->
-    <string name="DateUtils_just_now">刚刚</string>
-    <string name="DateUtils_minutes_ago">%d分钟前</string>
     <string name="DateUtils_today">今天</string>
     <string name="DateUtils_yesterday">昨天</string>
-    <!-- When scheduling a message, %1$s replaced with either today, tonight, or tomorrow. %2$s replaced with the time. e.g. Tonight at 9:00pm -->
-    <string name="DateUtils_schedule_at">%1$s %2$s</string>
-    <!-- Used when getting a time in the future. For example, Tomorrow at 9:00pm -->
-    <string name="DateUtils_tomorrow">明天</string>
-    <!-- Used in the context: Tonight at 9:00pm for example. Specifically this is after 7pm -->
-    <string name="DateUtils_tonight">今晚</string>
     <!-- plurals.xml -->
-    <plurals name="hours_ago" tools:ignore="UnusedQuantity">
-        <item quantity="one">%d小时前</item>
-        <item quantity="other">%d小时前</item>
-    </plurals>
-
-    <string name="DeviceListItem_today">今天</string>
-
     <string name="DateUtils_days">天</string>
     <string name="DateUtils_hours">小时</string>
     <string name="DateUtils_minutes">分钟</string>

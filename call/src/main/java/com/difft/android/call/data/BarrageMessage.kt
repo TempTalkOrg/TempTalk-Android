@@ -1,22 +1,29 @@
 package com.difft.android.call.data
 
+import androidx.compose.runtime.Stable
+import java.util.concurrent.atomic.AtomicLong
+
 data class BarrageMessage(
     val userName: String,
     val message: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val id: Long = barrageIdGenerator.incrementAndGet()
 )
 
+private val barrageIdGenerator = AtomicLong(0)
+
+@Stable
 data class BarrageMessageConfig(
     val isOneVOneCall: Boolean,
     val barrageTexts: List<String>,
     val displayDurationMillis: Long = 6000L,
     val showLimitCount: Int = 6,
-    val baseSpeed: Long, // 气泡消息展示 duration 基础时间（毫秒）
-    val deltaSpeed: Long, // 气泡消息展示 duration 偏移时间（毫秒）
-    val columns: List<Int>, // 气泡消息从底部出现的位置偏移（屏幕左侧百分比）
-    val emojiPresets: List<String>, // 气泡消息预设文本
-    val textPresets: List<String>, // 气泡消息预设文本
-    val textMaxLength: Int // 可以输入文本弹幕消息的最大长度
+    val baseSpeed: Long,
+    val deltaSpeed: Long,
+    val columns: List<Int>,
+    val emojiPresets: List<String>,
+    val textPresets: List<String>,
+    val textMaxLength: Int
 )
 
 data class EmojiBubbleMessage(

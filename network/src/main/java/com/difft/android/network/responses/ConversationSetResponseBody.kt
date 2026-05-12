@@ -16,6 +16,7 @@ data class ConversationSetResponseBody(
     val messageClearAnchor: Long = 0L,
     val version: Int = 0,
     val remark: String? = null,
+    val remarkAvatar: String? = null,
     val blockStatus: Int = 0,
     val sourceDescribe: String? = null,
     val findyouDescribe: String? = null,

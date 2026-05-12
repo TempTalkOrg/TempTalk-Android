@@ -32,6 +32,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.BaseActivity
@@ -94,6 +95,7 @@ import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.Draft
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
+import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
 import difft.android.messageserialization.model.Quote
@@ -131,14 +133,14 @@ import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.sharedContacts
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.create
-import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
-import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionActivity
-import org.thoughtcrime.securesms.util.MediaUtil
-import org.thoughtcrime.securesms.util.ServiceUtil
-import org.thoughtcrime.securesms.util.ViewUtil
-import org.thoughtcrime.securesms.util.visible
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.create
+import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
+import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.util.ServiceUtil
+import com.difft.android.chat.util.ViewUtil
+import com.difft.android.chat.util.visible
 import util.FileUtils
 import util.ScreenLockUtil
 import java.io.File
@@ -193,6 +195,9 @@ class ChatMessageInputFragment : Fragment() {
 
     @Inject
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
+
+    @Inject
+    lateinit var pushReactionSendJobFactory: PushReactionSendJobFactory
 
     @Inject
     lateinit var pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory
@@ -379,7 +384,11 @@ class ChatMessageInputFragment : Fragment() {
                                 selectChatsUtils.saveToNotes(
                                     requireActivity(),
                                     content,
-                                    forwardContext
+                                    forwardContext?.let { listOf(it) },
+                                    // Source conversation = the currently opened chat.
+                                    sourceConversation = chatViewModel.forWhat,
+                                    // Single selected message → exactly one outer author.
+                                    sourceAuthorIds = listOf(messageToForward.authorId)
                                 )
                             } else {
                                 selectChatsUtils.showChatSelectAndSendDialog(
@@ -388,6 +397,12 @@ class ChatMessageInputFragment : Fragment() {
                                     null,
                                     null,
                                     forwardContext?.let { listOf(it) },
+                                    // Single-message forward: long-press → Forward on ONE message
+                                    scene = ForwardNoticeData.Scene.SINGLE,
+                                    // Source conversation = the currently opened chat.
+                                    sourceConversation = chatViewModel.forWhat,
+                                    // Single selected message → exactly one outer author.
+                                    sourceAuthorIds = listOf(messageToForward.authorId),
                                 )
                             }
                             forwardContext = null
@@ -460,6 +475,14 @@ class ChatMessageInputFragment : Fragment() {
         chatViewModel.selectMessagesState.onEach {
             binding.combineForward.isVisible = it.editModel
             binding.clSendMessage.visible = !it.editModel
+            if (it.editModel && isVoiceMode) {
+                // Voice recorder lives in the parent ChatFragment and is anchored to the
+                // bottom of the screen. It would cover the multi-select action bar, so we
+                // exit voice mode when entering selection mode.
+                isVoiceMode = false
+                chatViewModel.setVoiceVisibility(false)
+                updateSubmitButtonView()
+            }
             if (binding.combineForward.isVisible) {
                 binding.combineForward.setContent {
                     val state = chatViewModel.selectMessagesState.collectAsState()
@@ -482,14 +505,28 @@ class ChatMessageInputFragment : Fragment() {
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.forwardMultiMessage.filterNotNull().onEach {
-            selectChatsUtils.showChatSelectAndSendDialog(requireActivity(), it.content, null, null, it.forwardContexts)
+            selectChatsUtils.showChatSelectAndSendDialog(
+                requireActivity(),
+                it.content,
+                null,
+                null,
+                it.forwardContexts,
+                scene = it.scene,
+                // Source conversation = the user's current chat, plumbed through ForwardContextData from the ViewModel.
+                sourceConversation = it.sourceConversation,
+                sourceAuthorIds = it.sourceAuthorIds,
+            )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.saveMultiMessageToNote.filterNotNull().onEach {
+            // Pass the WHOLE list — not `.first()`. Previous bug dropped N-1 attachments
+            // + produced wrong notice text on multi-select save-to-notes.
             selectChatsUtils.saveToNotes(
                 requireActivity(),
                 it.content,
-                it.forwardContexts.first()
+                it.forwardContexts,
+                sourceConversation = it.sourceConversation,
+                sourceAuthorIds = it.sourceAuthorIds
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -514,8 +551,11 @@ class ChatMessageInputFragment : Fragment() {
 
         chatViewModel.voiceMessageSend
             .onEach { path ->
-                val mimeType = MediaUtil.getMimeType(requireContext(), path.toUri()) ?: ""
-                prepareSendAttachmentPush(path.toUri(), mimeType, isAudioMessage = true)
+                // VoiceRecorderView always produces MPEG-4/AAC. Pin the MIME explicitly because
+                // MimeTypeMap.getMimeTypeFromExtension("m4a") returns "audio/mpeg" on some vendor
+                // ROMs, which breaks cross-platform receiver rendering (decoded as MP3 / shown as
+                // generic file).
+                prepareSendAttachmentPush(path.toUri(), MediaUtil.AUDIO_MP4, isAudioMessage = true)
             }
             .catch { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } }
             .launchIn(viewLifecycleOwner.lifecycleScope)
@@ -2074,7 +2114,7 @@ class ChatMessageInputFragment : Fragment() {
             null,
             null,
         )
-        ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+        ApplicationDependencies.getJobManager().add(pushReactionSendJobFactory.create(null, textMessage))
     }
 
     private fun recallMessage(messageID: String) {
@@ -2413,33 +2453,35 @@ class ChatMessageInputFragment : Fragment() {
 
     private var panelAnimator: android.animation.ValueAnimator? = null
 
+    /**
+     * Show the action panel. Caller MUST set `binding.llChatActions.minHeight` to the
+     * desired final height (typically the cached keyboard height) before calling this —
+     * `minHeight` is used as the animation target. If `minHeight` is 0, the panel is
+     * shown without animation (degraded display, no error).
+     */
     private fun showPanel(animated: Boolean = true) {
         panelAnimator?.cancel()
         val panel = binding.llChatActions
-        if (animated) {
-            // Make visible with zero height, then animate to measured height
+        val targetHeight = panel.minHeight
+        if (animated && targetHeight > 0) {
+            val lp = panel.layoutParams
+            lp.height = 0
+            panel.layoutParams = lp
             panel.visibility = View.VISIBLE
-            panel.post {
-                val targetHeight = panel.height
-                if (targetHeight <= 0) return@post
-                val lp = panel.layoutParams
-                lp.height = 0
-                panel.layoutParams = lp
-                panelAnimator = android.animation.ValueAnimator.ofInt(0, targetHeight).apply {
-                    duration = PANEL_ANIM_DURATION
-                    interpolator = android.view.animation.DecelerateInterpolator()
-                    addUpdateListener {
-                        lp.height = it.animatedValue as Int
+            panelAnimator = android.animation.ValueAnimator.ofInt(0, targetHeight).apply {
+                duration = PANEL_ANIM_DURATION
+                interpolator = android.view.animation.DecelerateInterpolator()
+                addUpdateListener {
+                    lp.height = it.animatedValue as Int
+                    panel.layoutParams = lp
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
                         panel.layoutParams = lp
                     }
-                    addListener(object : android.animation.AnimatorListenerAdapter() {
-                        override fun onAnimationEnd(animation: android.animation.Animator) {
-                            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                            panel.layoutParams = lp
-                        }
-                    })
-                    start()
-                }
+                })
+                start()
             }
         } else {
             panel.layoutParams = panel.layoutParams.apply {

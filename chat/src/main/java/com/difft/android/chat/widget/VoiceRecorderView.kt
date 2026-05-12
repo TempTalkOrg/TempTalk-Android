@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
+import com.difft.android.base.utils.appScope
 import com.difft.android.chat.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,8 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.audio.MediaRecorderWrapper
-import org.thoughtcrime.securesms.providers.MyBlobProvider
+import com.difft.android.chat.audio.MediaRecorderWrapper
+import com.difft.android.chat.providers.MyBlobProvider
 
 class VoiceRecorderView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -48,18 +49,21 @@ class VoiceRecorderView @JvmOverloads constructor(
     private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var startY = 0f
-    private var isRecording = false
-    private var isCancelled = false
+    @Volatile private var isRecording = false
+    @Volatile private var isCancelled = false
 
     private var mediaRecorder: MediaRecorder? = null
     private var amplitudeUpdateJob: Job? = null
     private var countdownJob: Job? = null
+    // Tracks the start coroutine so stop can join on it before tearing the recorder down,
+    // preventing the "stop wins the race -> recorder created afterwards leaks" interleaving.
+    private var startJob: Job? = null
 
-    private var recordingStartTime: Long = 0 // 记录开始录制的时间
+    @Volatile private var recordingStartTime: Long = 0
 
     var recordingCallback: ((RecordingState) -> Unit)? = null
 
-    private var outputFilePath: String? = null
+    @Volatile private var outputFilePath: String? = null
 
     private companion object {
         const val MIN_RECORDING_DURATION_MS = 1000L // 最短录制时间 1 秒（以毫秒为单位）
@@ -82,24 +86,40 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        // View 被销毁时，取消所有协程，避免内存泄漏
-        viewScope.cancel()
+
+        // Mark not-recording up-front so any surviving callback (audio focus listener,
+        // amplitude loop) early-returns instead of touching a dead recorder.
+        isRecording = false
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
 
-        // 同步停止 MediaRecorder，避免资源泄漏
-        try {
-            mediaRecorder?.apply {
-                stop()
-                release()
+        // Snapshot the recorder and hand cleanup off to appScope so it outlives viewScope.cancel().
+        // The lambda intentionally does NOT reference any View member, so it can't capture
+        // `this@VoiceRecorderView` and won't leak the View/Activity. Any context held by
+        // MediaRecorder is released as soon as release() runs (typical bound: <500 ms).
+        val recorderToCleanup = mediaRecorder
+        mediaRecorder = null
+        if (recorderToCleanup != null) {
+            // appScope is a process-scoped SupervisorJob on Dispatchers.IO; not cancelled by us,
+            // so the cleanup runs to completion.
+            appScope.launch {
+                try {
+                    recorderToCleanup.stop()
+                } catch (_: Exception) {
+                }
+                try {
+                    recorderToCleanup.release()
+                } catch (_: Exception) {
+                }
             }
-            mediaRecorder = null
-        } catch (e: Exception) {
-            L.i { "[VoiceRecorder] cleanup MediaRecorder failed: ${e.message}" }
         }
 
         releaseAudioFocus()
-        L.i { "[VoiceRecorder] View detached, all resources cleaned up" }
+
+        // Cancel viewScope last so the cleanup task above is already dispatched to appScope
+        // and won't be torn down with viewScope's children.
+        viewScope.cancel()
+        L.i { "[VoiceRecorder] View detached, cleanup dispatched to appScope" }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -131,8 +151,15 @@ class VoiceRecorderView @JvmOverloads constructor(
         isRecording = true
         isCancelled = false
 
+        // Must initialize synchronously before any coroutine is dispatched. Otherwise startCountdown()
+        // can run on Main before startMediaRecorder() (on IO) sets recordingStartTime, read the default
+        // 0L, compute a huge elapsed time, and immediately trigger stopRecording(), producing a
+        // 0-second voice message that fails to send.
+        recordingStartTime = System.currentTimeMillis()
+        outputFilePath = FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY) + recordingStartTime + ".m4a"
+
         cancelZone.visibility = View.VISIBLE
-        cancelZone.setBackgroundResource(R.drawable.chat_voice_cancle_bg) // 初始为灰色
+        cancelZone.setBackgroundResource(R.drawable.chat_voice_cancle_bg)
         tvTips.visibility = View.GONE
         waveformView.visibility = View.VISIBLE
         waveformView.startAnimation()
@@ -149,7 +176,8 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     private fun startCountdown() {
         countdownJob = viewScope.launch {
-            while (isActive) {
+            // Guards against abortRecording() firing before this coroutine gets CPU time.
+            while (isActive && isRecording) {
                 val elapsedTime = System.currentTimeMillis() - recordingStartTime
                 val remainingTime = MAX_RECORDING_DURATION_MS - elapsedTime
 
@@ -171,12 +199,28 @@ class VoiceRecorderView @JvmOverloads constructor(
         }
     }
 
-    // 开始录音
-    private fun startMediaRecorder() {
-        recordingStartTime = System.currentTimeMillis()
-        try {
-            outputFilePath = FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY) + System.currentTimeMillis() + ".m4a"
+    private fun launchMediaRecorder() {
+        startJob = viewScope.launch {
+            withContext(Dispatchers.IO) {
+                startMediaRecorder()
+            }
+            if (isRecording) {
+                startAmplitudeUpdates()
+            }
+        }
+    }
 
+    private fun startMediaRecorder() {
+        // recordingStartTime and outputFilePath are assigned synchronously in
+        // startRecordingIfPermissionGranted(); this method only handles the MediaRecorder lifecycle.
+        try {
+            // Guard against the late-IO-dispatch case: if onDetachedFromWindow / stopRecording flipped
+            // isRecording to false before this coroutine got CPU time, skip creating the recorder so we
+            // don't leak the mic. isRecording is @Volatile, so the write is visible here on IO.
+            if (!isRecording) {
+                L.i { "[VoiceRecorder] startMediaRecorder skipped, no longer recording" }
+                return
+            }
             mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(context)
             } else {
@@ -214,34 +258,23 @@ class VoiceRecorderView @JvmOverloads constructor(
                         return@setOnAudioFocusChangeListener
                     }
 
+                    // Any focus loss (transient or permanent) cancels the recording rather than
+                    // stop-and-send. Dominant trigger is an incoming call; in that case the user
+                    // is responding to something else and does NOT want a half-finished voice
+                    // note auto-delivered. False positives (alarm, external recorder) are rare
+                    // and the worst-case is the user re-records — much better than an unintended
+                    // partial send. Also avoids the pause/resume state-machine bugs (resume()
+                    // throwing IllegalStateException on a never-paused recorder, GAIN firing as
+                    // an initial notification on some OEM ROMs).
                     when (focusChange) {
-                        AudioManager.AUDIOFOCUS_LOSS -> {
-                            // 丧失音频焦点，直接停止录音（不只是暂停）
-                            L.i { "[VoiceRecorder] Audio focus lost, stop recording" }
+                        AudioManager.AUDIOFOCUS_LOSS,
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                            L.i { "[VoiceRecorder] Audio focus lost ($focusChange), cancel recording" }
+                            isCancelled = true
                             try {
                                 stopRecording()
                             } catch (e: Exception) {
                                 L.i { "[VoiceRecorder] Stop recording failed: ${e.message}" }
-                            }
-                        }
-
-                        AudioManager.AUDIOFOCUS_GAIN -> {
-                            // 获取音频焦点，继续录音
-                            L.i { "[VoiceRecorder] Audio focus gained" }
-                            try {
-                                mediaRecorder?.resume()
-                            } catch (e: Exception) {
-                                L.i { "[VoiceRecorder] Resume failed: ${e.message}" }
-                            }
-                        }
-
-                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                            // 临时丧失音频焦点（短暂丧失），暂停录音
-                            L.i { "[VoiceRecorder] Audio focus lost transient, pause recording" }
-                            try {
-                                mediaRecorder?.pause()
-                            } catch (e: Exception) {
-                                L.i { "[VoiceRecorder] Pause failed: ${e.message}" }
                             }
                         }
                     }
@@ -252,32 +285,35 @@ class VoiceRecorderView @JvmOverloads constructor(
                 val focusRequestResult = audioManager?.requestAudioFocus(it)
                 if (focusRequestResult == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                     L.i { "[VoiceRecorder] Get audio focus, start Media Recorder" }
-                    startMediaRecorder()
-                    startAmplitudeUpdates()
+                    launchMediaRecorder()
                 } else {
-                    L.i { "[VoiceRecorder] Failed to gain audio focus." }
+                    L.w { "[VoiceRecorder] Audio focus denied (result=$focusRequestResult), abort recording" }
+                    abortRecording(RecordingState.Reason.AUDIO_FOCUS_DENIED)
                 }
             }
         } else {
-            startMediaRecorder()
-            startAmplitudeUpdates()
+            launchMediaRecorder()
         }
     }
 
 
     private fun startAmplitudeUpdates() {
         amplitudeUpdateJob = viewScope.launch(Dispatchers.IO) {
-            while (isActive) {
+            // Loop terminates promptly once stopRecording() flips isRecording (@Volatile), so we
+            // don't keep polling maxAmplitude after MediaRecorder is released.
+            while (isActive && isRecording) {
                 try {
                     val amplitude = mediaRecorder?.maxAmplitude?.toFloat() ?: 0f
-
                     withContext(Dispatchers.Main) {
                         waveformView.updateAmplitude(amplitude)
                     }
-                    delay(100)
                 } catch (e: Exception) {
-                    L.w { "[VoiceRecorderView] error: ${e.stackTraceToString()}" }
+                    // maxAmplitude throws IllegalStateException once the recorder is released.
+                    // Break out instead of hot-looping (delay was inside try → catch path skipped it).
+                    L.w { "[VoiceRecorder] amplitude update failed: ${e.stackTraceToString()}" }
+                    break
                 }
+                delay(100)
             }
         }
     }
@@ -340,6 +376,9 @@ class VoiceRecorderView @JvmOverloads constructor(
 
         // 在后台线程停止 MediaRecorder，避免阻塞主线程
         viewScope.launch(Dispatchers.IO) {
+            // Wait for an in-flight start to finish so we never tear down a recorder that hasn't
+            // been created yet (the "stop wins the race" interleaving from the lifecycle audit).
+            startJob?.join()
             try {
                 stopMediaRecorder()
                 releaseAudioFocus()
@@ -369,15 +408,26 @@ class VoiceRecorderView @JvmOverloads constructor(
                     }
 
                     else -> {
-                        L.i { "[VoiceRecorder] Recording saved. Duration:$recordingDuration  path:$outputFilePath" }
-                        outputFilePath?.let { path ->
-                            // 检查文件大小
+                        val path = outputFilePath
+                        if (path == null) {
+                            L.w { "[VoiceRecorder] outputFilePath is null after stop, treat as failed" }
+                            recordingCallback?.invoke(RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED))
+                        } else {
                             val file = java.io.File(path)
-                            if (file.exists() && file.length() > 10 * 1024 * 1024) { // 10MB
-                                deleteRecordingFile()
-                                recordingCallback?.invoke(RecordingState.TooLarge)
-                            } else {
-                                recordingCallback?.invoke(RecordingState.Stopped(filePath = path))
+                            when {
+                                !file.exists() || file.length() == 0L -> {
+                                    L.w { "[VoiceRecorder] file missing/empty after stop (exists=${file.exists()}, length=${if (file.exists()) file.length() else -1})" }
+                                    deleteRecordingFile()
+                                    recordingCallback?.invoke(RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED))
+                                }
+                                file.length() > 10 * 1024 * 1024 -> { // 10MB
+                                    deleteRecordingFile()
+                                    recordingCallback?.invoke(RecordingState.TooLarge)
+                                }
+                                else -> {
+                                    L.i { "[VoiceRecorder] Recording saved. duration=$recordingDuration size=${file.length()}" }
+                                    recordingCallback?.invoke(RecordingState.Stopped(filePath = path))
+                                }
                             }
                         }
                     }
@@ -391,15 +441,20 @@ class VoiceRecorderView @JvmOverloads constructor(
 
 
     private fun stopMediaRecorder() {
-        mediaRecorder?.apply {
-            try {
-                stop()
-                release()
-            } catch (e: Exception) {
-                L.i { "[VoiceRecorder] stop failed:" + e.stackTraceToString() }
-            }
-        }
+        // Split try blocks so release() always runs even if stop() throws
+        // (e.g. IllegalStateException when start() never reached or no data captured).
+        val r = mediaRecorder ?: return
         mediaRecorder = null
+        try {
+            r.stop()
+        } catch (e: Exception) {
+            L.i { "[VoiceRecorder] stop failed: ${e.stackTraceToString()}" }
+        }
+        try {
+            r.release()
+        } catch (e: Exception) {
+            L.i { "[VoiceRecorder] release failed: ${e.stackTraceToString()}" }
+        }
     }
 
     private fun releaseAudioFocus() {
@@ -408,6 +463,17 @@ class VoiceRecorderView @JvmOverloads constructor(
                 audioManager?.abandonAudioFocusRequest(it)
             }
         }
+    }
+
+    // No MediaRecorder to tear down — caller detected failure before recording started.
+    private fun abortRecording(reason: RecordingState.Reason) {
+        isRecording = false
+        countdownJob?.cancel()
+        amplitudeUpdateJob?.cancel()
+        deleteRecordingFile()
+        releaseAudioFocus()
+        resetButton()
+        recordingCallback?.invoke(RecordingState.RecordFailed(reason))
     }
 
     private fun resetButton() {
@@ -438,5 +504,13 @@ sealed class RecordingState {
     data object Cancelled : RecordingState()
     data object RecordPermissionRequired : RecordingState()
     data object TooLarge : RecordingState()
+    data class RecordFailed(val reason: Reason) : RecordingState()
+
+    enum class Reason {
+        // requestAudioFocus() returned NOT_GRANTED — another app is using audio (call, music, assistant, ...).
+        AUDIO_FOCUS_DENIED,
+        // MediaRecorder did not produce a valid output file (init failed, or stop ran before any data was captured).
+        RECORDER_INIT_FAILED,
+    }
 }
 

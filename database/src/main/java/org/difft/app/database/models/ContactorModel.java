@@ -39,6 +39,9 @@ public class ContactorModel {
     public String remark; //备注名
 
     @WCDBField
+    public String remarkAvatar;
+
+    @WCDBField
     public String joinedAt;
 
     @WCDBField
@@ -57,11 +60,11 @@ public class ContactorModel {
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         ContactorModel that = (ContactorModel) o;
-        return meetingVersion == that.meetingVersion && Objects.equals(id, that.id) && Objects.equals(name, that.name) && Objects.equals(email, that.email) && Objects.equals(avatar, that.avatar) && Objects.equals(publicName, that.publicName) && Objects.equals(timeZone, that.timeZone) && Objects.equals(remark, that.remark) && Objects.equals(joinedAt, that.joinedAt) && Objects.equals(sourceDescribe, that.sourceDescribe) && Objects.equals(findyouDescribe, that.findyouDescribe) && Objects.equals(groupMemberContactor, that.groupMemberContactor) && Objects.equals(customUid, that.customUid);
+        return meetingVersion == that.meetingVersion && Objects.equals(id, that.id) && Objects.equals(name, that.name) && Objects.equals(email, that.email) && Objects.equals(avatar, that.avatar) && Objects.equals(publicName, that.publicName) && Objects.equals(timeZone, that.timeZone) && Objects.equals(remark, that.remark) && Objects.equals(remarkAvatar, that.remarkAvatar) && Objects.equals(joinedAt, that.joinedAt) && Objects.equals(sourceDescribe, that.sourceDescribe) && Objects.equals(findyouDescribe, that.findyouDescribe) && Objects.equals(groupMemberContactor, that.groupMemberContactor) && Objects.equals(customUid, that.customUid);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, name, email, avatar, meetingVersion, publicName, timeZone, remark, joinedAt, sourceDescribe, findyouDescribe, groupMemberContactor, customUid);
+        return Objects.hash(id, name, email, avatar, meetingVersion, publicName, timeZone, remark, remarkAvatar, joinedAt, sourceDescribe, findyouDescribe, groupMemberContactor, customUid);
     }
 }

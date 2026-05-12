@@ -5,24 +5,16 @@
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">Learn more</string>
     <string name="SpanUtil__read_more">Read more</string>
-    <!-- KeyCachingService -->
-    <string name="KeyCachingService_tt_passphrase_cached">Touch to open.</string>
-    <string name="KeyCachingService_passphrase_cached">Unlocked</string>
-    <string name="KeyCachingService_lock">Lock</string>
-
     <!-- DraftDatabase -->
     <string name="chat_draft">Draft</string>
 
     <string name="you">You</string>
 
     <!-- Contact -->
-    <string name="chat_contact_detail_title">Contact Details</string>
     <string name="contact_all">All</string>
     <string name="chat_contacts">Contacts</string>
     <string name="chat_me">Me</string>
     <string name="contact_groups">Groups</string>
-    <string name="contact_id">ID:</string>
-    <string name="contact_uid">UID:</string>
     <string name="contact_name_profile">ID:</string>
     <string name="contact_join_at">Joined:</string>
     <string name="contact_how_you_met">How you met:</string>
@@ -30,23 +22,21 @@
     <string name="contact_name_card">Name Card</string>
     <string name="contact_official_account_label">Official Account</string>
     <string name="contact_name_label">Name: %s</string>
-    <string name="contact_common_groups">Groups:</string>
+    <string name="contact_avatar_label">Original:</string>
+    <string name="contact_remark_subtitle">Only visible to you</string>
+    <string name="contact_remark_name_placeholder">Add Remark</string>
+    <string name="contact_remark_avatar_choose_photos">Photos</string>
+    <string name="contact_remark_avatar_restore">Revert to original</string>
     <string name="contact_info_title">Contact Info</string>
     <string name="contact_action_message">Message</string>
-    <string name="contact_action_add_and_message">Add &amp; Message</string>
     <string name="contact_action_call">Call</string>
     <string name="contact_action_share">Share</string>
-    <string name="contact_met_not_recorded">Not recorded.</string>
-    <string name="contact_email">Email:</string>
-    <string name="contact_local_time">Local Time:</string>
     <string name="contact_removed">Contact removed</string>
-    <string name="contact_forward">Forward</string>
     <string name="contact_remove">Delete Contact</string>
     <string name="contact_remove_dialog_title">Delete Contact</string>
     <string name="contact_remove_dialog_tips">All the messages will also be permanently deleted from both your and the other party’s devices.</string>
     <string name="contact_remove_dialog_yes">Delete</string>
     <string name="contact_remove_dialog_cancel">Cancel</string>
-    <string name="contact_added">New contact added</string>
     <string name="contact_request">%s send you a contact request</string>
     <string name="contact_request_accept">Accept</string>
     <string name="contact_request_sent">Friend request sent</string>
@@ -61,24 +51,17 @@
     <string name="contact_add_contacts_contact_name_not_correct">The contact ID is not correct, please try again.</string>
     <string name="contact_add_contacts_code_not_correct">The code is not correct, please try again.</string>
     <string name="contact_unblock_users">Unblock</string>
-    <string name="contact_unblock_operation_denied">Operation denied.You need to unblock this contact.</string>
-    <string name="contact_send_a_request">Send a request</string>
     <string name="contact_offline_tips">This account has logged out and messages can not be reached.</string>
     <string name="contact_account_exception_tips">This account has been disabled and messages can not be reached.</string>
     <string name="contact_unregistered_tips">Operation denied. This account is already unregistered.</string>
     <string name="contact_non_friend_limit_tips">You can only send up to 3 messages per day to a user who is not your friend. Please wait for the other party to accept your request.</string>
     <string name="contact_non_friend_text_only">Non-friends can only send text messages</string>
     <string name="contact_info">Contact Info</string>
-    <string name="contact_bot_cancel">Cancel</string>
-    <string name="contact_operation_denied">Operation denied, please contact</string>
-    <string name="contact_removed_messages_deleted">You removed %s. All the messages have been deleted.</string>
-
     <string name="contact_ignore">Ignore</string>
     <string name="contact_not_in_list">The user is not in your contact list!</string>
 
     <!-- Chat -->
     <string name="chat_chats">Chats</string>
-    <string name="chat_select_conversation">Select a conversation</string>
     <string name="chat_message_input_hint">Message</string>
     <string name="chat_message_input_hint_confidential">Confidential Message</string>
     <string name="chat_message_confidential_tips">Swipe left to read, swipe right to turn pages.</string>
@@ -91,9 +74,9 @@
     <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Yelling server</string>
     <string name="chat_message_action_voice2text_tip_ok">OK</string>
     <string name="chat_message_action_select_multiple">Select Multiple</string>
+    <string name="chat_message_action_select_max_limit">Select up to 50 messages</string>
     <string name="chat_message_action_combine_forward">Combine &amp; Forward</string>
     <string name="chat_message_action_quote">Quote</string>
-    <string name="chat_message_action_reply">Reply</string>
     <string name="chat_message_action_recall">Recall</string>
     <string name="chat_message_action_save_to_photos">Save to Photos</string>
     <string name="chat_message_action_download">Download</string>
@@ -111,21 +94,16 @@
     <string name="chat_message_contact_card">[Contact Card]</string>
     <string name="chat_message_contact_card_content" translatable="false">[Contact Card]</string>
     <string name="chat_message_chat_history">[Chat History]</string>
-    <string name="chat_tap_to_view">Tap to view</string>
+
     <string name="chat_tap_to_download">Tap to download</string>
     <string name="chat_net_error">The request failed. Please try again</string>
     <string name="chat_message_action_resend">Resend</string>
     <string name="chat_message_action_delete">Delete</string>
     <string name="chat_state_offline">Offline</string>
     <string name="chat_state_connecting">Connecting…</string>
-    <string name="chat_state_disconnecting">Disconnecting…</string>
     <string name="chat_state_auth_failed">No Longer Registered</string>
     <string name="chat_state_auth_failed_tips">This device has been logged out. Your account may have been logged in on another device. Tap to re-login.</string>
-    <string name="chat_re_login">re-login?</string>
-    <string name="chat_re_login_ok">OK</string>
-    <string name="chat_re_login_cancel">Cancel</string>
     <string name="chat_group_name_too_long">Group name must less than or equal 64 chars.</string>
-    <string name="chat_exceed_bytes_limit">Exceed 4096 bytes limit</string>
     <string name="chat_took_a_screen_shot">%s took a screenshot!</string>
     <string name="chat_contact_info">Contact Info</string>
     <string name="chat_stick">Stick</string>
@@ -158,13 +136,10 @@
     <string name="chat_speech_to_text">Converting…</string>
     <string name="chat_speech_to_text_fail">Unable to convert to text</string>
     <string name="chat_speech_to_text_isblank">No text recognized</string>
-    <string name="chat_translated_by">Translated by %s</string>
     <string name="chat_translate_fail">Translation failed</string>
     <string name="chat_translate_to_language">Translate to %s</string>
     <string name="language_chinese">Chinese</string>
     <string name="language_english">English</string>
-    <string name="chat_attachment_load_fail">Load failed, Please try again.</string>
-    <string name="chat_emergency_case" translatable="false">You have an emergency case, please contact %s</string>
     <string name="chat_confidential_can_not_select">Confidential message cannot be selected</string>
     <string name="chat_confidential_tip_title">Confidential Messages</string>
     <string name="chat_confidential_tip_content">Read once, then gone.</string>
@@ -186,6 +161,9 @@
     <string name="chat_voice_recording_too_short">Recording too short</string>
     <string name="chat_voice_recording_will_stop">Recording will stop in %d seconds</string>
     <string name="chat_voice_max_size_limit">The maximum recording file size is 10M</string>
+    <string name="chat_voice_focus_denied_hint">Cannot record while another app is using audio. Pause music or end the call and try again.</string>
+    <string name="chat_voice_record_failed">Voice recording failed. Please try again.</string>
+    <string name="media_editor_unavailable">Cannot reopen editor. Please pick the file again.</string>
 
     <string name="chat_message_delete_tips">Really want to delete this message?</string>
     <string name="chat_label_new_message">NEW MESSAGES</string>
@@ -196,34 +174,13 @@
     <string name="chat_option_add_contact">Add Contact</string>
     <string name="chat_option_instant_call">Instant Meeting</string>
     <string name="chat_option_mark_all_as_read">Mark all as read</string>
-
-    <string name="chat_created_reminder">\@%1$s created a reminder</string>
-    <string name="chat_changed_reminder">\@%1$s changed a reminder</string>
-    <string name="chat_turned_off_reminder">\@%1$s deleted a reminder</string>
-    <string name="chat_reminder_tips">Reminder by @%1$s: %2$s</string>
-
     <!-- Topic -->
-    <string name="chat_topic">Topic:</string>
-    <string name="chat_topic_reply_to">Reply to: %1$s</string>
-    <string name="chat_topic_reply_send_to">Reply sendto %1$s</string>
-    <string name="chat_topic_send_to">Topic sendto %1$s:</string>
-    <string name="chat_topic_reply_from">Reply from %1$s:</string>
-    <string name="chat_topic_reply">Reply</string>
-    <string name="chat_topic_with_name">Topic: %1$s</string>
-    <string name="chat_topic_from">From: %1$s</string>
-    <!--    <string name="chat_topic_title1">Topic From %1$s - %2$s</string>-->
-    <!--    <string name="chat_topic_title2">Topic From %1$s</string>-->
+    <!--
+-->
+    <!--
+-->
     <string name="chat_topic_title1">%1$s - %2$s</string>
     <string name="chat_topic_title2">%1$s</string>
-    <string name="chat_topic_list">Topic list</string>
-    <string name="chat_topic_wait_to_reply">[Wait for reply]</string>
-    <string name="chat_topic_message_count">%s Messages</string>
-    <string name="chat_topic_message_count_single">%s Message</string>
-    <string name="chat_topic_track">Track</string>
-    <string name="chat_topic_un_track">Untrack</string>
-    <string name="chat_topic_mark">Mark</string>
-    <string name="chat_topic_null">No topics</string>
-
     <!-- Group -->
     <string name="new_group">New Group</string>
     <string name="create_group_input_hint">Name this group chat</string>
@@ -239,44 +196,26 @@
     <string name="group_moderators">MODERATORS</string>
     <string name="group_edit_info">Edit Group Info</string>
     <string name="group_management">Group Management</string>
-    <string name="group_ext_private_chat">EXT private chat</string>
-    <string name="group_ext_private_chat_tips">After turning on the switch, group members can freely chat privately with EXT members.\nAfter turning off the switch, the permission will not be revoked immediately, but will need to be delayed for up to 7 days.</string>
     <string name="group_edit_save">Save</string>
     <string name="group_members">Members</string>
     <string name="group_add_member">Add Members</string>
     <string name="group_remove_member">Remove Members</string>
-    <string name="group_delete">Delete</string>
-    <string name="group_meeting_start_title">Group Meeting</string>
-    <string name="group_meeting_start_message">Start or join a group meeting now?</string>
-    <string name="group_meeting_start_ok">OK</string>
-    <string name="group_meeting_start_cancel">CANCEL</string>
     <string name="group_create_a_group">%s created the group.</string>
-    <string name="group_added_to_group">%1$s added %2$s to the group.</string>
     <string name="group_left_the_group">%s left the group.</string>
     <string name="group_invited_join_group">%1$s invited %2$s to join the group.</string>
     <!--    <string name="group_invited_join_group">%1$s joined the group.</string>-->
     <string name="group_removed_from_group">%1$s have been removed from the group.</string>
-    <string name="group_disbanded_group">The group has been disbanded and all members have been removed, all meetings have been canceled.</string>
-    <string name="group_has_been_disbanded">The group has been disbanded and all members have been removed, all meetings have been canceled.</string>
     <string name="group_changed_group_name">%1$s changed the group name.</string>
     <string name="group_changed_group_avatar">%1$s changed the group avatar.</string>
-    <string name="group_link">Group Link</string>
     <string name="group_share_group_link">Share Group Link</string>
     <string name="group_share_content">%1$s invited you to \"%2$s\", click to join the group.\nchative://group/join?inviteCode=%3$s</string>
     <string name="group_enter_group">Enter Group</string>
     <string name="group_permission_denied">No permission, please contact the group moderators.</string>
-    <string name="group_turned_on_ext_chat">%1$s turned on "EXT private chat"</string>
-    <string name="group_turned_off_ext_chat">%1$s turned off "EXT private chat"</string>
     <string name="group_unknown_group">Unknown group</string>
     <string name="group_not_your_friend">%1$s are not your friend yet, you cannot invite them to join a group. Please ask them to accept you first.</string>
-    <string name="group_select_count">Must select more than 1 member to create a group.</string>
     <string name="group_allow_everyone_to_speak">This group has been set to allow everyone to speak.</string>
     <string name="group_only_moderators_can_speak">This group has been set to only moderators can speak.</string>
     <string name="group_only_moderators_can_speak_tip">Only moderators can speak.</string>
-    <string name="group_auto_remove_enabled">Auto-remove 30 days inactive users : Enabled</string>
-    <string name="group_auto_remove_disabled">Auto-remove 30 days inactive users : Disabled</string>
-
-    <string name="group_moderators_title">Group Moderators</string>
     <string name="group_transfer_owner">Transfer Group Ownership</string>
     <string name="group_transfer_owner_tips">Select %1$s as the new group owner? You will automatically give up ownership</string>
     <string name="group_only_moderators_can_add">Only moderators can add members</string>
@@ -305,7 +244,6 @@
     <string name="me_logout_tips">All messages will be deleted for security.</string>
     <string name="me_logout_no_account_linked_tips">No email or phone linked, continuing will delete your account.</string>
     <string name="me_logout_continue">Proceed</string>
-    <string name="me_logout_tips_wea">Are you sure you want to log out?</string>
     <string name="me_logout_ok">Logout</string>
     <string name="me_logout_cancel">Cancel</string>
     <string name="me_renew_identity_key_generate">Generate</string>
@@ -322,12 +260,12 @@
     <string name="me_delete_dialog_ok">Delete</string>
     <string name="me_language">Language</string>
     <string name="me_help">Help &amp; Feedback</string>
-    <string name="me_share_contact">Share Contact</string>
     <string name="me_theme">Theme</string>
     <string name="me_theme_dark">Dark</string>
     <string name="me_theme_light">Light</string>
     <string name="me_theme_system">System</string>
-    <string name="me_chat">Chat</string>
+    <string name="me_chat">Chat &amp; Call</string>
+    <string name="me_chat_and_call">Chat &amp; Call</string>
     <string name="me_save_to_photos">Save to Photos</string>
     <string name="me_automatically_save_photos">Automatically save received photos and videos to Photos; items won\'t be saved in Confidential Mode.</string>
 
@@ -345,47 +283,25 @@
     <string name="voice_speed_1_5x">1.5×</string>
     <string name="voice_speed_2x">2×</string>
 
+    <!-- Voice changer (call) settings -->
+    <string name="me_call_voice_changer">Voice Changer</string>
+    <string name="me_call_voice_changer_desc">Set the default voice changer for calls.</string>
+
     <!-- Contact profile setting-->
     <string name="contact_profile_info">Profile</string>
     <string name="contact_profile_skip">Skip</string>
     <string name="contact_profile_done">Done</string>
     <string name="contact_profile_next">Next</string>
-    <string name="contact_profile_signature">Leave your mark with a personalized signature</string>
     <string name="contact_name">Name</string>
-    <string name="contact_signature">Signature</string>
-
-    <string name="contact_profile_set_remark">Set Remark</string>
+    <string name="contact_profile_set_remark">Edit remarks</string>
     <string name="contact_profile_remark">Remark</string>
     <string name="contact_profile_remark_save">Save</string>
 
     <!-- MainActivity -->
     <string name="not_granted_necessary_permissions">Not granted necessary permissions</string>
-    <string name="request_permissions_error">Exception in requesting permissions</string>
     <string name="invalid_link">Invalid Link</string>
     <string name="not_supported_link">Not supported link. Please upgrade the client and try again.</string>
-    <string name="group_does_not_exist">This group does not exist.</string>
     <string name="unsupported_file_type">Unsupported file type</string>
-
-    <!-- Dial Activity -->
-    <string name="incomplete_dial_number">The number you dialed is incomplete</string>
-    <string name="peer_not_online">Peer has not logged on</string>
-
-    <!-- Calling Activity -->
-    <string name="receiving_call">Incoming&#8230;</string>
-    <string name="calling_out">Calling&#8230;</string>
-    <string name="calling">Calling</string>
-    <string name="calling_ended">Meeting ended %s</string>
-    <string name="media_encryption_enabled">Media encryption enabled</string>
-    <string name="call_operation_denied">Operation denied</string>
-    <string name="audio_output_option_wired_headphones" translatable="false">Headphones</string>
-    <string name="audio_output_option_built_in_speaker" translatable="false">Speaker</string>
-    <string name="audio_output_option_built_in_earpiece" translatable="false">Phone</string>
-
-    <!-- Video Activity -->
-    <string name="message_wrong_number">Wrong Peer number</string>
-    <string name="tip_waiting_for_answering">Waiting for answering...</string>
-    <string name="tip_miss_call">Missed call. Try again later</string>
-    <string name="tip_get_invite_call">Invite you to a voice call</string>
 
     <!-- Forward message -->
     <string name="forwarded_message">Forwarded Message</string>
@@ -407,33 +323,20 @@
     <string name="chat_received">Received</string>
     <string name="chat_send_cancel">Cancel</string>
     <string name="chat_leave_a_message">Leave a message</string>
-    <string name="chat_re_edit">Re-edit</string>
     <string name="chat_recall_tips">Are you sure you want to recall message?</string>
     <string name="chat_recall_dialog_yes">Yes</string>
     <string name="chat_recall_dialog_cancel">Cancel</string>
-
-    <string name="chat_pip_not_supported_message">Device does not support picture-in-picture mode</string>
-    <string name="chat_call_can_not_toggle_camera">Camera service is not available, Please try again later!</string>
-
-    <string name="chat_call_canceled">Call canceled.</string>
-    <string name="chat_call_ended">Call ended.</string>
-
     <!--    invite-->
     <string name="invite_link">Invite link</string>
-    <string name="invite_with_this_OQ">Invite with this QR or link</string>
     <string name="invite_regenerate">Regenerate</string>
     <string name="invite_share">Share</string>
     <string name="invite_enter_code">Enter Code</string>
     <string name="invite_add_contact">Add Contact</string>
     <string name="invite_my_code">My Code</string>
-    <string name="invite_add_new_friend">Add a new friend</string>
     <string name="invite_enter_code_to_add">Enter a code to add a new friend</string>
     <string name="invite_enter_hint">Enter a 4-digit code or contact ID</string>
     <string name="invite_button_add_friend">Search</string>
-    <string name="invite_tv_search_by_uid">Add by friend\'s ID</string>
-    <string name="invite_tv_search_by_code">Add by friend\'s code</string>
     <string name="invite_copy_link">Copy Link</string>
-    <string name="invite_cancel">Cancel</string>
     <string name="invite_tips">Chat with me on Yelling %s</string>
     <string name="invite_regenerate_dialog_title">Regenerate Invite Code</string>
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
@@ -446,12 +349,8 @@
     <string name="invite_group_has_been_disbanded">Failed to join the group. This group has already been disbanded.</string>
     <string name="invite_group_is_invalid">Failed to join the group. This group is invalid.</string>
     <string name="invite_ok">OK</string>
-    <!--    <string name="invite_enable_group_invite_link">%1$s invite_enable_group_invite_link</string>-->
-    <!--    <string name="invite_disable_group_invite_link">%1$s invite_disable_group_invite_link</string>-->
-    <!--    <string name="invite_enable_only_moderators">%1$s invite_enable_only_moderators</string>-->
     <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
     <string name="invite_only_moderators_can_add">This group only allows moderators to invite.</string>
-    <string name="invite_disabled_invite_link">This group disabled invite link.</string>
     <string name="invite_code">%s Invite Code</string>
     <string name="invite_group_code">%s Group Invite Code</string>
     <string name="invite_joined_at">%s joined</string>
@@ -463,74 +362,35 @@
     <string name="link_device_tips">This device will be able to see your groups and contacts, read all your messages, and send messages in your name.</string>
     <string name="link_new_device">Link New Device</string>
     <string name="link_device_cancel">Cancel</string>
-    <string name="chat_toast_already_on_a_call_zh">你已经在通话中</string>
-    <string name="chat_toast_already_on_a_call" translatable="false">You are already on a call</string>
-    <string name="chat_unable_to_call">Unable to call</string>
-    <string name="chat_blocked_call_tips">You cannot call %s because of their privacy settings.</string>
     <string name="chat_dialog_ok">OK</string>
     <string name="chat_dialog_cancel">Cancel</string>
-
-    <string name="chat_answer_incoming_call">Accept</string>
-    <string name="chat_decline_incoming_call">Decline</string>
-    <string name="chat_turn_on_mic">Turn On</string>
-    <string name="chat_turn_off_mic">Turn Off</string>
-
     <string name="search_title_recent">Recent</string>
     <string name="search_title_contacts">Contacts</string>
     <string name="search_title_group">Group</string>
     <string name="search_chat_history">Search chat history</string>
     <string name="search_messages_default_tips">Enter keywords to search</string>
     <string name="search_related_messages">%d related messages</string>
-
-    <string name="chat_new_message">[New message]</string>
-    <string name="unsupported_message_type">[Unsupported message type]</string>
     <string name="max_support_file_size_limit">Sorry, the selected file exceeds the 200MB limit and cannot be sent.</string>
     <string name="text_file_exceeds_10mb_limit">Exceeding 10MB size limit</string>
-    <string name="all_messages_deleted">All the messages have been deleted.</string>
-    <string name="conversation_input_panel__slide_to_cancel">Slide to cancel</string>
-    <string name="ConversationActivity_unable_to_record_audio">Unable to record audio!</string>
-    <string name="InputPanel_tap_and_hold_to_record_a_voice_message_release_to_send">Tap and hold to record a voice message, release to send</string>
-
     <string name="chat_settings_mute">Mute</string>
     <string name="chat_action_unmute">Unmute</string>
     <string name="chat_action_mute">Mute</string>
-    <string name="action_to_turn_off">off</string>
-    <string name="action_to_turn_on">on</string>
-    <string name="option_toggle_scheduled_meeting_for_this">This meeting</string>
-    <string name="option_toggle_scheduled_meeting_for_all">All meetings</string>
-    <string name="option_toggle_scheduled_meeting_for_all_en" translatable="false">All meetings</string>
-    <string name="option_toggle_scheduled_event_for_all_en" translatable="false">All events</string>
-    <string name="option_scheduled_meeting_for_this">This meeting</string>
-    <string name="option_scheduled_event_for_this">This event</string>
-    <string name="option_toggle_scheduled_meeting_for_all_and_following">This and following meetings</string>
-    <string name="chat_label_host">Host</string>
-    <string name="chat_make_host">Transfer Host</string>
     <string name="chat_end_meeting">End Meeting</string>
     <string name="chat_end_live">End Live</string>
     <string name="chat_leave_meeting">Leave Meeting</string>
     <string name="switch_camera">Switch Camera</string>
     <string name="app_sign_error_title">Safety tips</string>
+    <string name="app_sign_error_tips">The application you have currently installed is an unofficial signed application, please confirm.</string>
     <string name="emulator_risk_tips">Your current device is emulator, which may cause the application functions not to work properly or cause security risks, please confirm.</string>
     <string name="root_risk_tips">Your current device has been rooted, and there is a risk that application data may be stolen by third-party application, please confirm.</string>
-
 
     <string name="app_close_application">Close application</string>
     <string name="app_ignore">Ignore</string>
 
     <!-- 20230927@w: for event scheduler ____________________________________-->
-    <string name="meetings_action_add">Add</string>
     <string name="meetings_action_start">Start</string>
     <string name="meetings_action_invite">Invite</string>
-    <string name="event_button_join">Join</string>
-    <string name="event_item_attendee_can_invite_others" translatable="false">Attendee can invite others</string>
-    <string name="event_item_attendee_can_modify_meeting" translatable="false">Attendee can modify live</string>
-    <string name="event_button_advanced_settings">Advanced Settings</string>
-    <string name="meetings_action_save">Save</string>
-    <string name="meetings_action_cancel">Cancel</string>
-    <string name="meetings_action_cancel_meeting">Cancel meeting</string>
-    <string name="meetings_action_cancel_event">Cancel event</string>
     <string name="duration_selection_15_mins">15 minutes</string>
-    <string name="duration_selection_20_mins">20 minutes</string>
     <string name="duration_selection_30_mins">30 minutes</string>
     <string name="duration_selection_45_mins">45 minutes</string>
     <string name="duration_selection_1_hr">1 hour</string>
@@ -541,52 +401,14 @@
     <string name="duration_selection_12_hrs">12 hours</string>
     <string name="duration_selection_24_hrs">1 day</string>
     <string name="duration_selection_48_hrs">2 days</string>
-    <string name="event_attachment_label_name">Name</string>
-    <string name="event_attachment_label_url">HTTP URL</string>
     <string name="toggle_background_blur">Toggle Blur</string>
-    <string name="event_label_title">Title</string>
-    <string name="event_label_link">Link</string>
-    <string name="event_attachment_hint_paste_url_here">Paste URL here</string>
-    <string name="event_attachment_hint_enter_a_name">Enter a name</string>
-    <string name="meetings_action_update">Update</string>
-    <string name="meetings_action_delete">Delete</string>
-    <string name="meetings_action_copy">Copy</string>
-    <string name="meetings_action_share_live_stream_info" translatable="false">Share Live stream to</string>
-    <string name="event_label_time">Time</string>
-    <string name="title_for_attendee_list">Attendees</string>
-    <string name="event_attendee_add">+ Add</string>
-    <string name="eventl_add_attendees">Add Attendees</string>
-    <string name="event_desc_everyone_can_invite_others_in_group" translatable="false">When unchecked, only creator (host) and group moderators can invite others.</string>
-    <string name="event_desc_everyone_can_modify_meeting_in_group" translatable="false">Only creator (host) can modify by default.</string>
-    <string name="live_info_receive_notification" translatable="false">You can receive 3 notifications from MeetingBot\n1.Reminder 10 mins before the live stream\n2. Meeting bar at the top of chat list 5 mins before the live stream\n3. Pop-up when the live stream starts</string>
-    <string name="evnet_dialog_title_rsvp_to_recurring_meetings">RSVP to recurring meetings</string>
-    <string name="evnet_dialog_title_rsvp_to_recurring_events">RSVP to recurring events</string>
-    <string name="event_dialog_title_confirm_delete_this_meeting">DON\'T attend this meeting</string>
-    <string name="event_dialog_title_confirm_delete_this_event">DON\'T attend this event</string>
-    <string name="event_dialog_title_confirm_delete_recurring_meetings">DON\'T attend the recurring meetings</string>
-    <string name="event_dialog_title_confirm_delete_recurring_events">DON\'T attend the recurring events</string>
-    <string name="event_dialog_title_confirm_delete_this_meeting_for_host">Cancel this meeting for all attendees</string>
-    <string name="event_dialog_title_confirm_delete_this_event_for_host">Cancel this event for all attendees</string>
-    <string name="event_dialog_title_confirm_delete_recurring_meetings_for_host">Cancel the recurring meetings for all attendees</string>
-    <string name="event_dialog_title_confirm_delete_recurring_events_for_host">Cancel the recurring events for all attendees</string>
-    <string name="event_link_google_calendar">Google Calendar</string>
     <!-- 20230927@w: for event scheduler ____________________________________-->
 
     <string name="operation_successful">Operation successful</string>
     <string name="operation_failed">Operation failed</string>
-
-    <string name="in_meeting_number">In meeting(%d)</string>
-    <string name="meeting_joined">%s joined</string>
-    <string name="non_participants_number">Non-participants(%d)</string>
-    <string name="attendee_banner_text">Attendees will auto change as group members change</string>
-    <string name="attendee_banner_info_text">When someone joins the group, the meeting will add the new one and when someone leaves, the meeting will also remove this person.</string>
-    <string name="event_dialog_title_confirm_create_event">There is already a meeting at the time. Are you sure to continue?</string>
-    <string name="event_dialog_title_confirm_create_group_event">There is already a meeting FROM THIS GROUP at the time. Are you sure to continue?</string>
-
     <string name="tip">Tip</string>
     <string name="notification_no_permission_tip">Application has no permission to show notifications. You can enable it in system settings..</string>
     <string name="notification_no_permission_tip1">Please allow %s to display notifications so that you can receive messages and calls normally.</string>
-    <string name="notification_disturb_tip">"Do not disturb" is turned on. You may not receive notifications.</string>
     <string name="notification_no_google_tip">To receive messages and call notifications, please keep background connection enabled.</string>
     <string name="notification_ignore">Not now</string>
     <string name="notification_go_to_settings">Go to settings</string>
@@ -608,41 +430,23 @@
     <string name="notification_mention_only_description">Receive notification only when you have been mentioned.</string>
     <string name="notification_off">Off</string>
     <string name="notification_content">Notification Content</string>
-    <string name="notification_default_group_settings">Default Group Setting</string>
     <string name="notification_default_setting">Default Setting</string>
     <string name="notification_change_default_setting_tip">Change default notification setting with \"Me/Notifications/Default Group Setting\".</string>
     <string name="notification_update_default_group_setting">Update Default Group Setting</string>
     <string name="notification_custom_settings">CUSTOM SETTINGS</string>
-    <string name="notification_sounds">Sounds Notification</string>
     <string name="notification_message_sounds">Message Sound</string>
     <string name="notification_message_notification">Message Notification</string>
     <string name="notification_critical_alert_title">Missed Call from %s</string>
     <string name="notification_critical_alert_content">Urgent: Please answer the call now.</string>
-
-    <string name="no_permission_camera_and_voice_tip">Application has no permission for video and voice. You can enable camera and microphone permissions in app permissions settings of the system settings.</string>
     <string name="no_permission_voice_tip">Application has no permission for voice. You can enable microphone permissions in app permissions settings of the system settings.</string>
     <string name="no_permission_camera_tip">Application has no permission for camera. You can enable camera permission in the application permission settings of the system settings.</string>
     <string name="no_permission_picture_tip">Application has no permission for access picture media files. You can enable image or storage access permission in the application permission settings of the system settings.</string>
 
     <string name="search_no_results_found">No results found</string>
     <string name="join">Join</string>
-    <string name="call_cannot_connected" translatable="false">Network error. Please try again later.</string>
-    <string name="unable_to_join_the_meeting">Unable to join the meeting at this time, please try again later.</string>
-
-    <string name="download_started">Attachment download started</string>
-    <string name="download_success">Download successful</string>
     <string name="download_failed">Download failed, please try again!</string>
     <string name="file_expired">File has expired.</string>
     <string name="uploading">UPLOADING</string>
-    <string name="download_downloading">Downloading, please wait…</string>
-    <string name="caption_on_reminder" translatable="false">Caption is on</string>
-    <string name="the_original_message_doesn_t_exist">The original message doesn\'t exist</string>
-    <string name="request_to_speak_reminder" translatable="false">You requested to speak, waiting for host approval.</string>
-    <string name="live_stream_has_started_reminder" translatable="false">The live stream has started.</string>
-
-    <string name="web_refresh">Refresh</string>
-    <string name="my_calendars" translatable="false">My Calendars</string>
-
     <string name="members">MEMBERS</string>
     <string name="invite_participants">Invite Members</string>
     <string name="install_call_btn_add">Add</string>
@@ -671,15 +475,6 @@
     <string name="MediaReviewImagePageFragment__discard">Discard</string>
     <string name="MediaReviewImagePageFragment__discard_changes">Discard changes?</string>
     <string name="MediaReviewImagePageFragment__youll_lose_any_changes">You\'ll lose any changes you\'ve made to this photo.</string>
-    <plurals name="ConversationFragment_saving_n_attachments">
-        <item quantity="one">Saving attachment</item>
-        <item quantity="other">Saving %1$d attachments</item>
-    </plurals>
-    <plurals name="ConversationFragment_saving_n_attachments_to_sd_card">
-        <item quantity="one">Saving attachment to storage…</item>
-        <item quantity="other">Saving %1$d attachments to storage…</item>
-    </plurals>
-    <string name="StorageUtil__s_s">%1$s/%2$s</string>
     <string name="ConversationFragment_error_while_saving_attachments_to_sd_card">Error while saving attachment to storage!</string>
     <string name="SaveAttachmentTask_saved_to_album">Saved to album</string>
     <string name="SaveAttachmentTask_saved_to_audio">Saved to audio folder</string>
@@ -697,34 +492,23 @@
     <string name="ImageEditorHud__blur">Blur</string>
     <string name="ImageEditorHud__done_editing">Done editing</string>
     <string name="ImageEditorHud__clear_all">Clear all</string>
-    <string name="ImageEditorHud__undo">Undo</string>
     <string name="ImageEditorHud__toggle_between_marker_and_highlighter">Toggle between marker and highlighter</string>
     <string name="ImageEditorHud__toggle_between_text_styles">Toggle between text styles</string>
     <string name="ImageEditorHud_blur_faces">Blur faces</string>
-    <string name="ImageEditorHud_new_blur_faces_or_draw_anywhere_to_blur">New: Blur faces or draw anywhere to blur</string>
     <string name="ImageEditorHud_draw_anywhere_to_blur">Draw anywhere to blur</string>
     <string name="ImageEditorHud_draw_to_blur_additional_faces_or_areas">Draw to blur additional faces or areas</string>
 
     <string name="QualitySelectorBottomSheetDialog__standard">Standard\nFaster, less data</string>
     <string name="QualitySelectorBottomSheetDialog__high">High\nSlower, more data</string>
     <string name="QualitySelectorBottomSheetDialog__media_quality">Media quality</string>
-
-    <string name="leave_the_meeting_in_few_seconds" translatable="false">Are you there？ LEAVE THE MEETING due to no one speaks for a long time.</string>
-    <string name="option_leave" translatable="false">Leave</string>
-    <string name="option_continue" translatable="false">Continue</string>
-
     <string name="call_invite">invites you to join the voice call</string>
     <string name="call_invite_of_group">invites you to a meeting</string>
-    <string name="call_not_now">Not now</string>
     <string name="call_reject">Reject</string>
     <string name="call_join">Join</string>
     <string name="call_accept">Accept</string>
     <string name="call_is_calling_tip">There is a call in progress. You can answer the call after disconnecting the current call.</string>
 
     <string name="file_load_error">Load error</string>
-    <string name="battery_optimizations_tips">Please allow %s to run in the background to stay informed with the messages and meetings.</string>
-    <string name="connecting">Connecting…</string>
-
     <string name="activate_device_title">Device Inactive</string>
     <string name="activate_device_tips">Due to prolonged inactivity, your device has been temporarily disabled for security reasons, and any unreceived messages have been cleared. Please activate your device to resume use.</string>
     <string name="activate_device">Activate Now</string>
@@ -762,7 +546,6 @@
     <string name="critical_alert_fullscreen_permission_check_failed">Please enable full-screen notification permission to receive important alerts.</string>
 
     <string name="disappearing_messages">Timer</string>
-    <string name="disappearing_messages_notify_content">The following messages will be deleted within %1$s after being read.</string>
     <string name="disappearing_messages_tips">Messages will expire after being read, they will GONE and then can NOT be viewed in any way.</string>
     <string name="official_bot_name" translatable="false">Support Team</string>
     <string name="official_bot_id" translatable="false">+10000</string>
@@ -773,18 +556,52 @@
     <string name="group_remove_member_body">This member will no longer be able to view or send messages in this group.</string>
     <string name="group_remove_member_confirm">Remove</string>
     <string name="chat_group_in_common">Groups in common</string>
-    <string name="contact_blocked_tips">Operation denied.You are not friend yet.</string>
 
+    <!-- Group Encryption -->
+    <!-- Cell row in group info -->
+    <string name="group_upgrade_to_encrypted">Enhance Encryption</string>
+    <string name="group_encrypted_label">Encryption Enhanced</string>
+    <!-- Confirm bottom sheet (unencrypted group) -->
+    <string name="group_encrypted_title">Enhance Encryption</string>
+    <string name="group_upgrade_description">Group info will be upgraded from in-transit encryption to end-to-end encryption.</string>
+    <string name="group_upgrade_button">Turn On</string>
+    <string name="group_upgrade_cancel">Cancel</string>
+    <!-- Info bottom sheet (encrypted group) -->
+    <string name="group_encrypted_info_title">Encryption Enhanced</string>
+    <string name="group_encrypted_info_description">Group info has been upgraded from in-transit encryption to end-to-end encryption.</string>
+    <string name="group_encrypted_info_dismiss">OK</string>
+    <!-- System message sent to group after upgrade -->
+    <string name="group_encryption_hint_message">🔒 Group info has been upgraded to end-to-end encryption</string>
+    <!-- Placeholder group name when key unavailable -->
+    <string name="group_name_encrypted_placeholder">🔒 Group</string>
+    <!-- Toast when user tries to operate without key -->
+    <string name="group_encryption_update_required">Can\'t make changes right now</string>
+    <!-- Inline Edit/Done button next to group name field -->
+    <string name="group_edit_name_edit">Edit</string>
+    <string name="group_edit_name_done">Done</string>
+    <string name="group_edit_name_empty">Group name can\'t be empty</string>
     <string name="critical_alerts">Critical Alerts</string>
     <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission). When enabled, Critical Alerts break through Silent Mode and Do Not Disturb.</string>
     <string name="critical_alerts_off">Off</string>
-    <string name="critical_alerts_on">On</string>
-
     <!-- Chat Archive Settings -->
     <string name="chat_archive_extend_time_title">Extend timer?</string>
     <string name="chat_archive_extend_time_message">Previously deleted messages can’t be recovered.</string>
     <string name="chat_archive_shorten_time_title">Shorten timer?</string>
     <string name="chat_archive_shorten_time_message">More messages may be deleted and won’t be recoverable. This change applies to all your devices.</string>
     <string name="chat_archive_messages_expired">Earlier messages are no longer available</string>
-
+    <!-- Forward notice (system message shown after a forward completes).
+         Terminal punctuation is appended by ForwardNoticeRenderer: the plurals text
+         itself has none, so the renderer can choose "." for a fully rendered list, or
+         nothing when the list ends in "..." (ellipsis already closes the sentence). -->
+    <plurals name="chat_forward_notice">
+        <item quantity="one">\"%1$s\" forwarded a message from %3$s</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s</item>
+    </plurals>
+    <!-- Self-only variant: used when all distinct source authors are the current
+         user, so the "from You" suffix would be redundant. -->
+    <plurals name="chat_forward_notice_self_only">
+        <item quantity="one">\"%1$s\" forwarded a message</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages</item>
+    </plurals>
+    <string name="chat_forward_notice_sentence_terminator">.</string>
 </resources>

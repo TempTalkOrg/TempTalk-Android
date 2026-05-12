@@ -14,6 +14,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatActivityForwardMessageBinding
+import com.difft.android.chat.widget.AudioMessageManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.hi.dhl.binding.viewbind
 import com.difft.android.chat.MessageContactsCacheUtil
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
+import com.difft.android.chat.dependencies.ApplicationDependencies
 
 @AndroidEntryPoint
 class ChatForwardMessageActivity : BaseActivity() {
@@ -73,11 +74,18 @@ class ChatForwardMessageActivity : BaseActivity() {
     // Store confidential message ID for deletion in onDestroy
     private var confidentialMessageId: String? = null
 
+    // Snapshot of the audio that was already playing when this preview opened (e.g. a
+    // voice message in the underlying chat). On close we only stop playback that the
+    // preview itself started — any pre-existing playback is left alone.
+    private var entryPlayingMessageId: String? = null
+
     // Disable BaseActivity auto padding - this Activity handles insets itself
     override fun shouldApplySystemBarsPadding(): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        entryPlayingMessageId = AudioMessageManager.currentPlayingMessage?.id
 
         setupBottomSheet()
         setupBackPressedCallback()
@@ -193,9 +201,7 @@ class ChatForwardMessageActivity : BaseActivity() {
                         }
                     }
                     BottomSheetBehavior.STATE_HIDDEN -> {
-                        finish()
-                        @Suppress("DEPRECATION")
-                        overridePendingTransition(0, 0)
+                        dismissNow()
                     }
                     else -> {
                         isDraggingDown = false
@@ -223,6 +229,14 @@ class ChatForwardMessageActivity : BaseActivity() {
                     val alpha = (slideOffset + 1f) / 2f // -1 -> 0, 0 -> 0.5, 1 -> 1
                     scrim.alpha = alpha.coerceIn(0f, 0.5f)
                 }
+
+                // BottomSheetBehavior STATE_HIDDEN sometimes doesn't fire promptly after a
+                // swipe-fling — it waits for the next touch event. Detect "fully off-screen"
+                // via slideOffset as a backup trigger so audio stops and the activity
+                // finishes immediately on swipe.
+                if (slideOffset <= -0.99f) {
+                    dismissNow()
+                }
             }
         }
         bottomSheetBehavior.addBottomSheetCallback(bottomSheetCallback)
@@ -232,12 +246,33 @@ class ChatForwardMessageActivity : BaseActivity() {
         if (::bottomSheetBehavior.isInitialized && ::bottomSheetCallback.isInitialized) {
             bottomSheetBehavior.removeBottomSheetCallback(bottomSheetCallback)
         }
+        // Backstop for paths that bypass STATE_HIDDEN (system finish, task removed).
+        stopPreviewOwnedAudio()
         // Delete confidential message when Activity is destroyed (not when Fragment is replaced)
         confidentialMessageId?.let {
             L.i { "[Confidential] Delete forward message, messageId: $it" }
             ApplicationDependencies.getMessageStore().deleteMessage(listOf(it))
         }
         super.onDestroy()
+    }
+
+    private fun stopPreviewOwnedAudio() {
+        val currentId = AudioMessageManager.currentPlayingMessage?.id
+        if (currentId != entryPlayingMessageId) {
+            AudioMessageManager.releasePlayer()
+        }
+    }
+
+    /**
+     * Idempotent dismiss — safe to call from any close path (STATE_HIDDEN callback or
+     * the slideOffset backup). isFinishing guards re-entry so duplicate triggers are no-ops.
+     */
+    private fun dismissNow() {
+        if (isFinishing) return
+        stopPreviewOwnedAudio()
+        finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
 
     private fun setupBackPressedCallback() {

@@ -44,6 +44,7 @@ enum class GroupNotifyDetailType(val value: Int) {
     GroupCostChange(40),
     PrivateChatChange(41),
     GroupCriticalAlertChange(47),
+    UpgradeGroupCrypto(48),
     GroupAccountInvalid(999);
 
     companion object {

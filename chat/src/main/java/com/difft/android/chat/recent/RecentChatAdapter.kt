@@ -230,7 +230,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                     }
                 } else {
                     binding.imageviewBotBadge.isVisible = data.roomId.isOfficialBotId()
-                    val contactAvatar = data.roomAvatarJson?.getContactAvatarData()
+                    val contactAvatar = (data.remarkAvatarJson?.takeIf { it.isNotEmpty() } ?: data.roomAvatarJson)
+                        ?.getContactAvatarData()
                     binding.imageviewAvatar.setAvatar(
                         contactAvatar?.getContactAvatarUrl(),
                         contactAvatar?.encKey,

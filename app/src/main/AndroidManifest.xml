@@ -144,6 +144,10 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
+            android:name=".setting.VoiceChangerSettingsActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+        <activity
             android:name=".setting.AboutActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
@@ -269,6 +273,31 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
+        </provider>
+
+        <!--
+            Disable androidx.startup auto-initializers we do not need:
+            - WorkManagerInitializer: project does not enqueue any Worker; auto-init still
+              registers a default network callback every cold start, hitting the per-app
+              limit on Android 16 (TooManyRequestsException). Re-enable via
+              Configuration.Provider if WorkManager is reintroduced.
+            - ProfileInstallerInitializer: project ships no baseline-prof.txt, so the
+              5s-delayed writeInBackground is a no-op that still spawns a ThreadPoolExecutor
+              on the main thread and shows up in BACKGROUND ANR samples on vivo devices.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+            <meta-data
+                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
         </provider>
 
         <!-- Override UCrop library Activity configuration to prevent direct external launch -->

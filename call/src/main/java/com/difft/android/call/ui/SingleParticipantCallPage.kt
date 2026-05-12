@@ -34,17 +34,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import android.view.ViewGroup
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.R
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
@@ -52,6 +52,12 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
+import com.difft.android.call.ui.barrage.BarrageMessageView
+import com.difft.android.call.ui.screenshare.ScreenSharingView
+import com.difft.android.call.ui.video.ScaleType
+import com.difft.android.call.ui.video.VideoItemTrackSelector
+import com.difft.android.call.ui.video.ViewType
+import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
@@ -78,11 +84,13 @@ fun SingleParticipantCallPage(
     callConfig: CallConfig,
     conversationId: String?,
     callRole: CallRole?,
+    isDualPane: Boolean = false,
 ){
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
     val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
     val isConnected = callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED
     val remoteParticipant = participants.filterIsInstance<RemoteParticipant>().firstOrNull()
@@ -105,13 +113,12 @@ fun SingleParticipantCallPage(
 
     when {
         isConnected && isUserSharingScreen && remoteParticipant != null -> {
-            // 显示屏幕分享画面
             ScreenSharingView(room = room, participant = remoteParticipant, reconnectCount = reconnectCount)
-            // 显示屏幕分享时speaker悬浮窗
-            ScreenShareSpeakerView(viewModel = viewModel, shareScreenUser = remoteParticipant, callConfig = callConfig)
+            LaunchedEffect(remoteParticipant.sid) {
+                viewModel.updateScreenShareFallback(remoteParticipant)
+            }
         }
         (isConnected || callRole == CallRole.CALLER) && participantUid != null -> {
-            // 统一使用同一个页面容器，避免状态切换时整页闪烁
             SingleParticipantItem(
                 room = room,
                 participant = remoteParticipant,
@@ -124,16 +131,13 @@ fun SingleParticipantCallPage(
 
 
     if(isConnected && !videoMuted && !isUserSharingScreen) {
-        // 展示自己的悬浮小窗口
         OneVOneSelfVideoView(viewModel, room = room)
     }
 
-    // 显示弹幕
-    BarrageMessageView(
-        viewModel,
-        config = BarrageMessageConfig(
+    val barrageConfig = remember(callConfig, autoHideTimeout) {
+        BarrageMessageConfig(
             isOneVOneCall = true,
-            barrageTexts= callConfig.chatPresets ?: emptyList(),
+            barrageTexts = callConfig.chatPresets ?: emptyList(),
             displayDurationMillis = autoHideTimeout,
             baseSpeed = callConfig.bubbleMessage?.baseSpeed ?: 4600L,
             deltaSpeed = callConfig.bubbleMessage?.deltaSpeed ?: 400L,
@@ -141,8 +145,15 @@ fun SingleParticipantCallPage(
             emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
             textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
             textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
-        ),
-        { message, type, topic ->
+        )
+    }
+
+    BarrageMessageView(
+        viewModel,
+        config = barrageConfig,
+        isDualPane = isDualPane,
+        isShareScreening = isUserSharingScreen,
+        sendBarrageMessage = { message, type, _ ->
             viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
                 if (status) {
                     if (type == RTM_MESSAGE_TYPE_DEFAULT) {
@@ -263,17 +274,18 @@ fun SingleParticipantItem(
     speakingEnabled: Boolean = true,
     reconnectCount: Int = 0,
 ){
-    val contactorCacheManager = remember {
-        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
     }
+    val contactorCacheManager = entryPoint.contactorCacheManager
+    val callToChatController = entryPoint.callToChatController
 
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
 
     suspend fun updateNameAndAvatar(userId: String) {
-        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, userId)
+        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(userId)
     }
 
     LaunchedEffect(uid) {
@@ -292,7 +304,8 @@ fun SingleParticipantItem(
         ParticipantAvatarInfo(
             modifier = modifier,
             userDisplayInfo = userDisplayInfo,
-            userId = uid
+            userId = uid,
+            callToChatController = callToChatController
         )
         return
     }
@@ -335,25 +348,26 @@ fun SingleParticipantItem(
             .background(Color.Transparent),
         contentAlignment = Alignment.Center
     ) {
-        if (!videoMuted) {
-            VideoItemTrackSelector(
-                coroutineScope = coroutineScope,
-                room = room,
-                participant = participant,
-                sourceType = Track.Source.CAMERA,
-                scaleType = if (IdUtil.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
-                viewType = ViewType.Surface,
-                draggable = !IdUtil.isPersonalMobileDevice(identity?.value),
-                reconnectCount = reconnectCount,
-            )
-        } else {
+        VideoItemTrackSelector(
+            coroutineScope = coroutineScope,
+            room = room,
+            participant = participant,
+            sourceType = Track.Source.CAMERA,
+            scaleType = if (IdUtil.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
+            viewType = ViewType.Surface,
+            draggable = !IdUtil.isPersonalMobileDevice(identity?.value),
+            reconnectCount = reconnectCount,
+        )
+        if (videoMuted) {
             ParticipantAvatarInfo(
+                modifier = Modifier.background(DifftTheme.colors.background),
                 userDisplayInfo = userDisplayInfo,
                 userId = identity?.value ?: uid,
                 audioMuted = audioMuted,
                 isSpeaking = effectiveIsSpeaking,
                 showAudioStatus = true,
-                imageLoader = imageLoader
+                imageLoader = imageLoader,
+                callToChatController = callToChatController
             )
         }
     }
@@ -368,18 +382,27 @@ private fun ParticipantAvatarInfo(
     isSpeaking: Boolean = false,
     showAudioStatus: Boolean = false,
     imageLoader: coil3.ImageLoader? = null,
+    callToChatController: com.difft.android.call.LCallToChatController,
 ) {
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        userDisplayInfo.avatar?.let { avatarImage ->
-            key(avatarImage) {
+        userDisplayInfo.avatarData?.let { avatarData ->
+            key(avatarData) {
                 AndroidView(
-                    factory = {
-                        (avatarImage.parent as? ViewGroup)?.removeView(avatarImage)
-                        avatarImage
+                    factory = { ctx ->
+                        when (avatarData) {
+                            is AvatarData.FromContactor ->
+                                callToChatController.getAvatarByContactor(ctx, avatarData.contactor)
+                            is AvatarData.FromNameOrUid ->
+                                callToChatController.createAvatarByNameOrUid(
+                                    ctx,
+                                    avatarData.name,
+                                    avatarData.userId
+                                )
+                        }
                     },
                     modifier = Modifier
                         .height(96.dp)

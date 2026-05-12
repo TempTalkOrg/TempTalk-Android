@@ -23,21 +23,9 @@ class ChatMessageContainerView @JvmOverloads constructor(
      */
     var containerWidth: Int = 0
 
-    /**
-     * Track the last bound message ID. Padding reset only happens when
-     * the message changes (different item reusing ViewHolder), not on
-     * re-measure of the same message (e.g., scroll adjustments).
-     */
-    private var lastBoundMessageId: String? = null
-
-    fun bindMessageId(messageId: String) {
-        if (messageId != lastBoundMessageId) {
-            lastBoundMessageId = messageId
-            resetAllPaddingsToDefault()
-        }
-    }
-
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // Reset paddings to default before measuring to ensure clean state for RecyclerView reuse
+        resetAllPaddingsToDefault()
 
         // First measure to get initial sizes
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -86,7 +74,9 @@ class ChatMessageContainerView @JvmOverloads constructor(
             val newMarginTop = if (needsExtraBottomSpace) 0 else (-26).dp
             if (params.topMargin != newMarginTop) {
                 params.topMargin = newMarginTop
-                timeWrapper.layoutParams = params
+                // Don't call setLayoutParams() — params is already the same reference,
+                // and setLayoutParams() triggers requestLayout() which can cause
+                // re-entrant layout issues on Android 16.
                 needsRemeasure = true
             }
         }

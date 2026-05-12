@@ -10,6 +10,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.chat.util.ForwardNoticeRenderer
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.websocket.api.messages.Data
@@ -19,10 +20,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT
+import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.TextMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.wcdb
@@ -259,6 +262,124 @@ class LocalMessageCreator @Inject constructor(
             0,
             gson.toJson(signalNotifyMessage)
         )
+    }
+
+    /**
+     * Create and persist a "forward notice" local system message (the UI representation of
+     * a `ForwardNoticeMessage`).
+     *
+     * **Product invariant — does not count toward unread**: a forward notice is a
+     * "visible but silent" system message.
+     *  - Visible inline in the conversation (system-message style)
+     *  - Does not trigger push notifications (MsgType carries no notification payload)
+     *  - **Does not increment the conversation's unread counter**
+     *
+     * **How the unread-exemption is achieved** (verified in `WCDBExtensions.kt` around
+     * `updateRoomUnreadState`): the unread count query explicitly excludes TYPE_NOTIFY:
+     *  ```
+     *  .and(DBMessageModel.type.notIn(TYPE_NOTIFY, TYPE_CONFIDENTIAL_PLACEHOLDER))
+     *  ```
+     *  Because we persist this as a `NotifyMessage` via `WCDB.putNotifyMessage`, its row has
+     *  `type = 2 (TYPE_NOTIFY)` and is therefore excluded from the unread query "for free" —
+     *  no extra field / parameter / ReadInfoModel change is needed.
+     *
+     * **Contrast with `createCriticalAlertMessage`**: a critical alert is a `TextMessage`
+     * (TYPE_TEXT=0) and **does** count toward unread (that is the point of "critical"). This
+     * method deliberately does not copy that type choice; it keeps the NotifyMessage semantics.
+     * The messageId triple generation still mirrors the `createCriticalAlertMessage` pattern.
+     *
+     * **Cross-path messageId alignment** (see §5.4 of the design): the triple
+     * `generateMessageId(timestamp, operatorId, sourceDevice)` makes the id computed by the
+     * originating device's local insert equivalent to the id computed by receivers (group
+     * members / other devices via SyncMessage loopback), so `putWhenNonExist` deduplicates
+     * reliably across paths.
+     *
+     * @param operatorId Actor (sender uid). On the sender side this is `globalServices.myId`;
+     *                   on the receiver side it is `envelope.source` for the group path and
+     *                   `myId` for the SyncMessage path.
+     * @param forWhat Target conversation (group target / peer in 1:1 / destination-redirected
+     *                conversation for sync messages).
+     * @param noticeData Aggregated payload (scene, sourceAuthorIds, messageCount).
+     * @param systemShowTimestamp In-conversation display timestamp (usually equal to
+     *                            `envelope.systemShowTimestamp` or `timestamp`; determines the
+     *                            row's position in the RecyclerView).
+     * @param timestamp Client-side `envelope.timestamp` (sendTs on the sender,
+     *                  `envelope.timestamp` on the receiver). **Must** match the sender's
+     *                  sendTs and the peer's envelope.timestamp.
+     * @param sourceDevice `envelope.sourceDevice` (the sender uses `DEFAULT_DEVICE_ID = 1`;
+     *                     the receiver uses `content.signalServiceEnvelope.sourceDevice`).
+     * @return The persisted [NotifyMessage]. Mostly for test assertions and debug logging;
+     *         callers do NOT persist again. Persistence uses `messageStore.putWhenNonExist`,
+     *         so repeated calls with the same messageId are idempotent.
+     */
+    suspend fun createForwardNoticeMessage(
+        operatorId: String,
+        forWhat: For,
+        noticeData: ForwardNoticeData,
+        systemShowTimestamp: Long,
+        timestamp: Long,
+        sourceDevice: Int = DEFAULT_DEVICE_ID
+    ): NotifyMessage = withContext(Dispatchers.IO) {
+        val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
+        val messageId = generateMessageId(timestamp, operatorId, sourceDevice)
+
+        // Name resolution: batch query via WCDB.getContactorsFromAllTable so the
+        // number of DB round-trips is O(1) instead of O(N) regardless of how many
+        // authors we resolve (contactor table in 1 IN query, with an optional
+        // groupMemberContactor fallback for ids missing from the main table).
+        // Renderer's resolver lambda is synchronous, so we pre-resolve into a map.
+        val idsToResolve = buildSet {
+            add(operatorId)
+            addAll(noticeData.sourceAuthorIds)
+        }
+        val myId = globalServices.myId
+        val preferredGid = (forWhat as? For.Group)?.id
+        val contactorMap = wcdb.getContactorsFromAllTable(idsToResolve.toList(), preferredGid)
+            .associateBy { it.id }
+        val nameCache: Map<String, String> = idsToResolve.associateWith { id ->
+            contactorMap[id]?.getDisplayNameForUI() ?: id.formatBase58Id()
+        }
+
+        val showContent = ForwardNoticeRenderer.render(
+            operatorId = operatorId,
+            myId = myId,
+            notice = noticeData,
+            context = context
+        ) { id -> nameCache[id] ?: id.formatBase58Id() }
+
+        val ttNotify = TTNotifyMessage(
+            data = null,
+            notifyTime = timestamp,
+            notifyType = TTNotifyMessage.NOTIFY_ACTION_TYPE_FORWARD_NOTICE,
+            showContent = showContent,
+            display = 1
+        )
+
+        val message = NotifyMessage(
+            messageId,
+            For.Account(operatorId),
+            forWhat,
+            systemShowTimestamp,
+            timestamp,
+            System.currentTimeMillis(),
+            SendType.Sent.rawValue,
+            expiresInSeconds,
+            0,
+            0,
+            0,
+            gson.toJson(ttNotify)
+        )
+
+        // putWhenNonExist is idempotent on messageId collision (cross-path dedup).
+        // `NotifyMessage` → `putNotifyMessage` → `type = 2 (TYPE_NOTIFY)` → excluded from
+        // `updateRoomUnreadState`'s unread query → "does not count toward unread" satisfied.
+        messageStore.putWhenNonExist(message)
+        L.i {
+            "[$TAG] createForwardNoticeMessage success, messageId=$messageId, " +
+                "scene=${noticeData.scene}, count=${noticeData.messageCount}, " +
+                "authors=${noticeData.sourceAuthorIds.size}"
+        }
+        message
     }
 
     /**

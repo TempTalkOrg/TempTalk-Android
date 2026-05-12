@@ -52,13 +52,12 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import kotlinx.coroutines.flow.Flow
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
-import util.concurrent.TTExecutors
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
+import com.difft.android.chat.cryptonew.EncryptionDataManager
+import com.difft.android.chat.dependencies.ApplicationDependencies
 import util.AppForegroundObserver
-import org.thoughtcrime.securesms.util.ForegroundServiceUtil
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.UnableToStartException
+import com.difft.android.chat.util.ForegroundServiceUtil
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.UnableToStartException
 import com.difft.android.websocket.api.ConversationManager
 import com.difft.android.websocket.api.messages.DetailMessageType
 import com.difft.android.websocket.api.messages.PublicKeyInfo
@@ -176,7 +175,7 @@ class LCallToChatControllerImpl @Inject constructor(
 
                 LCallManager.checkQuicFeatureGrayStatus()
 
-                val callIntentBuilder = CallIntent.Builder(application, LCallActivity::class.java)
+                val intent = CallIntent.Builder(application, LCallActivity::class.java)
                     .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     .withAction(CallIntent.Action.JOIN_CALL)
                     .withRoomName(roomName)
@@ -187,37 +186,9 @@ class LCallToChatControllerImpl @Inject constructor(
                     .withStartCallParams(startCallParams)
                     .withNeedAppLock(isNeedAppLock)
                     .withCallWaitDialogShown(true)
+                    .build()
 
-                val speedTestServerUrls = LCallEngine.getAvailableServerUrls()
-
-                // 优先使用缓存的 serverUrl
-                if (speedTestServerUrls.isNotEmpty()) {
-                    val intent = callIntentBuilder.withCallServerUrls(speedTestServerUrls).build()
-                    startCallInternal(context, intent, onComplete)
-                    return@launch
-                }
-
-                // 无缓存，发起网络请求
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        callService.getServiceUrl(SecureSharedPrefsUtil.getToken())
-                    }
-                }.onSuccess { response ->
-                    if (response.status == 0 && !response.data?.serviceUrls.isNullOrEmpty()) {
-                        val urls = response.data!!.serviceUrls!!
-                        val intent = callIntentBuilder.withCallServerUrls(urls).build()
-                        startCallInternal(context, intent, onComplete)
-                    } else {
-                        L.e { "[Call] joinCall getCallServerUrl failed, status:${response.status}" }
-                        withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
-                        onComplete(false)
-                    }
-                }.onFailure { e ->
-                    if (e is CancellationException) throw e
-                    L.e(e) { "[Call] joinCall getCallServerUrl error:" }
-                    withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
-                    onComplete(false)
-                }
+                startCallInternal(context, intent, onComplete)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -633,12 +604,20 @@ class LCallToChatControllerImpl @Inject constructor(
 
     override fun restoreIncomingCallScreenIfActive() {
         L.i { "[Call] Status: inCalling=${inComingCallStateManager.isActivityShowing()}, isInForeground=${inComingCallStateManager.isInForeground()}" }
-        if (inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isInForeground() && !ScreenDeviceUtil.isScreenLocked(application)) {
-            L.i { "[Call] Status: OK> restoreIncomingCallActivityIfIncoming" }
-            val intent = Intent(application, LIncomingCallActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (!inComingCallStateManager.isActivityShowing() || inComingCallStateManager.isInForeground()) {
+            return
+        }
+        appScope.launch(Dispatchers.IO) {
+            val isLocked = ScreenDeviceUtil.isScreenLocked(application)
+            if (!isLocked && inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isInForeground()) {
+                L.i { "[Call] Status: OK> restoreIncomingCallActivityIfIncoming" }
+                withContext(Dispatchers.Main) {
+                    val intent = Intent(application, LIncomingCallActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    application.startActivity(intent)
+                }
             }
-            application.startActivity(intent)
         }
     }
 
@@ -678,7 +657,7 @@ class LCallToChatControllerImpl @Inject constructor(
             ForegroundServiceUtil.start(context, intent)
         } catch (e: UnableToStartException) {
             L.w { "[MessageForegroundService] Unable to start foreground service for websocket. Deferring to background to try with blocking" }
-            TTExecutors.UNBOUNDED.execute {
+            appScope.launch(Dispatchers.IO) {
                 try {
                     ForegroundServiceUtil.startWhenCapable(context, intent)
                 } catch (e: UnableToStartException) {

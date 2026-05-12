@@ -24,7 +24,7 @@ import androidx.core.graphics.drawable.toDrawable
  * - Unified accessor API via DifftTheme object
  *
  * @param darkTheme Whether to use dark theme. Defaults to system setting.
- * @param useSecondaryBackground If true, uses backgroundSecondary color; otherwise uses default background.
+ * @param useSecondaryBackground If true, uses backgroundSetting color (page bg for settings-style screens); otherwise uses default background. Param name retained for API compatibility — does NOT map to the new colors.backgroundSecondary (true bg2).
  * @param content The composable content to display within the theme.
  */
 @Composable
@@ -39,9 +39,11 @@ fun DifftTheme(
     val colorScheme = if (darkTheme) createDarkColorScheme() else createLightColorScheme()
     val extendedColors = if (darkTheme) createDarkExtendedColors() else createLightExtendedColors()
 
-    // Determine background color based on useSecondaryBackground flag
+    // Determine background color based on useSecondaryBackground flag.
+    // Behavior preserved: maps to backgroundSetting (renamed from old backgroundSecondary),
+    // not the new backgroundSecondary that holds the true bg2 color.
     val backgroundColor = if (useSecondaryBackground) {
-        extendedColors.backgroundSecondary
+        extendedColors.backgroundSetting
     } else {
         colorScheme.background
     }
@@ -322,6 +324,10 @@ object DifftColorAccessor {
     val textInfo: Color
         @Composable @ReadOnlyComposable
         get() = extended.textInfo
+
+    val backgroundSetting: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundSetting
 
     val backgroundSecondary: Color
         @Composable @ReadOnlyComposable

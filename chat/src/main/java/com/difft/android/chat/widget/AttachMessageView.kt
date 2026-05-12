@@ -15,18 +15,19 @@ import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
 import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.isLongText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.viewFile
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.DownloadAttachmentJob
+import com.difft.android.chat.util.viewFile
 
 class AttachMessageView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : ConstraintLayout(context, attrs, defStyleAttr) {
+    context: Context, attrs: AttributeSet? = null
+) : ConstraintLayout(context, attrs) {
 
     val binding: LayoutAttachMessageViewBinding by viewbind(this)
 
@@ -122,7 +123,22 @@ class AttachMessageView @JvmOverloads constructor(
                     .filter { it == currentAttachmentId }
                     .collect {
                         withContext(Dispatchers.Main) {
-                            currentMessage?.let { setupAttachmentView(it) }
+                            currentMessage?.let {
+                                setupAttachmentView(it)
+                                // Long-text: hide self once download is complete — body text is shown by the parent binder.
+                                // Must match AttachContentBinder's isLongTextDownloaded check: isFileValid alone is not
+                                // sufficient (partial files pass), so also require status=SUCCESS or progress=100.
+                                val attachment = it.attachment
+                                if (attachment?.isLongText() == true) {
+                                    val path = FileUtil.getMessageAttachmentFilePath(it.id) + (attachment.fileName ?: "")
+                                    val isFileValid = FileUtil.isFileValid(path)
+                                    val progress = it.getAttachmentProgress()
+                                    val isComplete = isFileValid && (attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)
+                                    if (isComplete) {
+                                        visibility = GONE
+                                    }
+                                }
+                            }
                         }
                     }
             }?.also { progressJob = it }

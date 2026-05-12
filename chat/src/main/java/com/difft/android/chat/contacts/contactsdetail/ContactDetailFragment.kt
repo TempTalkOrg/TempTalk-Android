@@ -21,7 +21,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
-import com.difft.android.call.LChatToCallController
+import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.state.OnGoingCallStateManager
@@ -44,6 +44,7 @@ import com.difft.android.chat.ui.SingleChatSettingActivity
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.engine.ExoVideoPlayerEngine
 import com.luck.picture.lib.entity.LocalMedia
@@ -51,7 +52,7 @@ import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
 import com.luck.picture.lib.language.LanguageConfig
 import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.Util
 import android.content.Context
 import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.network.UrlManager
@@ -64,6 +65,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.convertToContactorModel
 import org.difft.app.database.getCommonGroupsCount
 import org.difft.app.database.models.ContactorModel
@@ -192,6 +194,7 @@ class ContactDetailFragment : Fragment() {
                         onCloseClick = ::handleCloseClick,
                         onMoreClick = ::handleMoreClick,
                         onAvatarClick = ::handleAvatarClick,
+                        onOriginalAvatarClick = ::handleOriginalAvatarClick,
                         onEditClick = ::handleEditClick,
                         onMessageClick = ::navigateToChat,
                         onCallClick = ::handleCallClick,
@@ -481,15 +484,23 @@ class ContactDetailFragment : Fragment() {
         val isSelf = globalServices.myId == contactId
         val isBot = contactor.id.isBotId()
         val isOfficialBot = contactor.id.isOfficialBotId()
-        val hasRemark = !TextUtils.isEmpty(contactor.remark)
-
-        val displayName = if (hasRemark) {
-            contactor.remark ?: contactor.getDisplayNameForUI()
-        } else {
-            contactor.getDisplayNameForUI()
-        }
+        // Mirror the priority chain that getDisplayNameForUI() walks for remarks
+        // so hasRemark reflects what displayName actually surfaces, otherwise the
+        // "原名" line under displayName would be dropped when remark only lives on
+        // the group-member row (cache cold + contactor.remark null).
+        val effectiveRemark = ContactRemarkCache.getRemark(contactor.id)?.takeIf { it.isNotEmpty() }
+            ?: contactor.remark?.takeIf { it.isNotEmpty() }
+            ?: contactor.groupMemberContactor?.remark?.takeIf { it.isNotEmpty() }
+        val hasRemark = !effectiveRemark.isNullOrEmpty()
+        val displayName = effectiveRemark ?: contactor.getDisplayNameForUI()
 
         val originalName = if (hasRemark) contactor.getDisplayNameWithoutRemarkForUI() else null
+
+        // Same priority chain as remark name above.
+        val effectiveRemarkAvatar = ContactRemarkCache.getRemarkAvatar(contactor.id)?.takeIf { it.isNotEmpty() }
+            ?: contactor.remarkAvatar?.takeIf { it.isNotEmpty() }
+            ?: contactor.groupMemberContactor?.remarkAvatar?.takeIf { it.isNotEmpty() }
+        val hasRemarkAvatar = !effectiveRemarkAvatar.isNullOrEmpty()
 
         // Build userId display value (prefer customUid)
         val userId = if (contactor.customUid.isNullOrEmpty() && customId.isNullOrEmpty()) {
@@ -507,6 +518,8 @@ class ContactDetailFragment : Fragment() {
             displayName = displayName,
             originalName = originalName,
             hasRemark = hasRemark,
+            hasRemarkAvatar = hasRemarkAvatar,
+            originalAvatarJson = if (hasRemarkAvatar) contactor.avatar else null,
             userId = userId,
             joinedAt = contactor.joinedAt,
             sourceDescribe = if (!isSelf) contactor.sourceDescribe else null,
@@ -547,55 +560,53 @@ class ContactDetailFragment : Fragment() {
         }
     }
 
-    /**
-     * Handle avatar click to open avatar preview.
-     * - Checks if original image cache exists, if not triggers download
-     * - Uses original image path first, falls back to small image for compatibility
-     */
+    /** Preview the rendered (effective) avatar — honors the remark chain. */
     private fun handleAvatarClick() {
         val contact = mContactor ?: return
-        if (TextUtils.isEmpty(contact.avatar)) return
-        val avatarData = contact.avatar?.getContactAvatarData() ?: return
-        val avatarUrl = avatarData.getContactAvatarUrl() ?: return
+        val data = contact.getEffectiveAvatarJson()?.getContactAvatarData() ?: return
+        previewAvatar(data.getContactAvatarUrl(), data.encKey)
+    }
 
+    /** Preview the public (non-remark) avatar from the inline subtitle thumbnail. */
+    private fun handleOriginalAvatarClick() {
+        val contact = mContactor ?: return
+        val data = contact.avatar?.getContactAvatarData() ?: return
+        previewAvatar(data.getContactAvatarUrl(), data.encKey)
+    }
+
+    private fun previewAvatar(url: String?, key: String?) {
+        if (url.isNullOrEmpty()) return
         viewLifecycleOwner.lifecycleScope.launch {
             val cacheFile = withContext(Dispatchers.IO) {
-                AvatarUtil.getCacheFile(avatarUrl)
+                AvatarUtil.getCacheFile(url)
             }
-
-            if (cacheFile == null) {
-                // No cache exists, show loading and download
-                L.i { "[ContactDetailFragment] Avatar cache not found, downloading..." }
-                ComposeDialogManager.showWait(requireActivity(), "")
-
-                val success = withContext(Dispatchers.IO) {
-                    try {
-                        val bytes = AvatarUtil.fetchAvatar(requireContext(), avatarUrl, avatarData.encKey ?: "")
-                        val newCacheFile = java.io.File(
-                            com.difft.android.base.utils.FileUtil.getAvatarCachePath(),
-                            "avatar_${avatarUrl.substringAfterLast("/")}"
-                        )
-                        newCacheFile.writeBytes(bytes)
-                        true
-                    } catch (e: Exception) {
-                        L.e { "[ContactDetailFragment] Failed to download avatar: ${e.message}" }
-                        false
-                    }
-                }
-
-                ComposeDialogManager.dismissWait()
-
-                if (!success || !isAdded || view == null) return@launch
-
-                val newFile = withContext(Dispatchers.IO) {
-                    AvatarUtil.getCacheFile(avatarUrl)
-                } ?: return@launch
-
-                openAvatarPreview(newFile.path)
-            } else {
-                // Cache exists, open preview directly
+            if (cacheFile != null) {
                 openAvatarPreview(cacheFile.path)
+                return@launch
             }
+
+            L.i { "[ContactDetailFragment] Avatar cache not found, downloading..." }
+            ComposeDialogManager.showWait(requireActivity(), "")
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    val bytes = AvatarUtil.fetchAvatar(requireContext(), url, key.orEmpty())
+                    val newCacheFile = java.io.File(
+                        com.difft.android.base.utils.FileUtil.getAvatarCachePath(),
+                        "avatar_${url.substringAfterLast("/")}"
+                    )
+                    newCacheFile.writeBytes(bytes)
+                    true
+                } catch (e: Exception) {
+                    L.e { "[ContactDetailFragment] Failed to download avatar: ${e.message}" }
+                    false
+                }
+            }
+            ComposeDialogManager.dismissWait()
+            if (!success || !isAdded || view == null) return@launch
+            val newFile = withContext(Dispatchers.IO) {
+                AvatarUtil.getCacheFile(url)
+            } ?: return@launch
+            openAvatarPreview(newFile.path)
         }
     }
 

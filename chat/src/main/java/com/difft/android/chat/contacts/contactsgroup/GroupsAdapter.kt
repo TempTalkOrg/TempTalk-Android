@@ -8,7 +8,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.chat.databinding.ChatItemGroupBinding
-import com.difft.android.chat.group.getAvatarData
+import com.difft.android.chat.group.getDisplayAvatarData
 import org.difft.app.database.models.GroupModel
 
 abstract class GroupsAdapter : ListAdapter<GroupModel, GroupItemViewHolder>(object : DiffUtil.ItemCallback<GroupModel>() {
@@ -59,6 +59,6 @@ class GroupItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
     fun bind(data: GroupModel) {
         binding.textviewGroupName.textSize = if (TextSizeUtil.isLarger) 24f else 16f
         binding.textviewGroupName.text = data.name
-        binding.imageviewGroup.setAvatar(data.avatar?.getAvatarData())
+        binding.imageviewGroup.setAvatar(data.getDisplayAvatarData())
     }
 }

@@ -118,7 +118,9 @@ fun View.getLifecycleOwner(): LifecycleOwner? {
     return null
 }
 
-val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+// IO: most appScope.launch{} callers are IO-bound (DB / SP / file / network post-processing).
+// CPU-bound paths (libsignal decrypt) already use explicit withContext(Default).
+val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
 fun checkThread() {
     if (BuildConfig.DEBUG) {

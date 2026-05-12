@@ -116,6 +116,18 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
     }
 
     /**
+     * Defer listener dispatch one frame so listener bodies can mutate the view tree
+     * without racing this inset/animation callback. See Crashlytics issue 32a90db4.
+     */
+    private fun dispatchKeyboardListeners(action: (KeyboardStateListener) -> Unit) {
+        val snapshot = keyboardStateListeners.toList()
+        post {
+            if (!isAttachedToWindow) return@post
+            snapshot.forEach(action)
+        }
+    }
+
+    /**
      * Freeze keyboard padding and immediately set it to the non-IME value (navigation bar only).
      * Use when switching from keyboard to a custom panel — the panel provides the height that
      * the keyboard was occupying, so the layout stays in place while the keyboard closes behind
@@ -180,10 +192,10 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
 
         if (isImeVisible && !isKeyboardVisible) {
             isKeyboardVisible = true
-            keyboardStateListeners.forEach { it.onKeyboardShown() }
+            dispatchKeyboardListeners { it.onKeyboardShown() }
         } else if (!isImeVisible && isKeyboardVisible) {
             isKeyboardVisible = false
-            keyboardStateListeners.forEach { it.onKeyboardHidden() }
+            dispatchKeyboardListeners { it.onKeyboardHidden() }
         }
 
         if (isImeVisible && imeInsets.bottom > 0) {
@@ -244,8 +256,10 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
             super.onEnd(animation)
             if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
                 isKeyboardAnimating = false
+                // Snapshot before requestApplyInsets — it may synchronously mutate isKeyboardVisible.
+                val visibleAtAnimationEnd = isKeyboardVisible
                 requestApplyInsets()
-                keyboardStateListeners.forEach { it.onKeyboardAnimationEnded(isKeyboardVisible) }
+                dispatchKeyboardListeners { it.onKeyboardAnimationEnded(visibleAtAnimationEnd) }
             }
         }
     }

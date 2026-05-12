@@ -15,9 +15,13 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.TextMessage
-import org.thoughtcrime.securesms.jobmanager.Job
-import org.thoughtcrime.securesms.jobs.PushReadReceiptSendJob
-import org.thoughtcrime.securesms.jobs.PushTextSendJob
+import com.difft.android.chat.jobmanager.Job
+import com.difft.android.chat.jobs.PushForwardNoticeSendJob
+import com.difft.android.chat.jobs.PushGroupKeySendJob
+import com.difft.android.chat.jobs.PushReactionSendJob
+import com.difft.android.chat.jobs.PushReadReceiptSendJob
+import com.difft.android.chat.jobs.PushTextSendJob
+import difft.android.messageserialization.model.ForwardNoticeData
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
 @AssistedFactory
@@ -45,6 +49,17 @@ interface PushTextSendJobFactory {
 }
 
 @AssistedFactory
+interface PushReactionSendJobFactory {
+    /**
+     * parameters: Job.Parameters? only used in JobManager, when creating a job from the PushReactionSendJob's Factory
+     */
+    fun create(
+        @Assisted parameters: Job.Parameters?,
+        @Assisted textMessage: TextMessage,
+    ): PushReactionSendJob
+}
+
+@AssistedFactory
 interface PushReadReceiptSendJobFactory {
     /**
      * parameters: Job.Parameters? only used in JobManager, when creating a job from the PushReadReceiptSendJob's Factory
@@ -67,6 +82,32 @@ interface PushReadReceiptSendJobFactory {
         @Assisted("sendSyncToSelf")
         sendSyncToSelf: Boolean
     ): PushReadReceiptSendJob
+}
+
+@AssistedFactory
+interface PushGroupKeySendJobFactory {
+    fun create(
+        @Assisted
+        parameters: Job.Parameters?,
+        @Assisted("gid")
+        gid: String,
+        @Assisted("recipientId")
+        recipientId: String,
+        @Assisted("isBroadcast")
+        isBroadcast: Boolean,
+    ): PushGroupKeySendJob
+}
+
+@AssistedFactory
+interface PushForwardNoticeSendJobFactory {
+    fun create(
+        @Assisted
+        parameters: Job.Parameters?,
+        @Assisted
+        target: difft.android.messageserialization.For,
+        @Assisted
+        noticeData: ForwardNoticeData,
+    ): PushForwardNoticeSendJob
 }
 
 @AssistedFactory

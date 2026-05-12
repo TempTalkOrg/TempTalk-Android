@@ -7,7 +7,7 @@ kotlinCoroutine = "1.10.2"
 # Android
 compileSdk = "36"
 targetSdk = "36"
-minSdk = "24"
+minSdk = "26"
 jvmTarget = "17"
 androidGradlePlugin = "8.13.2"
 
@@ -55,14 +55,13 @@ smartRefreshLayout = "2.1.0"
 # Picture Selector
 pictureSelector = "v3.11.2"
 
-dtproto = "3.0.0"
+dtproto = "3.1.0"
 jna = "5.14.0"
 signalAndroid = "0.86.5"
-sqlcipherAndroid = "4.14.1"
 
 # Jackson
-jacksonDatabind = "2.13.5"
-jacksonModuleKotlin = "2.12.0"
+jacksonDatabind = "2.21.2"
+jacksonModuleKotlin = "2.21.2"
 
 # Other Libraries
 jwtdecode = "2.0.2"
@@ -88,8 +87,8 @@ desugarJdkLibs = "2.1.5"
 accompanistSystemuicontroller = "0.36.0"
 coil = "3.3.0"
 accompanistPermissions = "0.37.3"
-livekitAndroid = "2.23.6.0"
-denoiseFilter = "1.0.16"
+livekitAndroid = "2.24.1.6"
+denoiseFilter = "1.1.0"
 kotlinxSerializationCore = "1.10.0"
 kotlinxSerializationJson = "1.10.0"
 robolectric = "4.14.1"
@@ -128,6 +127,7 @@ androidx-lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-view
 androidx-lifecycle-livedata-ktx = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "androidxLifecycle" }
 androidx-lifecycle-common-java8 = { module = "androidx.lifecycle:lifecycle-common-java8", version.ref = "androidxLifecycle" }
 androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "androidxLifecycle" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
 
 # AndroidX Navigation
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "androidxNavigation" }
@@ -197,7 +197,6 @@ picture-selector-compress = { module = "io.github.lucksiege:compress", version.r
 dtproto = { module = "com.github.TempTalkOrg:dtproto", version.ref = "dtproto" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 signal-android = { module = "org.signal:libsignal-android", version.ref = "signalAndroid" }
-signal-sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipherAndroid" }
 
 # Jackson
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jacksonDatabind" }
@@ -309,8 +308,7 @@ androidx-work = [
 # Signal
 # Note: signal-android already includes signal-client via api dependency
 signal = [
-    "signal-android",
-    "signal-sqlcipher-android"
+    "signal-android"
 ]
 
 # Jackson

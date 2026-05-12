@@ -1,0 +1,111 @@
+package com.difft.android.chat.mediasend.v2
+
+import android.content.Context
+import android.net.Uri
+import androidx.annotation.WorkerThread
+import com.luck.picture.lib.entity.LocalMedia
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.difft.android.chat.mediasend.ImageEditorModelRenderMediaTransform
+import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.MediaTransform
+import com.difft.android.chat.mediasend.VideoTrimTransform
+import com.difft.android.chat.mediasend.v2.videos.VideoTrimData
+import com.difft.android.chat.mms.SentMediaQuality
+import com.difft.android.chat.providers.MyBlobProvider
+import com.difft.android.chat.scribbles.ImageEditorFragment
+
+class MediaSelectionRepository(context: Context) {
+
+    private val context: Context = context.applicationContext
+
+    /**
+     * Tries to send the selected media, performing proper transformations for edited images and videos.
+     */
+    suspend fun send(
+        selectedMedia: List<LocalMedia>,
+        stateMap: Map<Uri, Any>,
+        quality: SentMediaQuality,
+        message: CharSequence?,
+        confidentialMode: Int = 0,
+    ): MediaSendActivityResult {
+        if (selectedMedia.isEmpty()) {
+            throw IllegalStateException("No selected media!")
+        }
+
+        return withContext(Dispatchers.IO) {
+            val trimmedBody: String = message?.toString()?.trim() ?: ""
+            val modelsToTransform: Map<LocalMedia, MediaTransform> = buildModelsToTransform(selectedMedia, stateMap, quality)
+            val oldToNewMediaMap: Map<LocalMedia, LocalMedia> = transformMediaSync(context, selectedMedia, modelsToTransform)
+            val updatedMedia = oldToNewMediaMap.values.toList()
+
+            MediaSendActivityResult(
+                media = updatedMedia,
+                body = trimmedBody,
+                confidentialMode = confidentialMode
+            )
+        }
+    }
+
+    fun deleteBlobs(media: List<LocalMedia>) {
+        media
+            .map(LocalMedia::getRealPath)
+            .forEach { MyBlobProvider.getInstance().delete(Uri.parse(it)) }
+    }
+
+    fun cleanUp(selectedMedia: List<LocalMedia>) {
+        deleteBlobs(selectedMedia)
+    }
+
+
+    @WorkerThread
+    private fun buildModelsToTransform(
+        selectedMedia: List<LocalMedia>,
+        stateMap: Map<Uri, Any>,
+        quality: SentMediaQuality
+    ): Map<LocalMedia, MediaTransform> {
+        val modelsToRender: MutableMap<LocalMedia, MediaTransform> = mutableMapOf()
+
+        selectedMedia.forEach {
+            val state = stateMap[Uri.parse(it.realPath)]
+            if (state is ImageEditorFragment.Data) {
+                modelsToRender[it] = ImageEditorModelRenderMediaTransform(state.readModel(), null, quality)
+            }
+
+            if (state is VideoTrimData) {
+                modelsToRender[it] = VideoTrimTransform(state, quality)
+            }
+
+//            if (quality == SentMediaQuality.HIGH) {
+//                val existingTransform: MediaTransform? = modelsToRender[it]
+//
+//                modelsToRender[it] = if (existingTransform == null) {
+//                    SentMediaQualityTransform(quality)
+//                } else {
+//                    CompositeMediaTransform(existingTransform, SentMediaQualityTransform(quality))
+//                }
+//            }
+        }
+
+        return modelsToRender
+    }
+
+    @WorkerThread
+    fun transformMediaSync(
+        context: Context,
+        currentMedia: List<LocalMedia>,
+        modelsToTransform: Map<LocalMedia, MediaTransform>
+    ): LinkedHashMap<LocalMedia, LocalMedia> {
+        val updatedMedia = LinkedHashMap<LocalMedia, LocalMedia>(currentMedia.size)
+
+        for (media in currentMedia) {
+            val transformer = modelsToTransform[media]
+            if (transformer != null) {
+                updatedMedia[media] = transformer.transform(context, media)
+            } else {
+                updatedMedia[media] = media
+            }
+        }
+        return updatedMedia
+    }
+}

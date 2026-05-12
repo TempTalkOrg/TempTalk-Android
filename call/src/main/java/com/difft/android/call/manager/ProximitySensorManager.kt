@@ -69,6 +69,9 @@ class ProximitySensorManager(
     @Volatile
     private var sensorJob: Job? = null
 
+    @Volatile
+    private var initJob: Job? = null
+
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
@@ -97,28 +100,32 @@ class ProximitySensorManager(
     }
 
     /**
-     * 初始化传感器管理器
-     * 检查设备是否支持距离传感器
+     * 初始化传感器管理器（异步）
+     * getSystemService(SENSOR_SERVICE) 首次调用会触发原生传感器枚举，可能耗时数百毫秒，
+     * 因此在 IO 线程执行以避免阻塞主线程
      */
+    @Synchronized
     fun initialize() {
         val context = contextRef.get() ?: run {
             L.w { "[Call] ProximitySensorManager: Context reference is null, cannot initialize" }
             return
         }
 
-        // 初始化 SensorManager
-        sensorManager = context.getSystemService(android.content.Context.SENSOR_SERVICE) as? SensorManager
+        initJob = windowScope.launch(Dispatchers.IO) {
+            val manager = context.getSystemService(android.content.Context.SENSOR_SERVICE) as? SensorManager
+            sensorManager = manager
 
-        val manager = sensorManager ?: run {
-            L.e { "[Call] ProximitySensorManager: Failed to get SensorManager" }
-            return
-        }
+            if (manager == null) {
+                L.e { "[Call] ProximitySensorManager: Failed to get SensorManager" }
+                return@launch
+            }
 
-        proximitySensor = manager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
-        if (proximitySensor == null) {
-            L.i { "[Call] ProximitySensorManager: Proximity sensor not available" }
-        } else {
-            L.i { "[Call] ProximitySensorManager: Proximity sensor initialized" }
+            proximitySensor = manager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+            if (proximitySensor == null) {
+                L.i { "[Call] ProximitySensorManager: Proximity sensor not available" }
+            } else {
+                L.i { "[Call] ProximitySensorManager: Proximity sensor initialized" }
+            }
         }
     }
 
@@ -128,29 +135,28 @@ class ProximitySensorManager(
      */
     @Synchronized
     fun register() {
-        // 检查是否已注册
         if (isRegistered) {
             L.w { "[Call] ProximitySensorManager: Sensor already registered" }
             return
         }
-        // 先恢复到默认亮度，避免残留黑屏状态
         resetWindowState()
-
-        val sensor = proximitySensor
-        val manager = sensorManager
-
-        if (sensor == null || manager == null) {
-            L.w { "[Call] ProximitySensorManager: Cannot register, sensor or manager not available" }
-            return
-        }
 
         sensorJob?.cancel()
         sensorJob = windowScope.launch {
+            initJob?.join()
+
+            val sensor = proximitySensor
+            val manager = sensorManager
+            if (sensor == null || manager == null) {
+                L.w { "[Call] ProximitySensorManager: Cannot register, sensor or manager not available" }
+                return@launch
+            }
+
             createProximityFlow(manager, sensor)
                 .buffer(Channel.CONFLATED)
                 .collect { isNear ->
-                updateDesiredState(isNear)
-            }
+                    updateDesiredState(isNear)
+                }
         }.also { job ->
             job.invokeOnCompletion { cause ->
                 isRegistered = false
@@ -189,20 +195,19 @@ class ProximitySensorManager(
      */
     @Synchronized
     fun release() {
-        // 先注销监听器
         unregister()
         resetWindowState()
 
-        // 清理所有引用
         proximitySensor = null
         sensorManager = null
+        initJob?.cancel()
+        initJob = null
         sensorJob?.cancel()
         sensorJob = null
         windowStateJob.cancel()
         if (ownsScope) {
             windowScope.cancel()
         }
-        // 清理 WeakReference
         windowRef.clear()
         contextRef.clear()
         L.i { "[Call] ProximitySensorManager: Released" }

@@ -78,6 +78,7 @@ import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -85,14 +86,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataMigrationManager
-import org.thoughtcrime.securesms.messages.FailedMessageProcessor
-import org.thoughtcrime.securesms.messages.MessageForegroundService
-import org.thoughtcrime.securesms.messages.MessageServiceManager
-import org.thoughtcrime.securesms.messages.PendingMessageProcessor
-import org.thoughtcrime.securesms.util.AppIconBadgeManager
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.websocket.WebSocketManager
+import com.difft.android.chat.messages.FailedMessageProcessor
+import com.difft.android.chat.messages.MessageForegroundService
+import com.difft.android.chat.messages.MessageServiceManager
+import com.difft.android.chat.messages.PendingMessageProcessor
+import com.difft.android.chat.util.AppIconBadgeManager
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.websocket.WebSocketManager
 import java.io.File
 import javax.inject.Inject
 import kotlin.system.exitProcess
@@ -157,9 +157,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
     @Inject
     lateinit var webSocketManager: WebSocketManager
-
-    @Inject
-    lateinit var encryptionDataMigrationManager: EncryptionDataMigrationManager
 
     @Inject
     lateinit var conversationSettingsManager: ConversationSettingsManager
@@ -290,8 +287,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         observeAndUpdateUnreadMessageCountBadge()
 
         requestNotificationPermission()
-
-        migrateEncryptionKeysIfNeeded()
 
         globalConfigsManager.syncMineConfigs()
 
@@ -739,6 +734,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private var checkNotificationFullScreenPermissionIgnore = false
     private var checkNotificationPermissionDialog: ComposeDialog? = null
     private var checkNotificationFullScreenPermissionDialog: ComposeDialog? = null
+    private var checkNotificationFullScreenPermissionJob: Job? = null
 
     /**
      * 检查通知权限并显示引导对话框
@@ -786,10 +782,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private fun checkNotificationFullScreenPermission() {
         if (checkNotificationFullScreenPermissionIgnore) return
 
-        lifecycleScope.launch {
+        checkNotificationFullScreenPermissionJob?.cancel()
+        checkNotificationFullScreenPermissionJob = lifecycleScope.launch {
             val hasPermission = withContext(Dispatchers.IO) {
                 messageNotificationUtil.hasFullScreenNotificationPermission()
             }
+            if (checkNotificationFullScreenPermissionIgnore) return@launch
             if (!hasPermission) {
                 if (checkNotificationFullScreenPermissionDialog == null) {
                     val message = FullScreenPermissionHelper.getNoPermissionTip()
@@ -920,15 +918,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
 
         return file
-    }
-
-    /**
-     * 执行密钥迁移
-     */
-    private fun migrateEncryptionKeysIfNeeded() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            encryptionDataMigrationManager.migrateIfNeeded()
-        }
     }
 
     private fun initWCDB() {

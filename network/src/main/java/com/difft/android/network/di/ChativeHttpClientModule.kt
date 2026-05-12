@@ -37,6 +37,10 @@ object ChativeHttpClientModule {
     @Retention(AnnotationRetention.RUNTIME)
     annotation class NoHeader
 
+    @Qualifier
+    @Retention(AnnotationRetention.RUNTIME)
+    annotation class SignalApi
+
     @Provides
     fun provideAuthProvider(): ChativeHttpClient.AuthProvider = object : ChativeHttpClient.AuthProvider {
         override fun provideAuth(): String = SecureSharedPrefsUtil.getBasicAuth()
@@ -115,4 +119,26 @@ object ChativeHttpClientModule {
             readWriteTimeoutSeconds = 30
         )
     }
+
+    /**
+     * Signal API client — no [HttpClientInterceptor], preserving raw HTTP status codes
+     * for Repository-layer error mapping (device management, message sending fallback).
+     */
+    @SignalApi
+    @Provides
+    @Singleton
+    fun provideSignalApiClient(
+        @ApplicationContext applicationContext: Context,
+        urlManager: UrlManager,
+        authTokenProvider: ChativeHttpClient.AuthProvider
+    ): ChativeHttpClient {
+        return ChativeHttpClient(
+            applicationContext,
+            urlManager.chat,
+            authTokenProvider,
+            useHttpClientInterceptor = false,
+            serializeNulls = true  // Match Jackson's default null-field serialization
+        )
+    }
+
 }

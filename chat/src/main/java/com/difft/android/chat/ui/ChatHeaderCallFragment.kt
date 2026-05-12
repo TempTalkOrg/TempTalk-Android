@@ -29,7 +29,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.databinding.ChatFragmentHeaderCallBinding
 import com.difft.android.chat.databinding.ChatFragmentHeaderCallStubBinding
 import com.difft.android.chat.group.GroupUtil
-import com.difft.android.chat.group.getAvatarData
+import com.difft.android.chat.group.getDisplayAvatarData
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -230,7 +230,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             CallType.GROUP.type if callData.conversation != null -> {
                 if (displayInfo.groupModel != null) {
                     binding.imageviewGroupAvatar.visibility = View.VISIBLE
-                    binding.imageviewGroupAvatar.setAvatar(displayInfo.groupModel.avatar?.getAvatarData())
+                    binding.imageviewGroupAvatar.setAvatar(displayInfo.groupModel.getDisplayAvatarData())
                 } else {
                     binding.imageviewGroupAvatar.visibility = View.VISIBLE
                     binding.imageviewAvatar.setAvatar(com.difft.android.base.R.drawable.base_ic_group)

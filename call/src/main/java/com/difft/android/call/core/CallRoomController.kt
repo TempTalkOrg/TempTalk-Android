@@ -1,14 +1,13 @@
 package com.difft.android.call.core
 
 import android.content.Context
-import androidx.lifecycle.MutableLiveData
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.CallIntent
+import com.difft.android.call.connect.MeetingConnectionPlanner
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.RoomMetadata
-import com.difft.android.call.exception.StartCallException
 import io.livekit.android.AudioOptions
 import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
@@ -27,7 +26,6 @@ import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoCodec
 import io.livekit.android.room.track.VideoPreset169
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,11 +34,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import livekit.LivekitTemptalk
 import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
+import android.net.Uri
 
 class CallRoomController(
     private val appContext: Context,
-    private val scope: CoroutineScope,
-    private val callIntent: CallIntent,
+    callIntent: CallIntent,
     private val audioHandler: AudioSwitchHandler,
     private val audioProcessor: AudioPipelineProcessor?,
     private val e2eeEnable: Boolean,
@@ -122,19 +120,30 @@ class CallRoomController(
         }
     }
 
-    suspend fun connect(url: String, appToken: String, startCallParams: ByteArray, useQuicSignal: Boolean, onError: (Throwable) -> Unit) = withContext(
+    suspend fun connect(domain: String, url: String, certPem: String, appToken: String, startCallParams: ByteArray, useQuicSignal: Boolean, onError: (Throwable) -> Unit) = withContext(
         Dispatchers.IO) {
         try {
+            if (!useQuicSignal) {
+                val host = runCatching { Uri.parse(url).host.orEmpty() }.getOrNull().orEmpty()
+                if (host.isNotEmpty() && MeetingConnectionPlanner.isIpHost(host)) {
+                    L.e {
+                        "[Call] WSS must use domain, but got IP host=$host url=$url serverHost=$domain (likely regression)"
+                    }
+                }
+            }
             room.e2eeOptions = getE2EEOptions()
             isUseQuicSignal = useQuicSignal
             room.connect(
                 url = url,
                 token = "",
-                options = ConnectOptions(
+                options =
+                    ConnectOptions(
+                    caCertPem = certPem,
+                    serverHost = domain,
                     ttCallRequest = LivekitTemptalk.TTCallRequest
                         .newBuilder()
                         .setToken(appToken)
-                        .setStartCall(livekit.LivekitTemptalk.TTStartCall.parseFrom(startCallParams))
+                        .setStartCall(LivekitTemptalk.TTStartCall.parseFrom(startCallParams))
                         .build(),
                     useQuicSignal = useQuicSignal,
                     quicDeviceType = DEFAULT_DEVICE_ID,

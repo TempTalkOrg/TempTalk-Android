@@ -1,7 +1,6 @@
 package com.difft.android.call.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -16,11 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,8 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -62,6 +57,7 @@ import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
+import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.MUTE_ACTION_INDEX
 import com.difft.android.call.util.IdUtil
@@ -80,20 +76,12 @@ fun ShowParticipantsListView(
     muteOtherEnabled: Boolean = false,
     handleInviteUsersClick: () -> Unit = {}
 ) {
-    val handsUpUserInfo by viewModel.handsUpUserInfo.collectAsState(emptyList())
-    var raiseHandExpanded by remember { mutableStateOf(false) }
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val lazyGridState = rememberLazyGridState()
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
-
-    LaunchedEffect(lazyGridState, handsUpUserInfo.size) {
-        if(handsUpUserInfo.isNotEmpty()){
-            lazyGridState.scrollToItem(0, 0)
-        }
-    }
 
     val configuration = LocalConfiguration.current
     val isWideScreen = configuration.screenWidthDp >= 600 ||
@@ -200,103 +188,21 @@ fun ShowParticipantsListView(
                             state = lazyGridState
                         ){
                             items(
-                                count = participants.size + (if (handsUpUserInfo.isNotEmpty()) 1 else 0),
-                                key = { index ->
-                                    if (index == 0 && handsUpUserInfo.isNotEmpty()) "header" else participants[index - (if (handsUpUserInfo.isNotEmpty()) 1 else 0)].sid.value
-                                }
+                                count = participants.size,
+                                key = { index -> participants[index].sid.value }
                             )
                             { index ->
-                                if (index == 0 && handsUpUserInfo.isNotEmpty()) {
-                                    Column(
-                                        modifier = Modifier
-                                            .wrapContentHeight()
-                                            .width(184.dp)
-                                            .background(color = colorResource(id = com.difft.android.base.R.color.gray_600), shape = RoundedCornerShape(size = 8.dp))
-                                            .padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top),
-                                        horizontalAlignment = Alignment.Start,
-                                    ){
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(20.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.Start),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            // Child views.
-                                            Image(
-                                                modifier = Modifier
-                                                    .padding(0.66667.dp)
-                                                    .width(16.dp)
-                                                    .height(16.dp),
-                                                painter = painterResource(id = R.drawable.call_tabler_hand_stop),
-                                                contentDescription = "image description",
-                                                contentScale = ContentScale.None
-                                            )
+                                val participant = participants[index]
 
-                                            Text(
-                                                text = "Raise hand (${handsUpUserInfo.size}) ",
-                                                // SF/H5
-                                                style = TextStyle(
-                                                    fontSize = 14.sp,
-                                                    lineHeight = 20.sp,
-                                                    fontFamily = FontFamily.Default,
-                                                    fontWeight = FontWeight(510),
-                                                    color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
-                                                )
-                                            )
-                                        }
-                                        handsUpUserInfo.forEachIndexed { index, handUpUserInfo ->
-                                            if(index > 4 && !raiseHandExpanded){
-                                                return@forEachIndexed
-                                            }
-                                            ShowHandsUpBottomListView(viewModel, handUpUserInfo, viewHeight = 32.dp, fontSize = 14, lineHeight = 20)
-                                        }
-
-                                        if(handsUpUserInfo.size > 5) {
-                                            val expandedIcon = if(raiseHandExpanded){
-                                                R.drawable.call_handup_chevron_up
-                                            } else {
-                                                R.drawable.call_handup_chevron_down
-                                            }
-                                            Column(
-                                                modifier = Modifier.fillMaxWidth().height(16.dp),
-                                                verticalArrangement = Arrangement.Center,
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                            ){
-                                                Image(
-                                                    modifier = Modifier
-                                                        .pointerInput(Unit) {
-                                                            detectTapGestures (
-                                                                onTap = {
-                                                                    raiseHandExpanded = !raiseHandExpanded
-                                                                }
-                                                            )
-                                                        }
-                                                        .padding(0.66667.dp)
-                                                        .width(16.dp)
-                                                        .height(16.dp)
-                                                    ,
-                                                    painter = painterResource(expandedIcon),
-                                                    contentDescription = "collapse expand icon",
-                                                    contentScale = ContentScale.None
-                                                )
-                                            }
-                                        }
-                                    }
-                                }else {
-                                    val participant = participants[index - (if (handsUpUserInfo.isNotEmpty()) 1 else 0)]
-
-                                    SmallParticipantViewItem(
-                                        participant = participant,
-                                        muteOtherEnabled = muteOtherEnabled,
-                                        speakingEnabled = speakingEnabled,
-                                        onClickMute = {
-                                            L.d { "Mute toggled for participant ${participant.identity?.value}" }
-                                            viewModel.toggleMute(participant)
-                                        },
-                                    )
-                                }
+                                SmallParticipantViewItem(
+                                    participant = participant,
+                                    muteOtherEnabled = muteOtherEnabled,
+                                    speakingEnabled = speakingEnabled,
+                                    onClickMute = {
+                                        L.d { "Mute toggled for participant ${participant.identity?.value}" }
+                                        viewModel.toggleMute(participant)
+                                    },
+                                )
                             }
                         }
                     }
@@ -311,7 +217,6 @@ fun ShowParticipantsListView(
 
 @Composable
 fun SmallParticipantViewItem(
-    modifier: Modifier = Modifier,
     participant: Participant,
     muteOtherEnabled: Boolean,
     speakingEnabled: Boolean = true,
@@ -322,11 +227,11 @@ fun SmallParticipantViewItem(
     val imageLoader = LocalImageLoaderProvider.localImageLoader()
     var expanded by remember { mutableStateOf(false) }
 
-    val context = LocalContext.current
-
-    val contactorCacheManager = remember {
-        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
     }
+    val contactorCacheManager = entryPoint.contactorCacheManager
+    val callToChatController = entryPoint.callToChatController
 
     var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
 
@@ -345,7 +250,7 @@ fun SmallParticipantViewItem(
 
     LaunchedEffect(participantId) {
         participantId?.let { id ->
-            userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, id)
+            userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(id)
         }
     }
 
@@ -360,7 +265,7 @@ fun SmallParticipantViewItem(
             if (updatedIds.contains(IdUtil.getUidByIdentity(participantId))) {
                 launch {
                     participantId?.let {
-                        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, participantId)
+                        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(participantId)
                     }
                 }
             }
@@ -404,9 +309,20 @@ fun SmallParticipantViewItem(
                     modifier = Modifier.fillMaxWidth()
                 ){
                     val (avatarView, userNameView, shareStatusView, speakStatusView) = createRefs()
-                    userDisplayInfo.avatar?.let { avatarImage ->
+                    userDisplayInfo.avatarData?.let { avatarData ->
                         AndroidView(
-                            factory = { avatarImage },
+                            factory = { ctx ->
+                                when (avatarData) {
+                                    is AvatarData.FromContactor ->
+                                        callToChatController.getAvatarByContactor(ctx, avatarData.contactor)
+                                    is AvatarData.FromNameOrUid ->
+                                        callToChatController.createAvatarByNameOrUid(
+                                            ctx,
+                                            avatarData.name,
+                                            avatarData.userId
+                                        )
+                                }
+                            },
                             modifier = Modifier
                                 .constrainAs(avatarView){
                                     start.linkTo(parent.start)

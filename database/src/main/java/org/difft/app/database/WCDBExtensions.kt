@@ -10,6 +10,7 @@ import com.difft.android.base.utils.application
 import com.difft.android.base.utils.checkThread
 import com.difft.android.base.utils.globalServices
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
@@ -1012,7 +1013,14 @@ fun RoomModel.updateRoomNameAndAvatar() {
 
 /**
  * Converts [ContactorModel] into [GroupMemberContactorModel].
- * NOTE: This conversion does NOT preserve avatar data!
+ *
+ * NOTE: This conversion does NOT preserve avatar data.
+ *
+ * `displayName` is intentionally set to the remark-less name. The remark is stored
+ * separately on `memberContactor.remark`, and the display layer ([getDisplayNameForUI]
+ * via cache + remark column) layers it on top. Storing the remark-included name here
+ * would contaminate `displayName` and surface the remark through callers such as
+ * [getDisplayNameWithoutRemarkForUI] that intentionally exclude remarks.
  */
 fun ContactorModel.covertToGroupMemberContactorModel(): GroupMemberContactorModel {
     if (this.avatar != null) {
@@ -1021,8 +1029,9 @@ fun ContactorModel.covertToGroupMemberContactorModel(): GroupMemberContactorMode
     val memberContactor = GroupMemberContactorModel()
     memberContactor.gid = ""
     memberContactor.id = this.id
-    memberContactor.displayName = this.getDisplayNameForUI()
+    memberContactor.displayName = this.getDisplayNameWithoutRemarkForUI()
     memberContactor.remark = this.remark
+    memberContactor.remarkAvatar = this.remarkAvatar
     return memberContactor
 }
 
@@ -1061,6 +1070,24 @@ private fun convertAmplitudes(amplitudesString: String?) = runCatching {
 
 fun WCDB.getReadInfoList(roomId: String): List<ReadInfoModel> {
     return wcdb.readInfo.getAllObjects(DBReadInfoModel.roomId.eq(roomId)).toList()
+}
+
+/**
+ * Check whether a user is a member of a given group.
+ *
+ * Uses a composite `gid + id` predicate that returns at most one row, so the
+ * full member list is never loaded into memory (matters for large groups).
+ *
+ * Typical use: receive-side guards that need to validate a group identity
+ * declared by a remote peer (e.g. ForwardNotice checking that `envelope.source`
+ * is actually in the `groupId` the payload claims, to prevent cross-conversation
+ * injection).
+ */
+fun WCDB.isGroupMember(gid: String, userId: String): Boolean {
+    return groupMemberContactor.getFirstObject(
+        DBGroupMemberContactorModel.gid.eq(gid)
+            .and(DBGroupMemberContactorModel.id.eq(userId))
+    ) != null
 }
 
 /**

@@ -14,9 +14,11 @@ import com.difft.android.chat.ui.SelectChatsUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.util.ClearClipboardAlarmReceiver
-import org.thoughtcrime.securesms.util.ServiceUtil
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.ClearClipboardAlarmReceiver
+import com.difft.android.chat.util.ServiceUtil
+import com.difft.android.chat.util.Util
+import difft.android.messageserialization.For
+import difft.android.messageserialization.model.ForwardNoticeData
 import java.io.File
 
 /**
@@ -127,8 +129,15 @@ class MessageActionHelper(
     /**
      * Forward message to other chats
      * Requires selectChatsUtils to be provided in constructor
+     *
+     * @param data The message to forward.
+     * @param sourceConversation Source conversation of the forwarded message (optional). The
+     *                            forwardNotice is posted here to tell original participants that
+     *                            their messages were forwarded away. Callers that can't determine
+     *                            the source conversation (e.g. ChatForwardMessageFragment) pass
+     *                            null; the notice is skipped in that case.
      */
-    fun forwardMessage(data: TextChatMessage) {
+    fun forwardMessage(data: TextChatMessage, sourceConversation: For? = null) {
         val utils = selectChatsUtils ?: run {
             L.w { "forwardMessage called but selectChatsUtils is null" }
             return
@@ -142,7 +151,14 @@ class MessageActionHelper(
             content,
             null,
             null,
-            listOf(forwardContext)
+            listOf(forwardContext),
+            // Long-press → Forward: single message, the original 1-tap forward entry point.
+            scene = ForwardNoticeData.Scene.SINGLE,
+            sourceConversation = sourceConversation,
+            // Single selected message → exactly one outer author. Using data.authorId so a
+            // combined-forward message is attributed to its outer uploader, NOT expanded
+            // into its nested authors.
+            sourceAuthorIds = listOf(data.authorId),
         )
     }
 }

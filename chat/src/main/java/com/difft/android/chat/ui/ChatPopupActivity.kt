@@ -57,8 +57,8 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
 /**
@@ -427,9 +427,16 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                 }
 
                 is RecordingState.Stopped -> {
-                    L.i { "[VoiceRecorder] Recording stopped. File saved at:${state.filePath}" }
                     mBinding.vVoiceRecordBg.visibility = View.GONE
-                    chatViewModel.sendVoiceMessage(state.filePath)
+                    val file = java.io.File(state.filePath)
+                    if (file.exists() && file.length() > 0) {
+                        L.i { "[VoiceRecorder] Recording stopped. size=${file.length()}" }
+                        chatViewModel.sendVoiceMessage(state.filePath)
+                    } else {
+                        L.w { "[VoiceRecorder] Stopped emitted with invalid file." }
+                        ToastUtil.showLong(R.string.chat_voice_record_failed)
+                        runCatching { file.delete() }
+                    }
                 }
 
                 is RecordingState.TooShort -> {
@@ -451,6 +458,16 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                     L.i { "[VoiceRecorder] Recording file too large" }
                     ToastUtil.showLong(R.string.chat_voice_max_size_limit)
                     mBinding.vVoiceRecordBg.visibility = View.GONE
+                }
+
+                is RecordingState.RecordFailed -> {
+                    L.w { "[VoiceRecorder] Recording failed: reason=${state.reason}" }
+                    mBinding.vVoiceRecordBg.visibility = View.GONE
+                    val msgRes = when (state.reason) {
+                        RecordingState.Reason.AUDIO_FOCUS_DENIED -> R.string.chat_voice_focus_denied_hint
+                        RecordingState.Reason.RECORDER_INIT_FAILED -> R.string.chat_voice_record_failed
+                    }
+                    ToastUtil.showLong(msgRes)
                 }
             }
         }

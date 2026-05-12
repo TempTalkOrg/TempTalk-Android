@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
+import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.loadRoomSearchResultsByKeyword
 import org.difft.app.database.search
 import org.difft.app.database.searchByNameAndGroupMembers
@@ -254,11 +255,18 @@ class SearchActivity : BaseActivity() {
 
             // 转换为 RoomViewData
             sortedRooms.map { room ->
+                val isOneOnOne = room.roomType != 1
+                val remarkAvatarJson = if (isOneOnOne) {
+                    ContactRemarkCache.getRemarkAvatar(room.roomId)?.takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                }
                 RoomViewData(
                     roomId = room.roomId,
-                    type = if (room.roomType == 1) RoomViewData.Type.Group else RoomViewData.Type.OneOnOne,
+                    type = if (isOneOnOne) RoomViewData.Type.OneOnOne else RoomViewData.Type.Group,
                     roomName = room.roomName,
                     roomAvatarJson = room.roomAvatarJson,
+                    remarkAvatarJson = remarkAvatarJson,
                     lastDisplayContent = room.lastDisplayContent,
                     lastActiveTime = room.lastActiveTime,
                     unreadMessageNum = room.unreadMessageNum,

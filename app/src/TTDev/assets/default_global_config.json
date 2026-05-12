@@ -166,6 +166,7 @@
       "meetingWithoutRingThreshold": 50,
       "chatWithoutReceiptThreshold": 50,
       "membersMaxSize": 200,
+      "encryptionEnabled": false,
       "messageArchivingTimeOptionValues": [
         15,
         30,
@@ -244,7 +245,18 @@
             "global_url": "https://tlivekit9tcew3gy.test.chative.im",
             "mainland_url": "https://tlivekit9tcew3gy.test.chative.im"
           }
-        ]
+        ],
+        "serviceUrls": {
+          "fallback": [],
+          "primary": {
+            "addrs": [
+              "99.83.151.232",
+              "166.117.53.127"
+            ],
+            "domain": "test.ablivekit.org",
+            "region": "SG"
+          }
+        }
       },
       "chatPresets": [
         "Good 👍",

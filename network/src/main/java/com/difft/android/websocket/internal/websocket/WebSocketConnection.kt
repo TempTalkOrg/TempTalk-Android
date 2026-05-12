@@ -3,7 +3,7 @@ package com.difft.android.websocket.internal.websocket
 import android.content.Context
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.websocket.api.util.Tls12SocketFactory
+import com.difft.android.websocket.api.util.TlsSocketFactory
 import com.difft.android.websocket.internal.util.Util
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
 import com.google.protobuf.InvalidProtocolBufferException
@@ -83,7 +83,7 @@ class WebSocketConnection @AssistedInject constructor(
 
         val sslCreator = OfficialSSLSocketFactoryCreator(context)
         clientBuilder.sslSocketFactory(
-            Tls12SocketFactory(sslCreator.socketFactory),
+            TlsSocketFactory(sslCreator.socketFactory),
             sslCreator.trustManager
         )
 

@@ -1,13 +1,9 @@
 <resources>
-
-    <string name="no_permission_camera_and_voice_tip">Application has no permission for video and voice. You can enable camera and microphone permissions in app permissions settings of the system settings.</string>
     <string name="call_pip_not_supported_message">Device does not support picture-in-picture mode</string>
     <string name="call_callee_action_reject">Call rejected</string>
-    <string name="call_callee_action_cancel">Call canceled</string>
     <string name="call_callee_action_hangup">Call ended</string>
     <string name="call_callee_action_noanswer">The callee did not answer</string>
     <string name="call_newcall_tip">There is a call in progress. You can answer the call after hanging up the current call.</string>
-    <string name="call_timeout_tip">Call timeout</string>
     <string name="call_is_calling_tip">You are already in a meeting.</string>
     <string name="call_status_calling">Calling…</string>
     <string name="call_connecting_title">Connecting…</string>
@@ -24,7 +20,6 @@
     <string name="call_e2ee_key_error">Unable to decrypt call key</string>
     <string name="call_connect_error_ended">The call has ended</string>
     <string name="call_no_internet_connection_tip">No internet connection. Please check your network and try again.</string>
-    <string name="call_other_exception_error">Exception error</string>
     <string name="call_enable_camera_not_implemented_error">The camera is not supported on this device. The call will proceed in audio-only mode.</string>
     <string name="call_all_mute_timeout_reminder">No one has been speaking for a while. Would you like to leave the meeting?</string>
     <string name="call_single_person_timeout_reminder">No other participants are in the meeting. Would you like to leave?</string>
@@ -43,24 +38,23 @@
     <string name="call_barrage_message_critical_alert_failed">Failed to send a Critical Alert. Please try again.</string>
     <string name="call_barrage_message_critical_alert_limited">Send too frequently. Please try again later.</string>
     <string name="call_attendees">Attendees</string>
-    <string name="call_barrage_message_text">Message</string>
     <string name="call_barrage_message_input_tip">Message(30 characters)</string>
-    <string name="call_barrage_send">Send</string>
-    <string name="call_other_network_poor_tip">The other party\'s network connection is poor.</string>
     <string name="call_myself_network_poor_tip">Your network connection is poor.</string>
     <string name="call_current_audio_device">%s ✓</string>
     <string name="call_button_group_leave_meeting">Leave</string>
-    <string name="call_button_group_end_meeting">End</string>
-    <string name="call_button_group_end_meeting_tip">Do you want to end the meeting for all?</string>
-    <string name="call_button_group_end_alert_title">End Meeting</string>
     <string name="call_button_group_alert_cancel_text">Cancel</string>
     <string name="call_button_group_alert_end_text">End for all</string>
     <string name="call_toolbar_noise_suppression_text">Mic Noise Suppression</string>
     <string name="call_denoise_mode_label">Denoise Mode</string>
     <string name="call_denoise_mode_standard">Standard</string>
     <string name="call_denoise_mode_enhanced">Enhanced</string>
+    <string name="call_voice_changer_label">Voice Changer</string>
+    <string name="call_voice_preset_original">Off(Original)</string>
+    <string name="call_voice_preset_loli">Chipmunk</string>
+    <string name="call_voice_preset_higher">Higher</string>
+    <string name="call_voice_preset_deeper">Deeper</string>
+    <string name="call_voice_preset_monster">Monster</string>
     <string name="call_toolbar_bottom_invite_text">Invite</string>
-    <string name="call_toolbar_bottom_raise_hand_text">Raise</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>
     <string name="call_toolbar_bottom_critical_alert_text">Critical Alert</string>
     <string name="call_topbar_critical_alert_entrance_text1">No answer?</string>
@@ -113,12 +107,8 @@
     <string name="call_camera_permission_deny_title">Camera Permission Disabled</string>
     <string name="call_microphone_permission_deny_content">Please go to system settings and enable the microphone permission, otherwise voice features will not be available.</string>
     <string name="call_camera_permission_deny_content">Please go to system settings and enable the camera permission, otherwise video features will not be available.</string>
-    <string name="call_microphone_permission_setting_failed">Unable to open settings. Please enable microphone permission manually.</string>
-    <string name="call_camera_permission_setting_failed">Unable to open settings. Please enable camera permission manually.</string>
-    <string name="call_permission_button_setting_cancel_tip">Lack of necessary permissions</string>
     <string name="fullscreen_notification_settings_huawei_tip">Please go to App Settings → Other Permissions and enable “Background Popup” to allow incoming calls to appear on the lock screen.</string>
     <string name="fullscreen_notification_settings_xiaomi_tip">Please go to App Settings → Other Permissions and enable “Background Popup Interface” to allow incoming calls to appear on the lock screen.</string>
-    <string name="fullscreen_notification_settings_honor_tip">Please go to App Settings → Notification Management and enable “Banner Notifications” to allow incoming calls to appear on the lock screen.</string>
     <string name="fullscreen_notification_settings_mainland_default_tip">Please make sure “Banner Notifications” are enabled in the app settings to allow incoming calls to appear on the lock screen.</string>
     <string name="fullscreen_notification_settings_oversea_tip">Please enable the “Full-Screen Notifications” permission to allow incoming calls to appear on the lock screen.</string>
     <string name="fullscreen_notification_no_permission_oversea_tip">Please allow the “Full-Screen Notifications” permission for %s so you can receive calls while your device is locked.</string>
@@ -132,13 +122,9 @@
     <string name="call_invite_members_title">Invite Members</string>
     <string name="call_invite_members">Members</string>
     <string name="call_invite_add">Add…</string>
-    <string name="call_invite_add_new_member">Add New Member</string>
     <string name="call_invite_search_placeholder">Search</string>
-    <string name="call_invite_add_contacts">Add Contacts</string>
     <string name="call_invite_done">Done</string>
-    <string name="call_invite_cancel">Cancel</string>
     <string name="call_invite_search_no_result">No results found</string>
-    <string name="call_invite_member_tag">In meeting</string>
     <string name="call_end_forall_toast_title">Someone is still speaking</string>
     <string name="call_end_forall_toast_message">Are you sure you want to end now?</string>
     <string name="call_critical_alert_confirm_view_message_group">Send to group members who have not joined.</string>
@@ -149,11 +135,15 @@
     <string name="call_critical_alert_tooltip">Breaks through Silent Mode and Do Not Disturb. Use only for urgent situations.</string>
 
     <!-- Server node selection (not translatable) -->
-    <string name="call_server_node_select_route" translatable="false">选择线路：%s</string>
-    <string name="call_server_node_connected" translatable="false">已连接</string>
-    <string name="call_server_node_disconnected" translatable="false">未连接</string>
-    <string name="call_server_node_select_server" translatable="false">选择服务器</string>
-    <string name="call_server_node_recommended" translatable="false">推荐</string>
-    <string name="call_server_node_unknown" translatable="false">未知节点</string>
-
+    <string name="call_server_node_select_route" translatable="false">Selected: %s</string>
+    <string name="call_server_node_connected" translatable="false">Connected</string>
+    <string name="call_server_node_disconnected" translatable="false">Disconnected</string>
+    <string name="call_server_node_select_server" translatable="false">Select Server</string>
+    <string name="call_server_node_primary" translatable="false">Primary</string>
+    <string name="call_server_node_fallback" translatable="false">Fallback</string>
+    <string name="call_server_node_ips_label" translatable="false">IPs</string>
+    <string name="call_server_node_no_ips" translatable="false">No IPs</string>
+    <string name="call_server_node_unknown" translatable="false">Unknown</string>
+    <string name="call_server_node_switch_forbid_only_self" translatable="false">Unable to switch route: you are the only participant in this call.</string>
+    <string name="call_screen_share_mic_queue">Waiting to speak</string>
 </resources>

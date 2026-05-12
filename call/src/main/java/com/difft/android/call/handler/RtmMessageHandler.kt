@@ -1,21 +1,16 @@
 package com.difft.android.call.handler
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.call.data.CancelHandRtmMessage
 import com.difft.android.call.data.CountDownTimerData
 import com.difft.android.call.data.EndCallRtmMessage
-import com.difft.android.call.data.HandsUpData
-import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CHAT
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_END_CALL
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_MUTE
-import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RAISE_HANDS_UP
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RESUME_CALL
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
-import com.difft.android.call.data.RaiseHandRtmMessage
 import com.difft.android.call.data.RtmDataPacket
 import com.difft.android.call.data.RtmMessage
 import io.livekit.android.events.RoomEvent
@@ -27,7 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.util.UUID
 
 class RtmMessageHandler(
     private val room: Room,
@@ -74,9 +68,9 @@ class RtmMessageHandler(
      *
      * This method processes incoming data messages from the RTM channel, decrypts them, and routes them to
      * different handler functions based on the message topic. It supports multiple message types including
-     * chat messages, mute/unmute requests, call control commands, countdown timer operations, and hand raising events.
+     * chat messages, mute/unmute requests, call control commands, and countdown timer operations.
      */
-    fun handleDataReceived(event: RoomEvent.DataReceived, onChat: (Participant, String, Int?) -> Unit, onMuteMe: () -> Unit, onResumeMe: () -> Unit, onEndCall: () -> Unit, onCountDown: (CountDownTimerData, String) -> Unit, onHandsUp: (HandsUpData, String) -> Unit) {
+    fun handleDataReceived(event: RoomEvent.DataReceived, onChat: (Participant, String, Int?) -> Unit, onMuteMe: () -> Unit, onResumeMe: () -> Unit, onEndCall: () -> Unit, onCountDown: (CountDownTimerData, String) -> Unit) {
         val topic = event.topic ?: return
         when (topic) {
             RTM_MESSAGE_TOPIC_CHAT, RTM_MESSAGE_TOPIC_MUTE, RTM_MESSAGE_TOPIC_RESUME_CALL -> {
@@ -116,20 +110,6 @@ class RtmMessageHandler(
                 }
             }
 
-            RTM_MESSAGE_TOPIC_RAISE_HANDS_UP, RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP -> {
-                val packet = try { json.decodeFromString<RtmDataPacket>(String(event.data, Charsets.UTF_8)) } catch (e: Exception) {
-                    L.e { "[Call] handleDataReceived decode hands up rtm message failed, error = ${e.message}" }
-                    null
-                }
-                packet?.payload?.let { payload ->
-                    val data = try { json.decodeFromString<HandsUpData>(payload) } catch (e: Exception) {
-                        L.e { "[Call] handleDataReceived decode hands up data failed, error = ${e.message}" }
-                        null
-                    }
-                    if (data != null) onHandsUp(data, topic)
-                }
-            }
-
         }
     }
 
@@ -163,28 +143,6 @@ class RtmMessageHandler(
             val payload = json.encodeToString(rtmMessage)
             send(topic = RTM_MESSAGE_TOPIC_RESUME_CALL, payload = payload, timestamp = timestamp, encrypt = true, onComplete = {}, identities = identities)
         }
-    }
-
-    /**
-     * Sends an RTM (Real-Time Messaging) message indicating whether a participant has raised or canceled their hand.
-     */
-    fun sendRaiseHandsRtmMessage(enabled: Boolean, participant: Participant, onComplete: (Boolean) -> Unit) {
-        val topic = if (enabled) RTM_MESSAGE_TOPIC_RAISE_HANDS_UP else RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP
-        val identities = listOfNotNull(participant.identity?.value)
-        val timestamp = System.currentTimeMillis()
-        val innerPayload = if (enabled)
-            json.encodeToString(RaiseHandRtmMessage(topic = topic))
-        else
-            json.encodeToString(CancelHandRtmMessage(topic = topic, hands = identities))
-        val payload = json.encodeToString(
-            RtmDataPacket(
-                payload = innerPayload,
-                signature = "",
-                sendTimestamp = timestamp,
-                uuid = UUID.randomUUID().toString()
-            )
-        )
-        send(topic = topic, payload = payload, timestamp = timestamp, encrypt = false, onComplete = onComplete)
     }
 
     /**

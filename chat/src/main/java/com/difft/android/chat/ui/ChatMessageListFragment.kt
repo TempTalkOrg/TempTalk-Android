@@ -65,6 +65,7 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDi
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.databinding.ChatFragmentMessageListBinding
+import com.difft.android.chat.group.GroupChatPopupActivity
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.MessageActionHelper
@@ -72,6 +73,7 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
+import difft.android.messageserialization.model.isLongText
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.messageaction.FailedMessageActionPopup
@@ -114,13 +116,13 @@ import com.difft.android.base.widget.InsetAwareConstraintLayout
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.components.reaction.ReactionEmojisAdapter
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.SaveAttachmentUtil
-import org.thoughtcrime.securesms.util.ServiceUtil
-import org.thoughtcrime.securesms.util.ThemeUtil
-import org.thoughtcrime.securesms.util.viewFile
+import com.difft.android.chat.components.reaction.ReactionEmojisAdapter
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.DownloadAttachmentJob
+import com.difft.android.chat.util.SaveAttachmentUtil
+import com.difft.android.chat.util.ServiceUtil
+import com.difft.android.chat.util.ThemeUtil
+import com.difft.android.chat.util.viewFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import util.TimeFormatter
 import java.io.ByteArrayOutputStream
@@ -165,7 +167,7 @@ class ChatMessageListFragment : Fragment() {
             override fun onItemClick(rootView: View, data: ChatMessage) {
                 if (data !is TextChatMessage) return
                 if (data.isMine && data.sendStatus == SendType.SentFailed.rawValue) {
-                    showResendPop(rootView, data)
+                    chatViewModel.reSendMessage(data)
                     return
                 }
                 if (data.forwardContext != null) {
@@ -247,8 +249,15 @@ class ChatMessageListFragment : Fragment() {
                                 showConfidentialAudioDialog(data)
                             }
                         }
+                    } else if (attachment.isLongText()) {
+                        // Long-text attachment is displayed as text — route to text dialog, not attachment dialog.
+                        if (data.isConfidential() && !TextUtils.isEmpty(data.message)) {
+                            showConfidentialViewTipIfNeeded(data) {
+                                showConfidentialTextDialog(data)
+                            }
+                        }
                     } else {
-                        // 普通附件（非图片/视频/音频）机密消息：打开时发送回执，关闭时删除
+                        // Regular attachment (non-image/video/audio): send receipt on open, delete on dismiss.
                         if (data.isConfidential()) {
                             showConfidentialViewTipIfNeeded(data) {
                                 sendConfidentialViewReceipt(data)
@@ -419,7 +428,7 @@ class ChatMessageListFragment : Fragment() {
         // Set chat background for popup mode only
         // Note: In dual-pane mode, background is set on detail_pane by IndexActivity
         // to keep it fixed when keyboard appears (Fragment root receives IME padding)
-        if (activity is ChatPopupActivity) {
+        if (activity is ChatPopupActivity || activity is GroupChatPopupActivity) {
             binding.recyclerViewMessage.background = ChatBackgroundDrawable(requireContext())
         }
 
@@ -514,11 +523,12 @@ class ChatMessageListFragment : Fragment() {
                     binding.recyclerViewMessage.itemAnimator = DefaultItemAnimator()
                     val position = viewHolder.bindingAdapterPosition
 
-                    lifecycleScope.launch {
+                    viewLifecycleOwner.lifecycleScope.launch {
                         chatMessageAdapter.notifyItemChanged(position)
 
                         // 等待动画完成后（DefaultItemAnimator 默认 changeDuration 为 250ms）触发引用
                         delay(300)
+                        if (!isAdded || view == null) return@launch
                         binding.recyclerViewMessage.itemAnimator = null
 
                         chatMessageAdapter.currentList.getOrNull(position)?.let { message ->
@@ -620,12 +630,12 @@ class ChatMessageListFragment : Fragment() {
 
         registerKeyboardStateListener()
 
-        // When the RecyclerView height decreases (keyboard appearing), scroll by the delta
-        // so that the bottom messages stay anchored in the viewport.
-        binding.recyclerViewMessage.addOnLayoutChangeListener { _, _, _, _, bottom, _, _, _, oldBottom ->
+        // Anchor bottom messages when RecyclerView shrinks (keyboard appearing).
+        // scrollBy is posted because we're inside the layout pass. See issue 32a90db4.
+        binding.recyclerViewMessage.addOnLayoutChangeListener { v, _, _, _, bottom, _, _, _, oldBottom ->
             val delta = oldBottom - bottom
             if (delta > 0) {
-                binding.recyclerViewMessage.scrollBy(0, delta)
+                v.post { (v as? RecyclerView)?.scrollBy(0, delta) }
             }
         }
 
@@ -753,8 +763,8 @@ class ChatMessageListFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             chatViewModel.selectMessagesState.collect { selectState ->
                 chatMessageAdapter.updateSelectionState(selectState)
-                
-                // When entering edit mode (CombineForwardBar appears), 
+
+                // When entering edit mode (CombineForwardBar appears),
                 // scroll to bottom only if already at bottom to prevent being covered
                 val isNowInEditMode = selectState.editModel
                 if (isNowInEditMode && !wasInEditMode) {
@@ -769,6 +779,18 @@ class ChatMessageListFragment : Fragment() {
                     }
                 }
                 wasInEditMode = isNowInEditMode
+            }
+        }
+
+        // When the VM rejects a checkbox tap (e.g. selection cap exceeded), the StateFlow
+        // doesn't change so no diff-driven rebind happens. Force a partial rebind on that
+        // specific row so the checkbox visual snaps back to its true selectedStatus.
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.selectionRejected.collect { messageId ->
+                val position = chatMessageAdapter.currentList.indexOfFirst { it.id == messageId }
+                if (position >= 0) {
+                    chatMessageAdapter.notifyItemChanged(position, ChatMessageAdapter.PAYLOAD_SELECTION)
+                }
             }
         }
     }
@@ -786,6 +808,8 @@ class ChatMessageListFragment : Fragment() {
         val isAtBottomBeforeUpdateList = isAtBottom(binding.recyclerViewMessage.layoutManager as LinearLayoutManager)
 
         chatMessageAdapter.submitList(list) {
+            if (!isAdded || view == null) return@submitList
+
             // 1. 如果有 scrollAction，执行强制滚动
             when (scrollAction) {
                 is ScrollAction.ToPosition -> {
@@ -811,7 +835,7 @@ class ChatMessageListFragment : Fragment() {
                         }
                     } else {
                         // 不在底部时，才需要更新悬浮按钮
-                        lifecycleScope.launch {
+                        viewLifecycleOwner.lifecycleScope.launch {
                             updateBottomFloatingButton()
                         }
                     }
@@ -854,6 +878,7 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private suspend fun updateBottomFloatingButton() {
+        if (!isAdded || view == null) return
         val defaultTintColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon)
         binding.ivToBottom.imageTintList = ColorStateList.valueOf(defaultTintColor)
 
@@ -1022,9 +1047,9 @@ class ChatMessageListFragment : Fragment() {
                 override fun onKeyboardHidden() {
                     if (!isAdded || view == null) return
                     if (wasAtBottomBeforeKeyboardHide) {
-                        binding.recyclerViewMessage.post {
-                            binding.recyclerViewMessage.noSmoothScrollToBottom()
-                        }
+                        // dispatchKeyboardListeners already posts this callback one frame,
+                        // by which point the layout has finished shrinking. No inner post needed.
+                        binding.recyclerViewMessage.noSmoothScrollToBottom()
                     }
                 }
                 override fun onKeyboardAnimationEnded(isKeyboardVisible: Boolean) {
@@ -1352,7 +1377,7 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onCopy(message: TextChatMessage, selectedText: String?) {
             if (selectedText != null) {
-                org.thoughtcrime.securesms.util.Util.copyToClipboard(requireContext(), selectedText)
+                _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                 ToastUtil.show(getString(R.string.chat_message_action_copied))
             } else {
                 messageActionHelper.copyMessageContent(message)
@@ -1686,7 +1711,7 @@ class ChatMessageListFragment : Fragment() {
             chatViewModel.sendConfidentialViewReceipt(message)
         }
         val isConfidential = message.isConfidential()
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             val mediaListInfo = withContext(Dispatchers.IO) {
                 val mediaList = arrayListOf<LocalMedia>()
 
@@ -1725,6 +1750,7 @@ class ChatMessageListFragment : Fragment() {
                 mediaList to position
             }
 
+            if (!isAdded || view == null) return@launch
             if (mediaListInfo.first.isEmpty()) {
                 L.w { "media list is empty" }
                 ToastUtil.showLong(R.string.file_load_error)
@@ -2133,7 +2159,7 @@ class ChatMessageListFragment : Fragment() {
             // 通过接口获取 ChatMessageListFragment
             val chatFragment = (requireActivity() as? ChatMessageListProvider)?.getChatMessageListFragment() ?: return
             val currentMessage = chatFragment.currentTextMessage ?: return
-            val messageText = currentMessage.message.toString()
+            val bodyText = currentMessage.message.toString()
 
             val textView = view.findViewById<TextView>(R.id.textView)
             val llConfidential = view.findViewById<LinearLayout>(R.id.ll_confidential)
@@ -2142,97 +2168,88 @@ class ChatMessageListFragment : Fragment() {
 
             textView.autoLinkMask = 0
             textView.movementMethod = null
-
             textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
-            LinkTextUtils.setMarkdownToTextview(
-                requireContext(),
-                messageText,
-                textView,
-                mentions = null
-            )
+            // Renders text + builds confidential line-number overlay + touch handler.
+            fun renderConfidentialText(text: String) {
+                LinkTextUtils.setMarkdownToTextview(requireContext(), text, textView, mentions = null)
+                textView.post {
+                    val textViewLayout = textView.layout
+                    if (textView.lineCount > 0) {
+                        llConfidential.removeAllViews()
+                        for (i in 0 until textView.lineCount) {
+                            val lineView = layoutInflater.inflate(
+                                R.layout.chat_item_content_text_confidential_dialog,
+                                llConfidential,
+                                false
+                            )
 
-            textView.post {
-                val textViewLayout = textView.layout
-                if (textView.lineCount > 0) {
-                    llConfidential.removeAllViews()
-                    for (i in 0 until textView.lineCount) {
-                        val view = layoutInflater.inflate(
-                            R.layout.chat_item_content_text_confidential_dialog,
-                            llConfidential,
-                            false
-                        )
-
-                        val top = textViewLayout.getLineTop(i)
-                        val bottom = textViewLayout.getLineBottom(i)
-                        val lineHeight = if (i == textView.lineCount - 1) {
-                            bottom - top + textView.lineSpacingExtra.toInt()
-                        } else {
-                            bottom - top
-                        }
-                        view.layoutParams.height = lineHeight
-
-                        val tvNumber = view.findViewById<TextView>(R.id.tv_line_number)
-                        val number = (i + 1).toString()
-                        tvNumber.text = number
-
-                        llConfidential.addView(view)
-                    }
-
-                    llConfidential.post {
-                        llConfidential.setOnTouchListener { v, event ->
-                            val itemHeight = llConfidential.getChildAt(0).height
-                            val touchX = event.x.toInt()
-
-                            val regionWidth = v.width / 3
-
-                            when (event.action) {
-                                MotionEvent.ACTION_DOWN -> {
-                                    // Only send view receipt on first touch, deletion happens in onConfidentialTextDialogDismiss
-                                    chatFragment.sendConfidentialViewReceipt(currentMessage)
-                                    if (touchX <= regionWidth) {
-                                        v.parent.requestDisallowInterceptTouchEvent(true)
-                                    } else {
-                                        v.parent.requestDisallowInterceptTouchEvent(false)
-                                    }
-                                }
-
-                                MotionEvent.ACTION_MOVE -> {
-                                    val currentY = event.y.toInt()
-                                    val currentPosition = (currentY / itemHeight).coerceIn(0, llConfidential.childCount - 1)
-
-                                    val startLine = (currentPosition - 2).coerceAtLeast(0)
-                                    val endLine = (currentPosition + 2).coerceAtMost(llConfidential.childCount - 1)
-
-                                    llConfidential.children.forEachIndexed { index, view ->
-                                        if (index in startLine..endLine) {
-                                            view.visibility = View.INVISIBLE
-                                        } else {
-                                            view.visibility = View.VISIBLE
-                                        }
-                                    }
-
-                                    if (touchX <= regionWidth) {
-                                        v.parent.requestDisallowInterceptTouchEvent(true)
-                                    } else {
-                                        v.parent.requestDisallowInterceptTouchEvent(false)
-                                    }
-                                }
-
-                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                                    llConfidential.children.forEach { it.visibility = View.VISIBLE }
-                                    v.parent.requestDisallowInterceptTouchEvent(false)
-                                }
+                            val top = textViewLayout.getLineTop(i)
+                            val bottom = textViewLayout.getLineBottom(i)
+                            val lineHeight = if (i == textView.lineCount - 1) {
+                                bottom - top + textView.lineSpacingExtra.toInt()
+                            } else {
+                                bottom - top
                             }
-                            true
+                            lineView.layoutParams.height = lineHeight
+
+                            val tvNumber = lineView.findViewById<TextView>(R.id.tv_line_number)
+                            tvNumber.text = (i + 1).toString()
+
+                            llConfidential.addView(lineView)
                         }
 
-                        if (chatFragment.isScrollViewScrollable(scrollView)) {
-                            tvTitle.visibility = View.VISIBLE
-                        } else {
-                            tvTitle.visibility = View.GONE
+                        llConfidential.post {
+                            llConfidential.setOnTouchListener { v, event ->
+                                val itemHeight = llConfidential.getChildAt(0).height
+                                val touchX = event.x.toInt()
+                                val regionWidth = v.width / 3
+
+                                when (event.action) {
+                                    MotionEvent.ACTION_DOWN -> {
+                                        chatFragment.sendConfidentialViewReceipt(currentMessage)
+                                        v.parent.requestDisallowInterceptTouchEvent(touchX <= regionWidth)
+                                    }
+
+                                    MotionEvent.ACTION_MOVE -> {
+                                        val currentY = event.y.toInt()
+                                        val currentPosition = (currentY / itemHeight).coerceIn(0, llConfidential.childCount - 1)
+                                        val startLine = (currentPosition - 2).coerceAtLeast(0)
+                                        val endLine = (currentPosition + 2).coerceAtMost(llConfidential.childCount - 1)
+
+                                        llConfidential.children.forEachIndexed { index, child ->
+                                            child.visibility = if (index in startLine..endLine) View.INVISIBLE else View.VISIBLE
+                                        }
+                                        v.parent.requestDisallowInterceptTouchEvent(touchX <= regionWidth)
+                                    }
+
+                                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                        llConfidential.children.forEach { it.visibility = View.VISIBLE }
+                                        v.parent.requestDisallowInterceptTouchEvent(false)
+                                    }
+                                }
+                                true
+                            }
+
+                            tvTitle.visibility = if (chatFragment.isScrollViewScrollable(scrollView)) View.VISIBLE else View.GONE
                         }
                     }
+                }
+            }
+
+            renderConfidentialText(bodyText)
+
+            // For long-text, load full file content and re-render to replace the 2KB body preview.
+            val attachment = currentMessage.attachment
+            if (attachment?.isLongText() == true) {
+                val filePath = FileUtil.getMessageAttachmentFilePath(currentMessage.id) + (attachment.fileName ?: "")
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val fullText = withContext(Dispatchers.IO) {
+                        if (FileUtil.isFileValid(filePath)) {
+                            try { java.io.File(filePath).readText() } catch (_: Exception) { null }
+                        } else null
+                    }
+                    if (fullText != null) renderConfidentialText(fullText)
                 }
             }
         }

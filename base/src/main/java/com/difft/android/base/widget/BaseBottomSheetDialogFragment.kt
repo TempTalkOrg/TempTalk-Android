@@ -273,7 +273,7 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
                     override fun onStateChanged(bottomSheet: View, newState: Int) {
                         if (newState == BottomSheetBehavior.STATE_HIDDEN) {
-                            dismiss()
+                            dismissAllowingStateLoss()
                         }
                         onBottomSheetStateChanged(newState)
                     }

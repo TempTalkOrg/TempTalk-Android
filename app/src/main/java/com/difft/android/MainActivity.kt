@@ -12,12 +12,14 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.auth0.android.jwt.JWT
+import com.difft.android.app.startup.needsIdentityKeyRelogin
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -26,7 +28,7 @@ import com.difft.android.chat.group.GroupChatPopupActivity
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatPopupActivity
 import com.difft.android.login.LoginActivity
-import org.thoughtcrime.securesms.util.NotificationTrampolineActivity
+import com.difft.android.chat.util.NotificationTrampolineActivity
 import com.tencent.wcdb.core.Database
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -61,49 +63,81 @@ class MainActivity : BaseActivity() {
     }
 
     private fun processIntent() {
-        // Check if should open popup chat (indicated by TrampolineActivity via EXTRA_OPEN_POPUP)
-        if (shouldOpenPopupChat()) {
-            openPopupChat()
-            finish()
-            return
-        }
-
         lifecycleScope.launch {
-            val (isLoggedIn, needsRecovery) = withContext(Dispatchers.IO) {
+            val state = withContext(Dispatchers.IO) {
                 val loggedIn = verifyLocalToken()
-                val recovery = if (loggedIn) recoveryPreferences.isRecoveryNeeded() else false
-                loggedIn to recovery
-            }
-            
-            if (isLoggedIn) {
-                if (needsRecovery) {
-                    performDatabaseRecovery()
+                // Identity-key consistency guard — only meaningful if logged in.
+                // Protects straggler users (pre-1.8.1) whose signal-key-value.db was deleted
+                // by TempTalkApplication's cleanupLegacyKeyValueDbIfNeeded.
+                val identityMissing = if (loggedIn) {
+                    needsIdentityKeyRelogin(userManager.getUserData())
                 } else {
-                    navigateToIndexActivity()
+                    false
                 }
-            } else {
-                startActivity(Intent(this@MainActivity, LoginActivity::class.java))
-                finish()
+                val recovery = if (loggedIn) recoveryPreferences.isRecoveryNeeded() else false
+
+                StartupState(loggedIn, identityMissing, recovery)
+            }
+
+            when {
+                !state.isLoggedIn -> {
+                    startActivity(Intent(this@MainActivity, LoginActivity::class.java))
+                    finish()
+                }
+                // Identity-key branch runs BEFORE recovery — recovering WCDB is meaningless
+                // if the identity keys are gone (decrypt would still fail).
+                state.needsIdentityRelogin -> {
+                    L.w { "[MainActivity] logged in but identity key missing, forcing passive re-login" }
+                    logoutManager.doLogoutWithoutRemoveData()
+                    // doLogoutWithoutRemoveData() eventually calls Process.killProcess; code below never runs.
+                }
+                state.needsRecovery -> performDatabaseRecovery()
+                // Popup branch runs only after auth + identity-key + recovery checks pass.
+                // EXTRA_OPEN_POPUP is set by NotificationTrampolineActivity but MainActivity is
+                // exported=true, so any installed app can forge it (issue #758). Auth is gated
+                // above; tryOpenPopupChat re-validates id format. Falls back to deeplink path
+                // (IndexActivity.handleDeeplink runs ValidatorUtil too) if the id is malformed.
+                shouldOpenPopupChat() -> {
+                    if (tryOpenPopupChat()) {
+                        finish()
+                    } else {
+                        L.w { "[MainActivity] popup intent rejected (invalid id), falling back to deeplink path" }
+                        navigateToIndexActivity()
+                    }
+                }
+                else -> navigateToIndexActivity()
             }
         }
     }
 
+    private data class StartupState(
+        val isLoggedIn: Boolean,
+        val needsIdentityRelogin: Boolean,
+        val needsRecovery: Boolean,
+    )
+
     private fun verifyLocalToken(): Boolean {
         val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
-        return if (TextUtils.isEmpty(basicAuth)) {
-            false
-        } else {
-            val account = userManager.getUserData()?.account
-            val token = SecureSharedPrefsUtil.getToken()
-
-            if (!TextUtils.isEmpty(account) && !TextUtils.isEmpty(token)) {
-                val jwt = JWT(token)
-                val uid = jwt.getClaim("uid").asString()
-                uid.equals(account)
-            } else {
-                true
-            }
+        if (TextUtils.isEmpty(basicAuth)) {
+            return false
         }
+
+        val account = userManager.getUserData()?.account
+        val token = SecureSharedPrefsUtil.getToken()
+
+        // Inconsistent state: basicAuth present but account/token missing (partial logout,
+        // migration edge). Treat as unauthenticated — this is a security gate (issue #758).
+        if (TextUtils.isEmpty(account) || TextUtils.isEmpty(token)) {
+            L.w {
+                "[MainActivity] verifyLocalToken: basicAuth set but account/token missing, " +
+                    "account.empty=${TextUtils.isEmpty(account)} token.empty=${TextUtils.isEmpty(token)}"
+            }
+            return false
+        }
+
+        val jwt = JWT(token)
+        val uid = jwt.getClaim("uid").asString()
+        return uid.equals(account)
     }
 
     /**
@@ -238,29 +272,36 @@ class MainActivity : BaseActivity() {
     }
 
     /**
-     * Open popup chat activity.
+     * Try to open popup chat. Returns true on success, false if the id is missing/malformed
+     * (so the caller can fall through to the normal startup flow).
      */
-    private fun openPopupChat() {
+    private fun tryOpenPopupChat(): Boolean {
         val groupId = intent.getStringExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID)
         val contactId = intent.getStringExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID)
-        
-        if (groupId.isNullOrEmpty() && contactId.isNullOrEmpty()) {
-            L.e { "[MainActivity] openPopupChat: No groupId or contactId" }
-            return
-        }
-        
-        val popupIntent = if (!groupId.isNullOrEmpty()) {
-            Intent(this, GroupChatPopupActivity::class.java).apply {
-                putExtra(GroupChatPopupActivity.INTENT_EXTRA_GROUP_ID, groupId)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        val popupIntent = when {
+            !groupId.isNullOrEmpty() && ValidatorUtil.isGid(groupId) -> {
+                Intent(this, GroupChatPopupActivity::class.java).apply {
+                    putExtra(GroupChatPopupActivity.INTENT_EXTRA_GROUP_ID, groupId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             }
-        } else {
-            Intent(this, ChatPopupActivity::class.java).apply {
-                putExtra(ChatPopupActivity.BUNDLE_KEY_CONTACT_ID, contactId)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            !contactId.isNullOrEmpty() && ValidatorUtil.isUid(contactId) -> {
+                Intent(this, ChatPopupActivity::class.java).apply {
+                    putExtra(ChatPopupActivity.BUNDLE_KEY_CONTACT_ID, contactId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            else -> {
+                L.e {
+                    "[MainActivity] tryOpenPopupChat: invalid or missing id " +
+                        "groupId.length=${groupId?.length ?: 0} contactId.length=${contactId?.length ?: 0}"
+                }
+                return false
             }
         }
-        
+
         startActivity(popupIntent)
+        return true
     }
 }

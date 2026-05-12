@@ -31,6 +31,7 @@ import java.io.File
 object TextTruncationUtil {
 
     const val DEFAULT_MAX_LINES = 20
+    const val CONFIDENTIAL_MAX_LINES = 8
 
     /**
      * 为 TextView 设置双击打开文本预览的监听
@@ -146,6 +147,8 @@ object TextTruncationUtil {
         textView: TextView,
         messageId: String,
         maxLines: Int = DEFAULT_MAX_LINES,
+        enableInteraction: Boolean = true,
+        alwaysShowReadMore: Boolean = false,
         onReadMoreClick: () -> Unit
     ) {
         // 使用 messageId 作为标识，检查当前 TextView 显示的是否是这条消息
@@ -161,20 +164,12 @@ object TextTruncationUtil {
         val lineCount = layout.lineCount
         val currentText = textView.text
 
-        // 判断是否需要截断：
-        // 1. 行数 > maxLines（明确超过限制）
-        // 2. 或者行数 >= maxLines 且文本内容超出了第 maxLines 行的末尾位置
-        //    （处理边界情况：文本刚好填满 maxLines 行但后面还有内容被截断）
-        val needsTruncation = if (lineCount >= maxLines) {
-            val endOfMaxLine = layout.getLineEnd(maxLines - 1)
-            endOfMaxLine < currentText.length
-        } else {
-            false
-        }
+        // Append "Read more" when text overflows maxLines, or when caller forces it (e.g. long-text preview).
+        val isRealTruncation = lineCount >= maxLines && layout.getLineEnd(maxLines - 1) < currentText.length
+        val needsTruncation = isRealTruncation || alwaysShowReadMore
 
         if (needsTruncation) {
-            // 获取第 maxLines 行的末尾位置，截取文本到这个位置
-            val truncateAtLineEnd = layout.getLineEnd(maxLines - 1)
+            val truncateAtLineEnd = if (isRealTruncation) layout.getLineEnd(maxLines - 1) else currentText.length
             val truncatedText = currentText.subSequence(0, truncateAtLineEnd)
 
             // 添加 "Read more" 可点击链接（不添加 "..."）
@@ -227,7 +222,9 @@ object TextTruncationUtil {
             )
 
             textView.text = builder
-            textView.movementMethod = LinkMovementMethod.getInstance()
+            if (enableInteraction) {
+                textView.movementMethod = LinkMovementMethod.getInstance()
+            }
             textView.maxLines = maxLines + 1  // +1 for the "Read more" line
         } else {
             // No truncation needed, keep the formatted text as is

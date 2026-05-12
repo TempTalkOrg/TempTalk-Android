@@ -34,8 +34,8 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
 import util.TimeFormatter
 import util.TimeUtils
-import org.thoughtcrime.securesms.util.Util
-import org.thoughtcrime.securesms.util.shareFile
+import com.difft.android.chat.util.Util
+import com.difft.android.chat.util.shareFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import java.io.File
 

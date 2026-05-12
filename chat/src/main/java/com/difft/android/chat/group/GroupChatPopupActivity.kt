@@ -50,9 +50,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.wcdb
+import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
 /**
@@ -384,6 +385,11 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         groupUtil.singleGroupsUpdate
             .onEach {
                 if (it.gid == chatViewModel.forWhat.id) {
+                    if (it.status != 0) {
+                        // Group is gone (kicked / left / dismissed / destroyed) — close.
+                        finish()
+                        return@onEach
+                    }
                     chatViewModel.setChatUIData(ChatUIData(null, it))
                     // Refresh confidential toggle when group members change
                     updateConfidential()
@@ -406,9 +412,16 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                     mBinding.vVoiceRecordBg.visibility = View.VISIBLE
                 }
                 is RecordingState.Stopped -> {
-                    L.i { "[VoiceRecorder] Recording stopped. File saved at:${state.filePath}" }
                     mBinding.vVoiceRecordBg.visibility = View.GONE
-                    chatViewModel.sendVoiceMessage(state.filePath)
+                    val file = java.io.File(state.filePath)
+                    if (file.exists() && file.length() > 0) {
+                        L.i { "[VoiceRecorder] Recording stopped. size=${file.length()}" }
+                        chatViewModel.sendVoiceMessage(state.filePath)
+                    } else {
+                        L.w { "[VoiceRecorder] Stopped emitted with invalid file." }
+                        ToastUtil.showLong(R.string.chat_voice_record_failed)
+                        runCatching { file.delete() }
+                    }
                 }
                 is RecordingState.TooShort -> {
                     L.i { "[VoiceRecorder] Recording too short" }
@@ -426,6 +439,15 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                     L.i { "[VoiceRecorder] Recording file too large" }
                     ToastUtil.showLong(R.string.chat_voice_max_size_limit)
                     mBinding.vVoiceRecordBg.visibility = View.GONE
+                }
+                is RecordingState.RecordFailed -> {
+                    L.w { "[VoiceRecorder] Recording failed: reason=${state.reason}" }
+                    mBinding.vVoiceRecordBg.visibility = View.GONE
+                    val msgRes = when (state.reason) {
+                        RecordingState.Reason.AUDIO_FOCUS_DENIED -> R.string.chat_voice_focus_denied_hint
+                        RecordingState.Reason.RECORDER_INIT_FAILED -> R.string.chat_voice_record_failed
+                    }
+                    ToastUtil.showLong(msgRes)
                 }
             }
         }
@@ -508,9 +530,30 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
     private fun getGroupInfo(forceUpdate: Boolean = false) {
         lifecycleScope.launch {
             try {
+                // See GroupChatFragment.getGroupInfo for rationale.
+                val (oldVersion, oldName, oldAvatar) = if (forceUpdate) {
+                    withContext(Dispatchers.IO) {
+                        val g = wcdb.group.getFirstObject(DBGroupModel.gid.eq(chatViewModel.forWhat.id))
+                        Triple(g?.version, g?.name, g?.avatar)
+                    }
+                } else Triple(null, null, null)
+
                 val result = groupUtil.getSingleGroupInfo(chatViewModel.forWhat.id, forceUpdate)
                 if (result != null) {
                     chatViewModel.setChatUIData(ChatUIData(null, result))
+                    if (forceUpdate) {
+                        val groupChanged = oldVersion != result.version
+                            || oldName != result.name
+                            || oldAvatar != result.avatar
+                        if (groupChanged) {
+                            L.i { "[GroupChatPopupActivity] Group info changed for ${result.gid}, notifying room" }
+                            groupUtil.emitSingleGroupUpdate(result)
+                        } else {
+                            // Group info unchanged: independently check Room/Group drift
+                            // (fallback for cold-start race that drops trackRoom events).
+                            groupUtil.reconcileRoomIfDrifted(result)
+                        }
+                    }
                 } else if (!forceUpdate) {
                     chatViewModel.setChatUIData(
                         ChatUIData(null, GroupModel().apply { gid = chatViewModel.forWhat.id })
@@ -521,6 +564,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             }
         }
     }
+
 
     override fun onDestroy() {
         if (::bottomSheetBehavior.isInitialized && ::bottomSheetCallback.isInitialized) {

@@ -15,8 +15,6 @@ const val RTM_MESSAGE_TOPIC_SET_COUNTDOWN = "set-countdown"
 const val RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN = "restart-countdown"
 const val RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN = "extend-countdown"
 const val RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN = "clear-countdown"
-const val RTM_MESSAGE_TOPIC_RAISE_HANDS_UP = "raise-hand"
-const val RTM_MESSAGE_TOPIC_CANCEL_HANDS_UP = "cancel-hand"
 const val RTM_MESSAGE_TOPIC_END_CALL = "end-call"
 const val RTM_MESSAGE_KEY_TEXT = "text"
 const val RTM_MESSAGE_KEY_TOPIC = "topic"
@@ -71,32 +69,7 @@ data class CountDownTimerData(
 )
 
 @Serializable
-data class HandsUpData(
-    val topic: String,
-    val hands: List<HandUpUserData>? = null,
-    val operatorIdentity: String,
-)
-
-@Serializable
-data class HandUpUserData(
-    val identity: String,
-    val ts: Long
-)
-
-
-@Serializable
-data class RaiseHandRtmMessage(
-    val topic: String? = null,
-)
-
-@Serializable
 data class EndCallRtmMessage(
     val topic: String? = null,
     val sendTimestamp: Long,
-)
-
-@Serializable
-data class CancelHandRtmMessage(
-    val topic: String? = null,
-    val hands: List<String>? = null,
 )

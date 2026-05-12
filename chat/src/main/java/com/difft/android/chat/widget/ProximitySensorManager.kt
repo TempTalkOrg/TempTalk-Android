@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.thoughtcrime.securesms.util.ServiceUtil
+import com.difft.android.chat.util.ServiceUtil
 
 object ProximitySensorManager : SensorEventListener {
     private var sensorManager: SensorManager? = null

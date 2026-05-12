@@ -28,7 +28,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.Util
 import javax.inject.Inject
 
 /**

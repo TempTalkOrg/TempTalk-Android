@@ -8,6 +8,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.R
+import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -58,12 +59,11 @@ class ContactorCacheManager @Inject constructor() {
         withContext(Dispatchers.IO) {
             val toUpdate = uidList.filter { uid -> contactorCache.containsKey(uid) }
             toUpdate.forEach { uid ->
-                callToChatController.getContactorById(application, uid).let { contactor ->
-                    if (contactor.isPresent) {
-                        contactorCache[contactor.get().id] = CacheEntry.Hit(contactor.get())
-                    } else {
-                        contactorCache[uid] = CacheEntry.Miss
-                    }
+                val result = callToChatController.getContactorById(application, uid)
+                if (result.isPresent) {
+                    contactorCache[result.get().id] = CacheEntry.Hit(result.get())
+                } else {
+                    contactorCache[uid] = CacheEntry.Miss
                 }
             }
         }
@@ -80,22 +80,15 @@ class ContactorCacheManager @Inject constructor() {
         return withContext(Dispatchers.IO) {
             id?.let {
                 val userId = it.split(".").firstOrNull() ?: it
-                when (val entry = contactorCache[userId]) {
-                    is CacheEntry.Hit -> {
-                        L.d { "[Call] ContactorCacheManager DisplayName found in cache for userId: $userId, displayName: ${entry.contactor.getDisplayNameForUI()}" }
-                        return@withContext entry.contactor.getDisplayNameForUI()
-                    }
-                    else -> {}
-                }
+                val cached = contactorCache[userId]
+                if (cached is CacheEntry.Hit) return@withContext cached.contactor.getDisplayNameForUI()
 
-                callToChatController.getContactorById(application, userId).let { contactor ->
-                    if (contactor.isPresent) {
-                        contactorCache[userId] = CacheEntry.Hit(contactor.get())
-                        L.d { "[Call] ContactorCacheManager DisplayName retrieved for userId: $userId, displayName: ${contactor.get().getDisplayNameForUI()}" }
-                        return@withContext contactor.get().getDisplayNameForUI()
-                    } else {
-                        contactorCache[userId] = CacheEntry.Miss
-                    }
+                val result = callToChatController.getContactorById(application, userId)
+                if (result.isPresent) {
+                    contactorCache[userId] = CacheEntry.Hit(result.get())
+                    return@withContext result.get().getDisplayNameForUI()
+                } else {
+                    contactorCache[userId] = CacheEntry.Miss
                 }
 
                 L.i { "[Call] ContactorCacheManager getDisplayName No displayName found for userId: $userId" }
@@ -124,12 +117,10 @@ class ContactorCacheManager @Inject constructor() {
     suspend fun getDisplayGroupNameById(id: String?): String? {
         if (id.isNullOrEmpty()) return null
         val group = callToChatController.getSingleGroupInfo(id)
-        if (group != null) {
-            return group.name
-        } else {
+        if (group == null) {
             L.i { "[Call] ContactorCacheManager getDisplayGroupNameById No group name found for id: $id" }
-            return null
         }
+        return group?.name
     }
     
     /**
@@ -151,7 +142,7 @@ class ContactorCacheManager @Inject constructor() {
             callToChatController.getAvatarByContactor(context, contactor)
         }
     }
-    
+
     /**
      * 根据名称或UID创建头像
      * 当无法获取用户信息时，使用名称或UID创建默认头像
@@ -167,22 +158,31 @@ class ContactorCacheManager @Inject constructor() {
     
     /**
      * 获取参与者显示信息
-     * 包含用户ID、显示名称和头像
-     * 
-     * @param context 上下文
+     * 包含用户ID、显示名称和头像数据
+     *
+     * 整个方法体在 Dispatchers.IO 中执行，不再强制切回 Main 线程。
+     * 返回 data-only 的 [AvatarData]；UI 层在 AndroidView factory 中按需在 Main 线程构建实际的 View。
+     *
+     * 注意：本方法不接受 Context 参数。原 context 参数在重构后已无内部使用，
+     * 而调用方传入的 LocalContext.current（Activity-backed）会被 IO 协程捕获，
+     * 形成潜在的 Activity 泄漏风险，因此显式移除。
+     *
      * @param uid 用户ID
      * @return 参与者显示信息
      */
-    suspend fun getParticipantDisplayInfo(context: Context, uid: String): CallUserDisplayInfo {
-        val userId = uid.split(".").firstOrNull() ?: uid
-        val contactor = getContactorByUserId(userId)
-        val name = contactor?.getDisplayNameForUI() ?: getDisplayNameById(uid)
-        val avatar = withContext(Dispatchers.Main) {
-            contactor?.let { callToChatController.getAvatarByContactor(context, it) }
-                ?: createAvatarByNameOrUid(context, name, userId)
+    suspend fun getParticipantDisplayInfo(uid: String): CallUserDisplayInfo =
+        withContext(Dispatchers.IO) {
+            val userId = uid.split(".").firstOrNull() ?: uid
+            val contactor = getContactorByUserId(userId)
+            val name = contactor?.getDisplayNameForUI() ?: getDisplayNameById(uid)
+            val avatarData: AvatarData = if (contactor != null) {
+                AvatarData.FromContactor(contactor)
+            } else {
+                AvatarData.FromNameOrUid(name, userId)
+            }
+            L.i { "[ContactorCacheManager] getParticipantDisplayInfo uid=$uid hasContactor=${contactor != null}" }
+            CallUserDisplayInfo(uid, name, avatarData)
         }
-        return CallUserDisplayInfo(uid, name, avatar)
-    }
 
     /**
      * 根据 userId 获取联系人信息（带本地缓存）
@@ -196,20 +196,16 @@ class ContactorCacheManager @Inject constructor() {
      */
     private suspend fun getContactorByUserId(userId: String): ContactorModel? {
         return withContext(Dispatchers.IO) {
-            val cached = when (val entry = contactorCache[userId]) {
-                is CacheEntry.Hit -> entry.contactor
-                else -> null
+            val entry = contactorCache[userId]
+            if (entry is CacheEntry.Hit) return@withContext entry.contactor
+            val result = callToChatController.getContactorById(application, userId)
+            if (result.isPresent) {
+                contactorCache[userId] = CacheEntry.Hit(result.get())
+                result.get()
+            } else {
+                contactorCache[userId] = CacheEntry.Miss
+                null
             }
-            cached?.let { return@withContext it }
-            callToChatController.getContactorById(application, userId).let { contactor ->
-                if (contactor.isPresent) {
-                    contactorCache[userId] = CacheEntry.Hit(contactor.get())
-                    return@withContext contactor.get()
-                } else {
-                    contactorCache[userId] = CacheEntry.Miss
-                }
-            }
-            return@withContext null
         }
     }
     

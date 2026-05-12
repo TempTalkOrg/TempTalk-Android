@@ -16,7 +16,7 @@ import com.difft.android.databinding.ActivitySetPasscodeBinding
 import com.difft.android.login.PasscodeUtil
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
 @AndroidEntryPoint

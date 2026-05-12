@@ -8,9 +8,9 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.NewMessageEncryptor
-import org.thoughtcrime.securesms.websocket.monitor.WebSocketHealthMonitor
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.NewMessageEncryptor
+import com.difft.android.chat.websocket.monitor.WebSocketHealthMonitor
 import com.difft.android.websocket.api.ConversationManager
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import com.difft.android.websocket.api.websocket.HealthMonitor

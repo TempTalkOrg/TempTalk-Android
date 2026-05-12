@@ -178,7 +178,7 @@ fun difftTopAppBarColors(
 
 /**
  * Creates TopAppBarColors for secondary surface elevation.
- * Uses `backgroundSecondary` for a slightly elevated appearance.
+ * Uses `backgroundSetting` for a slightly elevated appearance on settings-style screens.
  *
  * Use this variant for:
  * - Settings screens with elevated headers
@@ -193,8 +193,8 @@ fun difftTopAppBarColors(
  * )
  * ```
  *
- * @param containerColor Background color for the TopAppBar. Defaults to backgroundSecondary
- * @param scrolledContainerColor Background color when scrolled. Defaults to backgroundSecondary
+ * @param containerColor Background color for the TopAppBar. Defaults to backgroundSetting
+ * @param scrolledContainerColor Background color when scrolled. Defaults to backgroundSetting
  * @param navigationIconContentColor Color for navigation icon. Defaults to textPrimary (t.primary)
  * @param titleContentColor Color for title text. Defaults to textPrimary (t.primary)
  * @param actionIconContentColor Color for action icons. Defaults to textPrimary (t.primary)
@@ -202,8 +202,8 @@ fun difftTopAppBarColors(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun difftElevatedTopAppBarColors(
-    containerColor: Color = DifftTheme.colors.backgroundSecondary,
-    scrolledContainerColor: Color = DifftTheme.colors.backgroundSecondary,
+    containerColor: Color = DifftTheme.colors.backgroundSetting,
+    scrolledContainerColor: Color = DifftTheme.colors.backgroundSetting,
     navigationIconContentColor: Color = DifftTheme.colors.textPrimary,
     titleContentColor: Color = DifftTheme.colors.textPrimary,
     actionIconContentColor: Color = DifftTheme.colors.textPrimary

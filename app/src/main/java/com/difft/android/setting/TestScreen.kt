@@ -88,7 +88,7 @@ fun TestScreen(
                     )
                 }
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 // Create Groups
                 TestRowItem(
@@ -106,7 +106,7 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 // Send Message to Single Group
                 TestRowItem(
@@ -124,7 +124,7 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 // Send Message to All Groups
                 TestRowItem(
@@ -132,7 +132,7 @@ fun TestScreen(
                     onClick = onSendMessageToAllGroups
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 // Disband Groups
                 TestRowItem(
@@ -148,14 +148,14 @@ fun TestScreen(
                     onClick = onCorruptDatabase
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 TestRowItem(
                     title = "Manual Backup Database",
                     onClick = onBackupDatabase
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 TestRowItem(
                     title = "Send Recovery Event",
@@ -385,7 +385,7 @@ private fun TestSectionPreview() {
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSecondary)
+                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
 
                 TestRowItem(
                     title = "Send Message to All Groups",

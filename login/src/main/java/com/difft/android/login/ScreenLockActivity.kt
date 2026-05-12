@@ -25,7 +25,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
 @AndroidEntryPoint

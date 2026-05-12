@@ -13,7 +13,7 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.InviteMember
 import com.difft.android.call.manager.ContactorCacheManager
-import com.difft.android.call.ui.InviteScreenState
+import com.difft.android.call.ui.invite.InviteScreenState
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors

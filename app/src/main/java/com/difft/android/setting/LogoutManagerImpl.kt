@@ -17,11 +17,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDBSecureSharedPrefsUtil
-import org.thoughtcrime.securesms.messages.MessageForegroundService
-import org.thoughtcrime.securesms.util.AppIconBadgeManager
-import org.thoughtcrime.securesms.util.ForegroundServiceUtil
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.websocket.WebSocketManager
+import org.difft.app.database.cache.ContactRemarkCache
+import com.difft.android.chat.messages.MessageForegroundService
+import com.difft.android.chat.util.AppIconBadgeManager
+import com.difft.android.chat.util.ForegroundServiceUtil
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.websocket.WebSocketManager
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.system.exitProcess
@@ -60,6 +61,7 @@ class LogoutManagerImpl @Inject constructor(
                     this.patternAttempts = 0
                 }
                 SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)
+                ContactRemarkCache.clear()
             }
             appIconBadgeManager.updateAppIconBadgeNum(0)
 
@@ -86,6 +88,8 @@ class LogoutManagerImpl @Inject constructor(
 
         WCDBSecureSharedPrefsUtil(application).clear()
         messageStore.deleteDatabase()
+
+        ContactRemarkCache.clear()
 
         FileUtil.clearAllFilesExceptLogs()
     }

@@ -62,7 +62,6 @@ private fun View.setupConfidentialCover(isBlurred: Boolean) {
     visibility = View.VISIBLE
     if (isBlurred) {
         setBackgroundColor(Color.TRANSPARENT)
-        (this as? TextView)?.text = null
     } else {
         setBackgroundResource(R.drawable.chat_message_confidential_bg)
     }
@@ -86,19 +85,42 @@ object TextContentBinder : ContentBinder {
         textView.autoLinkMask = 0
         textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
-        if (textMessage.isConfidential()) {
-            // Render text normally for blur visual, but skip truncation/interaction — coverView handles everything
-            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
-            textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES
-            textView.movementMethod = null
+        val isConfidential = textMessage.isConfidential()
+        val messageId = textMessage.id
+        val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
+        textView.setTag(R.id.tag_truncation_message_id, messageId)
+        LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+        textView.maxLines = effectiveMaxLines + 1
+        textView.ellipsize = null
+
+        if (!isConfidential) {
+            TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
+        }
+
+        textView.doOnPreDraw {
+            TextTruncationUtil.applyTruncation(
+                context = textView.context,
+                textView = textView,
+                messageId = messageId,
+                maxLines = effectiveMaxLines,
+                enableInteraction = !isConfidential
+            ) {
+                TextTruncationUtil.showFullTextDialog(
+                    textView,
+                    rawText,
+                    textMessage.mentions,
+                    textMessage
+                )
+            }
+        }
+
+        if (isConfidential) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 llContent?.applyConfidentialBlur()
                 coverView.setupConfidentialCover(isBlurred = true)
-
             } else {
                 coverView.setupConfidentialCover(isBlurred = false)
-
             }
             coverView.setOnClickListener {
                 LinkTextUtils.findParentChatMessageItemView(coverView)?.performClick()
@@ -108,38 +130,8 @@ object TextContentBinder : ContentBinder {
                 true
             }
         } else {
-            TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
-
-            val messageId = textMessage.id
-            textView.setTag(R.id.tag_truncation_message_id, messageId)
-
-            LinkTextUtils.setMarkdownToTextview(
-                textView.context,
-                rawText,
-                textView,
-                textMessage.mentions
-            )
-
-            textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
-
-            textView.doOnPreDraw {
-                TextTruncationUtil.applyTruncation(
-                    context = textView.context,
-                    textView = textView,
-                    messageId = messageId
-                ) {
-                    TextTruncationUtil.showFullTextDialog(
-                        textView,
-                        rawText,
-                        textMessage.mentions,
-                        textMessage
-                    )
-                }
-            }
-
             llContent?.clearConfidentialBlur()
             coverView.visibility = View.GONE
-
             coverView.setOnClickListener(null)
             coverView.setOnLongClickListener(null)
         }
@@ -157,7 +149,7 @@ object ImageContentBinder : ContentBinder {
         val textMessage = message as TextChatMessage
         val imageMessageView = contentFrame.findViewById<ImageAndVideoMessageView>(R.id.imageMessageView)
         val textView = contentFrame.findViewById<TextView>(R.id.textView)
-        val coverView = contentFrame.findViewById<TextView>(R.id.v_cover)
+        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
 
         imageMessageView.setupImageView(textMessage, shouldSaveToPhotos, containerWidth)
 
@@ -166,45 +158,35 @@ object ImageContentBinder : ContentBinder {
 
             textView.autoLinkMask = 0
 
-            // Skip double-click preview for confidential messages; coverView handles clicks
-            if (!textMessage.isConfidential()) {
-                // Save message ID to tag for ViewHolder reuse detection in post callbacks
-                val messageId = textMessage.id
-                val rawText = textMessage.message.toString()
-                textView.setTag(R.id.tag_truncation_message_id, messageId)
+            val isConfidential = textMessage.isConfidential()
+            val messageId = textMessage.id
+            val rawText = textMessage.message.toString()
+            val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
-                // Non-confidential: set up double-click text preview
+            textView.setTag(R.id.tag_truncation_message_id, messageId)
+            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+            textView.maxLines = effectiveMaxLines + 1
+            textView.ellipsize = null
+
+            if (!isConfidential) {
                 TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
+            }
 
-                // First render full text to measure line count
-                LinkTextUtils.setMarkdownToTextview(
-                    textView.context,
-                    rawText,
-                    textView,
-                    textMessage.mentions
-                )
-
-                // Set to DEFAULT_MAX_LINES + 1 initially to prevent flicker on refresh
-                textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
-
-                // doOnPreDraw to measure after layout and apply truncation
-                textView.doOnPreDraw {
-                    TextTruncationUtil.applyTruncation(
-                        context = textView.context,
-                        textView = textView,
-                        messageId = messageId
-                    ) {
-                        TextTruncationUtil.showFullTextDialog(
-                            textView,
-                            rawText,
-                            textMessage.mentions,
-                            textMessage
-                        )
-                    }
+            textView.doOnPreDraw {
+                TextTruncationUtil.applyTruncation(
+                    context = textView.context,
+                    textView = textView,
+                    messageId = messageId,
+                    maxLines = effectiveMaxLines,
+                    enableInteraction = !isConfidential
+                ) {
+                    TextTruncationUtil.showFullTextDialog(
+                        textView,
+                        rawText,
+                        textMessage.mentions,
+                        textMessage
+                    )
                 }
-            } else {
-                // Confidential: plain text display, clicks handled by coverView
-                textView.text = textMessage.message
             }
         } else {
             textView.visibility = View.GONE
@@ -236,7 +218,7 @@ object AudioContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val voiceMessageView = contentFrame.findViewById<VoiceMessageView>(R.id.voice_message_view)
-        val coverView = contentFrame.findViewById<TextView>(R.id.v_cover)
+        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
 
         voiceMessageView.setAudioMessage(textMessage)
 
@@ -341,48 +323,47 @@ object AttachContentBinder : ContentBinder {
             textView.visibility = View.VISIBLE
             textView.autoLinkMask = 0
 
-            if (!textMessage.isConfidential()) {
-                val messageId = textMessage.id
-                val rawText = textMessage.message.toString()
-                textView.setTag(R.id.tag_truncation_message_id, messageId)
+            val isConfidential = textMessage.isConfidential()
+            val messageId = textMessage.id
+            val rawText = textMessage.message.toString()
+            val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
+            textView.setTag(R.id.tag_truncation_message_id, messageId)
+            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+            textView.maxLines = effectiveMaxLines + 1
+            textView.ellipsize = null
+
+            if (!isConfidential) {
                 TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
+            }
 
-                LinkTextUtils.setMarkdownToTextview(
-                    textView.context,
-                    rawText,
-                    textView,
-                    textMessage.mentions
-                )
-
-                textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
-
-                textView.doOnPreDraw {
-                    TextTruncationUtil.applyTruncation(
-                        context = textView.context,
-                        textView = textView,
-                        messageId = messageId
-                    ) {
-                        if (isLongTextDownloaded && longTextPath != null) {
-                            TextTruncationUtil.showFullTextDialogFromFile(
-                                textView,
-                                longTextPath,
-                                rawText,
-                                textMessage.mentions,
-                                textMessage
-                            )
-                        } else {
-                            TextTruncationUtil.showFullTextDialog(
-                                textView,
-                                rawText,
-                                textMessage.mentions,
-                                textMessage
-                            )
-                        }
+            textView.doOnPreDraw {
+                TextTruncationUtil.applyTruncation(
+                    context = textView.context,
+                    textView = textView,
+                    messageId = messageId,
+                    maxLines = effectiveMaxLines,
+                    enableInteraction = !isConfidential,
+                    // Long-text body is only a 2KB preview — always expose Read More (aligns with iOS/Mac).
+                    alwaysShowReadMore = isLongText
+                ) {
+                    if (isLongTextDownloaded && longTextPath != null) {
+                        TextTruncationUtil.showFullTextDialogFromFile(
+                            textView,
+                            longTextPath,
+                            rawText,
+                            textMessage.mentions,
+                            textMessage
+                        )
+                    } else {
+                        TextTruncationUtil.showFullTextDialog(
+                            textView,
+                            rawText,
+                            textMessage.mentions,
+                            textMessage
+                        )
                     }
                 }
-            } else {
-                textView.text = textMessage.message
             }
         } else {
             textView.visibility = View.GONE
@@ -413,6 +394,7 @@ object AttachContentBinder : ContentBinder {
             coverView.setOnLongClickListener(null)
         }
     }
+
 }
 
 /**
@@ -558,14 +540,10 @@ object MultiForwardContentBinder : ContentBinder {
         if (textMessage.isConfidential()) {
             val llContent = contentFrame.findViewById<View>(R.id.ll_content)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Clear margin to prevent gap between blur area and container
-                (llContent?.layoutParams as? ViewGroup.MarginLayoutParams)?.setMargins(0, 0, 0, 0)
                 llContent?.applyConfidentialBlur()
                 vCover.setupConfidentialCover(isBlurred = true)
-
             } else {
                 vCover.setupConfidentialCover(isBlurred = false)
-
             }
             vCover.setOnClickListener {
                 LinkTextUtils.findParentChatMessageItemView(vCover)?.let { parent ->
@@ -579,12 +557,8 @@ object MultiForwardContentBinder : ContentBinder {
                 true
             }
         } else {
-            val llContent = contentFrame.findViewById<View>(R.id.ll_content)
-            llContent?.clearConfidentialBlur()
-            val margin = 8.dp
-            (llContent?.layoutParams as? ViewGroup.MarginLayoutParams)?.setMargins(margin, margin, margin, margin)
+            contentFrame.findViewById<View>(R.id.ll_content)?.clearConfidentialBlur()
             vCover.visibility = View.GONE
-
         }
     }
 }

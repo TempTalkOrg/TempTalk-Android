@@ -16,7 +16,10 @@
             android:exported="false"
             android:launchMode="singleInstance"
             android:resizeableActivity="true"
+            android:screenOrientation="portrait"
             android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:supportsPictureInPicture="true"
             android:finishOnTaskLaunch="true"
             android:taskAffinity="com.difft.android.call.task" />

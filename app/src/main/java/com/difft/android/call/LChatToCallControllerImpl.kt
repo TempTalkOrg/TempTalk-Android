@@ -24,7 +24,6 @@ import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
-import com.difft.android.call.repo.LCallHttpService
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
@@ -42,6 +41,7 @@ import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.handler.CallMessageHandler
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.network.config.WsTokenManager
 
 @Singleton
@@ -66,19 +66,10 @@ class LChatToCallControllerImpl @Inject constructor(
         )
     }
 
-    private val callService by lazy {
-        httpClient.getService(LCallHttpService::class.java)
-    }
-
     private val mySelfId: String by lazy {
         globalServices.myId
     }
 
-
-    // 常量定义
-    companion object {
-        private const val RESPONSE_STATUS_SUCCESS = 0
-    }
 
     override fun startCall(
         activity: Activity,
@@ -197,28 +188,8 @@ class LChatToCallControllerImpl @Inject constructor(
             .withNeedAppLock(false)
             .withCallWaitDialogShown(true)
 
-        val cachedUrls = LCallEngine.getAvailableServerUrls()
-        if (cachedUrls.isNotEmpty()) {
-            activity.startActivity(callIntentBuilder.withCallServerUrls(cachedUrls).build())
-            return true
-        }
-
-        // ✅ 网络请求 + 异常处理
-        return try {
-            val response = callService.getServiceUrl(token)
-
-            if (response.status == RESPONSE_STATUS_SUCCESS && !response.data?.serviceUrls.isNullOrEmpty()) {
-                val urls = response.data!!.serviceUrls!!
-                activity.startActivity(callIntentBuilder.withCallServerUrls(urls).build())
-                true
-            } else {
-                L.e { "[Call] startCall getCallServerUrl failed, status:${response.status}" }
-                false
-            }
-        } catch (e: Exception) {
-            L.e { "[Call] startCall getCallServerUrl failed: ${e.message}" }
-            false
-        }
+        activity.startActivity(callIntentBuilder.build())
+        return true
     }
 
 }

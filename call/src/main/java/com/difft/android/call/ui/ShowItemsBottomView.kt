@@ -32,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -45,10 +44,9 @@ import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
-import com.difft.android.call.data.CallStatus
+import com.difft.android.call.data.VoicePreset
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import kotlinx.coroutines.launch
 
@@ -61,19 +59,19 @@ fun ShowItemsBottomView(
     onDismiss: () -> Unit,
     deNoiseCallBack: (Boolean) -> Unit,
     deNoiseModeCallBack: (AudioModule) -> Unit,
+    voicePresetCallBack: (VoicePreset) -> Unit,
     handleInviteUsersClick: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
     )
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
     val showToolBarBottomViewEnable by viewModel.callUiController.showToolBarBottomViewEnable.collectAsState(false)
     val isParticipantSharedScreen by viewModel.callUiController.isShareScreening.collectAsState(false)
     val deNoiseEnable by viewModel.deNoiseEnable.collectAsState(true)
     val deNoiseMode by viewModel.deNoiseMode.collectAsState()
+    val voicePreset by viewModel.voicePreset.collectAsState()
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
-    val handsUpEnabled by viewModel.callUiController.handsUpEnabled.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
     val isCriticalAlertEnable by viewModel.callUiController.isCriticalAlertEnable.collectAsState(false)
     val awaitingJoinInvitees by viewModel.participantManager.awaitingJoinInvitees.collectAsState()
@@ -185,76 +183,6 @@ fun ShowItemsBottomView(
                                 color = colorResource(id = com.difft.android.base.R.color.gray_50),
                             )
                         )
-                    }
-
-                    if(!isOneVOneCall) {
-                        Column(
-                            modifier = Modifier
-                                .width(80.dp)
-                                .height(76.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .width(48.dp)
-                                    .height(48.dp)
-                                    .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
-                                    .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
-                                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null){
-                                        L.i { "[call] ShowItemsBottomView onClick raise hand" }
-                                        viewModel.callStatus.value.let { status ->
-                                            if(status == CallStatus.CONNECTED || status == CallStatus.RECONNECTED) {
-                                                viewModel.rtm.sendRaiseHandsRtmMessage(!handsUpEnabled, viewModel.room.localParticipant, onComplete = { status ->
-                                                    if(status){
-                                                        if (!handsUpEnabled) {
-                                                            viewModel.room::ttCallResp.get()?.let { response ->
-                                                                val callOptions = response.callOptions
-                                                                val autoPublishSilenceAudio = callOptions.autoPublishSilenceAudio
-                                                                val disableSilenceOnRaiseHand = callOptions.disableSilenceOnRaiseHand
-                                                                L.i { "[call] ShowItemsBottomView raise hand autoPublishSilenceAudio=$autoPublishSilenceAudio, disableSilenceOnRaiseHand=$disableSilenceOnRaiseHand" }
-                                                                if (!autoPublishSilenceAudio && !disableSilenceOnRaiseHand) {
-                                                                    viewModel.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
-                                                                }
-                                                            }
-                                                        }
-                                                        viewModel.callUiController.setHandsUpEnable(!handsUpEnabled)
-                                                    } else {
-                                                        L.e { "[call] ShowItemsBottomView Error sending raise hand: $status" }
-                                                    }
-                                                })
-                                            } else
-                                                (context.getActivity() as? LCallActivity)?.let {
-                                                    it.showStyledPopTip(it.getString(R.string.call_connecting_retry_tip))
-                                                }
-
-                                            dismissSheet()
-                                        }
-                                    },
-                                horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
-                                verticalAlignment = Alignment.Top,
-                            ) {
-                                Image(
-                                    modifier = Modifier
-                                        .padding(1.dp)
-                                        .width(24.dp)
-                                        .height(24.dp),
-                                    painter = painterResource(id = R.drawable.call_bottom_hand_stop),
-                                    contentDescription = "raise hand",
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                            Text(
-                                text = ResUtils.getString(R.string.call_toolbar_bottom_raise_hand_text),
-                                style = TextStyle(
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp,
-                                    fontFamily = FontFamily.Default,
-                                    fontWeight = FontWeight(400),
-                                    color = colorResource(id = com.difft.android.base.R.color.gray_50),
-                                )
-                            )
-                        }
                     }
 
                     if (cameraEnabled) {
@@ -425,6 +353,15 @@ fun ShowItemsBottomView(
                             }
                         )
                     }
+
+                    VoicePresetCard(
+                        currentPreset = voicePreset,
+                        isParticipantSharedScreen = isParticipantSharedScreen,
+                        onPresetSelected = { preset ->
+                            viewModel.audioDeviceManager.switchVoicePreset(preset)
+                            voicePresetCallBack(preset)
+                        }
+                    )
                 }
             }
         }

@@ -44,14 +44,17 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.difft.app.database.cache.ContactRemarkCache
+import org.difft.app.database.cache.ContactRemarkInfo
 import org.difft.app.database.convertToContactorModel
 import org.difft.app.database.covertToGroupMemberContactorModel
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
+import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.base.utils.Base64
 import java.util.Locale
 import java.util.Optional
@@ -107,19 +110,19 @@ object ContactorUtil {
         try {
             val id = contactResponse.number ?: return null
 
-            var remark: String? = null
-            val remarkArray = contactResponse.remark?.split("|")
-            remarkArray?.let {
-                if (it.size > 1) {
-                    val paddedString = (id + id + id).padEnd(32, '+')
-                    val key = paddedString.toByteArray().copyOf(32)
-                    remark = ContactRemarkUtil.decodeRemark(Base64.decode(it[1]), key)
-                    if (remark == null) {
-                        remark = contactResponse.remark
-                    }
-                }
-            } ?: run {
-                remark = contactResponse.remark
+            // Use the unified decode helper so bulk-fetch and single-update paths share
+            // the same failure semantics. On null/empty input -> null; on plain string
+            // (no '|') -> the string itself; on V1| with a successful decode -> plaintext;
+            // on V1| with a decode failure (exception or null result) -> null, never the
+            // raw "V1|<base64>" string (which would otherwise be persisted into DB and
+            // surfaced as the contact's display name through the cache).
+            val remark = when (val result = decodeRemarkV1OrPlain(contactResponse.remark, id)) {
+                is RemarkDecodeResult.Success -> result.plain
+                RemarkDecodeResult.Failure -> null
+            }
+            val remarkAvatarPlain = when (val result = decodeRemarkV1OrPlain(contactResponse.remarkAvatar, id)) {
+                is RemarkDecodeResult.Success -> result.plain
+                RemarkDecodeResult.Failure -> null
             }
 
             return ContactorModel().apply {
@@ -131,6 +134,7 @@ object ContactorUtil {
                 this.publicName = contactResponse.publicConfigs?.publicName
                 this.timeZone = contactResponse.timeZone
                 this.remark = remark
+                this.remarkAvatar = remarkAvatarPlain
                 this.joinedAt = contactResponse.joinedAt
                 this.sourceDescribe = contactResponse.sourceDescribe
                 this.findyouDescribe = contactResponse.findyouDescribe
@@ -163,15 +167,15 @@ object ContactorUtil {
     /**
      * get data from db first,then through the network
      */
-    suspend fun getContactWithID(context: Context, id: String): Optional<ContactorModel> {
+    suspend fun getContactWithID(context: Context, id: String): Optional<ContactorModel> = withContext(Dispatchers.IO) {
         val local = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(id))
             ?: wcdb.groupMemberContactor.getFirstObject(DBGroupMemberContactorModel.id.eq(id))
                 ?.convertToContactorModel()
         if (local != null) {
-            return Optional.of(local)
+            return@withContext Optional.of(local)
         }
         val contacts = fetchContactors(listOf(id), context)
-        return if (contacts.isNotEmpty()) {
+        if (contacts.isNotEmpty()) {
             Optional.ofNullable(contacts.first())
         } else {
             Optional.empty()
@@ -182,8 +186,8 @@ object ContactorUtil {
     suspend fun fetchContactors(ids: List<String>, context: Context): List<ContactorModel> =
         fetchContactors(context, ids, SecureSharedPrefsUtil.getBasicAuth())
 
-    private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> {
-        return try {
+    private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> = withContext(Dispatchers.IO) {
+        try {
             val contacts = context
                 .getEntryPoint()
                 .getHttpClient()
@@ -221,6 +225,8 @@ object ContactorUtil {
                 val contactorOfGroupMember = notExistInContacts.map { contactor -> contactor.covertToGroupMemberContactorModel() }
                 wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq("").and(DBGroupMemberContactorModel.id.`in`(contactorOfGroupMember.map { it.id })))
                 wcdb.groupMemberContactor.insertObjects(contactorOfGroupMember)
+
+                ContactRemarkCache.putAll(contacts.associate { it.id to ContactRemarkInfo(remark = it.remark, remarkAvatar = it.remarkAvatar) })
                 contacts
             } else {
                 emptyList()
@@ -290,6 +296,7 @@ object ContactorUtil {
 
         L.d { "[ContactorUtil] Initializing with coroutines..." }
         setupFetchAndSaveContactorsWithCoroutines()
+        coroutineScope.launch { ContactRemarkCache.preload() }
         isCoroutineInitialized = true
     }
 
@@ -360,6 +367,7 @@ object ContactorUtil {
                         } else {
                             val allContactEntities = contacts.mapNotNull { from(it) }
                             wcdb.contactor.insertObjects(allContactEntities)
+                            ContactRemarkCache.putAll(allContactEntities.associate { it.id to ContactRemarkInfo(remark = it.remark, remarkAvatar = it.remarkAvatar) })
                             L.i { "[ContactorUtil] SaveContactors success:${allContactEntities.size}" }
                             emitContactsUpdate(allContactEntities.map { it.id })
                         }
@@ -456,62 +464,134 @@ object ContactorUtil {
     }
 
     fun updateRemark(contactId: String, remarkString: String?) {
-        if (remarkString.isNullOrEmpty()) {
-            updateContactRemark(null, contactId)
-            return
-        }
-        val remarkArray = remarkString.split("|")
-        if (remarkArray.size > 1) {
-            try {
-                val paddedString = (contactId + contactId + contactId).padEnd(32, '+')
-                val key = paddedString.toByteArray().copyOf(32)
-                val decodedBytes = Base64.decode(remarkArray[1])
-                val remark = ContactRemarkUtil.decodeRemark(decodedBytes, key)
-                L.d { "[ContactorUtil] UpdateRemark remark: $remark" }
-                updateContactRemark(remark, contactId)
-            } catch (e: Exception) {
-                L.e(e) { "[ContactorUtil] UpdateRemark fail:" }
-            }
+        when (val result = decodeRemarkV1OrPlain(remarkString, contactId)) {
+            is RemarkDecodeResult.Success -> updateContactRemark(result.plain, contactId)
+            RemarkDecodeResult.Failure -> Unit // decode failed - preserve local value, do not clear
         }
     }
 
     private fun updateContactRemark(remark: String?, contactId: String) {
+        // Diff short-circuit: skip when cache holds a definitive value matching the new value.
+        // We deliberately do NOT short-circuit when normalized is null and cache.get returns null,
+        // because a null cache result is ambiguous between "no remark" and "preload not yet
+        // completed for this uid" -- in the latter case the DB may still hold an old value that
+        // must be cleared.
+        val normalized = remark?.takeIf { it.isNotEmpty() }
+        if (normalized != null && ContactRemarkCache.getRemark(contactId) == normalized) return
+
         wcdb.contactor.updateValue(
-            remark,
+            normalized,
             DBContactorModel.remark,
             DBContactorModel.id.eq(contactId)
         )
         wcdb.groupMemberContactor.updateValue(
-            remark,
+            normalized,
             DBGroupMemberContactorModel.remark,
             DBGroupMemberContactorModel.id.eq(contactId)
         )
 
+        ContactRemarkCache.putRemark(contactId, normalized)
         emitContactsUpdate(listOf(contactId))
     }
 
-    private suspend fun processContactsStreaming(contacts: List<ContactResponse>) {
+    fun updateRemarkAvatar(contactId: String, encryptedRemarkAvatar: String?) {
+        when (val result = decodeRemarkV1OrPlain(encryptedRemarkAvatar, contactId)) {
+            is RemarkDecodeResult.Success -> updateContactRemarkAvatar(result.plain, contactId)
+            RemarkDecodeResult.Failure -> {
+                L.w { "[ContactRemark] updateRemarkAvatar decode failure uid=$contactId — keeping local value" }
+            }
+        }
+    }
+
+    private fun updateContactRemarkAvatar(plainAvatarJson: String?, contactId: String) {
+        // Diff short-circuit: skip when cache holds a definitive value matching the new value.
+        val normalized = plainAvatarJson?.takeIf { it.isNotEmpty() }
+        if (normalized != null && ContactRemarkCache.getRemarkAvatar(contactId) == normalized) return
+
+        wcdb.contactor.updateValue(
+            normalized,
+            DBContactorModel.remarkAvatar,
+            DBContactorModel.id.eq(contactId)
+        )
+        wcdb.groupMemberContactor.updateValue(
+            normalized,
+            DBGroupMemberContactorModel.remarkAvatar,
+            DBGroupMemberContactorModel.id.eq(contactId)
+        )
+
+        ContactRemarkCache.putRemarkAvatar(contactId, normalized)
+        emitContactsUpdate(listOf(contactId))
+    }
+
+    private suspend fun processContactsStreaming(contacts: List<ContactResponse>) = withContext(Dispatchers.IO) {
         wcdb.contactor.deleteObjects()
 
         val batchSize = 500
         val allContactIds = mutableListOf<String>()
+        val remarkUpdates = HashMap<String, ContactRemarkInfo?>()
         var totalWithoutAvatar = 0
         val noAvatarIds = mutableListOf<String>()
 
         contacts.chunked(batchSize).forEach { batch ->
             val contactEntities = batch.mapNotNull { from(it) }
-            contactEntities.filter { it.avatar == null }.forEach { 
+            contactEntities.filter { it.avatar == null }.forEach {
                 totalWithoutAvatar++
                 noAvatarIds.add(it.id)
             }
             wcdb.contactor.insertObjects(contactEntities)
             allContactIds.addAll(contactEntities.map { it.id })
+            contactEntities.forEach { remarkUpdates[it.id] = ContactRemarkInfo(remark = it.remark, remarkAvatar = it.remarkAvatar) }
 
             yield()
         }
 
+        ContactRemarkCache.putAll(remarkUpdates)
         L.i { "[ContactorUtil] Streaming complete: total:${allContactIds.size}, withoutAvatar:$totalWithoutAvatar, ids:$noAvatarIds" }
         emitContactsUpdate(allContactIds)
+    }
+
+    /**
+     * Decodes a V1|-encrypted or plain remark string.
+     *
+     * Three distinct outcomes:
+     *  - input null / empty -> [RemarkDecodeResult.Success] with plain=null (explicit clear)
+     *  - input non-empty and decoded successfully -> [RemarkDecodeResult.Success] with non-empty plain
+     *  - input non-empty but Base64 / decryption throws -> [RemarkDecodeResult.Failure]
+     *    (preserve local value; must NOT be treated as clear)
+     *
+     * Callers ([updateRemark]) must distinguish Success(null) from Failure:
+     * the former writes empty to DB + cache; the latter skips the entry to avoid
+     * accidentally clearing an existing remark.
+     */
+    private fun decodeRemarkV1OrPlain(remarkString: String?, contactId: String): RemarkDecodeResult {
+        if (remarkString.isNullOrEmpty()) return RemarkDecodeResult.Success(null)
+        val parts = remarkString.split("|")
+        if (parts.size <= 1) return RemarkDecodeResult.Success(remarkString)
+        return try {
+            val paddedString = (contactId + contactId + contactId).padEnd(32, '+')
+            val key = paddedString.toByteArray().copyOf(32)
+            val decoded = ContactRemarkUtil.decodeRemark(Base64.decode(parts[1]), key)
+            // A null result from decodeRemark indicates a silent decryption failure
+            // (e.g. corrupted ciphertext that does not throw). Treat it as Failure so
+            // the caller preserves the local value rather than surfacing the raw V1|
+            // string to the user as a contact name.
+            if (decoded == null) {
+                L.w { "[ContactorUtil] decodeRemarkV1OrPlain returned null uid=$contactId" }
+                RemarkDecodeResult.Failure
+            } else {
+                RemarkDecodeResult.Success(decoded)
+            }
+        } catch (e: Exception) {
+            L.e(e) { "[ContactorUtil] decodeRemarkV1OrPlain fail uid=$contactId: ${e.stackTraceToString()}" }
+            RemarkDecodeResult.Failure
+        }
+    }
+
+    private sealed interface RemarkDecodeResult {
+        /** Decode succeeded; plain may be null (explicit clear) or a non-empty string. */
+        data class Success(val plain: String?) : RemarkDecodeResult
+        /** Decode failed (Base64 / decryption error). Caller must preserve local value and skip. */
+        data object Failure : RemarkDecodeResult
     }
 }
 

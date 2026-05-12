@@ -21,6 +21,14 @@ class SignalServiceContentCreator(
         return createCallContent(message)
     }
 
+    fun createFrom(message: SignalServiceProtos.GroupKeyMessage): Content {
+        return enforceMaxContentSize(content { groupKeyMessage = message })
+    }
+
+    fun createFrom(message: SignalServiceProtos.ForwardNoticeMessage): Content {
+        return enforceMaxContentSize(content { forwardNotice = message })
+    }
+
     private fun createMessageContent(message: SignalServiceProtos.DataMessage): Content {
         return enforceMaxContentSize(content { dataMessage = message })
     }

@@ -28,7 +28,7 @@ import com.difft.android.base.widget.setTopMargin
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.ViewUtil
 import java.util.Locale
 import javax.inject.Inject
 
@@ -116,11 +116,12 @@ class LoginFragment : Fragment() {
         return "+$countryCode"
     }
 
-    private val countryPickerActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == Activity.RESULT_OK) {
-            val code = it.data?.getStringExtra("code")
-            binding.tvPhoneCode.text = code
-        }
+    private val countryPickerActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // Activity-result callbacks fire after view destruction; guard binding access.
+        if (!isAdded || view == null) return@registerForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val code = result.data?.getStringExtra("code") ?: return@registerForActivityResult
+        binding.tvPhoneCode.text = code
     }
 
     private fun checkInputAccount() {

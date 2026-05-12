@@ -26,16 +26,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.DownloadAttachmentJob
 import java.util.Date
 
 /**
  * Remember call release function when this view is not used anymore
  */
 class VoiceMessageView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : ConstraintLayout(context, attrs, defStyleAttr) {
+    context: Context, attrs: AttributeSet? = null
+) : ConstraintLayout(context, attrs) {
 
     val binding: VoiceMessageViewBinding by viewbind(this)
 

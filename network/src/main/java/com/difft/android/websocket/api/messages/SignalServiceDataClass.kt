@@ -1,6 +1,7 @@
 package com.difft.android.websocket.api.messages
 
 import android.text.TextUtils
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
 import com.difft.android.websocket.api.messages.TTNotifyMessage.Companion.NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING
 import com.difft.android.websocket.api.messages.TTNotifyMessage.Companion.NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING
@@ -190,6 +191,25 @@ class SignalServiceDataClass(
                 } else {
                     throw IllegalArgumentException("readMessage's readPosition doesn't have groupId or sender")
                 }
+            } else if (signalServiceContent.syncMessage.hasForwardNoticeSync()) {
+                // Self-sync: Content.syncMessage.forwardNoticeSync is a ForwardNoticeMessage.
+                // Resolve conversation from payload.conversation (filled by sender from its
+                // own view: peer uid for 1v1, myId for NTS source).
+                //
+                // The groupId arm below is defense-in-depth only — our sender never emits
+                // sync for group source (see PushForwardNoticeSendJob.sendSyncToSelf and
+                // NewSignalServiceMessageSender's For.Group guard). Kept so a future change
+                // that enables group sync doesn't silently route to the wrong conversation.
+                val syncMsg = signalServiceContent.syncMessage.forwardNoticeSync
+                val payloadConv = syncMsg.takeIf { it.hasConversation() }?.conversation
+                when {
+                    payloadConv?.hasGroupId() == true ->
+                        payloadConv.parseToFor(signalServiceEnvelope.timestamp)
+                            ?: For.Account(senderId)
+                    payloadConv?.hasNumber() == true && payloadConv.number.isNotEmpty() ->
+                        For.Account(payloadConv.number)
+                    else -> For.Account(senderId) // defensive: NTS fallback
+                }
             } else {
                 throw IllegalArgumentException("syncMessage doesn't have sent or read or topicMark or topicAction")
             }
@@ -229,8 +249,51 @@ class SignalServiceDataClass(
                     throw IllegalArgumentException("conversationId number is null: ${signalServiceEnvelope.msgType} content: $signalServiceContent")
                 }
             }
+        } else if (signalServiceContent?.hasForwardNotice() == true) {
+            // Primary path: Content.forwardNotice from peer (or from self for NTS source).
+            // Self-sync goes through SyncMessage.forwardNoticeSync — NOT this branch.
+            //
+            // Rule:
+            //   1) payload.conversation.groupId → For.Group(groupId) — fixes group bug
+            //      (v1 relied on envelope.msgExtra.conversationId, which is custom-notify-specific).
+            //   2) else                         → For.Account(senderId) — envelope.source IS the peer
+            //                                     (for 1v1 primary; for NTS source this also lands
+            //                                      correctly since senderId==myId).
+            val payloadConv = signalServiceContent.forwardNotice
+                .takeIf { it.hasConversation() }
+                ?.conversation
+            if (payloadConv?.hasGroupId() == true) {
+                payloadConv.parseToFor(signalServiceEnvelope.timestamp)
+                    ?: For.Account(senderId)
+            } else {
+                For.Account(senderId)
+            }
         } else {
             throw IllegalArgumentException("Unknown message type msg typ: ${signalServiceEnvelope.msgType} content: $signalServiceContent")
         }
     }
+}
+
+/**
+ * Private helper — `MsgExtra.ConversationId` → [For].
+ *
+ * Routes group ids through [transformGroupIdFromServerToLocal]; Firebase-records
+ * an anomaly if the groupId has an unexpected byte length (server is expected
+ * to hand us 32 or 36-byte group ids, per existing legacy paths).
+ *
+ * Returns `null` when neither `groupId` nor `number` is set — callers decide
+ * the fallback (typically `For.Account(senderId)`).
+ */
+private fun SignalServiceProtos.ConversationId.parseToFor(
+    timestampForLog: Long
+): For? {
+    if (hasGroupId()) {
+        val bytes = groupId.toByteArray()
+        if (bytes.size != 32 && bytes.size != 36) {
+            L.w { "[ForwardNotice] Invalid group id length: ${bytes.size}, timestamp=$timestampForLog" }
+        }
+        return For.Group(bytes.transformGroupIdFromServerToLocal())
+    }
+    if (hasNumber() && number.isNotEmpty()) return For.Account(number)
+    return null
 }

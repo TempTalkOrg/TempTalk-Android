@@ -44,8 +44,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.util.Util
-import org.thoughtcrime.securesms.util.shareText
+import com.difft.android.chat.util.Util
+import com.difft.android.chat.util.shareText
 import javax.inject.Inject
 
 class InviteUtils @Inject constructor() {
@@ -211,7 +211,13 @@ class InviteUtils @Inject constructor() {
     }
 
     private fun createQRBitmap(context: Activity, url: String): Bitmap? {
-        val logoBitmap = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_invite_qr_logo)
+        val logoBitmap = androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_invite_qr_logo)?.let {
+            val bitmap = Bitmap.createBitmap(it.intrinsicWidth, it.intrinsicHeight, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            it.setBounds(0, 0, canvas.width, canvas.height)
+            it.draw(canvas)
+            bitmap
+        }
         val bitmap = QRCodeEncoder.syncEncodeQRCode(url, 200.dp, ContextCompat.getColor(context, com.difft.android.base.R.color.bg2_night), logoBitmap)
         return bitmap
     }

@@ -29,6 +29,7 @@ data class UserData(
     var lastCheckUpdateTime: Long = 0, // 上次检查更新的时间
     var saveToPhotos: Boolean = false, //是否开启自动保存到相册功能
     var voicePlaybackSpeed: Float = 1.0f, //语音消息播放速度 (1.0x, 1.5x, 2.0x)
+    var callVoiceChangerPreset: String = "original", //通话全局变音偏好 (VoicePreset.sdkKey: original/goddess/uncle)
     var keepAliveEnabled: Boolean = false, // Service保活机制是否启用
     var autoStartMessageService: Boolean = true, // 是否允许自动开启消息后台连接服务（默认true，用户手动关闭后为false）
     var messageServiceTipsShowedVersion: String? = null, //上次提示开启消息后台连接服务的版本
@@ -47,4 +48,10 @@ data class UserData(
     var globalNotification: Int = GlobalNotificationType.ALL.value, //全局通知开关类型
     var checkNotificationPermission: String? = null, //上次检查通知权限的版本
     var hasShownConfidentialTip: Boolean = false, // 机密消息首次使用提示
+
+    // Image editor brush-width preferences (0–100 percentage; 0 = slider leftmost).
+    // Replaces the deleted SignalStore.imageEditorValues().*Percentage keys in signal-key-value.db.
+    var imageEditorMarkerPercentage: Int = 0,
+    var imageEditorHighlighterPercentage: Int = 0,
+    var imageEditorBlurPercentage: Int = 0,
 )

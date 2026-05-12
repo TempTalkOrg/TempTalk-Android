@@ -104,8 +104,13 @@ object WCDBUpdateService :
                 .and(DBRoomModel.lastActiveTime.add(otherTimeoutMillis).lt(currentTime))
             val expiredOtherCondition = expiredOtherNewData.or(expiredOtherOldData)
 
-            // Final condition: exclude self AND (invalid rooms OR expired groups OR expired other)
+            // Pinned conversations are kept even when empty/expired — only their messages
+            // are auto-archived (by MessageArchiveManager); the room row itself stays.
+            val notPinnedCondition = DBRoomModel.pinnedTime.isNull()
+
+            // Final condition: exclude self AND not pinned AND (invalid rooms OR expired empty rooms)
             val finalCondition = DBRoomModel.roomId.notEq(globalServices.myId)
+                .and(notPinnedCondition)
                 .and(invalidRoomCondition.or(expiredGroupCondition).or(expiredOtherCondition))
 
             // Get rooms to delete first

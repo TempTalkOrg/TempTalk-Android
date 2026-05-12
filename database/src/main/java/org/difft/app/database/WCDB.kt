@@ -15,13 +15,17 @@ import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBDraftModel
 import org.difft.app.database.models.DBFailedMessageModel
 import org.difft.app.database.models.DBForwardContextModel
+import org.difft.app.database.models.DBGroupCryptoKeysModel
 import org.difft.app.database.models.DBForwardModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
+import org.difft.app.database.models.DBJobConstraintModel
+import org.difft.app.database.models.DBJobSpecModel
 import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBNotificationCacheModel
 import org.difft.app.database.models.DBPendingMessageModelNew
+import org.difft.app.database.models.DBPublicKeyInfoModel
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBReadInfoModel
@@ -197,6 +201,26 @@ class WCDB @Inject constructor(
         db.getTable("notification_cache", DBNotificationCacheModel.INSTANCE)
     }
 
+    val groupCryptoKeys by lazy {
+        db.createTable("group_crypto_keys", DBGroupCryptoKeysModel.INSTANCE)
+        db.getTable("group_crypto_keys", DBGroupCryptoKeysModel.INSTANCE)
+    }
+
+    val publicKeyInfo by lazy {
+        db.createTable("public_key_info", DBPublicKeyInfoModel.INSTANCE)
+        db.getTable("public_key_info", DBPublicKeyInfoModel.INSTANCE)
+    }
+
+    val jobSpec by lazy {
+        db.createTable("job_spec", DBJobSpecModel.INSTANCE)
+        db.getTable("job_spec", DBJobSpecModel.INSTANCE)
+    }
+
+    val jobConstraint by lazy {
+        db.createTable("job_constraint", DBJobConstraintModel.INSTANCE)
+        db.getTable("job_constraint", DBJobConstraintModel.INSTANCE)
+    }
+
     // Map from lowercase tableName to the actual table
     val tablesMap by lazy {
         listOf(
@@ -219,7 +243,11 @@ class WCDB @Inject constructor(
             failedMessage,
             readInfo,
             resetIdentityKey,
-            notificationCache
+            notificationCache,
+            groupCryptoKeys,
+            publicKeyInfo,
+            jobSpec,
+            jobConstraint
         ).associateBy { it.tableName.lowercase() }
     }
     fun deleteDatabaseFile() {

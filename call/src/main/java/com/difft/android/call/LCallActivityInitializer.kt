@@ -1,0 +1,362 @@
+package com.difft.android.call
+
+import android.content.pm.ActivityInfo
+import android.os.Bundle
+import android.view.WindowManager
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
+import com.difft.android.base.call.CallRole
+import com.difft.android.base.call.CallType
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.user.AppLockCallbackManager
+import com.difft.android.base.utils.WindowSizeClassUtil
+import com.difft.android.call.data.CallEndType
+import com.difft.android.call.data.CallExitParams
+import com.difft.android.call.handler.CallActionHandler
+import com.difft.android.call.handler.CallErrorHandler
+import com.difft.android.call.handler.CallExitHandler
+import com.difft.android.call.handler.InviteCallHandler
+import com.difft.android.call.manager.CallCleanupManager
+import com.difft.android.call.manager.CallDialogManager
+import com.difft.android.call.manager.CallLifecycleObserver
+import com.difft.android.call.manager.CallScreenshotController
+import com.difft.android.call.manager.CallServiceManager
+import com.difft.android.call.manager.PictureInPictureManager
+import com.difft.android.call.manager.ProximitySensorManager
+import com.difft.android.call.receiver.CallActivityBroadcastReceiver
+import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
+import com.difft.android.call.ui.CallContent
+import com.difft.android.call.util.CallWaitDialogUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * Initialization extensions for [LCallActivity].
+ *
+ * Splits the bulky initializeXxx / registerXxx wiring from [LCallActivity]
+ * into extension functions so the Activity body focuses only on lifecycle
+ * scheduling and high-level coordination.
+ *
+ * All extensions depend solely on the Activity's exposed internal members
+ * and preserve the original business semantics unchanged.
+ */
+
+internal fun LCallActivity.initializeState() {
+    if (WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+    onGoingCallStateManager.setIsInCalling(true)
+
+    if (isAppLockEnabled()) {
+        onGoingCallStateManager.setNeedAppLock(callIntent.needAppLock)
+    } else {
+        onGoingCallStateManager.setNeedAppLock(false)
+    }
+
+    viewModel.getRoomId()?.let {
+        onGoingCallStateManager.setCurrentRoomId(it)
+    }
+
+    viewModel.callUiController.setPipModeEnabled(isInPictureInPictureMode)
+    onGoingCallStateManager.setIsInPipMode(isInPictureInPictureMode)
+}
+
+internal fun LCallActivity.initializeErrorHandler() {
+    callErrorHandler = CallErrorHandler(
+        activity = this,
+        lifecycleScope = lifecycleScope,
+        callIntent = callIntent,
+        onEndCall = { endCallAndClearResources() },
+    )
+}
+
+internal fun LCallActivity.initializeExitHandler() {
+    callExitHandler = CallExitHandler(
+        viewModel = viewModel,
+        callToChatController = callToChatController,
+        onGoingCallStateManager = onGoingCallStateManager,
+        callDataManager = callDataManager,
+        callIntent = callIntent,
+        callRole = callRole,
+        conversationId = onGoingCallStateManager.getConversationId(),
+        callType = onGoingCallStateManager.callType().ifEmpty { callIntent.callType },
+        onEndCall = { endCallAndClearResources() }
+    )
+}
+
+internal fun LCallActivity.initializeCallActionHandler() {
+    callActionHandler = CallActionHandler(
+        viewModel = viewModel,
+        onGoingCallStateManager = onGoingCallStateManager,
+        callRingtoneManager = ringtoneManager,
+        callIntent = callIntent,
+        callRole = callRole,
+        conversationId = onGoingCallStateManager.getConversationId(),
+        onExitClick = { params -> handleExitClick(params) },
+        onEndCall = { endCallAndClearResources() },
+        onShowTip = { message, onDismiss -> showStyledPopTip(message, onDismiss) }
+    )
+}
+
+internal fun LCallActivity.handleIntent(savedInstanceState: Bundle?) {
+    callIntent = CallIntent(intent)
+    if (savedInstanceState == null) {
+        L.i { "[Call] LCallActivity: Processing intent" }
+        if (callRole == CallRole.CALLEE) {
+            LCallManager.stopIncomingCallService(callIntent.roomId, tag = "accept: has in call activity")
+        } else if (callIntent.action == CallIntent.Action.START_CALL && callIntent.callType == CallType.ONE_ON_ONE.type) {
+            callIntent.conversationId?.let { conversationId ->
+                viewModel.addAwaitingJoinInvitees(listOf(conversationId))
+            }
+        }
+        L.d { "[Call] LCallActivity logIntent:$callIntent" }
+        processIntent(callIntent)
+    } else {
+        L.i { "[Call] LCallActivity: Activity likely rotated, not processing intent" }
+    }
+}
+
+internal fun LCallActivity.processIntent(callIntent: CallIntent) {
+    if (callIntent.action == CallIntent.Action.START_CALL || callIntent.action == CallIntent.Action.JOIN_CALL) {
+        if (onGoingCallStateManager.callType().isEmpty()) {
+            onGoingCallStateManager.setCallType(callIntent.callType)
+        }
+        onGoingCallStateManager.setConversationId(callIntent.conversationId)
+    }
+}
+
+internal fun LCallActivity.initializeManagers() {
+    initializeCallServiceManager()
+    initializePictureInPictureManager()
+    initializeProximitySensor()
+    initializeDialogManager()
+    initializeInviteCallManager()
+    initializeScreenshotController()
+}
+
+internal fun LCallActivity.registerListeners() {
+    registerOnBackPressedHandler()
+    registerAppUnlockListener()
+    // Broadcast receiver registration involves Binder IPC to system_server,
+    // which can take 100-500ms+ under load. Defer to the next main-looper
+    // pass so onCreate returns promptly and the first frame renders.
+    // NOTE: Must use Dispatchers.Main (not .immediate) — lifecycleScope
+    // defaults to Main.immediate which would execute inline on the main thread.
+    lifecycleScope.launch(Dispatchers.Main) {
+        registerCallActivityReceiver()
+        registerScreenUnlockReceiver()
+    }
+}
+
+internal fun LCallActivity.configureWindow() {
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+    allowOnLockScreen()
+}
+
+internal fun LCallActivity.initializeView() {
+    L.i { "[Call] LCallActivity initView" }
+    if (!callIntent.callWaitDialogShown) {
+        CallWaitDialogUtil.show(this)
+    }
+    lifecycleScope.launch {
+        withContext(Dispatchers.Default) {
+            viewModel.room
+        }
+        withContext(Dispatchers.Main) {
+            CallWaitDialogUtil.dismiss()
+            setContent {
+                val room = viewModel.room
+                val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
+                CallContent(
+                    room = room,
+                    viewModel = viewModel,
+                    audioSwitchHandler = viewModel.audioHandler,
+                    inviteCallHandler = inviteCallManager,
+                    isUserSharingScreen = isUserSharingScreen,
+                    callConfig = callConfig,
+                    callIntent = callIntent,
+                    callRole = callRole,
+                    conversationId = onGoingCallStateManager.getConversationId(),
+                    autoHideTimeout = autoHideTimeout,
+                    muteOtherEnabled = muteOtherEnabled,
+                    onScreenClick = { handleScreenClick() },
+                    onCallTypeChanged = {
+                        onGoingCallStateManager.setCallType(it)
+                        updateScreenshotListeningState()
+                    },
+                    onInviteUsersClick = { handleInviteUsersClick() },
+                    onWindowZoomOutClick = { handleWindowZoomOutClick() },
+                    onInviteViewAction = { handleInviteViewAction(it) },
+                    onExitClick = { params, callEndType -> handleExitClick(params, callEndType) },
+                    onBottomCallEndAction = { action -> handleBottomCallEndAction(action) }
+                )
+            }
+        }
+    }
+}
+
+internal fun LCallActivity.initializeCallServiceManager() {
+    callServiceManager = CallServiceManager(
+        context = this,
+        callToChatController = callToChatController
+    ).also { it.startOngoingCallService() }
+}
+
+internal fun LCallActivity.initializePictureInPictureManager() {
+    pictureInPictureManager = PictureInPictureManager(
+        activity = this,
+        lifecycle = lifecycle,
+        onPipModeChanged = { isInPipMode ->
+            viewModel.callUiController.setPipModeEnabled(isInPipMode)
+            onGoingCallStateManager.setIsInPipMode(isInPipMode)
+        },
+        onPipClosed = {
+            onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
+                handleExitClick(
+                    CallExitParams(
+                        roomId,
+                        callIntent.callerId,
+                        callRole,
+                        onGoingCallStateManager.callType(),
+                        onGoingCallStateManager.getConversationId()
+                    )
+                )
+            }
+        }
+    ).also { it.initialize() }
+}
+
+internal fun LCallActivity.initializeProximitySensor() {
+    proximitySensorManager = ProximitySensorManager(
+        activity = this,
+        isScreenSharingProvider = { viewModel.callUiController.isShareScreening.value }
+    ).also { it.initialize() }
+}
+
+internal fun LCallActivity.initializeDialogManager() {
+    callDialogManager = CallDialogManager(
+        activity = this,
+        lifecycleScope = lifecycleScope,
+        viewModel = viewModel,
+        callIntent = callIntent,
+        callRole = callRole,
+        onGoingCallStateManager = onGoingCallStateManager,
+        userManager = userManager,
+        onExitCall = { params -> handleExitClick(params) },
+        onEndCall = { endCallAndClearResources() }
+    )
+}
+
+internal fun LCallActivity.initializeInviteCallManager() {
+    inviteCallManager = InviteCallHandler(
+        viewModel = viewModel,
+        callToChatController = callToChatController,
+        contactorCacheManager = contactorCacheManager,
+        callIntent = callIntent,
+        scope = lifecycleScope
+    )
+}
+
+internal fun LCallActivity.initializeLifecycleObserver() {
+    callLifecycleObserver = CallLifecycleObserver(
+        viewModel = viewModel,
+        onGoingCallStateManager = onGoingCallStateManager,
+        callToChatController = callToChatController,
+        callErrorHandler = callErrorHandler,
+        callDialogManager = callDialogManager,
+        callConfig = callConfig
+    ).also { lifecycle.addObserver(it) }
+}
+
+internal fun LCallActivity.initializeCleanupManager() {
+    callCleanupManager = CallCleanupManager(
+        lifecycle = lifecycle,
+        context = this,
+        callbackId = callbackId
+    )
+}
+
+internal fun LCallActivity.initializeScreenshotController() {
+    screenshotController = CallScreenshotController(
+        activity = this,
+        coroutineScope = lifecycleScope,
+        onGoingCallStateManager = onGoingCallStateManager,
+        callToChatController = callToChatController,
+        conversationIdProvider = { callIntent.conversationId },
+        callTypeProvider = {
+            onGoingCallStateManager.callType().ifEmpty { callIntent.callType }
+        },
+        isInPipModeProvider = {
+            onGoingCallStateManager.isInPipMode() || isInPictureInPictureMode
+        },
+        focusLostAtProvider = { windowFocusLostAt }
+    )
+}
+
+internal fun LCallActivity.registerAppUnlockListener() {
+    appUnlockListener = {
+        if (it) {
+            onGoingCallStateManager.setNeedAppLock(false)
+        }
+    }
+    AppLockCallbackManager.addListener(callbackId, appUnlockListener)
+}
+
+internal fun LCallActivity.registerCallActivityReceiver() {
+    callActivityBroadcastReceiver = CallActivityBroadcastReceiver(
+        onPushStreamLimit = {
+            showStyledPopTip(getString(R.string.call_push_stream_limit_tip), onDismiss = {})
+        },
+        onOngoingTimeout = { roomId ->
+            if (roomId == onGoingCallStateManager.getCurrentRoomId()) {
+                showStyledPopTip(
+                    getString(R.string.call_callee_action_noanswer),
+                    onDismiss = { endCallAndClearResources() })
+            }
+        },
+        onCallControl = { actionType, roomId ->
+            callActionHandler?.handleCallAction(actionType, roomId)
+        }
+    ).also { it.register(this) }
+}
+
+internal fun LCallActivity.registerScreenUnlockReceiver() {
+    screenUnlockBroadcastReceiver = ScreenUnlockBroadcastReceiver(
+        onBringCallActivityToFront = { LCallManager.bringCallScreenToFront(this) },
+        onGoingCallStateManager = onGoingCallStateManager
+    ).also { it.register(this) }
+}
+
+internal fun LCallActivity.registerOnBackPressedHandler() {
+    backPressedCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            L.i { "[Call] LCallActivity intercept on back press" }
+            showPipPermissionToastOrEnterPipMode("back pressed")
+        }
+    }
+    onBackPressedDispatcher.addCallback(this, backPressedCallback)
+}
+
+internal fun LCallActivity.createCallExitParams(): CallExitParams = CallExitParams(
+    viewModel.getRoomId(),
+    callIntent.callerId,
+    callRole,
+    onGoingCallStateManager.callType(),
+    onGoingCallStateManager.getConversationId()
+)
+
+internal fun LCallActivity.handleExitClick(
+    params: CallExitParams,
+    callEndType: CallEndType? = CallEndType.LEAVE,
+) {
+    callExitHandler?.handleExit(params, callEndType ?: CallEndType.LEAVE)
+        ?: run {
+            L.w { "[Call] LCallActivity: CallExitHandler is not initialized, ending call directly" }
+            endCallAndClearResources()
+        }
+}

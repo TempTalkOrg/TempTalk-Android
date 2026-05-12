@@ -42,6 +42,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -50,7 +51,7 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageNotificationUtil
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
@@ -150,27 +151,13 @@ class SingleChatSettingActivity : BaseActivity() {
             SearchMessageActivity.startActivity(this@SingleChatSettingActivity, contactId, false, null)
         }
 
-        lifecycleScope.launch {
-            try {
-                val contact = withContext(Dispatchers.IO) {
-                    wcdb.getContactorFromAllTable(contactId)
-                }
-                if (contact != null) {
-                    mContact = contact
-                    mBinding.avatar.setAvatar(contact)
-                    mBinding.tvName.text = contact.getDisplayNameForUI()
-                    mBinding.title.text = contact.getDisplayNameForUI()
+        loadAndRenderContact()
 
-                    mBinding.vInfo.setOnClickListener {
-                        ContactDetailActivity.startActivity(this@SingleChatSettingActivity, contactId)
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[SingleChatSettingActivity] getContactWithID error: ${e.stackTraceToString()}" }
-            }
-        }
+        // Re-render title/avatar after contact edits (remark name/avatar, profile, etc.).
+        ContactorUtil.contactsUpdate
+            .filter { it.contains(contactId) }
+            .onEach { loadAndRenderContact() }
+            .launchIn(lifecycleScope)
 
         // Subscribe to conversationSet for all config-related UI updates
         chatSettingViewModel.conversationSet
@@ -249,6 +236,30 @@ class SingleChatSettingActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         handleCommonGroupsDisplay()
+    }
+
+    private fun loadAndRenderContact() {
+        lifecycleScope.launch {
+            try {
+                val contact = withContext(Dispatchers.IO) {
+                    wcdb.getContactorFromAllTable(contactId)
+                }
+                if (contact != null) {
+                    mContact = contact
+                    mBinding.avatar.setAvatar(contact)
+                    mBinding.tvName.text = contact.getDisplayNameForUI()
+                    mBinding.title.text = contact.getDisplayNameForUI()
+
+                    mBinding.vInfo.setOnClickListener {
+                        ContactDetailActivity.startActivity(this@SingleChatSettingActivity, contactId)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[SingleChatSettingActivity] getContactWithID error: ${e.stackTraceToString()}" }
+            }
+        }
     }
 
     /**

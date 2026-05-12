@@ -27,8 +27,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.util.KeyHelper
-import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
+import com.difft.android.chat.crypto.IdentityKeyUtil
+import com.difft.android.chat.cryptonew.EncryptionDataManager
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Date

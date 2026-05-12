@@ -15,10 +15,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import org.thoughtcrime.securesms.mms.PartAuthority
+import com.difft.android.chat.mms.PartAuthority
 
 /**
- * Unit tests for [SaveAttachmentUtil].
+ * Unit tests for [com.difft.android.chat.util.SaveAttachmentUtil].
  *
  * Tests focus on public API behavior — permission checks, null stream handling,
  * and batch logic. Full MediaStore integration (ContentProvider insert/query)
@@ -47,18 +47,18 @@ class SaveAttachmentUtilTest {
     fun `saveAttachment returns WriteAccessFailure when no write permission`() = runTest {
         every { FileUtil.canWriteToMediaStore() } returns false
 
-        val result = SaveAttachmentUtil.saveAttachment(context, buildAttachment())
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.saveAttachment(context, buildAttachment())
 
-        assertTrue(result is SaveAttachmentUtil.SaveResult.WriteAccessFailure)
+        assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.WriteAccessFailure)
     }
 
     @Test
     fun `saveAttachments returns WriteAccessFailure when no write permission`() = runTest {
         every { FileUtil.canWriteToMediaStore() } returns false
 
-        val result = SaveAttachmentUtil.saveAttachments(context, listOf(buildAttachment(), buildAttachment()))
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.saveAttachments(context, listOf(buildAttachment(), buildAttachment()))
 
-        assertTrue(result is SaveAttachmentUtil.SaveResult.WriteAccessFailure)
+        assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.WriteAccessFailure)
     }
 
     // endregion
@@ -70,9 +70,9 @@ class SaveAttachmentUtilTest {
         every { FileUtil.canWriteToMediaStore() } returns true
         every { PartAuthority.getAttachmentStream(any(), any()) } returns null
 
-        val result = SaveAttachmentUtil.saveAttachment(context, buildAttachment(contentType = "image/jpeg"))
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.saveAttachment(context, buildAttachment(contentType = "image/jpeg"))
 
-        assertTrue(result is SaveAttachmentUtil.SaveResult.Failure)
+        assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Failure)
     }
 
     // endregion
@@ -84,23 +84,23 @@ class SaveAttachmentUtilTest {
         every { FileUtil.canWriteToMediaStore() } returns true
         every { PartAuthority.getAttachmentStream(any(), any()) } returns null
 
-        val result = SaveAttachmentUtil.saveAttachments(context, listOf(
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.saveAttachments(context, listOf(
             buildAttachment(contentType = "image/jpeg"),
             buildAttachment(contentType = "image/png")
         ))
 
-        assertTrue(result is SaveAttachmentUtil.SaveResult.Failure)
+        assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Failure)
     }
 
     @Test
     fun `saveAttachments returns Failure on empty list treated as success with null`() = runTest {
         every { FileUtil.canWriteToMediaStore() } returns true
 
-        val result = SaveAttachmentUtil.saveAttachments(context, emptyList())
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.saveAttachments(context, emptyList())
 
         // Empty list: loop doesn't execute, returns Success(null) since size != 1
-        assertTrue(result is SaveAttachmentUtil.SaveResult.Success)
-        assertEquals(null, (result as SaveAttachmentUtil.SaveResult.Success).attachment)
+        assertTrue(result is com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Success)
+        assertEquals(null, (result as com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Success).attachment)
     }
 
     // endregion
@@ -109,7 +109,7 @@ class SaveAttachmentUtilTest {
 
     @Test
     fun `Attachment defaults are correct`() {
-        val attachment = SaveAttachmentUtil.Attachment(
+        val attachment = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.Attachment(
             uri = Uri.parse("content://test/1"),
             contentType = "image/jpeg",
             date = 1000L
@@ -123,7 +123,7 @@ class SaveAttachmentUtilTest {
     @Test
     fun `Attachment preserves all fields`() {
         val uri = Uri.parse("content://test/2")
-        val attachment = SaveAttachmentUtil.Attachment(
+        val attachment = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.Attachment(
             uri = uri,
             contentType = "video/mp4",
             date = 2000L,
@@ -147,13 +147,13 @@ class SaveAttachmentUtilTest {
     @Test
     fun `SaveResult Success holds attachment`() {
         val attachment = buildAttachment()
-        val result = SaveAttachmentUtil.SaveResult.Success(attachment)
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Success(attachment)
         assertEquals(attachment, result.attachment)
     }
 
     @Test
     fun `SaveResult Success can hold null attachment for batch`() {
-        val result = SaveAttachmentUtil.SaveResult.Success(null)
+        val result = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.SaveResult.Success(null)
         assertEquals(null, result.attachment)
     }
 
@@ -168,7 +168,7 @@ class SaveAttachmentUtilTest {
         fileName: String? = null,
         shouldDeleteOriginalFile: Boolean = false,
         shouldShowToast: Boolean = false
-    ) = SaveAttachmentUtil.Attachment(
+    ) = _root_ide_package_.com.difft.android.chat.util.SaveAttachmentUtil.Attachment(
         uri = uri,
         contentType = contentType,
         date = date,

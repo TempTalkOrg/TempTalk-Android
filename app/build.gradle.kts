@@ -9,9 +9,10 @@ plugins {
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
 
+
 }
 
-val appVersionName = "2.1.7"
+val appVersionName = "2.2.3"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -20,7 +21,7 @@ fun getCurrentDayTimestamp(): String {
     return simpleDateFormat.format(currentDate)
 }
 
-val appVersionCode = 651597
+val appVersionCode = 710793
 
 fun getBuildTime(): String {
     return System.currentTimeMillis().toString()
@@ -171,6 +172,7 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             )
+
         }
     }
 
@@ -281,5 +283,6 @@ dependencies {
 
     // 性能监控
     implementation(libs.anrwatchdog)
+    // Pinned to 1.4.1: avoids transitive .module dependency verification failures. Initializer disabled in AndroidManifest (no baseline-prof.txt).
     implementation(libs.profileinstaller)
 }

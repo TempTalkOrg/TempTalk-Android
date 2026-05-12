@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.catch
 import org.difft.app.database.convertToContactorModels
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
 import com.difft.android.chat.R
@@ -36,10 +37,17 @@ import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBRoomStore
+import com.difft.android.chat.crypto.GroupCrypto
+import com.difft.android.chat.crypto.GroupCryptoRepo
+import com.difft.android.chat.crypto.GroupKeyDistributor
+import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
+import com.difft.android.network.group.GroupMemberBinding
 import com.difft.android.network.group.GroupRepo
+import com.difft.android.network.group.UpgradeGroupToEncryptedReq
 import com.difft.android.network.responses.MuteStatus
 import com.hi.dhl.binding.viewbind
+import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -52,7 +60,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageNotificationUtil
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 const val KEY_GROUP_ID = "groupId"
@@ -82,6 +90,12 @@ class GroupInfoActivity : BaseActivity() {
     lateinit var groupRepo: GroupRepo
 
     @Inject
+    lateinit var groupCryptoRepo: GroupCryptoRepo
+
+    @Inject
+    lateinit var groupKeyDistributor: GroupKeyDistributor
+
+    @Inject
     lateinit var dbRoomStore: DBRoomStore
 
     @Inject
@@ -89,6 +103,9 @@ class GroupInfoActivity : BaseActivity() {
 
     @Inject
     lateinit var userManager: com.difft.android.base.user.UserManager
+
+    @Inject
+    lateinit var globalConfigsManager: GlobalConfigsManager
 
     private val chatSettingViewModel: ChatSettingViewModel by viewModels(extrasProducer = {
         defaultViewModelCreationExtras.withCreationCallback<ChatSettingViewModelFactory> {
@@ -142,6 +159,11 @@ class GroupInfoActivity : BaseActivity() {
         groupUtil.singleGroupsUpdate
             .onEach {
                 if (it.gid == groupId) {
+                    if (it.status != 0) {
+                        // Group is gone (kicked / left / dismissed / destroyed) — close.
+                        finish()
+                        return@onEach
+                    }
                     groupInfo = it
                     selfGroupInfo = groupInfo?.members?.find { member -> member.id == globalServices.myId }
                     selfGroupInfo?.let { info ->
@@ -267,7 +289,7 @@ class GroupInfoActivity : BaseActivity() {
                 var members = mutableListOf<GroupMemberModel>()
 
                 it.forEach { member ->
-                    val contactAvatar = member.avatar?.getContactAvatarData()
+                    val contactAvatar = member.getEffectiveAvatarJson()?.getContactAvatarData()
                     members.add(
                         GroupMemberModel(
                             member.getDisplayNameForUI(),
@@ -300,6 +322,8 @@ class GroupInfoActivity : BaseActivity() {
     }
 
     private fun setOtherView() {
+        setupEncryptionRow()
+
         binding.llSearchChatHistory.setOnClickListener {
             SearchMessageActivity.startActivity(this@GroupInfoActivity, groupId, true, null)
         }
@@ -471,5 +495,132 @@ class GroupInfoActivity : BaseActivity() {
                 getString(R.string.save_to_photos_default, statusText)
             }
         }
+    }
+
+    private fun setupEncryptionRow() {
+        val isEncryptedGroup = (groupInfo?.groupCryptoMode ?: 0) > 0
+
+        if (isEncryptedGroup) {
+            // Flag gates new encryption actions only; encrypted groups always show their status.
+            binding.dividerEncryptionTop.visibility = View.VISIBLE
+            binding.llEncryptionRow.visibility = View.VISIBLE
+            binding.ivEncryptionLock.visibility = View.VISIBLE
+            binding.ivEncryptionLock.setColorFilter(getColor(com.difft.android.base.R.color.t_primary))
+            binding.tvEncryptionLabel.text = getString(R.string.group_encrypted_label)
+            binding.tvEncryptionLabel.setTextColor(getColor(com.difft.android.base.R.color.t_primary))
+            binding.ivEncryptionArrow.visibility = View.VISIBLE
+            binding.llEncryptionRow.setOnClickListener {
+                showEncryptedGroupInfoSheet()
+            }
+        } else {
+            // Plain group: upgrade entry shown only when flag is on and user is owner/admin.
+            val canShowUpgrade = globalConfigsManager.isGroupEncryptionEnabled() && role <= GROUP_ROLE_ADMIN
+            if (canShowUpgrade) {
+                binding.dividerEncryptionTop.visibility = View.VISIBLE
+                binding.llEncryptionRow.visibility = View.VISIBLE
+                binding.ivEncryptionLock.visibility = View.GONE
+                binding.tvEncryptionLabel.text = getString(R.string.group_upgrade_to_encrypted)
+                binding.tvEncryptionLabel.setTextColor(getColor(com.difft.android.base.R.color.primary))
+                binding.ivEncryptionArrow.visibility = View.GONE
+                binding.llEncryptionRow.setOnClickListener {
+                    showUpgradeToEncryptedSheet()
+                }
+            } else {
+                binding.dividerEncryptionTop.visibility = View.GONE
+                binding.llEncryptionRow.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun showUpgradeToEncryptedSheet() {
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(this) {
+            GroupEncryptionBottomSheet(
+                isUpgrade = true,
+                onUpgrade = {
+                    dialog?.dismiss()
+                    performUpgradeToEncrypted()
+                },
+                onDismiss = { dialog?.dismiss() }
+            )
+        }
+    }
+
+    private fun showEncryptedGroupInfoSheet() {
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(this) {
+            GroupEncryptionBottomSheet(
+                isUpgrade = false,
+                onUpgrade = { },
+                onDismiss = { dialog?.dismiss() }
+            )
+        }
+    }
+
+    private fun performUpgradeToEncrypted() {
+        val group = groupInfo ?: return
+        ComposeDialogManager.showWait(this, "")
+
+        lifecycleScope.launch {
+            try {
+                val (request, rGroup) = withContext(Dispatchers.IO) {
+                    buildUpgradeRequest(group)
+                }
+                val response = withContext(Dispatchers.IO) {
+                    groupRepo.upgradeToEncrypted(groupId, request)
+                }
+                ComposeDialogManager.dismissWait()
+
+                if (response.status == 0) {
+                    withContext(Dispatchers.IO) {
+                        groupCryptoRepo.saveRGroupIfNeeded(groupId, rGroup)
+                        groupKeyDistributor.distributeToGroup(groupId)
+                        groupUtil.fetchAndSaveSingleGroupInfo(groupId, true)
+                    }
+                    L.i { "[GE] Upgraded group $groupId to encrypted" }
+                    ToastUtil.show(getString(R.string.operation_successful))
+                } else {
+                    L.w { "[GE] Upgrade group $groupId failed: ${response.reason}" }
+                    response.reason?.let { ToastUtil.showLong(it) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ComposeDialogManager.dismissWait()
+                L.w { "[GroupInfoActivity] upgradeToEncrypted error: ${e.stackTraceToString()}" }
+                ToastUtil.showLong(R.string.chat_net_error)
+            }
+        }
+    }
+
+    /**
+     * Build the upgrade request with encrypted fields and member bindings.
+     * Must be called from IO thread.
+     * @return Pair of (request, rGroup) — rGroup kept as coroutine-local to avoid Activity state loss.
+     */
+    private fun buildUpgradeRequest(group: GroupModel): Pair<UpgradeGroupToEncryptedReq, ByteArray> {
+        val rGroup = GroupCrypto.generateRGroup()
+        val kGroup = GroupCrypto.deriveKGroup(rGroup)
+        val skBind = GroupCrypto.deriveSkBind(rGroup)
+        val pkBind = GroupCrypto.derivePkBind(rGroup)
+
+        val encryptedName = GroupCrypto.encryptGroupName(kGroup, group.name ?: "")
+        val encryptedAvatar = group.avatar?.let { GroupCrypto.encryptGroupAvatar(kGroup, it) }
+
+        val members = group.members ?: emptyList()
+        val memberBindings = members.mapNotNull { member ->
+            member.id?.let { uid ->
+                GroupMemberBinding(uid, GroupCrypto.signUid(skBind, uid))
+            }
+        }
+        val pkBindBase64 = GroupCrypto.pkBindToSpkiBase64(pkBind)
+
+        val request = UpgradeGroupToEncryptedReq(
+            encryptedName = encryptedName,
+            encryptedAvatar = encryptedAvatar,
+            groupMemberVerifyPublicKey = pkBindBase64,
+            memberBindings = memberBindings
+        )
+        return request to rGroup
     }
 }

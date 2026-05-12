@@ -52,9 +52,9 @@ import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.SaveAttachmentUtil
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.DownloadAttachmentJob
+import com.difft.android.chat.util.SaveAttachmentUtil
 import util.TimeFormatter
 import java.io.File
 
@@ -359,7 +359,7 @@ class ChatForwardMessageFragment : Fragment() {
                         override fun onCopy(message: TextChatMessage, selectedText: String?) {
                             if (selectedText != null) {
                                 // Partial selection - copy selected text only
-                                org.thoughtcrime.securesms.util.Util.copyToClipboard(requireContext(), selectedText)
+                                _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                                 ToastUtil.show(getString(R.string.chat_message_action_copied))
                             } else {
                                 // Full selection - copy entire message

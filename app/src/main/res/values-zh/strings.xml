@@ -1,6 +1,5 @@
 <resources>
     <!--    设置-->
-    <string name="settings_privacy_setting_title">隐私</string>
     <string name="settings_privacy_find_me">寻找我的方式</string>
     <string name="settings_privacy_phone">手机号</string>
     <string name="settings_privacy_email">邮箱</string>
@@ -61,42 +60,25 @@
     <string name="settings_obtain_desktop_version">网站</string>
 
     <string name="settings_version_is_latest">当前版本已是最新版本</string>
-    <string name="settings_new_version_found">发现新版本</string>
-    <string name="settings_dialog_ok">确定</string>
     <string name="settings_dialog_cancel">取消</string>
     <string name="settings_dialog_update">更新</string>
-
-    <string name="settings_logout">登出</string>
-
-    <string name="settings_logging">日志</string>
     <string name="settings_submit_debug_log">提交调试日志</string>
     <string name="settings_submit_debug_log_by_es">直接提交</string>
     <string name="settings_submit_debug_log_by_app">通过%s提交</string>
-    <string name="settings_submit_debug_log_by_other">通过其他方式提交</string>
     <string name="settings_handle_log_fail">日志上传失败，请重试</string>
     <string name="settings_handle_log_success">日志上传成功</string>
 
-    <!--    搜索-->
-    <!--    <string name="search_messages_default_tips">输入关键词搜索消息</string>-->
     <!--    <string name="search_users_default_tips">输入电子邮件或手机号搜索用户</string>-->
     <string name="search_user">搜索用户：</string>
-    <string name="search_result_dialog_title">未找到</string>
-    <string name="search_result_dialog_content">%s 不存在</string>
-    <string name="search_result_dialog_invite">邀请</string>
-    <string name="search_result_dialog_cancel">取消</string>
     <string name="search_no_results_found">未找到结果</string>
     <string name="search_view_more">查看更多</string>
     <string name="search_more_contacts">更多联系人</string>
     <string name="search_more_groups">更多群组</string>
     <string name="search_more_messages">更多消息</string>
     <string name="search_result_inclued">包含: %s</string>
-
-    <string name="deeplink_meeting">会议</string>
-    <string name="indicator_meetings">日程</string>
-
     <string name="language_restart_required">重启后生效</string>
     <string name="language_restart_tips">语言设置将在应用重启后生效。</string>
-    <string name="language_restart_later">稍后</string>
+    <string name="language_restart_cancel">取消</string>
     <string name="language_restart">重启</string>
 
     <string name="status_upgrade_downolad_failed">更新包下载失败</string>
@@ -109,15 +91,6 @@
     <string name="status_upgrade_button_cancle">取消</string>
     <string name="status_upgrade_verify_failed">更新包校验失败</string>
     <string name="status_upgrade_param_exception">更新包参数异常</string>
-
-    <string name="hours_plural">%d小时</string>
-    <string name="hour_singular">1小时</string>
-    <string name="minutes_plural">%d分钟</string>
-    <string name="minute_singular">1分钟</string>
-    <string name="hours_minutes">%1$d小时%2$d分钟</string>
-    <string name="today">今天</string>
-    <string name="migrating_data_please_wait">数据迁移中，请稍候…</string>
-
     <string name="me_text_size">字体大小</string>
     <string name="me_text_size_default">默认</string>
     <string name="me_text_size_lage">大</string>

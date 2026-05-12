@@ -48,7 +48,7 @@
             tools:ignore="LockedOrientationActivity" />
 
         <service
-            android:name="org.thoughtcrime.securesms.jobmanager.JobSchedulerScheduler$SystemService"
+            android:name=".jobmanager.JobSchedulerScheduler$SystemService"
             android:enabled="true"
             android:permission="android.permission.BIND_JOB_SERVICE"
             tools:ignore="NewApi" />
@@ -60,19 +60,6 @@
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustNothing|stateHidden"
             tools:ignore="LockedOrientationActivity" />
-        <activity
-            android:name="org.thoughtcrime.securesms.DummyActivity"
-            android:allowTaskReparenting="true"
-            android:alwaysRetainTaskState="false"
-            android:clearTaskOnLaunch="true"
-            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:enabled="true"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:finishOnTaskLaunch="true"
-            android:noHistory="true"
-            android:stateNotNeeded="true"
-            android:theme="@android:style/Theme.NoDisplay" />
 
         <activity
             android:name=".contacts.contactsdetail.ContactDetailActivity"
@@ -156,7 +143,7 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
-            android:name="org.thoughtcrime.securesms.mediasend.v2.MediaSelectionActivity"
+            android:name=".mediasend.v2.MediaSelectionActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop"
@@ -185,18 +172,18 @@
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
         <receiver
-            android:name="org.thoughtcrime.securesms.util.MessageNotificationUtil$NotificationDismissReceiver"
+            android:name=".util.MessageNotificationUtil$NotificationDismissReceiver"
             android:exported="false" />
 
         <!-- Clipboard clear receiver for auto-clearing sensitive content -->
         <receiver
-            android:name="org.thoughtcrime.securesms.util.ClearClipboardAlarmReceiver"
+            android:name=".util.ClearClipboardAlarmReceiver"
             android:exported="false" />
 
         <!-- Notification trampoline activity for routing based on app foreground state -->
         <!-- Decides whether to use CLEAR_TASK flag when starting MainActivity -->
         <activity
-            android:name="org.thoughtcrime.securesms.util.NotificationTrampolineActivity"
+            android:name=".util.NotificationTrampolineActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
@@ -208,7 +195,7 @@
 
         <!-- 系统启动广播接收器 -->
         <receiver
-            android:name="org.thoughtcrime.securesms.messages.BootCompletedReceiver"
+            android:name=".messages.BootCompletedReceiver"
             android:enabled="true"
             android:exported="false"
             android:directBootAware="true">
@@ -220,12 +207,12 @@
 
         <!-- AlarmManager 定时检查接收器 -->
         <receiver
-            android:name="org.thoughtcrime.securesms.messages.ServiceCheckReceiver"
+            android:name=".messages.ServiceCheckReceiver"
             android:enabled="true"
             android:exported="false" />
 
         <service
-            android:name="org.thoughtcrime.securesms.messages.MessageForegroundService"
+            android:name=".messages.MessageForegroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging"

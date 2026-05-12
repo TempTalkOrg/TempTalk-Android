@@ -37,7 +37,7 @@ abstract class GroupMembersAdapter(private val showType: Int) : ListAdapter<Grou
         }
 
         holder.rootView.setOnClickListener {
-            if (!data.checkBoxEnable) return@setOnClickListener
+            if (!data.checkBoxEnable || !data.showCheckBox) return@setOnClickListener
             val actualPosition = holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION } ?: return@setOnClickListener
             onCheckBoxClicked(data, actualPosition)
         }

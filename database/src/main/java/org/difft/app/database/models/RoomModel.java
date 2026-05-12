@@ -59,9 +59,6 @@ public class RoomModel {
     public int blockStatus;
 
     @WCDBField
-    public String publicKeyInfoJson;
-
-    @WCDBField
     public long readPosition;
 
     @WCDBField
@@ -120,12 +117,12 @@ public class RoomModel {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof RoomModel roomModel)) return false;
-        return roomType == roomModel.roomType && muteStatus == roomModel.muteStatus && blockStatus == roomModel.blockStatus && readPosition == roomModel.readPosition && unreadMessageNum == roomModel.unreadMessageNum && mentionType == roomModel.mentionType && lastActiveTime == roomModel.lastActiveTime && groupMembersNumber == roomModel.groupMembersNumber && confidentialMode == roomModel.confidentialMode && criticalAlertType == roomModel.criticalAlertType && Objects.equals(roomId, roomModel.roomId) && Objects.equals(roomName, roomModel.roomName) && Objects.equals(roomAvatarJson, roomModel.roomAvatarJson) && Objects.equals(lastDisplayContent, roomModel.lastDisplayContent) && Objects.equals(messageExpiry, roomModel.messageExpiry) && Objects.equals(messageClearAnchor, roomModel.messageClearAnchor) && Objects.equals(pinnedTime, roomModel.pinnedTime) && Objects.equals(publicKeyInfoJson, roomModel.publicKeyInfoJson) && Objects.equals(saveToPhotos, roomModel.saveToPhotos) && Objects.equals(emptyRoomSince, roomModel.emptyRoomSince);
+        return roomType == roomModel.roomType && muteStatus == roomModel.muteStatus && blockStatus == roomModel.blockStatus && readPosition == roomModel.readPosition && unreadMessageNum == roomModel.unreadMessageNum && mentionType == roomModel.mentionType && lastActiveTime == roomModel.lastActiveTime && groupMembersNumber == roomModel.groupMembersNumber && confidentialMode == roomModel.confidentialMode && criticalAlertType == roomModel.criticalAlertType && Objects.equals(roomId, roomModel.roomId) && Objects.equals(roomName, roomModel.roomName) && Objects.equals(roomAvatarJson, roomModel.roomAvatarJson) && Objects.equals(lastDisplayContent, roomModel.lastDisplayContent) && Objects.equals(messageExpiry, roomModel.messageExpiry) && Objects.equals(messageClearAnchor, roomModel.messageClearAnchor) && Objects.equals(pinnedTime, roomModel.pinnedTime) && Objects.equals(saveToPhotos, roomModel.saveToPhotos) && Objects.equals(emptyRoomSince, roomModel.emptyRoomSince);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(roomId, roomType, roomName, roomAvatarJson, lastDisplayContent, messageExpiry, messageClearAnchor, pinnedTime, muteStatus, blockStatus, publicKeyInfoJson, readPosition, unreadMessageNum, mentionType, lastActiveTime, groupMembersNumber, confidentialMode, criticalAlertType, saveToPhotos, emptyRoomSince);
+        return Objects.hash(roomId, roomType, roomName, roomAvatarJson, lastDisplayContent, messageExpiry, messageClearAnchor, pinnedTime, muteStatus, blockStatus, readPosition, unreadMessageNum, mentionType, lastActiveTime, groupMembersNumber, confidentialMode, criticalAlertType, saveToPhotos, emptyRoomSince);
     }
 
     @Override
@@ -142,7 +139,6 @@ public class RoomModel {
                 ", pinnedTime=" + pinnedTime +
                 ", muteStatus=" + muteStatus +
                 ", blockStatus=" + blockStatus +
-                ", publicKeyInfoJson='" + publicKeyInfoJson + '\'' +
                 ", readPosition=" + readPosition +
                 ", unreadMessageNum=" + unreadMessageNum +
                 ", mentionType=" + mentionType +

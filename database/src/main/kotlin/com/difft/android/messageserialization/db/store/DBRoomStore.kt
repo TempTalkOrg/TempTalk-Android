@@ -138,10 +138,6 @@ class DBRoomStore @Inject constructor(
         return findRoom(forWhat)?.let { Optional.ofNullable(it.pinnedTime) } ?: Optional.empty()
     }
 
-    override suspend fun getPublicKeyInfo(forWhat: For): String? {
-        return findRoom(forWhat)?.publicKeyInfoJson
-    }
-
     fun getConfidentialMode(roomId: String): Int {
         return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.confidentialMode ?: 0
     }
@@ -281,15 +277,6 @@ class DBRoomStore @Inject constructor(
      */
     fun clearCriticalAlert(roomId: String) {
         updateCriticalAlertType(roomId, difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE)
-    }
-
-    override suspend fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?) {
-        L.i { "[DBRoomStore] updatePublicKeyInfo  id:${forWhat.id} publicKeyInfo: ${publicKeyInfo?.length}" }
-        wcdb.room.updateValue(
-            publicKeyInfo,
-            DBRoomModel.publicKeyInfoJson,
-            DBRoomModel.roomId.eq(forWhat.id)
-        )
     }
 
     override suspend fun getMessageReadPosition(forWhat: For): Long {

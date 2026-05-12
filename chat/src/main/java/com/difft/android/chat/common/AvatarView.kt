@@ -14,6 +14,7 @@ import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
@@ -27,10 +28,8 @@ import java.io.File
 
 class AvatarView @JvmOverloads constructor(
     context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0,
-    defStyleRes: Int = 0
-) : ConstraintLayout(context, attrs, defStyleAttr, defStyleRes) {
+    attrs: AttributeSet? = null
+) : ConstraintLayout(context, attrs) {
 
     val binding: ChatContactAvatarBinding by viewbind(this)
 
@@ -46,7 +45,10 @@ class AvatarView @JvmOverloads constructor(
         val firstLetter: String?,
         val id: String,
         val letterTextSizeDp: Int,
-        val targetSizePx: Int? = null  // Optional target size in pixels for Glide
+        val targetSizePx: Int? = null,  // Optional target size in pixels for Glide
+        // Fallback avatar tried when the primary fails to download/decrypt.
+        val fallbackUrl: String? = null,
+        val fallbackKey: String? = null,
     )
 
     override fun onAttachedToWindow() {
@@ -64,7 +66,9 @@ class AvatarView @JvmOverloads constructor(
         firstLetter: String?,
         id: String,
         letterTextSizeDp: Int = 22,
-        targetSizePx: Int? = null  // Optional: explicit size in pixels for Glide (useful in Compose AndroidView)
+        targetSizePx: Int? = null,  // Optional: explicit size in pixels for Glide (useful in Compose AndroidView)
+        fallbackUrl: String? = null,
+        fallbackKey: String? = null,
     ) {
         resetAnimationState()
 
@@ -77,7 +81,11 @@ class AvatarView @JvmOverloads constructor(
             binding.ivFavorites.visibility = GONE
             currentLoadingUrl = url
 
-            val params = AvatarParams(url, key, firstLetter, id, letterTextSizeDp, targetSizePx)
+            val params = AvatarParams(
+                url, key, firstLetter, id, letterTextSizeDp, targetSizePx,
+                fallbackUrl = fallbackUrl?.takeIf { it.isNotEmpty() && it != url },
+                fallbackKey = fallbackKey,
+            )
 
             if (isAttachedToWindow) {
                 loadAvatarInternal(params)
@@ -125,11 +133,20 @@ class AvatarView @JvmOverloads constructor(
             }
 
             lifecycleOwner.lifecycleScope.launch {
-                val downloadedFile = withContext(Dispatchers.IO) {
+                var loadedUrl: String = url
+                var loadedKey: String? = key
+                var downloadedFile = withContext(Dispatchers.IO) {
                     AvatarUtil.ensureCached(context.applicationContext, url, key ?: "")
                 }
+                if (downloadedFile == null && !params.fallbackUrl.isNullOrEmpty()) {
+                    loadedUrl = params.fallbackUrl
+                    loadedKey = params.fallbackKey
+                    downloadedFile = withContext(Dispatchers.IO) {
+                        AvatarUtil.ensureCached(context.applicationContext, params.fallbackUrl, params.fallbackKey ?: "")
+                    }
+                }
                 if (downloadedFile != null && currentLoadingUrl == url && isAttachedToWindow) {
-                    loadImageWithGlide(downloadedFile, url, key, targetSize)
+                    loadImageWithGlide(downloadedFile, loadedUrl, loadedKey, targetSize)
                     binding.ivAvatar.visibility = VISIBLE
                 }
             }
@@ -137,14 +154,17 @@ class AvatarView @JvmOverloads constructor(
     }
 
     fun setAvatar(contact: ContactorModel, letterTextSizeDp: Int = 22, targetSizePx: Int? = null) {
-        val avatar = contact.avatar?.getContactAvatarData()
+        val effective = contact.getEffectiveAvatarJson()?.getContactAvatarData()
+        val publicAvatar = contact.avatar?.getContactAvatarData()
         setAvatar(
-            avatar?.getContactAvatarUrl(),
-            avatar?.encKey,
-            ContactorUtil.getFirstLetter(contact.getDisplayNameWithoutRemarkForUI()),
-            contact.id,
-            letterTextSizeDp,
-            targetSizePx
+            url = effective?.getContactAvatarUrl(),
+            key = effective?.encKey,
+            firstLetter = ContactorUtil.getFirstLetter(contact.getDisplayNameWithoutRemarkForUI()),
+            id = contact.id,
+            letterTextSizeDp = letterTextSizeDp,
+            targetSizePx = targetSizePx,
+            fallbackUrl = publicAvatar?.getContactAvatarUrl(),
+            fallbackKey = publicAvatar?.encKey,
         )
     }
 

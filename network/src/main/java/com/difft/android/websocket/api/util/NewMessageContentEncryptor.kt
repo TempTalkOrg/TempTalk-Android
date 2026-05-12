@@ -6,7 +6,10 @@ import com.difft.android.base.log.lumberjack.L
 interface INewMessageContentEncryptor {
     companion object {
 
+        // [MIN..MAX] = decrypt range; CURRENT = encrypt version.
+        // Decoupled so receive can pre-bury newer versions before encrypt flips.
         const val MESSAGE_MINIMUM_SUPPORTED_VERSION = 2
+        const val MESSAGE_MAX_SUPPORTED_VERSION = 3
         const val MESSAGE_CURRENT_VERSION = 2
 
     }

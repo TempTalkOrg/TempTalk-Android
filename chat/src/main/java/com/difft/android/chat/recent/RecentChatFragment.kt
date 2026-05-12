@@ -61,9 +61,9 @@ import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.websocket.WebSocketManager
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.websocket.WebSocketManager
 import javax.inject.Inject
 import dagger.Lazy
 import kotlinx.coroutines.delay
@@ -274,16 +274,17 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         val pinnedRooms = workingList.filter { item ->
             item.isPinned && item.callData == null
         }
-        pinnedRooms.sortedByDescending { item ->
-            item.pinnedTime
-        }
         // filter the meeting rooms
         val meetingRooms = workingList.filter { item ->
             item.callData != null && item.callData?.type != CallType.INSTANT.type
         }
+        // filter draft rooms (has draft, not pinned, not in call)
+        val draftRooms = workingList.filter { item ->
+            item.draftPreview != null && !item.isPinned && item.callData == null
+        }
         // filter the others rooms
         val otherRooms = workingList.filter { item ->
-            item.callData == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
+            item.callData == null && item.draftPreview == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
         }
 
         // add instant call rooms
@@ -298,18 +299,20 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             } else {
                 currentInstantCallRooms
             }
-            sortedList.addAll(roomsToAdd.sortedByDescending { it.lastActiveTime })
+            sortedList.addAll(roomsToAdd.sortedByDescending { it.sortTime })
 
         } else {
-            sortedList.addAll(currentInstantCallRooms.sortedByDescending { it.lastActiveTime })
+            sortedList.addAll(currentInstantCallRooms.sortedByDescending { it.sortTime })
         }
 
         // add meeting rooms
-        sortedList.addAll(meetingRooms.sortedByDescending { it.lastActiveTime })
+        sortedList.addAll(meetingRooms.sortedByDescending { it.sortTime })
         // add pinned rooms
-        sortedList.addAll(pinnedRooms.sortedByDescending { it.lastActiveTime })
-        // add other rooms (sorted by lastActiveTime descending)
-        sortedList.addAll(otherRooms.sortedByDescending { it.lastActiveTime })
+        sortedList.addAll(pinnedRooms.sortedByDescending { it.sortTime })
+        // add draft rooms (sorted by sortTime descending)
+        sortedList.addAll(draftRooms.sortedByDescending { it.sortTime })
+        // add other rooms (sorted by sortTime descending)
+        sortedList.addAll(otherRooms.sortedByDescending { it.sortTime })
         return sortedList to instantCallRoomViewDataMap
     }
 
@@ -497,15 +500,18 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
     private fun checkDevices() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    ApplicationDependencies.getSignalServiceAccountManager().devices
-                }
+                // Retrofit suspend fun handles threading and responds to cancellation
+                // (fixes LeakCanary issue with old blocking PushServiceSocket call)
+                recentChatViewModel.checkDeviceAuth()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 L.w { "[RecentChatFragment] checkDevices error: ${e.stackTraceToString()}" }
+                // DeviceRepository.checkDeviceAuth() throws AuthorizationFailedException
+                // for BOTH 401 AND 403, matching PushServiceSocket.validateResponse() exactly.
+                // See PR #395 for prior incident where error handling was lost during migration.
                 if (e is AuthorizationFailedException) {
-                    L.i { "[Message] AuthorizationFailedException" }
+                    L.i { "[Message] Auth failed (code=${e.code}), logging out" }
                     logoutManager.doLogoutWithoutRemoveData()
                 }
             }

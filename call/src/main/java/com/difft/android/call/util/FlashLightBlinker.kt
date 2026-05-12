@@ -16,27 +16,28 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 
 
 object FlashLightBlinker {
 
-    // 当前闪烁状态
+    @Volatile
     private var isBlinking = false
 
-    // 用于区分不同启动请求的唯一 token
+    @Volatile
     private var currentToken: Long = 0L
 
-    // 协程同步锁，确保状态一致性
+    // 协程 Mutex 仅用于 startBlinking 内部的 start-start 协调（含 cancelAndJoin suspend 调用）
     private val mutex = Mutex()
 
-    // 全局协程作用域
     private val blinkerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // 当前闪灯任务
-    private var blinkJob: Job? = null
+    // AtomicReference 保证 stopBlinking 的 read-then-clear 与 startBlinking 的安装是原子的，
+    // 避免新启动的 blinkJob 被并发 stopBlinking 静默孤立
+    private val blinkJobRef = AtomicReference<Job?>(null)
 
-    // 当前使用的摄像头 ID
+    @Volatile
     private var cameraId: String? = null
 
     /**
@@ -53,24 +54,18 @@ object FlashLightBlinker {
         val token = System.currentTimeMillis()
 
         blinkerScope.launch {
-            // Step 1 提取旧 job 引用（不在锁外 cancel）
             val oldJob: Job? = mutex.withLock {
-                val previousJob = blinkJob
-                blinkJob = null
-                previousJob
+                blinkJobRef.getAndSet(null)
             }
 
-            // Step 2 在锁外取消旧任务，避免死锁
             oldJob?.cancelAndJoin()
 
-            // Step 3 旧任务停止后再更新 token，防止旧任务提前退出
             mutex.withLock {
                 currentToken = token
-                stopInternal(context)
+                turnOffTorch(context)
                 isBlinking = true
             }
 
-            // Step 4 获取可用摄像头（支持闪光灯）
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val id = cameraManager.cameraIdList.firstOrNull {
                 cameraManager.getCameraCharacteristics(it)
@@ -82,89 +77,72 @@ object FlashLightBlinker {
 
             cameraId = id
 
-            // Step 5 启动新的闪烁任务
-            blinkJob = launch {
+            blinkJobRef.set(launch {
                 val endTime = durationMs?.let { System.currentTimeMillis() + it }
 
                 try {
                     while (isActive) {
                         val now = System.currentTimeMillis()
                         if (endTime != null && now >= endTime) break
+                        if (!isBlinking || token != currentToken) break
 
-                        // 开灯（加锁防止 stop 竞争）
-                        mutex.withLock {
-                            if (!isBlinking || token != currentToken) return@launch
-                            cameraManager.setTorchMode(id, true)
-                        }
-
+                        cameraManager.setTorchMode(id, true)
                         delay(intervalMs.coerceAtLeast(50))
 
-                        // 关灯（加锁防止 stop 竞争）
-                        mutex.withLock {
-                            if (!isBlinking || token != currentToken) return@launch
-                            cameraManager.setTorchMode(id, false)
-                        }
+                        if (!isBlinking || token != currentToken) break
 
+                        cameraManager.setTorchMode(id, false)
                         delay(intervalMs.coerceAtLeast(50))
                     }
-                } catch (e: CancellationException) {
-                    // 协程被主动取消（正常情况）
+                } catch (_: CancellationException) {
                     L.i { "[FlashLightBlinker] Blink canceled" }
                 } catch (e: Exception) {
                     L.e { "[FlashLightBlinker] Blink failed: ${e.message}" }
                 } finally {
-                    // 确保闪光灯关闭并清理状态
                     try {
                         cameraManager.setTorchMode(id, false)
                     } catch (e: Exception) {
                         L.w { "[FlashLightBlinker] setTorchMode off failed in finally: ${e.stackTraceToString()}" }
                     }
-                    mutex.withLock {
+                    if (token == currentToken) {
                         isBlinking = false
                         cameraId = null
                     }
                     L.i { "[FlashLightBlinker] Blinking stopped" }
                 }
-            }
+            })
         }
     }
 
     /**
-     * 手动停止闪灯（立即生效）
+     * 停止闪灯（同步非阻塞，可安全在主线程调用）。
+     *
+     * 不 launch 协程，避免 CoroutineScheduler.dispatch 在主线程触发
+     * Object.notifyAll 导致低端设备 ANR。
+     *
+     * 不在主线程做 setTorchMode（binder IPC）：被 cancel 的 blinkJob 的 finally 块
+     * 会在 IO 线程上调用 setTorchMode(id, false) 兜底关灯。
+     *
+     * 用 AtomicReference.getAndSet 原子交换，避免与并发的 startBlinking 安装新 Job
+     * 之间产生 read-then-clear 竞态导致新 Job 被孤立。
      */
-    fun stopBlinking(context: Context) {
-        blinkerScope.launch {
-            // cancel() 可立即中断 delay
-            val jobToCancel: Job? = mutex.withLock {
-                val job = blinkJob
-                blinkJob = null
-                job
-            }
-
-            jobToCancel?.cancel()
-            stopInternal(context)
-        }
-    }
-
-    /**
-     * 内部关闭闪光灯并清理状态
-     */
-    private fun stopInternal(context: Context) {
+    fun stopBlinking() {
         isBlinking = false
+        blinkJobRef.getAndSet(null)?.cancel()
+    }
+
+    private fun turnOffTorch(context: Context) {
         cameraId?.let { id ->
             try {
                 val cameraManager =
                     context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 cameraManager.setTorchMode(id, false)
             } catch (e: Exception) {
-                L.w { "[FlashLightBlinker] stopBlinking setTorchMode failed: ${e.stackTraceToString()}" }
+                L.w { "[FlashLightBlinker] turnOffTorch failed: ${e.stackTraceToString()}" }
             }
         }
     }
 
-    /**
-     * 检查摄像头权限是否已授权
-     */
     fun hasCameraPermission(context: Context): Boolean {
         return ContextCompat.checkSelfPermission(
             context,
@@ -172,8 +150,5 @@ object FlashLightBlinker {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    /**
-     * 当前闪灯状态
-     */
     fun isBlinking() = isBlinking
 }

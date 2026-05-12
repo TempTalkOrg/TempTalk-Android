@@ -100,6 +100,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil)
     implementation(libs.coil.gif)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.compose.foundation.version)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)

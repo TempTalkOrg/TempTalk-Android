@@ -55,10 +55,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.signal.libsignal.protocol.logging.SignalProtocolLogger
 import org.signal.libsignal.protocol.logging.SignalProtocolLoggerProvider
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencyProvider
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.dependencies.ApplicationDependencyProvider
 import util.AppForegroundObserver
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageNotificationUtil
 import util.ScreenLockUtil
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
@@ -71,28 +71,28 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     lateinit var userManager: UserManager
 
     @Inject
-    lateinit var globalConfigsManager: GlobalConfigsManager
-
-    @Inject
-    lateinit var messageNotificationUtil: MessageNotificationUtil
-
-    @Inject
     lateinit var environmentHelper: EnvironmentHelper
 
     @Inject
-    lateinit var coordinator: DomainSpeedTestCoordinator
+    lateinit var globalConfigsManager: dagger.Lazy<GlobalConfigsManager>
 
     @Inject
-    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+    lateinit var messageNotificationUtil: dagger.Lazy<MessageNotificationUtil>
 
     @Inject
-    lateinit var inComingCallStateManager: InComingCallStateManager
+    lateinit var coordinator: dagger.Lazy<DomainSpeedTestCoordinator>
 
     @Inject
-    lateinit var criticalAlertManager: CriticalAlertManager
+    lateinit var onGoingCallStateManager: dagger.Lazy<OnGoingCallStateManager>
 
     @Inject
-    lateinit var criticalAlertStateManager: CriticalAlertStateManager
+    lateinit var inComingCallStateManager: dagger.Lazy<InComingCallStateManager>
+
+    @Inject
+    lateinit var criticalAlertManager: dagger.Lazy<CriticalAlertManager>
+
+    @Inject
+    lateinit var criticalAlertStateManager: dagger.Lazy<CriticalAlertStateManager>
 
     @Inject
     lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
@@ -131,13 +131,15 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
             .addBlocking("installCrashFilter", this::installCrashFilter)
+            .addNonBlocking(this::cleanupLegacySqlCipherArtifacts)
+            .addNonBlocking(this::sweepStaleSendingMessages)
             .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking { initCallEngine() }
             .addNonBlocking { cleanupStaleCallNotification() }
             .addNonBlocking { monitorMainThreadBlocking() }
             .addNonBlocking { ContactorUtil.init() }
             .addNonBlocking { initGlobalConfigs() }
-            .addNonBlocking { coordinator.initialize() }
+            .addNonBlocking { coordinator.get().initialize() }
             .execute()
 
         L.i { "[AppStartup] application onCreate() took " + (System.currentTimeMillis() - AppStartup.getApplicationStartTime()) + " ms" }
@@ -153,7 +155,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     override fun attachBaseContext(context: Context) {
-        super.attachBaseContext(LanguageUtils.updateBaseContextLocale(context))
+        super.attachBaseContext(LanguageUtils.createConfiguredContext(context))
     }
 
     private fun initializeLogging() {
@@ -165,6 +167,23 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 SignalProtocolLogger.ERROR, SignalProtocolLogger.ASSERT -> L.e { "[$tag] $message" }
             }
         }
+    }
+
+    private fun cleanupLegacySqlCipherArtifacts() {
+        com.difft.android.app.startup.cleanupLegacySqlCipherArtifacts(applicationContext)
+    }
+
+    /**
+     * Flip stale `message.sendType == Sending` rows to `SentFailed` via
+     * [com.difft.android.app.startup.sweepStaleSendingMessages].
+     *
+     * Runs off the main thread via `addNonBlocking` — the narrow race against a
+     * user-initiated fresh Sending message is recoverable: the misflagged row
+     * gains a visible retry button and a user-initiated resend goes through the
+     * normal PushTextSendJob path.
+     */
+    private fun sweepStaleSendingMessages() {
+        com.difft.android.app.startup.sweepStaleSendingMessages(this)
     }
 
     /**
@@ -194,27 +213,28 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun initNotification() {
-        messageNotificationUtil.checkAndCreateNotificationChannels()
+        messageNotificationUtil.get().checkAndCreateNotificationChannels()
     }
 
     private fun initGlobalConfigs() {
-        globalConfigsManager.getAndSaveGlobalConfigs(this)
+        globalConfigsManager.get().getAndSaveGlobalConfigs(this)
     }
 
     override fun onForeground() {
         recordLastUseTime()
         scheduleGrayConfigUpdateCheck()
         LCallManager.restoreIncomingCallScreenIfActive()
-        globalConfigsManager.onAppStateChanged(isForeground = true)
+        LCallManager.onAppForegroundedForCallServiceUrls()
+        globalConfigsManager.get().onAppStateChanged(isForeground = true)
         messageArchiveManager.get().onAppStateChanged(isForeground = true)
-        coordinator.startPeriodicTest(isForeground = true)
+        coordinator.get().startPeriodicTest(isForeground = true)
     }
 
     override fun onBackground() {
         recordLastUseTimeJob?.cancel()
-        globalConfigsManager.onAppStateChanged(isForeground = false)
+        globalConfigsManager.get().onAppStateChanged(isForeground = false)
         messageArchiveManager.get().onAppStateChanged(isForeground = false)
-        coordinator.startPeriodicTest(isForeground = false)
+        coordinator.get().startPeriodicTest(isForeground = false)
     }
 
     /**
@@ -256,7 +276,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 }
 
                 // 进入会话列表时停止critical alert
-                if (activity is IndexActivity && criticalAlertManager.isCriticalAlertRunning() && !criticalAlertStateManager.isJoining()) {
+                if (activity is IndexActivity && criticalAlertManager.get().isCriticalAlertRunning() && !criticalAlertStateManager.get().isJoining()) {
                     LCallManager.dismissCriticalAlertIfActive()
                 }
             }
@@ -417,17 +437,17 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 2. 通话相关
-        if (criticalAlertStateManager.isShowing()) {
+        if (criticalAlertStateManager.get().isShowing()) {
             L.d { "[ScreenLock] Skip: critical alert" }
             return false
         }
 
-        if (onGoingCallStateManager.isInCalling() && !onGoingCallStateManager.needAppLock) {
+        if (onGoingCallStateManager.get().isInCalling() && !onGoingCallStateManager.get().needAppLock) {
             L.d { "[ScreenLock] Skip: in call" }
             return false
         }
 
-        if (inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isNeedAppLock()) {
+        if (inComingCallStateManager.get().isActivityShowing() && !inComingCallStateManager.get().isNeedAppLock()) {
             L.d { "[ScreenLock] Skip: incoming call" }
             return false
         }
@@ -455,10 +475,19 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     /**
-     * Intercept [android.util.SuperNotCalledException] to prevent app crash.
-     * This exception is triggered by Hook frameworks (e.g., lhook on rooted emulators)
-     * that intercept Activity.onCreate() without calling through to the original implementation.
-     * It cannot occur during normal app usage.
+     * Intercept crashes triggered by Hook frameworks on abnormal devices (rooted emulators,
+     * automation tools).
+     *
+     * Filtered crashes:
+     * 1. [android.util.SuperNotCalledException] — Hook frameworks intercept Activity.onCreate()
+     *    without calling through to the original implementation.
+     * 2. UCropMultipleActivity "Missing required parameters" — Hook frameworks on virtual devices
+     *    (ladroid/redroid emulators) launch UCropMultipleActivity directly via Intent without
+     *    the required CropTotalDataSource parameter. Normal users cannot trigger this because
+     *    ImageFileCropEngine and PictureCommonFragment already validate parameters before
+     *    launching UCrop (see PR #363). The library throws in onCreate() → initCropFragments()
+     *    before any ActivityLifecycleCallbacks can intercept it, so UncaughtExceptionHandler
+     *    is the only viable interception point.
      */
     private fun installCrashFilter() {
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -513,7 +542,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
      * process. Cancel it proactively to avoid a ghost "call in progress" notification.
      */
     private fun cleanupStaleCallNotification() {
-        if (onGoingCallStateManager.isInCalling()) return
+        if (onGoingCallStateManager.get().isInCalling()) return
         try {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             nm.cancel(ForegroundService.DEFAULT_NOTIFICATION_ID)
@@ -543,8 +572,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun shouldCheckScreenLockForCall(): Boolean {
-        val incomingCallNeedsLock = inComingCallStateManager.isActivityShowing() && inComingCallStateManager.isNeedAppLock()
-        val activeCallNeedsLock = onGoingCallStateManager.isInCalling() && onGoingCallStateManager.needAppLock
+        val incomingCallNeedsLock = inComingCallStateManager.get().isActivityShowing() && inComingCallStateManager.get().isNeedAppLock()
+        val activeCallNeedsLock = onGoingCallStateManager.get().isInCalling() && onGoingCallStateManager.get().needAppLock
         return incomingCallNeedsLock || activeCallNeedsLock
     }
 

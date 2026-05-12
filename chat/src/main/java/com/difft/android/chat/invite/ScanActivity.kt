@@ -22,7 +22,7 @@ import com.luck.picture.lib.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.thoughtcrime.securesms.util.ServiceUtil
+import com.difft.android.chat.util.ServiceUtil
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint

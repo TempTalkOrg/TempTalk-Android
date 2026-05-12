@@ -6,7 +6,8 @@ import com.difft.android.base.call.ControlMessageRequestBody
 import com.difft.android.base.call.ControlMessageResponseData
 import com.difft.android.base.call.InviteCallRequestBody
 import com.difft.android.base.call.InviteCallResponseData
-import com.difft.android.base.call.ServiceUrlData
+import com.difft.android.base.call.ServiceUrlDataV2
+import com.difft.android.base.call.StatisticsLogRequestBody
 import com.difft.android.call.response.RoomState
 import com.difft.android.network.BaseResponse
 import retrofit2.http.Body
@@ -40,14 +41,20 @@ interface LCallHttpService {
         @Body request: InviteCallRequestBody
     ): BaseResponse<InviteCallResponseData>
 
-    @GET("v3/call/serviceurl")
-    suspend fun getServiceUrl(
+    @GET("v3/call/serviceurl/v2")
+    suspend fun getServiceUrlV2(
         @Header("Authorization") authorization: String,
-    ): BaseResponse<ServiceUrlData>
+    ): BaseResponse<ServiceUrlDataV2>
 
     @POST("v3/call/feedback")
     suspend fun callFeedback(
         @Header("Authorization") authorization: String,
         @Body request: CallFeedbackRequestBody
+    ): BaseResponse<Unit>
+
+    @POST("v3/call/statistics/log")
+    suspend fun statisticsLog(
+        @Header("Authorization") authorization: String,
+        @Body request: StatisticsLogRequestBody
     ): BaseResponse<Unit>
 }

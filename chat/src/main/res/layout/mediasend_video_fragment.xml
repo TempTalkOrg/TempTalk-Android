@@ -5,12 +5,12 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <org.thoughtcrime.securesms.video.VideoPlayer
+    <com.difft.android.chat.video.VideoPlayer
         android:id="@+id/video_player"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <org.thoughtcrime.securesms.scribbles.VideoEditorPlayButtonLayout
+    <com.difft.android.chat.scribbles.VideoEditorPlayButtonLayout
         android:id="@+id/video_editor_hud"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

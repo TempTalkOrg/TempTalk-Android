@@ -11,7 +11,7 @@
     <include layout="@layout/layout_system_ui_guidelines" />
 
     <!-- Call status header (shown during active call) -->
-    <FrameLayout
+    <com.difft.android.chat.ui.SafeFrameLayout
         android:id="@+id/fragment_container_view_call"
         android:layout_width="0dp"
         android:layout_height="44dp"

@@ -9,6 +9,8 @@ data class RoomViewData(
     val type: Type = Type.OneOnOne,
     var roomName: CharSequence? = null,
     val roomAvatarJson: String? = null, //currently it only use for group
+    /** Remark avatar JSON for OneOnOne rooms; null for groups. */
+    val remarkAvatarJson: String? = null,
     val lastDisplayContent: CharSequence? = null,
     var lastActiveTime: Long? = 0L,
     val lastActiveTimeText: String = "",
@@ -22,6 +24,7 @@ data class RoomViewData(
     var isLiveStream: Boolean = false,
     var callData: CallData? = null,
     val draftPreview: String? = null,
+    val sortTime: Long = 0L,
     val groupMembersNumber: Int = 0, //群成员数量
 ) {
     sealed class Type {

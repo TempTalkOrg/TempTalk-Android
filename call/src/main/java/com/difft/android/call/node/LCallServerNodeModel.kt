@@ -3,21 +3,20 @@ package com.difft.android.call.node
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.difft.android.base.call.ServiceUrls
+import com.difft.android.base.call.UrlInfo
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.CallConfig
 import com.difft.android.call.LCallEngine
-import com.difft.android.call.R
+import com.difft.android.call.LCallManager
+import com.difft.android.call.connect.DefaultGlobalConfigCallServiceUrlsReader
+import com.difft.android.call.connect.MeetingConnectionPlanner
 import com.difft.android.call.data.ServerNode
-import com.difft.android.call.data.SpeedResponseStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlin.collections.sortedBy
 
-
-class LCallServerNodeModel(application: Application, callConfig: CallConfig): AndroidViewModel(application)  {
-
-    val serverUrlsSpeedInfo = LCallEngine.serverUrlsSpeedInfo
+class LCallServerNodeModel(application: Application) : AndroidViewModel(application) {
 
     val serverUrlConnected = LCallEngine.serverUrlConnected
 
@@ -25,69 +24,109 @@ class LCallServerNodeModel(application: Application, callConfig: CallConfig): An
 
     val connectionType = LCallEngine.connectionType
 
-    val serverNodeConfig = callConfig.callServers?.clusters?.flatMap { cluster ->
-        mutableListOf<Pair<String, String>>().apply {
-            cluster.global_url?.let { url ->
-                add(Pair(url,cluster.id + "_global"))
-            }
-            cluster.mainland_url?.let { url ->
-                add(Pair(url,cluster.id + "_mainland"))
-            }
-        }
-    } ?: emptyList()
-
-
-    private var _serverNodes = MutableStateFlow<List<ServerNode>>(emptyList())
+    private val _serverNodes = MutableStateFlow<List<ServerNode>>(emptyList())
     val serverNodes: StateFlow<List<ServerNode>> get() = _serverNodes
 
-    private var _serverNodeConnected = MutableStateFlow<ServerNode?>(null)
+    private val _serverNodeConnected = MutableStateFlow<ServerNode?>(null)
     val serverNodeConnected: StateFlow<ServerNode?> get() = _serverNodeConnected
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> get() = _isLoading
 
     init {
-        refreshConnectedServerNode()
-        refreshServerNodes()
+        loadServerNodes()
+        observeConnectedUrl()
     }
 
-    fun refreshConnectedServerNode() {
+    private fun loadServerNodes() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            val serviceUrls = resolveServiceUrls()
+            if (serviceUrls != null) {
+                val nodes = buildServerNodes(serviceUrls)
+                _serverNodes.value = nodes
+                updateConnectedNode(nodes)
+            }
+            _isLoading.value = false
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            LCallManager.fetchCallServiceUrlAndCache()
+            val serviceUrls = LCallManager.getCachedServiceUrls()
+                ?: DefaultGlobalConfigCallServiceUrlsReader.read(getApplication())
+            if (serviceUrls != null) {
+                val nodes = buildServerNodes(serviceUrls)
+                _serverNodes.value = nodes
+                updateConnectedNode(nodes)
+            }
+            _isLoading.value = false
+        }
+    }
+
+    private fun observeConnectedUrl() {
         viewModelScope.launch {
-            serverUrlConnected.collect { serverUrl ->
-                L.d { "[call] LCallEngine refreshConnectedServerNode serverUrl:${serverUrl}" }
-                if(serverUrl.isNullOrEmpty()) {
-                    _serverNodeConnected.value = null
-                    return@collect
-                }
-                _serverNodeConnected.value = _serverNodes.value.firstOrNull { it.url == serverUrl }
-                L.d { "[call] LCallEngine refreshConnectedServerNode _serverNodeConnected:${_serverNodeConnected.value}" }
+            serverUrlConnected.collect { connectedUrl ->
+                L.d { "[Call] LCallServerNodeModel observeConnectedUrl url=$connectedUrl" }
+                _serverNodeConnected.value = findConnectedNode(_serverNodes.value, connectedUrl)
             }
         }
     }
 
-    fun refreshServerNodes() {
-        viewModelScope.launch {
-            serverUrlsSpeedInfo.collect { speedInfos ->
-                if(speedInfos.isEmpty()){
-                    return@collect
+    private suspend fun resolveServiceUrls(): ServiceUrls? {
+        LCallManager.getCachedServiceUrls()?.let { return it }
+        runCatching { LCallManager.ensureCallServiceUrlsForCall(timeoutMs = 10_000L) }
+            .getOrNull()?.let { return it }
+        return DefaultGlobalConfigCallServiceUrlsReader.read(getApplication())
+    }
+
+    private fun buildServerNodes(serviceUrls: ServiceUrls): List<ServerNode> {
+        val nodes = mutableListOf<ServerNode>()
+        serviceUrls.primary?.let { nodes += it.toServerNode(isPrimary = true) }
+        for (fb in serviceUrls.fallback) {
+            if (fb != null) nodes += fb.toServerNode(isPrimary = false)
+        }
+        return nodes
+    }
+
+    private fun UrlInfo.toServerNode(isPrimary: Boolean): ServerNode {
+        val connectUrl = MeetingConnectionPlanner.normalizeConnectUrl(domain) ?: "https://$domain"
+        return ServerNode(
+            name = region.ifEmpty { domain },
+            url = connectUrl,
+            flag = regionToFlag(region),
+            region = region,
+            domain = domain,
+            addrs = addrs,
+            isPrimary = isPrimary,
+        )
+    }
+
+    private fun updateConnectedNode(nodes: List<ServerNode>) {
+        _serverNodeConnected.value = findConnectedNode(nodes, serverUrlConnected.value)
+    }
+
+    private fun findConnectedNode(nodes: List<ServerNode>, connectedUrl: String?): ServerNode? {
+        if (connectedUrl.isNullOrEmpty()) return null
+        return nodes.firstOrNull { node ->
+            node.url.equals(connectedUrl, ignoreCase = true) ||
+                node.addrs.any {
+                    MeetingConnectionPlanner.normalizeConnectUrl(it)
+                        ?.equals(connectedUrl, ignoreCase = true) == true
                 }
-                val serverNodes = mutableListOf<ServerNode>()
-                speedInfos.sortedBy { it.lastResponseTime }.forEachIndexed {
-                    index, speedInfo ->
-                    val name = serverNodeConfig.firstOrNull { speedInfo.url == it.first }?.second ?: getApplication<Application>().getString(R.string.call_server_node_unknown)
-                    val flag = when(name) {
-                        "UAE_global","UAE_mainland" -> "🇦🇪"
-                        "SG_global","SG_mainland" -> "🇸🇬"
-                        else -> "🚀"
-                    }
-                    val ping = if(speedInfo.status == SpeedResponseStatus.SUCCESS) speedInfo.lastResponseTime else -1
-                    serverNodes.add(ServerNode(name, url = speedInfo.url , flag,ping.toInt(), recommended = index == 0))
-                }
-                _serverNodes.value = serverNodes
-                serverUrlConnected.value?.let { serverUrl ->
-                    _serverNodeConnected.value = _serverNodes.value.firstOrNull { it.url == serverUrl }
-                }
-            }
         }
     }
 
-
+    private fun regionToFlag(region: String): String {
+        return when {
+            region.contains("AE", ignoreCase = true) || region.contains("UAE", ignoreCase = true) -> "\uD83C\uDDE6\uD83C\uDDEA"
+            region.contains("SG", ignoreCase = true) -> "\uD83C\uDDF8\uD83C\uDDEC"
+            region.contains("US", ignoreCase = true) -> "\uD83C\uDDFA\uD83C\uDDF8"
+            region.contains("JP", ignoreCase = true) -> "\uD83C\uDDEF\uD83C\uDDF5"
+            region.contains("HK", ignoreCase = true) -> "\uD83C\uDDED\uD83C\uDDF0"
+            else -> "\uD83C\uDF10"
+        }
+    }
 }

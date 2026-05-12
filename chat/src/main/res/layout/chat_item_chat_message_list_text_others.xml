@@ -141,7 +141,7 @@
             android:visibility="gone"
             tools:visibility="visible" />
 
-        <FrameLayout
+        <com.difft.android.chat.ui.SafeFrameLayout
             android:id="@+id/contentFrame"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

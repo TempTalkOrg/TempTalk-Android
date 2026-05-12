@@ -54,16 +54,25 @@ public class GroupModel {
     @WCDBField
     public boolean criticalAlert = false;
 
+    @WCDBField
+    public Integer groupCryptoMode;
+
+    @WCDBField
+    public String encryptedName;
+
+    @WCDBField
+    public String encryptedAvatar;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         GroupModel that = (GroupModel) o;
-        return Objects.equals(gid, that.gid) && Objects.equals(name, that.name) && Objects.equals(messageExpiry, that.messageExpiry) && Objects.equals(avatar, that.avatar) && Objects.equals(status, that.status) && Objects.equals(invitationRule, that.invitationRule) && Objects.equals(version, that.version) && Objects.equals(remindCycle, that.remindCycle) && Objects.equals(anyoneRemove, that.anyoneRemove) && Objects.equals(rejoin, that.rejoin) && Objects.equals(publishRule, that.publishRule) && Objects.equals(linkInviteSwitch, that.linkInviteSwitch) && Objects.equals(privateChat, that.privateChat) && criticalAlert == that.criticalAlert;
+        return Objects.equals(gid, that.gid) && Objects.equals(name, that.name) && Objects.equals(messageExpiry, that.messageExpiry) && Objects.equals(avatar, that.avatar) && Objects.equals(status, that.status) && Objects.equals(invitationRule, that.invitationRule) && Objects.equals(version, that.version) && Objects.equals(remindCycle, that.remindCycle) && Objects.equals(anyoneRemove, that.anyoneRemove) && Objects.equals(rejoin, that.rejoin) && Objects.equals(publishRule, that.publishRule) && Objects.equals(linkInviteSwitch, that.linkInviteSwitch) && Objects.equals(privateChat, that.privateChat) && criticalAlert == that.criticalAlert && Objects.equals(groupCryptoMode, that.groupCryptoMode) && Objects.equals(encryptedName, that.encryptedName) && Objects.equals(encryptedAvatar, that.encryptedAvatar);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(gid, name, messageExpiry, avatar, status, invitationRule, version, remindCycle, anyoneRemove, rejoin, publishRule, linkInviteSwitch, privateChat, criticalAlert);
+        return Objects.hash(gid, name, messageExpiry, avatar, status, invitationRule, version, remindCycle, anyoneRemove, rejoin, publishRule, linkInviteSwitch, privateChat, criticalAlert, groupCryptoMode, encryptedName, encryptedAvatar);
     }
 }

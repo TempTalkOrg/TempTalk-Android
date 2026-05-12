@@ -7,7 +7,6 @@ import com.difft.android.base.utils.sampleAfterFirst
 import org.difft.app.database.wcdb
 import difft.android.messageserialization.model.Draft
 import com.google.gson.Gson
-import com.tencent.wcdb.base.Value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -15,10 +14,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBDraftModel
-import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.DraftModel
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class DraftWithTime(val draft: Draft, val updatedAt: Long)
 
 @Singleton
 class DraftRepository @Inject constructor(
@@ -31,12 +31,13 @@ class DraftRepository @Inject constructor(
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     ).apply { tryEmit(Unit) }  // 初始emit
 
-    val allDraftsFlow: Flow<Map<String, Draft>> = _draftUpdates
+    val allDraftsFlow: Flow<Map<String, DraftWithTime>> = _draftUpdates
         .map {
             withContext(Dispatchers.IO) {
                 wcdb.draft.allObjects.mapNotNull { entity ->
                     try {
-                        entity.roomId to gson.fromJson(entity.draftJson, Draft::class.java)
+                        val draft = gson.fromJson(entity.draftJson, Draft::class.java)
+                        entity.roomId to DraftWithTime(draft, entity.updatedAt)
                     } catch (e: Exception) {
                         L.e { "[DraftRepository] Error parsing draft: ${e.message}" }
                         null
@@ -76,23 +77,18 @@ class DraftRepository @Inject constructor(
             this.roomId = roomId
             this.draftJson = draftJson
         }
-        val currentDraft = wcdb.draft.getFirstObject(DBRoomModel.roomId.eq(roomId))?.draftJson
+        val currentDraft = wcdb.draft.getFirstObject(DBDraftModel.roomId.eq(roomId))?.draftJson
         if (currentDraft == draftJson) {// 如果草稿内容没有变化，则不更新
             L.i { "[DraftRepository] The same draft content, no need to update" }
             return
         }
         L.i { "[DraftRepository] Update draft for room:${roomId}" }
+        newDraft.updatedAt = System.currentTimeMillis()
         wcdb.draft.insertOrReplaceObject(newDraft)
-        //同时更新会话的lastActiveTime，以便能排在前面
-        wcdb.room.updateValue(
-            Value(System.currentTimeMillis()),
-            DBRoomModel.lastActiveTime,
-            DBRoomModel.roomId.eq(roomId)
-        )
 
         // ✅ 触发draft查询（独立）
         _draftUpdates.tryEmit(Unit)
-        // ✅ 触发room刷新（因为更新了 lastActiveTime）
+        // ✅ 触发room刷新（草稿变化需要更新会话列表显示）
         RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
         L.d { "[DraftRepository] Draft updated, emitted notifications" }
     }

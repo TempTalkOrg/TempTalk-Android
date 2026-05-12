@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.user.CallConfig
 import com.difft.android.call.LCallActivity
+import com.difft.android.call.ui.screenshare.getActivity
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import kotlinx.coroutines.Dispatchers

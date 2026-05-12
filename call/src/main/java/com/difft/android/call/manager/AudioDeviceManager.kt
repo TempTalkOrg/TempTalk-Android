@@ -5,6 +5,7 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.call.BuildConfig
+import com.difft.android.call.data.VoicePreset
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.audio.AudioSwitchHandler
@@ -21,6 +22,9 @@ class AudioDeviceManager(
 
     private val _deNoiseMode = MutableStateFlow(AudioModule.RNNOISE)
     val deNoiseMode: StateFlow<AudioModule> = _deNoiseMode.asStateFlow()
+
+    private val _voicePreset = MutableStateFlow(VoicePreset.ORIGINAL)
+    val voicePreset: StateFlow<VoicePreset> = _voicePreset.asStateFlow()
 
     val audioHandler by lazy {
         AudioSwitchHandler(context).apply {
@@ -78,6 +82,11 @@ class AudioDeviceManager(
      */
     fun switchDeNoiseEnable(enabled: Boolean) {
         _deNoiseEnable.value = enabled
+    }
+
+    fun switchVoicePreset(preset: VoicePreset) {
+        if (_voicePreset.value == preset) return
+        _voicePreset.value = preset
     }
 
     fun switchDeNoiseMode(mode: AudioModule) {
