@@ -7,21 +7,34 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import com.difft.android.base.log.lumberjack.L
+import java.util.concurrent.atomic.AtomicBoolean
 
 class NetworkConnectionListener(context: Context, private val onNetworkLost: (() -> Boolean) -> Unit) {
 
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    private val validated = AtomicBoolean(false)
+
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             L.d { "[Call] ConnectivityManager.NetworkCallback onAvailable()" }
-            onNetworkLost { false }
+        }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            super.onCapabilitiesChanged(network, capabilities)
+            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                if (validated.compareAndSet(false, true)) {
+                    L.d { "[Call] ConnectivityManager.NetworkCallback network validated" }
+                    onNetworkLost { false }
+                }
+            }
         }
 
         override fun onLost(network: Network) {
             super.onLost(network)
+            validated.set(false)
             L.d { "[Call] ConnectivityManager.NetworkCallback onLost()" }
             onNetworkLost { true }
         }

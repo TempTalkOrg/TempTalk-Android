@@ -3,10 +3,8 @@ package com.difft.android.chat.group
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
-import android.util.Base64
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -16,12 +14,11 @@ import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePe
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.FileUtil
 import kotlin.coroutines.cancellation.CancellationException
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.getContactorsFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import org.difft.app.database.search
@@ -37,18 +34,18 @@ import com.difft.android.chat.contacts.data.getFirstLetter
 import com.difft.android.chat.contacts.data.isBotId
 import com.difft.android.chat.databinding.ChatActivityCreateGroupBinding
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
-import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.chat.crypto.GroupCrypto
+import com.difft.android.chat.crypto.GroupCryptoRepo
+import com.difft.android.chat.crypto.GroupKeyDistributor
 import com.difft.android.network.group.CreateGroupReq
-import com.difft.android.network.group.GroupAvatarData
-import com.difft.android.network.group.GroupAvatarResponse
+import com.difft.android.network.group.GroupMemberBinding
 import com.difft.android.network.group.GroupRepo
 import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.ImageFileCompressEngine
 import com.luck.picture.lib.pictureselector.ImageFileCropEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.google.gson.Gson
 import com.hi.dhl.binding.viewbind
 import com.luck.picture.lib.basic.PictureSelector
 import com.luck.picture.lib.config.SelectMimeType
@@ -62,11 +59,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.RequestBody
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.ContactorModel
 import util.ScreenLockUtil
-import org.thoughtcrime.securesms.util.MediaUtil
 import java.io.File
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
@@ -94,6 +89,21 @@ class CreateGroupActivity : BaseActivity() {
     @Inject
     lateinit var wcdb: WCDB
 
+    @Inject
+    lateinit var groupUtil: GroupUtil
+
+    @Inject
+    lateinit var groupCryptoRepo: GroupCryptoRepo
+
+    @Inject
+    lateinit var groupKeyDistributor: GroupKeyDistributor
+
+    @Inject
+    lateinit var groupAvatarUploader: GroupAvatarUploader
+
+    @Inject
+    lateinit var globalConfigsManager: GlobalConfigsManager
+
     companion object {
         fun startActivity(activity: Activity, selectedIds: ArrayList<String>?) {
             val intent = Intent(activity, CreateGroupActivity::class.java)
@@ -102,78 +112,90 @@ class CreateGroupActivity : BaseActivity() {
         }
     }
 
-    @ChativeHttpClientModule.Chat
-    @Inject
-    lateinit var httpClient: ChativeHttpClient
-
-    @Inject
-    @ChativeHttpClientModule.NoHeader
-    lateinit var noHeaderClient: ChativeHttpClient
-
     private fun createGeneralGroup(groupName: String) {
         val list = selectedMap.mapNotNull { it.key }
+        val encryptionEnabled = globalConfigsManager.isGroupEncryptionEnabled()
         ComposeDialogManager.showWait(this@CreateGroupActivity, "")
         mAvatarFilePath?.let { path ->
             lifecycleScope.launch {
                 try {
-                    val avatarJson = withContext(Dispatchers.IO) {
-                        val response = httpClient.httpService
-                            .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
-                        if (response.status != 0) {
-                            throw NetworkException(response.status, response.reason ?: "")
-                        }
-
-                        val data = FileUtil.readFile(File(path))
-                            ?: throw NetworkException(message = "Failed to read avatar file")
-
-                        val encryptResult = GroupAvatarUtil.encryptGroupAvatar(data)
-
-                        val encryptionKey = encryptResult["encryptionKey"] as? String
-                            ?: throw NetworkException(message = "Missing encryption key")
-
-                        val digest = encryptResult["digest"] as? String
-                            ?: throw NetworkException(message = "Missing digest")
-
-                        val encryptedData = encryptResult["encryptedData"] as? ByteArray
-                            ?: throw NetworkException(message = "Missing encrypted data")
-
-                        val requestBody = RequestBody.create(null, encryptedData)
-
-                        noHeaderClient.httpService.fetchUploadAvatar(
-                            response.location.orEmpty(),
-                            requestBody
-                        )
-
-                        val groupAvatarData = GroupAvatarData(
-                            0,
-                            data.size.toString(),
-                            MediaUtil.getMimeType(this@CreateGroupActivity, Uri.parse(path)),
-                            digest,
-                            encryptionKey,
-                            response.id.toString()
-                        )
-                        val groupAvatarDataString = Base64.encodeToString(
-                            Gson().toJson(groupAvatarData).toByteArray(),
-                            Base64.NO_WRAP
-                        )
-                        Gson().toJson(GroupAvatarResponse(groupAvatarDataString))
-                    }
-                    val request = CreateGroupReq(groupName, list, avatarJson)
-                    createGroup(request)
+                    val avatarJson = groupAvatarUploader.uploadAndBuildJson(path)
+                    val (request, rGroup) = buildGroupRequest(groupName, list, avatarJson, encryptionEnabled)
+                    createGroup(request, rGroup)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    ComposeDialogManager.dismissWait()
                     L.e { "[${TAG}]create group avatar error:${e.stackTraceToString()}" }
-                    ToastUtil.show(R.string.chat_net_error)
+                    showErrorToast((e as? NetworkException)?.errorMsg)
                 }
             }
         } ?: run {
-            val request = CreateGroupReq(groupName, list)
-            createGroup(request)
+            val (request, rGroup) = buildGroupRequest(groupName, list, null, encryptionEnabled)
+            createGroup(request, rGroup)
         }
     }
 
-    private fun createGroup(request: CreateGroupReq) {
+    /**
+     * Build a group creation request, either plain or encrypted depending on the feature flag.
+     * @return Pair of (request, rGroup?) — rGroup is null for plain groups.
+     */
+    private fun buildGroupRequest(
+        groupName: String,
+        members: List<String>,
+        avatarJson: String?,
+        encryptionEnabled: Boolean
+    ): Pair<CreateGroupReq, ByteArray?> {
+        return if (encryptionEnabled) {
+            val (request, rGroup) = buildEncryptedGroupRequest(groupName, members, avatarJson)
+            request to rGroup
+        } else {
+            CreateGroupReq(
+                name = groupName,
+                numbers = members,
+                avatar = avatarJson
+            ) to null
+        }
+    }
+
+    /**
+     * Build an encrypted group creation request.
+     * @return Pair of (request, rGroup) — rGroup kept as coroutine-local to avoid Activity state loss.
+     */
+    private fun buildEncryptedGroupRequest(
+        groupName: String,
+        members: List<String>,
+        avatarJson: String?
+    ): Pair<CreateGroupReq, ByteArray> {
+        val rGroup = GroupCrypto.generateRGroup()
+        val kGroup = GroupCrypto.deriveKGroup(rGroup)
+        val skBind = GroupCrypto.deriveSkBind(rGroup)
+        val pkBind = GroupCrypto.derivePkBind(rGroup)
+
+        val encryptedName = GroupCrypto.encryptGroupName(kGroup, groupName)
+        val encryptedAvatar = avatarJson?.let { GroupCrypto.encryptGroupAvatar(kGroup, it) }
+
+        // Sign all members including self
+        val allMembers = (members + globalServices.myId).distinct()
+        val memberBindings = allMembers.map { uid ->
+            GroupMemberBinding(uid, GroupCrypto.signUid(skBind, uid))
+        }
+        val pkBindBase64 = GroupCrypto.pkBindToSpkiBase64(pkBind)
+
+        val request = CreateGroupReq(
+            name = null,
+            numbers = members,
+            avatar = null,
+            groupCryptoMode = 1,
+            encryptedName = encryptedName,
+            encryptedAvatar = encryptedAvatar,
+            groupMemberVerifyPublicKey = pkBindBase64,
+            memberBindings = memberBindings
+        )
+        return request to rGroup
+    }
+
+    private fun createGroup(request: CreateGroupReq, rGroup: ByteArray?) {
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
@@ -182,6 +204,16 @@ class CreateGroupActivity : BaseActivity() {
                 ComposeDialogManager.dismissWait()
                 if (result.status == 0) {
                     result.data?.gid?.let { gid ->
+                        withContext(Dispatchers.IO) {
+                            if (rGroup != null) {
+                                groupCryptoRepo.saveRGroupIfNeeded(gid, rGroup)
+                            }
+                            groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
+                            if (rGroup != null) {
+                                groupKeyDistributor.distributeToGroup(gid)
+                            }
+                        }
+                        L.i { "[GE] Created group $gid encrypted=${rGroup != null}" }
                         GroupChatContentActivity.startActivity(this@CreateGroupActivity, gid)
                     }
                     setResult(RESULT_OK)
@@ -191,14 +223,25 @@ class CreateGroupActivity : BaseActivity() {
                         val content = strangers.map { s -> s.name }.joinToString(separator = ", ")
                         ToastUtil.show(getString(R.string.group_not_your_friend))
                     }
+                } else {
+                    L.w { "[${TAG}]createGroup failed: status=${result.status}, reason=${result.reason}" }
+                    showErrorToast(result.reason)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
                 L.e { "[${TAG}]createGeneralGroup - error=${e.stackTraceToString()}" }
-                ToastUtil.show(R.string.chat_net_error)
+                showErrorToast((e as? NetworkException)?.errorMsg)
             }
+        }
+    }
+
+    private fun showErrorToast(reason: String?) {
+        if (!reason.isNullOrBlank()) {
+            ToastUtil.showLong(reason)
+        } else {
+            ToastUtil.show(R.string.chat_net_error)
         }
     }
 
@@ -326,7 +369,7 @@ class CreateGroupActivity : BaseActivity() {
         sortedContacts.forEach {
             val selected = selectedMap.contains(it.id)
             val defaultSelected = selectedIds.find { id -> id == it.id } != null
-            val avatarData = it.avatar?.getContactAvatarData()
+            val avatarData = it.getEffectiveAvatarJson()?.getContactAvatarData()
             memberModels.add(
                 GroupMemberModel(
                     it.getDisplayNameForUI(),

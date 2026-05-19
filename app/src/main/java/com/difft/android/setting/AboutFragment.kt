@@ -15,7 +15,6 @@ import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.call.node.LCallServerNodeActivity
-import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
 import util.TimeUtils
@@ -37,9 +36,6 @@ class AboutFragment : Fragment() {
 
     @Inject
     lateinit var urlManager: UrlManager
-
-    @Inject
-    lateinit var selectChatsUtils: SelectChatsUtils
 
     override fun onCreateView(
         inflater: LayoutInflater,

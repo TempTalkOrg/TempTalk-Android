@@ -4,13 +4,12 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Handler
+import android.os.Looper
 import android.util.Rational
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleCoroutineScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.base.log.lumberjack.L
-import kotlinx.coroutines.launch
 
 /**
  * 管理画中画（Picture-in-Picture）模式
@@ -18,13 +17,14 @@ import kotlinx.coroutines.launch
  */
 class PictureInPictureManager(
     private val activity: Activity,
-    private val lifecycleScope: LifecycleCoroutineScope,
     private val lifecycle: Lifecycle,
     private val onPipModeChanged: (Boolean) -> Unit,
     private val onPipClosed: (() -> Unit)?
 ) {
     private lateinit var pipBuilderParams: PictureInPictureParams.Builder
     private var isInitialized = false
+    private var isPipParamsSet = false
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
      * 初始化 PIP 参数
@@ -46,18 +46,11 @@ class PictureInPictureManager(
         pipBuilderParams.setAspectRatio(aspectRatio)
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            // Android 12+ 需要延迟设置
-            lifecycleScope.launch {
-                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    launch {
-                        pipBuilderParams.setAutoEnterEnabled(false)
-                        tryToSetPictureInPictureParams()
-                    }
-                }
-            }
-        } else {
-            tryToSetPictureInPictureParams()
+            pipBuilderParams.setAutoEnterEnabled(false)
         }
+
+        // Post 到主线程队列末尾，避免阻塞 Activity 启动关键路径
+        mainHandler.post { tryToSetPictureInPictureParams() }
 
         isInitialized = true
         L.i { "[Call] PictureInPictureManager initialized" }
@@ -138,13 +131,15 @@ class PictureInPictureManager(
     }
 
     /**
-     * 尝试设置 PIP 参数
+     * 尝试设置 PIP 参数（Binder IPC，可能耗时较长）
      */
     @RequiresApi(android.os.Build.VERSION_CODES.O)
     private fun tryToSetPictureInPictureParams() {
+        if (isPipParamsSet) return
         try {
             activity.setPictureInPictureParams(pipBuilderParams.build())
-            L.d { "[Call] PictureInPictureManager: PIP params set successfully" }
+            isPipParamsSet = true
+            L.i { "[Call] PictureInPictureManager: PIP params set successfully" }
         } catch (e: Exception) {
             L.e { "[Call] PictureInPictureManager: Failed to set PIP params: ${e.message}" }
         }
@@ -155,6 +150,8 @@ class PictureInPictureManager(
      */
     fun release() {
         isInitialized = false
+        isPipParamsSet = false
+        mainHandler.removeCallbacksAndMessages(null)
         L.i { "[Call] PictureInPictureManager released" }
     }
 }

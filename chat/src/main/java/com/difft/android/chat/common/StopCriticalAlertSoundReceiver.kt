@@ -6,7 +6,7 @@ import android.content.Intent
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.util.FlashLightBlinker
 import dagger.hilt.android.EntryPointAccessors
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageNotificationUtil
 
 class StopCriticalAlertSoundReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -27,7 +27,7 @@ class StopCriticalAlertSoundReceiver: BroadcastReceiver() {
                 )
                 val criticalAlertManager = entryPoint.criticalAlertManager()
                 criticalAlertManager.stopSoundIfMatch(id)
-                FlashLightBlinker.stopBlinking(context)
+                FlashLightBlinker.stopBlinking()
             } catch (e: Exception) {
                 L.e { "[CriticalAlert] StopCriticalAlertSoundReceiver failed to get CriticalAlertManager: ${e.message}" }
             }

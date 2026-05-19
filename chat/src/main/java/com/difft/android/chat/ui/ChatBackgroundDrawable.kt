@@ -9,7 +9,7 @@ import android.graphics.drawable.Drawable
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.difft.android.chat.R
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.ViewUtil
 
 class ChatBackgroundDrawable(
     context: Context,

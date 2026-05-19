@@ -102,7 +102,7 @@
             tools:visibility="visible">
 
             <!-- 图标容器 (圆形背景 + 进度环 + 图标) -->
-            <FrameLayout
+            <com.difft.android.chat.ui.SafeFrameLayout
                 android:id="@+id/downloadIconContainer"
                 android:layout_width="48dp"
                 android:layout_height="48dp">
@@ -134,7 +134,7 @@
                     android:layout_gravity="center"
                     android:src="@drawable/ic_media_download"
                     tools:src="@drawable/ic_media_download" />
-            </FrameLayout>
+            </com.difft.android.chat.ui.SafeFrameLayout>
 
             <!-- 状态文字 (文件大小或过期提示) -->
             <androidx.appcompat.widget.AppCompatTextView

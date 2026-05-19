@@ -9,12 +9,14 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.chat.databinding.ChatFragmentGroupBinding
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.recent.ConversationNavigationCallback
+import com.difft.android.chat.recent.DualPaneSelectionListener
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +30,7 @@ import org.difft.app.database.models.GroupModel
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class GroupsFragment : Fragment() {
+class GroupsFragment : Fragment(), DualPaneSelectionListener {
     val binding: ChatFragmentGroupBinding by viewbind()
 
     @Inject
@@ -63,22 +65,16 @@ class GroupsFragment : Fragment() {
 
         groupUtil.getGroupsStatusUpdate
             .onEach {
-                val groups = withContext(Dispatchers.IO) {
-                    wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
-                }
-                if (!isAdded || view == null) return@onEach
+                loadGroups()
                 binding.smartRefreshLayout.finishRefresh()
-                submitSortedList(groups)
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        // Initial load
+        // Load groups on every STARTED lifecycle (handles config changes / split-screen)
         viewLifecycleOwner.lifecycleScope.launch {
-            val groups = withContext(Dispatchers.IO) {
-                wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                loadGroups()
             }
-            if (!isAdded || view == null) return@launch
-            submitSortedList(groups)
         }
 
         groupUtil.singleGroupsUpdate
@@ -104,6 +100,18 @@ class GroupsFragment : Fragment() {
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
+    override fun onResume() {
+        super.onResume()
+        val navigationCallback = activity as? ConversationNavigationCallback
+        if (navigationCallback?.isDualPaneMode == true) {
+            mAdapter.selectedId = navigationCallback.currentSelectedConversationId
+        }
+    }
+
+    override fun updateDualPaneSelection(selectedId: String?) {
+        mAdapter.selectedId = selectedId
+    }
+
     private val mAdapter: GroupsAdapter by lazy {
         object : GroupsAdapter() {
             override fun onItemClick(group: GroupModel) {
@@ -111,6 +119,9 @@ class GroupsFragment : Fragment() {
                 val navigationCallback = activity as? ConversationNavigationCallback
                 if (navigationCallback != null) {
                     navigationCallback.onGroupConversationSelected(group.gid)
+                    if (navigationCallback.isDualPaneMode) {
+                        selectedId = group.gid
+                    }
                 } else {
                     GroupChatContentActivity.startActivity(
                         this@GroupsFragment.requireActivity(),
@@ -125,6 +136,13 @@ class GroupsFragment : Fragment() {
         lifecycleScope.launch(Dispatchers.IO) {
             groupUtil.syncAllGroupAndAllGroupMembers(forceFetch = true, syncMembers = true)
         }
+    }
+
+    private suspend fun loadGroups() {
+        val groups = withContext(Dispatchers.IO) {
+            wcdb.group.getAllObjects(DBGroupModel.status.eq(0))
+        }
+        submitSortedList(groups)
     }
 
     private fun submitSortedList(list: List<GroupModel>) {

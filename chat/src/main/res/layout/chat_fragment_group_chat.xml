@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.difft.android.base.widget.InsetAwareConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:clipChildren="false"
-    android:clipToPadding="false">
+    app:animateKeyboardChanges="true">
+
+    <include layout="@layout/layout_system_ui_guidelines" />
 
     <!-- Call status header (shown during active call) -->
-    <FrameLayout
+    <com.difft.android.chat.ui.SafeFrameLayout
         android:id="@+id/fragment_container_view_call"
         android:layout_width="0dp"
         android:layout_height="44dp"
@@ -35,7 +37,6 @@
         android:name="com.difft.android.chat.ui.ChatMessageListFragment"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:clipChildren="false"
         android:tag="chatMessageListFragment"
         app:layout_constraintBottom_toTopOf="@id/fragment_container_view_input"
         app:layout_constraintEnd_toEndOf="parent"
@@ -91,4 +92,4 @@
         android:id="@+id/include_full_input"
         layout="@layout/layout_chat_full_input" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</com.difft.android.base.widget.InsetAwareConstraintLayout>

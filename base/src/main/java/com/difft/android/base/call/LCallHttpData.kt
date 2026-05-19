@@ -135,8 +135,21 @@ data class InviteCallResponseData(
     val systemShowTimestamp: Long?
 )
 
-data class ServiceUrlData(
-    val serviceUrls: List<String>?,
+data class ServiceUrlDataV2(
+    val serviceUrls: ServiceUrls?,
+)
+
+data class ServiceUrls(
+    val config_version: Int,
+    val fallback: List<UrlInfo?>,
+    val primary: UrlInfo?,
+    val ttl: Int
+)
+
+data class UrlInfo(
+    val addrs: List<String>,
+    val domain: String,
+    val region: String
 )
 
 data class CallFeedbackRequestBody(
@@ -146,4 +159,15 @@ data class CallFeedbackRequestBody(
     val roomId: String?,
     val rating: Int,
     val reasons: Map<String, List<Int>> = emptyMap()
+)
+
+data class StatisticsLogRequestBody(
+    val payload: LogPayLoad
+)
+
+data class LogPayLoad(
+    val roomId: String?,
+    val uuid: String?,
+    val event: String,
+    val details: Map<String, String> = emptyMap()
 )

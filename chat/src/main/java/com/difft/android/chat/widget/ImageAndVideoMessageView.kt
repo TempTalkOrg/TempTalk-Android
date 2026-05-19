@@ -36,16 +36,16 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.DownloadAttachmentJob
-import org.thoughtcrime.securesms.util.MediaUtil
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.DownloadAttachmentJob
+import com.difft.android.chat.util.MediaUtil
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
 class ImageAndVideoMessageView @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : ConstraintLayout(context, attrs, defStyleAttr) {
+    context: Context, attrs: AttributeSet? = null
+) : ConstraintLayout(context, attrs) {
 
     val binding: LayoutImageMessageViewBinding by viewbind(this)
 
@@ -63,8 +63,10 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         currentAttachmentId = message.id
         currentMessage = message
 
-        // Reset all status views
+        // Reset all status views and clear stale image from previous ViewHolder binding
         hideAllStatusViews()
+        Glide.with(context).clear(binding.imageView)
+        binding.imageView.setImageDrawable(null)
 
         val attachment = message.attachment ?: return
 

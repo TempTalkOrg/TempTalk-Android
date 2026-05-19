@@ -15,7 +15,7 @@ import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
-import com.difft.android.call.LChatToCallController
+import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.ChatMessageListBehavior
@@ -30,6 +30,7 @@ import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageTwo
+import com.difft.android.chat.message.isNotifyStyleMessage
 import com.difft.android.chat.speech2text.SpeechToTextManager
 import com.difft.android.chat.translate.TranslateManager
 import com.difft.android.messageserialization.db.store.DBMessageStore
@@ -42,6 +43,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
+import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.ReadPosition
 import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.SpeechToTextStatus
@@ -52,8 +54,10 @@ import difft.android.messageserialization.model.TranslateTargetLanguage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -67,6 +71,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.convertToMessageModel
@@ -81,8 +86,8 @@ import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.ReadInfoModel
 import org.difft.app.database.updateGroupMembersReadPosition
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.create
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.create
 import util.TimeFormatter
 import javax.inject.Inject
 
@@ -95,9 +100,9 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val dbMessageStore: DBMessageStore,
     private val dbRoomStore: DBRoomStore,
     private val chatPaginationControllerFactory: ChatPaginationControllerFactory,
-    private val callManager: LChatToCallController,
-    private val translateManager: TranslateManager,
-    private val speechToTextManager: SpeechToTextManager,
+    private val callManager: dagger.Lazy<LChatToCallController>,
+    private val translateManager: dagger.Lazy<TranslateManager>,
+    private val speechToTextManager: dagger.Lazy<SpeechToTextManager>,
     private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val callDataManager: CallDataManager
@@ -135,6 +140,11 @@ class ChatMessageViewModel @AssistedInject constructor(
     val saveMultiMessageToNote = MutableStateFlow<ForwardContextData?>(null)
 
     val selectMessagesState = MutableStateFlow(SelectMessageState(false, emptySet(), 0))
+
+    // Emits the messageId of a checkbox tap that was rejected (e.g. exceeds the cap),
+    // so the list can revert that row's checkbox visual to match selectMessagesState.
+    private val _selectionRejected = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val selectionRejected: SharedFlow<String> = _selectionRejected.asSharedFlow()
 
     // 用于判断消息数据是否真正变化，避免 _readInfoList 变化时重复触发滚动
     private var lastMessageListTimestamp: Long = 0
@@ -308,10 +318,15 @@ class ChatMessageViewModel @AssistedInject constructor(
         listClick.tryEmit(Unit)
     }
 
-    val voiceMessageSend: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    // Channel buffers the emit during Activity recreation so it isn't lost when the new collector subscribes.
+    private val _voiceMessageSendChannel = Channel<String>(capacity = Channel.BUFFERED)
+    val voiceMessageSend: Flow<String> = _voiceMessageSendChannel.receiveAsFlow()
 
     fun sendVoiceMessage(path: String) {
-        voiceMessageSend.tryEmit(path)
+        val result = _voiceMessageSendChannel.trySend(path)
+        if (result.isFailure) {
+            L.w { "[ChatMessageViewModel] voiceMessageSend channel send failed" }
+        }
     }
 
     val chatActionsShow: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -342,7 +357,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             }
             //否则发起livekit call通话
             L.i { "[call] Starting new call" }
-            callManager.startCall(activity, forWhat, chatRoomName) { status, message ->
+            callManager.get().startCall(activity, forWhat, chatRoomName) { status, message ->
                 if (!status) {
                     L.e { "[Call] start call failed." }
                     message?.let { ToastUtil.show(it) }
@@ -430,6 +445,7 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     companion object {
         private const val AUTO_DELETE_DELAY = 3000L
+        private const val MAX_SELECT_LIMIT = 50
     }
 
     fun emojiReaction(emojiEvent: EmojiReactionEvent) {
@@ -462,7 +478,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                 val speechToTextData = data.speechToTextData ?: SpeechToTextData(SpeechToTextStatus.Invisible, null)
                 speechToTextData.convertStatus = SpeechToTextStatus.Converting
                 updateSpeechToTextStatus(data.id, speechToTextData)
-                speechToTextManager.speechToText(
+                speechToTextManager.get().speechToText(
                     viewModelScope,
                     context,
                     attachment,
@@ -534,7 +550,7 @@ class ChatMessageViewModel @AssistedInject constructor(
 
         val targetLang = if (targetLanguage == TranslateTargetLanguage.ZH) TranslateLanguage.CHINESE else TranslateLanguage.ENGLISH
 
-        translateManager.translateText(
+        translateManager.get().translateText(
             scope = viewModelScope,
             text = content.toString(),
             targetLang = targetLang,
@@ -650,9 +666,22 @@ class ChatMessageViewModel @AssistedInject constructor(
             }
             val isSameDayWithNextMessage = TimeFormatter.isSameDay(message.timeStamp, nextMessage?.timeStamp ?: 0L)
 
-            message.showName = !isSameDayWithPreviousMessage || previousMessage is NotifyChatMessage || message.authorId != previousMessage?.authorId
-            message.showDayTime = !isSameDayWithPreviousMessage
-            message.showTime = !isSameDayWithNextMessage || message.authorId != nextMessage?.authorId
+            message.showName = !isSameDayWithPreviousMessage || previousMessage?.isNotifyStyleMessage() == true || message.authorId != previousMessage?.authorId
+
+            // Notify-style messages (NotifyChatMessage, screenshot) never show the day header.
+            // The day header transfers to the first normal message that follows.
+            if (message.isNotifyStyleMessage()) {
+                message.showDayTime = false
+            } else {
+                val previousNonNotify = if (index > 0) {
+                    listWithoutErrorNotify.subList(0, index).lastOrNull { !it.isNotifyStyleMessage() }
+                } else {
+                    null
+                } ?: anchorChatMessageBefore?.takeIf { !it.isNotifyStyleMessage() }
+                message.showDayTime = !TimeFormatter.isSameDay(message.timeStamp, previousNonNotify?.timeStamp ?: 0L)
+            }
+
+            message.showTime = !isSameDayWithNextMessage || nextMessage?.isNotifyStyleMessage() == true || message.authorId != nextMessage?.authorId
 
             // 设置新消息分割线：仅在初始化加载时（readPosition 不为 null）显示
             // 在 readPosition 之后第一个不是自己发送的消息上显示
@@ -813,6 +842,12 @@ class ChatMessageViewModel @AssistedInject constructor(
     fun selectedMessage(messageId: String, selected: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             val state = selectMessagesState.value
+            val alreadySelected = messageId in state.selectedMessageIds
+            if (selected && !alreadySelected && state.selectedMessageIds.size >= MAX_SELECT_LIMIT) {
+                ToastUtil.show(R.string.chat_message_action_select_max_limit)
+                _selectionRejected.tryEmit(messageId)
+                return@launch
+            }
             val newSelectedIds = if (selected) {
                 state.selectedMessageIds + messageId
             } else {
@@ -926,7 +961,19 @@ class ChatMessageViewModel @AssistedInject constructor(
             }
             forwardContext
         }
-        forwardMultiMessage.value = ForwardContextData("", forwardContexts)
+        // Multi-select → Forward (one-by-one): each selected message is forwarded as its
+        // own message; Scene.ONE_BY_ONE is displayed as "saved/forwarded N messages" style
+        // in the notice renderer.
+        // One author entry per user-selected message (outer message, not nested).
+        // Pass the raw list — sendForwardNotice dedups for the authors display list
+        // but uses size as the message count.
+        forwardMultiMessage.value = ForwardContextData(
+            "",
+            forwardContexts,
+            ForwardNoticeData.Scene.ONE_BY_ONE,
+            forWhat,
+            sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+        )
         resetSelectMessageState()
     }
 
@@ -946,8 +993,16 @@ class ChatMessageViewModel @AssistedInject constructor(
                 it.systemShowTimestamp
             )
         }, forWhat is For.Group)
+        // Multi-select → Combine & Forward: selected messages are bundled into ONE
+        // forwarded container; Scene.COMBINED drives "forwarded N messages (combined)" text.
         forwardMultiMessage.value =
-            ForwardContextData("", listOfNotNull(forwardContext))
+            ForwardContextData(
+                "",
+                listOfNotNull(forwardContext),
+                ForwardNoticeData.Scene.COMBINED,
+                forWhat,
+                sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+            )
         resetSelectMessageState()
     }
 
@@ -965,7 +1020,13 @@ class ChatMessageViewModel @AssistedInject constructor(
             val sharedContactId = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
             val sharedContactName = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.name?.displayName
             saveMultiMessageToNote.value =
-                ForwardContextData("", listOf(ForwardContext(emptyList(), false, sharedContactId, sharedContactName)))
+                ForwardContextData(
+                    "",
+                    listOf(ForwardContext(emptyList(), false, sharedContactId, sharedContactName)),
+                    ForwardNoticeData.Scene.SAVE_TO_NOTES,
+                    forWhat,
+                    sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                )
         } else {
             val forwardContext = ForwardContext(loadedMessages.map {
                 val message = it
@@ -982,7 +1043,13 @@ class ChatMessageViewModel @AssistedInject constructor(
                 )
             }, forWhat is For.Group)
             saveMultiMessageToNote.value =
-                ForwardContextData("", listOfNotNull(forwardContext))
+                ForwardContextData(
+                    "",
+                    listOfNotNull(forwardContext),
+                    ForwardNoticeData.Scene.SAVE_TO_NOTES,
+                    forWhat,
+                    sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                )
         }
         resetSelectMessageState()
     }
@@ -1004,5 +1071,14 @@ enum class EmojiReactionFrom {
 
 data class ForwardContextData(
     val content: String,
-    val forwardContexts: List<ForwardContext>
+    val forwardContexts: List<ForwardContext>,
+    val scene: ForwardNoticeData.Scene,
+    val sourceConversation: For,   // Source conversation (where the forwarded messages originally lived). forwardNotice will be posted here.
+    // Authors of the user-selected messages, NOT de-duplicated and preserving selection order.
+    // One entry per selected message: a plain message contributes its author; a combined-forward
+    // message contributes only the outer author (the uploader), NOT the inner/nested authors.
+    // sendForwardNotice uses this list as the authoritative source for count and authors,
+    // bypassing the ambiguity that arises when a combined-forward message's nested `forwards`
+    // would otherwise be flat-mapped into multiple entries.
+    val sourceAuthorIds: List<String>
 )

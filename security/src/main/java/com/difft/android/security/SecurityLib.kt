@@ -1,6 +1,5 @@
 package com.difft.android.security
 
-import android.content.Context
 import android.os.Process
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
@@ -12,24 +11,10 @@ import kotlinx.coroutines.launch
 
 object SecurityLib {
 
-    private val APP_SIGN_SHA256_LIST = setOf(
-        "b4e071def9a09fbdab690d0aa0583a2f62e7cdaa96a2d167e3fa8ceeb4853e3e",
-        "53c73dd8561d756ad3c162a12ab079357de76f5c6956a2d7e701597e3c4282d5"
-    )
     private const val TRACER_PID_MONITOR_INTERVAL_MS = 15_000L
 
     @Volatile
     private var tracerPidMonitorJob: Job? = null
-
-    @JvmStatic
-    fun checkApkSign(context: Context): Boolean {
-        return try {
-            SignatureVerifier.checkApkSign(context, APP_SIGN_SHA256_LIST)
-        } catch (e: Exception) {
-            L.w(e) { "[SecurityLib] verifySignature error" }
-            false
-        }
-    }
 
     @JvmStatic
     fun checkEmulator(): Boolean {

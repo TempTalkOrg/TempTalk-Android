@@ -2,6 +2,7 @@ package com.difft.android.call.ui
 
 import android.Manifest
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,7 +32,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -41,7 +45,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
@@ -62,19 +65,22 @@ import io.livekit.android.audio.AudioSwitchHandler
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
-    showBottomToolBarViewEnabled: Boolean = true,
     isUserSharingScreen: Boolean = false,
     audioSwitchHandler: AudioSwitchHandler? = null,
     endCallAction: (callType: String, callEndType: CallEndType) -> Unit
 ){
+    // 直接 collectAsState；可见性变化会让本 composable 重组一次，按钮 Row 等
+    // 子树参数稳定（Compose 自动 skip），实际成本 <1ms。换来的是可见态完全
+    // 不挂 pointerInput，命中测试中本节点透明，详见 isBottomVisible 顶部注释。
+    val showBottomState = viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val micEnabled by viewModel.micEnabled.collectAsState(false)
     val videoEnabled by viewModel.cameraEnabled.collectAsState(false)
     val currentAudioDevice by viewModel.currentAudioDevice.collectAsState()
     val currentCallType by viewModel.callType.collectAsState()
+    val voicePreset by viewModel.voicePreset.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val callStatus by viewModel.callStatus.collectAsState()
 
     val context = LocalContext.current
 
@@ -89,9 +95,6 @@ fun MainPageWithBottomControlView(
     val volumeAirpodPainter = painterResource(id = R.drawable.call_btn_volume_airpod)
     val usersPainter = painterResource(id = R.drawable.users)
     val dotsPainter = painterResource(id = R.drawable.call_btn_tabler_dots)
-    val hangupPainter = painterResource(id = R.drawable.call_btn_hangup)
-    val chevronRightPainter = painterResource(id = R.drawable.call_btn_tabler_chevron_right)
-    val exitLinePainter = painterResource(id = R.drawable.call_btn_mingcute_exit_line)
 
     val requestMicPermission = rememberPermissionChecker(
         viewModel = viewModel,
@@ -149,6 +152,8 @@ fun MainPageWithBottomControlView(
         }
     )
 
+    val isBottomVisible = isOneVOneCall && !isUserSharingScreen || showBottomState.value
+
     Column(
         modifier = Modifier
             .then(
@@ -162,59 +167,77 @@ fun MainPageWithBottomControlView(
         verticalArrangement = Arrangement.Bottom,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if(isOneVOneCall && !isUserSharingScreen || showBottomToolBarViewEnabled) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Transparent)
-            ){
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Transparent)
+                .alpha(if (isBottomVisible) 1f else 0f)
+                .tapInterceptor(enabled = !isBottomVisible) {
+                    viewModel.callUiController.toggleOverlays()
+                }
+        ){
                 val controlSize = 48.dp
-                val controlPadding =  if(isLandscape) 16.dp else 12.dp
+                val controlPadding = if (isLandscape) 16.dp else 12.dp
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .wrapContentSize(),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ConstraintLayout(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            val (otherView, endCallView) = createRefs()
-
-                            Row(
-                                modifier = Modifier
-                                    .constrainAs(otherView) {
-                                        centerHorizontallyTo(parent)
-                                    }
-                                    .wrapContentSize(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ){
-                                Surface(
-                                    modifier = Modifier.size(controlSize),
-                                    color = Color.Transparent
-                                ) {
-                                    val painter = if (micEnabled) micOpenPainter else micClosePainter
-                                    Image(
-                                        painter = painter,
-                                        contentDescription = "Mic",
-                                        contentScale = ContentScale.Fit, // 根据需要调整
-                                        modifier = Modifier
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null,
-                                                onClick = {
-                                                    L.i { "[call] LCallActivity onClick Mic" }
-                                                    callStatus.let { status ->
+                                Box(modifier = Modifier.size(controlSize)) {
+                                    Surface(
+                                        modifier = Modifier.size(controlSize),
+                                        color = Color.Transparent,
+                                        shape = CircleShape,
+                                        border = if (voicePreset.isEnabled) BorderStroke(
+                                            width = 2.dp,
+                                            color = colorResource(id = com.difft.android.base.R.color.blue_400),
+                                        ) else null
+                                    ) {
+                                        val painter = if (micEnabled) micOpenPainter else micClosePainter
+                                        Image(
+                                            painter = painter,
+                                            contentDescription = "Mic",
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier
+                                                .clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null,
+                                                    onClick = {
+                                                        L.i { "[call] LCallActivity onClick Mic" }
                                                         if (viewModel.isControlButtonClickEnabled()) requestMicPermission()
                                                     }
-                                                }
+                                                )
+                                        )
+                                    }
+                                    if (voicePreset.isEnabled) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .size(18.dp)
+                                                .background(
+                                                    brush = Brush.linearGradient(
+                                                        colors = listOf(
+                                                            Color(0xFF4DA0FF),
+                                                            Color(0xFF82C1FC),
+                                                            Color(0xFF328AFD)
+                                                        ),
+                                                        start = Offset(0f, 0f),
+                                                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                                                    ),
+                                                    shape = CircleShape
+                                                )
+                                        ) {
+                                            Text(
+                                                text = voicePreset.emoji,
+                                                fontSize = 12.sp,
+                                                lineHeight = 16.sp,
+                                                textAlign = TextAlign.Center
                                             )
-                                    )
+                                        }
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.width(controlPadding))
@@ -231,9 +254,7 @@ fun MainPageWithBottomControlView(
                                         modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
                                         {
                                             L.i { "[call] LCallActivity onClick Camera" }
-                                            callStatus.let { status ->
-                                                if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
-                                            }
+                                            if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
                                         }
                                     )
                                 }
@@ -343,13 +364,13 @@ fun MainPageWithBottomControlView(
                                             color = colorResource(id = com.difft.android.base.R.color.bg2_night),
                                             shape = RoundedCornerShape(size = 100.00001.dp)
                                         )
-                                        .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null
                                         ) {
                                             viewModel.callUiController.setShowToolBarBottomViewEnable(true)
-                                        },
+                                        }
+                                        .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
                                     horizontalArrangement = Arrangement.spacedBy(
                                         10.000000953674316.dp,
                                         Alignment.Start
@@ -370,237 +391,29 @@ fun MainPageWithBottomControlView(
                                 Spacer(modifier = Modifier.width(controlPadding))
 
                                 if(currentCallType == CallType.ONE_ON_ONE.type) {
-                                    Row(
-                                        modifier = Modifier
-                                            .width(50.dp)
-                                            .height(48.dp)
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null
-                                            ) {
-                                                L.i { "[call] LCallActivity onClick Hangup" }
-                                                endCallAction(currentCallType, CallEndType.END)
-                                            },
-                                        horizontalArrangement = Arrangement.spacedBy(1.dp, Alignment.Start),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .width(48.dp)
-                                                .height(48.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.Start),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .width(48.dp)
-                                                    .height(48.dp)
-                                                    .background(
-                                                        color = colorResource(id = com.difft.android.base.R.color.error),
-                                                        shape = RoundedCornerShape(size = 100.dp)
-                                                    )
-                                                    .padding(
-                                                        start = 8.dp,
-                                                        top = 12.dp,
-                                                        end = 8.dp,
-                                                        bottom = 12.dp
-                                                    ),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Image(
-                                                    modifier = Modifier
-                                                        .padding(1.0125.dp)
-                                                        .width(31.2.dp)
-                                                        .height(24.dp),
-                                                    painter = hangupPainter,
-                                                    contentDescription = "hangup",
-                                                    contentScale = ContentScale.None
-                                                )
-                                            }
-                                        }
-                                    }
+                                    OneOnOneHangupButton(
+                                        onHangup = { endCallAction(currentCallType, CallEndType.END) }
+                                    )
                                 } else if(!isLandscape) {
-                                    Row(
-                                        modifier = Modifier
-                                            .padding(0.dp)
-                                            .width(78.dp)
-                                            .height(48.dp)
-                                    ){
-                                        ConstraintLayout(
-                                            modifier = Modifier.fillMaxWidth()
-                                        ){
-                                            val (chevronRightView, exitLineView) = createRefs()
-                                            Row(
-                                                modifier = Modifier
-                                                    .constrainAs(chevronRightView) {
-                                                        end.linkTo(parent.end)
-                                                    }
-                                                    .width(54.dp)
-                                                    .height(48.dp)
-                                                    .background(
-                                                        color = colorResource(id = com.difft.android.base.R.color.bg2_night),
-                                                        shape = RoundedCornerShape(
-                                                            topStart = 0.dp,
-                                                            topEnd = 100.dp,
-                                                            bottomStart = 0.dp,
-                                                            bottomEnd = 100.dp
-                                                        )
-                                                    )
-                                                    .padding(top = 7.dp, bottom = 7.dp)
-                                                    .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null
-                                                    ) {
-                                                        viewModel.callUiController.setShowBottomCallEndViewEnable(true)
-                                                    },
-                                                horizontalArrangement = Arrangement.End,
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Image(
-                                                    modifier = Modifier
-                                                        .padding(end = 10.dp)
-                                                        .width(14.dp)
-                                                        .height(14.dp),
-                                                    painter = chevronRightPainter,
-                                                    contentDescription = "end call choices menu",
-                                                    contentScale = ContentScale.None
-                                                )
-                                            }
-
-                                            Row(
-                                                modifier = Modifier
-                                                    .constrainAs(exitLineView) {
-                                                        start.linkTo(parent.start)
-                                                    }
-                                                    .width(48.dp)
-                                                    .height(48.dp)
-                                                    .background(
-                                                        color = colorResource(id = com.difft.android.base.R.color.t_error_night),
-                                                        shape = RoundedCornerShape(size = 100.dp)
-                                                    )
-                                                    .padding(top = 7.dp, bottom = 7.dp)
-                                                    .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null
-                                                    ) {
-                                                        L.i { "[call] LCallActivity onClick Leave" }
-                                                        endCallAction(currentCallType, CallEndType.LEAVE)
-                                                    },
-                                                horizontalArrangement = Arrangement.spacedBy(
-                                                    10.dp,
-                                                    Alignment.CenterHorizontally
-                                                ),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Image(
-                                                    modifier = Modifier
-                                                        .padding(1.0125.dp)
-                                                        .width(24.dp)
-                                                        .height(24.dp),
-                                                    painter = exitLinePainter,
-                                                    contentDescription = "leave",
-                                                    contentScale = ContentScale.None
-                                                )
-                                            }
-                                        }
-                                    }
+                                    GroupCallLeaveButton(
+                                        onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
+                                        onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
+                                    )
                                 }
                             }
 
-                            if(currentCallType != CallType.ONE_ON_ONE.type && isLandscape) {
-                                Row(
-                                    modifier = Modifier
-                                        .constrainAs(endCallView) {
-                                            end.linkTo(parent.end, 19.dp)
-                                        }
-                                        .padding(0.dp)
-                                        .width(78.dp)
-                                        .height(48.dp)
-                                ){
-                                    ConstraintLayout(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ){
-                                        val (chevronRightView, exitLineView) = createRefs()
-                                        Row(
-                                            modifier = Modifier
-                                                .constrainAs(chevronRightView) {
-                                                    end.linkTo(parent.end)
-                                                }
-                                                .width(54.dp)
-                                                .height(48.dp)
-                                                .background(
-                                                    color = colorResource(id = com.difft.android.base.R.color.bg2_night),
-                                                    shape = RoundedCornerShape(
-                                                        topStart = 0.dp,
-                                                        topEnd = 100.dp,
-                                                        bottomStart = 0.dp,
-                                                        bottomEnd = 100.dp
-                                                    )
-                                                )
-                                                .padding(top = 7.dp, bottom = 7.dp)
-                                                .clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
-                                                    indication = null
-                                                ) {
-                                                    viewModel.callUiController.setShowBottomCallEndViewEnable(true)
-                                                },
-                                            horizontalArrangement = Arrangement.End,
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Image(
-                                                modifier = Modifier
-                                                    .padding(end = 10.dp)
-                                                    .width(14.dp)
-                                                    .height(14.dp),
-                                                painter = chevronRightPainter,
-                                                contentDescription = "end call choices menu",
-                                                contentScale = ContentScale.None
-                                            )
-                                        }
-
-                                        Row(
-                                            modifier = Modifier
-                                                .constrainAs(exitLineView) {
-                                                    start.linkTo(parent.start)
-                                                }
-                                                .width(48.dp)
-                                                .height(48.dp)
-                                                .background(
-                                                    color = colorResource(id = com.difft.android.base.R.color.t_error_night),
-                                                    shape = RoundedCornerShape(size = 100.dp)
-                                                )
-                                                .padding(top = 7.dp, bottom = 7.dp)
-                                                .clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
-                                                    indication = null
-                                                ) {
-                                                    L.i { "[call] LCallActivity onClick Leave" }
-                                                    endCallAction(currentCallType, CallEndType.LEAVE)
-                                                },
-                                            horizontalArrangement = Arrangement.spacedBy(
-                                                10.dp,
-                                                Alignment.CenterHorizontally
-                                            ),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Image(
-                                                modifier = Modifier
-                                                    .padding(1.0125.dp)
-                                                    .width(24.dp)
-                                                    .height(24.dp),
-                                                painter = exitLinePainter,
-                                                contentDescription = "leave",
-                                                contentScale = ContentScale.None
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                    if (currentCallType != CallType.ONE_ON_ONE.type && isLandscape) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 19.dp)
+                        ) {
+                            GroupCallLeaveButton(
+                                onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
+                                onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
+                            )
                         }
                     }
-                }
-            }
         }
     }
 }

@@ -3,7 +3,6 @@ package com.difft.android.call
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import java.util.ArrayList
 
 class CallIntent(private val intent: Intent) {
 
@@ -44,7 +43,6 @@ class CallIntent(private val intent: Intent) {
         CALL_ROOM_ID("CALL_ROOM_ID"),
         CALL_ROOM_NAME("CALL_ROOM_NAME"),
         CALL_TYPE("CALL_TYPE"),
-        CALL_SERVER_URLS("CALL_SERVER_URLS"),
         CALL_CALLER_ID("CALL_CALLER_ID"),
         CALL_CONVERSATION_ID("CALL_CONVERSATION_ID"),
         CALL_ROLE("CALL_ROLE"),
@@ -107,11 +105,6 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
-        fun withCallServerUrls(serviceUrls: List<String>): Builder {
-            intent.putStringArrayListExtra(getExtraString(Extra.CALL_SERVER_URLS), ArrayList(serviceUrls))
-            return this
-        }
-
         fun withStartCallParams(params: ByteArray): Builder {
             intent.putExtra(getExtraString(Extra.CALL_START_PARAMS), params)
             return this
@@ -145,8 +138,6 @@ class CallIntent(private val intent: Intent) {
 
     val conversationId: String? by lazy { intent.getStringExtra(getExtraString(Extra.CALL_CONVERSATION_ID)) }
 
-    val callServerUrls: List<String> by lazy { intent.getStringArrayListExtra(getExtraString(Extra.CALL_SERVER_URLS)).orEmpty() }
-
     val startCallParams: ByteArray? by lazy { intent.getByteArrayExtra(getExtraString(Extra.CALL_START_PARAMS))}
 
     val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
@@ -162,7 +153,6 @@ class CallIntent(private val intent: Intent) {
       CALL_ROLE? $callRole
       CALL_CALLER_ID? $callerId
       CALL_CONVERSATION_ID? $conversationId
-      CALL_ServerUrls? $callServerUrls
     """.trimIndent()
     }
 

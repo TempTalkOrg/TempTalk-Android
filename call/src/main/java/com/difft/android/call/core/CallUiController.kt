@@ -4,7 +4,11 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.BarrageMessage
 import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.TextBubbleMessage
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class CallUiController() {
@@ -18,17 +22,11 @@ class CallUiController() {
     private val _showToolBarBottomViewEnable = MutableStateFlow(false)
     val showToolBarBottomViewEnable = _showToolBarBottomViewEnable.asStateFlow()
 
-    private val _showHandsUpEnabled = MutableStateFlow(false)
-    val showHandsUpEnabled = _showHandsUpEnabled.asStateFlow()
-
     private val _showUsersEnabled = MutableStateFlow(false)
     val showUsersEnabled = _showUsersEnabled.asStateFlow()
 
     private val _showSimpleBarrageEnabled = MutableStateFlow(false)
     val showSimpleBarrageEnabled = _showSimpleBarrageEnabled.asStateFlow()
-
-    private val _handsUpEnabled = MutableStateFlow(false)
-    val handsUpEnabled = _handsUpEnabled.asStateFlow()
 
     private val _isInPipMode = MutableStateFlow(false)
     val isInPipMode = _isInPipMode.asStateFlow()
@@ -39,14 +37,23 @@ class CallUiController() {
     private val _showBottomToolBarViewEnabled = MutableStateFlow(true)
     val showBottomToolBarViewEnabled = _showBottomToolBarViewEnabled.asStateFlow()
 
-    private val _barrageMessage = MutableStateFlow<BarrageMessage?>(null)
-    val barrageMessage = _barrageMessage.asStateFlow()
+    private val _barrageMessage = MutableSharedFlow<BarrageMessage>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val barrageMessage: SharedFlow<BarrageMessage> = _barrageMessage.asSharedFlow()
 
-    private val _emojiBubbleMessage = MutableStateFlow<EmojiBubbleMessage?>(null)
-    val emojiBubbleMessage = _emojiBubbleMessage.asStateFlow()
+    private val _emojiBubbleMessage = MutableSharedFlow<EmojiBubbleMessage>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val emojiBubbleMessage: SharedFlow<EmojiBubbleMessage> = _emojiBubbleMessage.asSharedFlow()
 
-    private val _textBubbleMessage = MutableStateFlow<TextBubbleMessage?>(null)
-    val textBubbleMessage = _textBubbleMessage.asStateFlow()
+    private val _textBubbleMessage = MutableSharedFlow<TextBubbleMessage>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val textBubbleMessage: SharedFlow<TextBubbleMessage> = _textBubbleMessage.asSharedFlow()
 
     private val _isShareScreening = MutableStateFlow(false)
     val isShareScreening = _isShareScreening.asStateFlow()
@@ -63,12 +70,11 @@ class CallUiController() {
     private val _showCriticalAlertConfirmViewEnabled = MutableStateFlow(false)
     val showCriticalAlertConfirmViewEnabled = _showCriticalAlertConfirmViewEnabled.asStateFlow()
 
-    /**
-     * Enables or disables the "Hands Up" feature for participants in a call or meeting.
-     */
-    fun setHandsUpEnable(enabled: Boolean) {
-        _handsUpEnabled.value = enabled
-    }
+    private val _speakingEnabled = MutableStateFlow(true)
+    val speakingEnabled = _speakingEnabled.asStateFlow()
+
+    private val _reconnectCount = MutableStateFlow(0)
+    val reconnectCount = _reconnectCount.asStateFlow()
 
     /**
      * Updates the Picture-in-Picture (PiP) mode state for the current call.
@@ -82,14 +88,6 @@ class CallUiController() {
      */
     fun setShowSimpleBarrageEnabled(enabled: Boolean) {
         _showSimpleBarrageEnabled.value = enabled
-    }
-
-    /**
-     * Sets whether the "raise hand" view at the bottom of the screen is enabled for display.
-     */
-    fun setShowHandsUpBottomViewEnabled(enabled: Boolean) {
-        L.i { "[Call] ShowHandsUpView setShowHandsUpBottomViewEnabled enabled:${enabled}" }
-        _showHandsUpEnabled.value = enabled
     }
 
     /**
@@ -134,6 +132,21 @@ class CallUiController() {
         _showBottomToolBarViewEnabled.value = enabled
     }
 
+    fun toggleOverlays() {
+        val bottomEnabled = _showBottomToolBarViewEnabled.value
+        if (_showSimpleBarrageEnabled.value && bottomEnabled) {
+            _showSimpleBarrageEnabled.value = false
+        } else {
+            _showTopStatusViewEnabled.value = !_showTopStatusViewEnabled.value
+            _showBottomToolBarViewEnabled.value = !bottomEnabled
+        }
+    }
+
+    fun toggleTopBottomBars() {
+        _showTopStatusViewEnabled.value = !_showTopStatusViewEnabled.value
+        _showBottomToolBarViewEnabled.value = !_showBottomToolBarViewEnabled.value
+    }
+
     /**
      * Updates the state indicating whether user list display is enabled in the call UI.
      */
@@ -141,25 +154,16 @@ class CallUiController() {
         _showUsersEnabled.tryEmit(enabled)
     }
 
-    /**
-     * Updates the barrage message (floating chat message) displayed in the call UI.
-     */
-    fun setBarrageMessage(message: BarrageMessage?) {
-        _barrageMessage.value = message
+    fun setBarrageMessage(message: BarrageMessage) {
+        _barrageMessage.tryEmit(message)
     }
 
-    /**
-     * Updates the emoji bubble message displayed in the call UI.
-     */
-    fun setEmojiBubbleMessage(message: EmojiBubbleMessage?) {
-        _emojiBubbleMessage.value = message
+    fun setEmojiBubbleMessage(message: EmojiBubbleMessage) {
+        _emojiBubbleMessage.tryEmit(message)
     }
 
-    /**
-     * Updates the text bubble message displayed in the call UI.
-     */
-    fun setTextBubbleMessage(message: TextBubbleMessage?) {
-        _textBubbleMessage.value = message
+    fun setTextBubbleMessage(message: TextBubbleMessage) {
+        _textBubbleMessage.tryEmit(message)
     }
 
     /**
@@ -185,6 +189,14 @@ class CallUiController() {
 
     fun setRequestPermissionStatus(status: Boolean) {
         _isRequestingPermission.value = status
+    }
+
+    fun setSpeakingEnabled(enabled: Boolean) {
+        _speakingEnabled.value = enabled
+    }
+
+    fun incrementReconnectCount() {
+        _reconnectCount.value++
     }
 
     @Volatile

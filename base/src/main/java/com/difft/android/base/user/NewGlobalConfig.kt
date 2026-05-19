@@ -4,8 +4,7 @@ import javax.annotation.concurrent.Immutable
 
 data class NewGlobalConfig(
     val code: Int = 0,
-    val data: Data? = null,
-    val sign: String? = null
+    val data: Data? = null
 )
 
 data class Data(
@@ -78,7 +77,8 @@ data class Group(
     val largeGroupThreshold: Double = 0.0,
     val meetingWithoutRingThreshold: Double = 0.0,
     val membersMaxSize: Int = 200,
-    val messageArchivingTimeOptionValues: List<Long>? = null
+    val messageArchivingTimeOptionValues: List<Long>? = null,
+    val encryptionEnabled: Boolean = false
 )
 
 data class Meeting(

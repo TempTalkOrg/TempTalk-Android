@@ -58,10 +58,10 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
-import org.thoughtcrime.securesms.messages.MessageForegroundService
-import org.thoughtcrime.securesms.messages.MessageServiceManager
-import org.thoughtcrime.securesms.util.AutoStartPermissionHelper
-import org.thoughtcrime.securesms.util.DeviceProperties
+import com.difft.android.chat.messages.MessageForegroundService
+import com.difft.android.chat.messages.MessageServiceManager
+import com.difft.android.chat.util.AutoStartPermissionHelper
+import com.difft.android.chat.util.DeviceProperties
 import javax.inject.Inject
 
 @AndroidEntryPoint

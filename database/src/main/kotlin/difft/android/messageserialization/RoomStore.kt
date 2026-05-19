@@ -16,10 +16,6 @@ interface RoomStore {
 
     suspend fun getPinnedTime(forWhat: For): Optional<Long>
 
-    suspend fun getPublicKeyInfo(forWhat: For): String?
-
-    suspend fun updatePublicKeyInfo(forWhat: For, publicKeyInfo: String?)
-
     suspend fun getMessageReadPosition(forWhat: For): Long
 
     suspend fun updateMessageReadPosition(forWhat: For, readPosition: Long)

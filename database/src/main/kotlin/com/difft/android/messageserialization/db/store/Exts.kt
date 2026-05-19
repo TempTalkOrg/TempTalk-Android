@@ -2,6 +2,7 @@ package com.difft.android.messageserialization.db.store
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.Base58
+import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.models.ContactorModel
 import java.util.Optional
 
@@ -14,11 +15,12 @@ fun <T> Optional<T>.getOrNull(): T? {
 }
 
 /**
- * 获取联系人显示名称，包含备注信息
- * 优先级：remark > groupRemark > publicName > name > groupDisplayName > id
+ * Returns the display name for a contact, honoring user-set remarks.
+ * Priority: cachedRemark > remark > groupRemark > publicName > name > groupDisplayName > id
  */
 fun ContactorModel.getDisplayNameForUI(): String {
     return getFirstNonEmptyValue(
+        ContactRemarkCache.getRemark(this.id),
         remark,
         groupMemberContactor?.remark,
         publicName,
@@ -39,6 +41,17 @@ fun ContactorModel.getDisplayNameWithoutRemarkForUI(): String {
         groupMemberContactor?.displayName,
         id.formatBase58Id()
     )
+}
+
+/**
+ * Avatar JSON to render, walking the remark priority chain:
+ * cache.remarkAvatar > contactor.remarkAvatar > gMember.remarkAvatar > contactor.avatar.
+ */
+fun ContactorModel.getEffectiveAvatarJson(): String? {
+    return ContactRemarkCache.getRemarkAvatar(this.id)?.takeIf { it.isNotEmpty() }
+        ?: remarkAvatar?.takeIf { it.isNotEmpty() }
+        ?: groupMemberContactor?.remarkAvatar?.takeIf { it.isNotEmpty() }
+        ?: avatar
 }
 
 fun getFirstNonEmptyValue(vararg values: String?): String {

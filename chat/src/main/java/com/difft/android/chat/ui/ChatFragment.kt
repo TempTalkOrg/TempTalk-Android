@@ -7,8 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import com.difft.android.base.widget.InsetAwareConstraintLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
 import androidx.fragment.app.viewModels
@@ -56,8 +55,8 @@ import kotlinx.coroutines.launch
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.ViewUtil
 import javax.inject.Inject
 
 /**
@@ -113,7 +112,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
     })
 
     @Inject
-    lateinit var messageNotificationUtil: MessageNotificationUtil
+    lateinit var messageNotificationUtil: dagger.Lazy<MessageNotificationUtil>
 
     @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
@@ -145,6 +144,22 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // API < 30: WindowInsetsAnimationCompat doesn't work with adjustNothing,
+        // fall back to adjustResize for basic keyboard handling (no smooth animation).
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            requireActivity().window.setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            )
+        }
+
+        // Configure InsetAwareConstraintLayout for dual-pane mode
+        // In dual-pane, IndexActivity handles system bars; Fragment only needs IME
+        val rootLayout = binding.root as InsetAwareConstraintLayout
+        if (isInDualPaneMode()) {
+            rootLayout.setUseWindowTypes(false)
+        }
+
         viewLifecycleOwner.lifecycleScope.launch {
             onCreateForShowingMessages(savedInstanceState)
         }
@@ -154,62 +169,27 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
     override fun onResume() {
         super.onResume()
 
-        // Handle IME insets in Fragment
-        // ChatActivity has disabled bottom padding, so this Fragment is responsible
-        setupImeInsets()
-
-        messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
+        messageNotificationUtil.get().cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
-        messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
+        messageNotificationUtil.get().cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 
     override fun onPause() {
         super.onPause()
-
-        // Clear IME insets listener to prevent background Fragment from responding to keyboard
-        // Note: Don't reset padding here to avoid visual jump during page transitions
-        // The correct padding will be restored via requestApplyInsets() in onResume()
-        _binding?.root?.let { ViewCompat.setOnApplyWindowInsetsListener(it, null) }
-
         SendMessageUtils.removeFromCurrentChat(chatViewModel.forWhat.id)
     }
 
     override fun onDestroyView() {
-        super.onDestroyView()
-        _binding?.root?.let { ViewCompat.setOnApplyWindowInsetsListener(it, null) }
-        _binding = null
-    }
-
-    /**
-     * Setup IME insets handling.
-     * Adjusts Fragment root view's bottom padding when keyboard appears to push up the input box.
-     */
-    private fun setupImeInsets() {
-        val rootView = _binding?.root ?: return
-        val isDualPane = isInDualPaneMode()
-        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, insets ->
-            val imeHeight = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            val navigationBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            // Dual-pane: IndexActivity handles nav bar padding, Fragment only handles IME portion above nav bar
-            // Normal mode: ChatActivity disabled bottom padding, Fragment handles both nav bar and IME
-            val bottomPadding = if (isDualPane) {
-                // Dual-pane: subtract nav bar height (already handled by Activity) to avoid double padding
-                // When keyboard hidden: imeHeight=0, result=0 (no extra padding)
-                // When keyboard shown: only add the portion above nav bar
-                maxOf(0, imeHeight - navigationBarHeight)
-            } else {
-                // Normal mode: use IME height or nav bar height (whichever applies)
-                if (imeHeight > 0) imeHeight else navigationBarHeight
-            }
-            view.setPadding(
-                view.paddingLeft,
-                view.paddingTop,
-                view.paddingRight,
-                bottomPadding
+        // Restore manifest-declared softInputMode so the Activity window state
+        // doesn't leak adjustResize after this fragment is removed (dual-pane mode).
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            requireActivity().window.setSoftInputMode(
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
             )
-            insets
         }
-        rootView.requestApplyInsets()
+        super.onDestroyView()
+        _binding = null
     }
 
     private fun onCreateForShowingMessages(savedInstanceState: Bundle?) {
@@ -250,9 +230,16 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                 }
 
                 is RecordingState.Stopped -> {
-                    L.i { "[VoiceRecorder] Recording stopped. File saved at:${state.filePath}" }
                     binding.vVoiceRecordBg.visibility = View.GONE
-                    chatViewModel.sendVoiceMessage(state.filePath)
+                    val file = java.io.File(state.filePath)
+                    if (file.exists() && file.length() > 0) {
+                        L.i { "[VoiceRecorder] Recording stopped. size=${file.length()}" }
+                        chatViewModel.sendVoiceMessage(state.filePath)
+                    } else {
+                        L.w { "[VoiceRecorder] Stopped emitted with invalid file." }
+                        ToastUtil.showLong(R.string.chat_voice_record_failed)
+                        runCatching { file.delete() }
+                    }
                 }
 
                 is RecordingState.TooShort -> {
@@ -274,6 +261,16 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                     L.i { "[VoiceRecorder] Recording file too large" }
                     ToastUtil.showLong(R.string.chat_voice_max_size_limit)
                     binding.vVoiceRecordBg.visibility = View.GONE
+                }
+
+                is RecordingState.RecordFailed -> {
+                    L.w { "[VoiceRecorder] Recording failed: reason=${state.reason}" }
+                    binding.vVoiceRecordBg.visibility = View.GONE
+                    val msgRes = when (state.reason) {
+                        RecordingState.Reason.AUDIO_FOCUS_DENIED -> R.string.chat_voice_focus_denied_hint
+                        RecordingState.Reason.RECORDER_INIT_FAILED -> R.string.chat_voice_record_failed
+                    }
+                    ToastUtil.showLong(msgRes)
                 }
             }
         }

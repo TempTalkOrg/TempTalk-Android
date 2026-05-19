@@ -104,7 +104,7 @@
             android:visibility="gone"
             tools:visibility="visible" />
 
-        <FrameLayout
+        <com.difft.android.chat.ui.SafeFrameLayout
             android:id="@+id/contentFrame"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -123,13 +123,35 @@
             tools:visibility="visible" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/cl_message_time"
+            android:id="@+id/ll_time_wrapper"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:layout_marginTop="-26dp"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="3dp">
+            android:layout_marginTop="-26dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_confidential_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="3dp"
+                android:background="@drawable/chat_message_item_time_bg"
+                android:padding="4dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_confidential_tip"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/cl_message_time"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_goneMarginEnd="8dp"
+                tools:visibility="visible" />
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/cl_message_time"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:paddingHorizontal="8dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
             <TextView
                 android:id="@+id/textViewTime"
@@ -186,8 +208,9 @@
                     tools:visibility="visible" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-        </androidx.constraintlayout.widget.ConstraintLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </com.difft.android.chat.ui.ChatMessageContainerView>
 

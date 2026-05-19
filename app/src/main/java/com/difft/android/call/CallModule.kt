@@ -1,6 +1,7 @@
 package com.difft.android.call
 
 
+import com.difft.android.chat.call.LChatToCallController
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn

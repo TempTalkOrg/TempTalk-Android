@@ -10,19 +10,19 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.R
 import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.signal.libsignal.protocol.ecc.ECPublicKey
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.TextSecurePreferences
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
+import com.difft.android.chat.util.TextSecurePreferences
+import com.difft.android.chat.cryptonew.EncryptionDataManager
+import com.difft.android.network.signal.DeviceRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
+
 @Singleton
 class LinkDeviceUtils @Inject constructor(
-    private val encryptionDataManager: EncryptionDataManager
+    private val encryptionDataManager: EncryptionDataManager,
+    private val deviceRepository: DeviceRepository,
 ) {
 
     /**
@@ -39,20 +39,18 @@ class LinkDeviceUtils @Inject constructor(
                 onConfirm = {
                     activity.lifecycleScope.launch {
                         try {
-                            withContext(Dispatchers.IO) {
-                                val accountManager = ApplicationDependencies.getSignalServiceAccountManager()
-                                val verificationCode = accountManager.newDeviceVerificationCode
-                                val publicKey = ECPublicKey(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
-                                val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
-                                val id = globalServices.myId
-                                accountManager.addDevice(
-                                    ephemeralId,
-                                    publicKey,
-                                    aciIdentityKeyPair,
-                                    verificationCode,
-                                    id
-                                )
-                            }
+                            // Retrofit suspend funs handle threading; no withContext(IO) needed
+                            val verificationCode = deviceRepository.getNewDeviceVerificationCode()
+                            val publicKey = ECPublicKey(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
+                            val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
+                            val id = globalServices.myId
+                            deviceRepository.addDevice(
+                                ephemeralId!!,
+                                publicKey,
+                                aciIdentityKeyPair,
+                                verificationCode,
+                                id
+                            )
                             TextSecurePreferences.setMultiDevice(activity, true)
                             if (needFinish) {
                                 activity.finish()

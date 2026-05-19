@@ -13,6 +13,7 @@ import androidx.core.net.toUri
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.difft.android.PushForwardNoticeSendJobFactory
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
@@ -21,6 +22,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
 import com.difft.android.network.config.GlobalConfigsManager
 import org.difft.app.database.getGroupMemberCount
@@ -49,6 +51,7 @@ import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
+import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.SharedContact
 import difft.android.messageserialization.model.SharedContactName
 import difft.android.messageserialization.model.SharedContactPhone
@@ -81,8 +84,8 @@ import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.RoomModel
 import util.FileUtils
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.MediaUtil
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.util.MediaUtil
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
@@ -111,6 +114,9 @@ class SelectChatsUtils @Inject constructor(
 
     @Inject
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
+
+    @Inject
+    lateinit var pushForwardNoticeSendJobFactory: PushForwardNoticeSendJobFactory
 
     private fun showWaitDialog(activity: Activity, message: String = "") {
         ComposeDialogManager.showWait(activity, message, cancelable = false)
@@ -160,6 +166,17 @@ class SelectChatsUtils @Inject constructor(
         title: String? = null,
         file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
+        scene: ForwardNoticeData.Scene? = null,
+        // Source conversation (where the forwarded messages originally lived). Forward callers
+        // MUST pass this — the forwardNotice is posted there to tell original participants their
+        // messages were forwarded away. Share callers (file / plain text share) pass null; no
+        // notice is sent.
+        sourceConversation: For? = null,
+        // Authors of user-selected messages (NOT de-duplicated, preserving selection order).
+        // One entry per outer/selected message; a combined-forward message contributes only
+        // its outer author, not the inner/nested authors. Used as the authoritative source
+        // for notice count and authors, bypassing flatMap ambiguity on nested forwards.
+        sourceAuthorIds: List<String>? = null,
     ) {
         val fragment = ChatSelectBottomSheetFragment.newInstance(
             isContactOnly = false,
@@ -181,6 +198,9 @@ class SelectChatsUtils @Inject constructor(
                 title,
                 file,
                 forwardContexts,
+                scene,
+                sourceConversation,
+                sourceAuthorIds,
                 scope = fragment.lifecycleScope,
                 onDismiss = { fragment.dismiss() }
             )
@@ -313,6 +333,9 @@ class SelectChatsUtils @Inject constructor(
         title: String? = null,
         file: File? = null,
         forwardContexts: List<ForwardContext>? = null,
+        scene: ForwardNoticeData.Scene? = null,
+        sourceConversation: For? = null,
+        sourceAuthorIds: List<String>? = null,
         scope: CoroutineScope,
         onDismiss: () -> Unit
     ) {
@@ -373,7 +396,25 @@ class SelectChatsUtils @Inject constructor(
                                 mode = 0
                             }
                         }
-                        processForwardContextsSequentially(context, forwardContexts, content, chatsContact, archiveTime = time.toInt(), confidentialMode = mode)
+                        // scene fallback: share-external-content entries pass `null`; we land
+                        // on SINGLE-equivalent semantics so the notice still reflects reality.
+                        // Non-forward callers (file != null, plain text) never hit this branch
+                        // because they don't pass `forwardContexts`.
+                        val resolvedScene = scene ?: run {
+                            L.w { "[SelectChatsUtils] forwardContexts present but scene=null, fallback to SINGLE" }
+                            ForwardNoticeData.Scene.SINGLE
+                        }
+                        processForwardContextsSequentially(
+                            context,
+                            forwardContexts,
+                            content,
+                            chatsContact,
+                            archiveTime = time.toInt(),
+                            confidentialMode = mode,
+                            scene = resolvedScene,
+                            sourceConversation = sourceConversation,
+                            sourceAuthorIds = sourceAuthorIds
+                        )
                     }
                 } else {
                     sendTasks.add {
@@ -404,53 +445,77 @@ class SelectChatsUtils @Inject constructor(
     }
 
     /**
-     * 保存到收藏（无关联 dialog，使用 appScope）
+     * Save one or more forwarded messages to the user's own notes (recipient=self).
+     *
+     * Signature changed from `forwardContext: ForwardContext?` to
+     * `forwardContexts: List<ForwardContext>?` so multi-select save-to-notes keeps
+     * EVERY selected message's attachments — the previous `.first()` shortcut at the
+     * call site dropped N-1 attachments and produced wrong notice text
+     * ("saved 1 message from Y" when actually saved 5).
+     *
+     * Each ForwardContext is processed independently for attachment permissions /
+     * text push; the notice is enqueued once for the whole batch, with aggregated
+     * authors and a total count.
      */
     fun saveToNotes(
         context: Activity,
         content: String,
-        forwardContext: ForwardContext? = null
+        forwardContexts: List<ForwardContext>? = null,
+        // Source conversation where the user initiated save-to-notes. Pass null to skip the notice.
+        sourceConversation: For? = null,
+        // Authors of the user-selected messages for the notice. See sendForwardNotice.
+        sourceAuthorIds: List<String>? = null
     ) {
         // 显示全局 WaitDialog，设置为不可取消
         showWaitDialog(context)
 
-        if (forwardContext != null) {
-            val list = checkForwardAttachments(forwardContext)
-            if (list.isNotEmpty()) {
-                appScope.launch(Dispatchers.IO) {
-                    try {
-                        givePermissionForAttachments(
-                            context,
-                            content,
-                            globalServices.myId,
-                            false,
-                            list,
-                            forwardContext
-                        )
-                        handleTaskSuccess(R.string.chat_saved) {}
-                    } catch (e: Exception) {
-                        handleTaskError(e)
+        if (!forwardContexts.isNullOrEmpty()) {
+            appScope.launch(Dispatchers.IO) {
+                try {
+                    forwardContexts.forEach { ctx ->
+                        val list = checkForwardAttachments(ctx)
+                        if (list.isNotEmpty()) {
+                            givePermissionForAttachments(
+                                context,
+                                content,
+                                globalServices.myId,
+                                false,
+                                list,
+                                ctx
+                            )
+                        } else {
+                            sendTextPush(
+                                context,
+                                content,
+                                globalServices.myId,
+                                false,
+                                ctx,
+                                sharedContactId = ctx.sharedContactId,
+                                sharedContactName = ctx.sharedContactName
+                            )
+                        }
                     }
-                }
-            } else {
-                appScope.launch(Dispatchers.IO) {
-                    try {
-                        sendTextPush(
-                            context,
-                            content,
-                            globalServices.myId,
-                            false,
-                            forwardContext,
-                            sharedContactId = forwardContext.sharedContactId,
-                            sharedContactName = forwardContext.sharedContactName
+                    // All forward messages persisted/sent → emit one aggregated notice to the
+                    // SOURCE conversation (where messages originally lived), telling its members
+                    // "these messages were saved to notes". If caller didn't pass sourceConversation
+                    // (non-chat entry, test tool, etc.), skip the notice silently.
+                    if (sourceConversation != null) {
+                        sendForwardNotice(
+                            sourceConversation,
+                            forwardContexts,
+                            ForwardNoticeData.Scene.SAVE_TO_NOTES,
+                            sourceAuthorIds
                         )
-                        handleTaskSuccess(R.string.chat_saved) {}
-                    } catch (e: Exception) {
-                        handleTaskError(e)
+                    } else {
+                        L.w { "[ForwardNotice] saveToNotes called without sourceConversation, skip notice" }
                     }
+                    handleTaskSuccess(R.string.chat_saved) {}
+                } catch (e: Exception) {
+                    handleTaskError(e)
                 }
             }
         } else {
+            // Pure text save-to-notes — no source messages → no notice (nothing to summarize).
             appScope.launch(Dispatchers.IO) {
                 try {
                     sendTextPush(context, content, globalServices.myId, false)
@@ -501,7 +566,10 @@ class SelectChatsUtils @Inject constructor(
         content: String,
         chatsContact: ChatsContact,
         archiveTime: Int? = null,
-        confidentialMode: Int? = null
+        confidentialMode: Int? = null,
+        scene: ForwardNoticeData.Scene,
+        sourceConversation: For? = null,   // Source conversation (where the forwarded messages originally lived); notice is posted here.
+        sourceAuthorIds: List<String>? = null   // Authors of the user-selected messages (outer, not nested). Used for notice count and authors.
     ) = coroutineScope {
         // 使用 async 等待所有内部协程完成
         val deferredTasks = forwardContexts.map { forwardContext ->
@@ -521,8 +589,82 @@ class SelectChatsUtils @Inject constructor(
             }
         }
 
-        // 等待所有任务完成
+        // fail-fast: any forwardContext failure throws, which bypasses sendForwardNotice below
+        // and propagates to the onConfirm outer try/catch → handleTaskError.
         awaitAll(*deferredTasks.toTypedArray())
+
+        // All original forward messages succeeded → enqueue one notice to the SOURCE conversation
+        // (where the forwarded messages originally lived),telling original participants
+        // "someone forwarded your messages away". This mirrors screenshot-notification semantics.
+        // NOT to the forward target — target-side already sees the forwarded messages themselves.
+        if (sourceConversation != null) {
+            sendForwardNotice(sourceConversation, forwardContexts, scene, sourceAuthorIds)
+        } else {
+            L.w { "[ForwardNotice] sourceConversation missing, skip notice (non-forward share or caller bug?)" }
+        }
+    }
+
+    /**
+     * Enqueue a [PushForwardNoticeSendJob] summarizing a completed multi-message forward
+     * into [sourceConversation] (the chat where the forwarded messages originally lived).
+     * The notice tells participants of that original conversation that someone forwarded
+     * their messages away — mirroring screenshot-notification semantics.
+     *
+     * Aggregation rules:
+     *   - authorIds: flatten top-level forwards, take `.author`, dedup (first-seen order).
+     *     Nested forwards don't contribute their own authors — we count/attribute only
+     *     the top-level messages the user chose to forward.
+     *   - totalCount: sum of top-level forwards across all ForwardContexts.
+     *     Nested forwards count as 1 (the container).
+     *
+     * Empty aggregation → drop silently (defensive; should not happen in practice).
+     */
+    private fun sendForwardNotice(
+        sourceConversation: For,   // Source conversation; the notice is posted here.
+        forwardedContexts: List<ForwardContext>,
+        scene: ForwardNoticeData.Scene,
+        // Preferred authoritative author list from the caller: one entry per user-selected
+        // (outer) message, NOT de-duplicated. When provided, this is used directly:
+        //   count   = size (selected message count, treats a combined-forward as 1)
+        //   authors = distinct() (for rendering)
+        // When null, fall back to the old flat-map aggregation over top-level forwards
+        // (may incorrectly expand a combined-forward message into its nested entries).
+        sourceAuthorIds: List<String>? = null
+    ) {
+        val authorIds: List<String>
+        val totalCount: Int
+        if (sourceAuthorIds != null) {
+            authorIds = sourceAuthorIds.distinct()
+            totalCount = sourceAuthorIds.size
+        } else {
+            authorIds = forwardedContexts
+                .flatMap { it.forwards.orEmpty() }
+                .map { it.author }
+                .distinct()
+            totalCount = forwardedContexts.sumOf { it.forwards?.size ?: 0 }
+        }
+
+        if (authorIds.isEmpty() || totalCount == 0) {
+            L.w {
+                "[ForwardNotice] skip — empty notice (sourceConversation=${sourceConversation.id}, " +
+                    "scene=$scene, authors=${authorIds.size}, count=$totalCount)"
+            }
+            return
+        }
+
+        L.i {
+            "[ForwardNotice] enqueue notice job: sourceConversation=${sourceConversation.id}, " +
+                "isGroup=${sourceConversation is For.Group}, scene=$scene, " +
+                "authors=${authorIds.size}, count=$totalCount, explicitAuthors=${sourceAuthorIds != null}"
+        }
+
+        ApplicationDependencies.getJobManager().add(
+            pushForwardNoticeSendJobFactory.create(
+                null,
+                sourceConversation,
+                ForwardNoticeData(scene, authorIds, totalCount)
+            )
+        )
     }
 
     private suspend fun givePermissionForAttachments(
@@ -927,7 +1069,7 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
                         ChatsContact(
                             contact.id,
                             displayName,
-                            contact.avatar,
+                            contact.getEffectiveAvatarJson(),
                             displayName.getFirstLetter(),
                             false,
                             SelectChatsUtils.ITEM_TYPE_CONTACT,
@@ -997,7 +1139,7 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
                         ChatsContact(
                             contact.id,
                             displayName,
-                            contact.avatar,
+                            contact.getEffectiveAvatarJson(),
                             displayName.getFirstLetter(),
                             false,
                             SelectChatsUtils.ITEM_TYPE_CONTACT,

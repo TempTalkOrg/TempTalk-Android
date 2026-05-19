@@ -9,16 +9,6 @@
         "servTo": "fuse"
       },
       {
-        "name": "srv.chative.online",
-        "certType": "authority",
-        "servTo": "fuse"
-      },
-      {
-        "name": "srv.chative.ninja",
-        "certType": "authority",
-        "servTo": "fuse"
-      },
-      {
         "name": "srv.temptalk.net",
         "certType": "authority",
         "servTo": "fuse"
@@ -30,16 +20,6 @@
       },
       {
         "name": "chat.chative.im",
-        "certType": "self",
-        "servTo": "chat"
-      },
-      {
-        "name": "chat.chative.online",
-        "certType": "self",
-        "servTo": "chat"
-      },
-      {
-        "name": "chat.chative.ninja",
         "certType": "self",
         "servTo": "chat"
       }
@@ -59,16 +39,6 @@
         "label": "chat1"
       },
       {
-        "domain": "chat.chative.online",
-        "certType": "self",
-        "label": "chat2"
-      },
-      {
-        "domain": "chat.chative.ninja",
-        "certType": "self",
-        "label": "chat3"
-      },
-      {
         "domain": "chat.temptalk.net",
         "certType": "self",
         "label": "chat4"
@@ -77,16 +47,6 @@
         "domain": "d272r1ud4wbyy4.cloudfront.net",
         "certType": "authority",
         "label": "avatar"
-      },
-      {
-        "domain": "lJgAX4gRwo4GBW1Svh2z.temptalk.app",
-        "certType": "authority",
-        "label": "livekit-sg1"
-      },
-      {
-        "domain": "lJgAX4gRwo4GBW1Svh2z.ttcall.net",
-        "certType": "authority",
-        "label": "livekit-sg2"
       }
     ],
     "services": [
@@ -95,8 +55,6 @@
         "path": "/chat",
         "domains": [
           "chat1",
-          "chat2",
-          "chat3",
           "chat4"
         ]
       },
@@ -105,8 +63,6 @@
         "path": "/call",
         "domains": [
           "chat1",
-          "chat2",
-          "chat3",
           "chat4"
         ]
       },
@@ -115,8 +71,6 @@
         "path": "/fileshare",
         "domains": [
           "chat1",
-          "chat2",
-          "chat3",
           "chat4"
         ]
       },
@@ -125,8 +79,6 @@
         "path": "/speech2text",
         "domains": [
           "chat1",
-          "chat2",
-          "chat3",
           "chat4"
         ]
       },
@@ -138,20 +90,10 @@
         ]
       },
       {
-        "name": "livekit",
-        "path": "",
-        "domains": [
-          "livekit-sg1",
-          "livekit-sg2"
-        ]
-      },
-      {
         "name": "grayCheck",
         "path": "/grayCheck",
         "domains": [
           "chat1",
-          "chat2",
-          "chat3",
           "chat4"
         ]
       }
@@ -226,6 +168,7 @@
       "meetingWithoutRingThreshold": 50,
       "chatWithoutReceiptThreshold": 50,
       "membersMaxSize": 200,
+      "encryptionEnabled": false,
       "messageArchivingTimeOptionValues": [
         3600,
         172800,
@@ -304,7 +247,18 @@
             "mainland_url": "https://lJgAX4gRwo4GBW1Svh2z.ttcall.net",
             "mainland_url2": "https://pdYQmVa2Mlq9ey3PmJlz.temptalk.app"
           }
-        ]
+        ],
+        "serviceUrls": {
+          "fallback": [],
+          "primary": {
+            "addrs": [
+              "166.117.96.138",
+              "166.117.166.12"
+            ],
+            "domain": "pr7sg9kf2dt5bq8mw3zx.ablivekit.org",
+            "region": "SG"
+          }
+        }
       },
       "chatPresets": [
         "Good 👍",

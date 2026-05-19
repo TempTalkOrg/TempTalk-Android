@@ -33,7 +33,7 @@ import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.difft.android.call.ui.CriticalAlertFullScreen
+import com.difft.android.call.ui.alert.CriticalAlertFullScreen
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.group.GroupRepo
@@ -43,7 +43,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageNotificationUtil
 import javax.inject.Inject
 import kotlin.collections.any
 import kotlin.collections.orEmpty

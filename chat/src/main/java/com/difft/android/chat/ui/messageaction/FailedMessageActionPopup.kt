@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.DifftThemePreview
-import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.base.utils.dp as dpToPx
 
@@ -129,8 +128,6 @@ class FailedMessageActionPopup(
             contentBounds.bottom - rootBounds.top
         )
         
-        val screenWidth = WindowSizeClassUtil.getWindowWidthPx(activity)
-        
         composeView = ComposeView(activity).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             
@@ -148,7 +145,6 @@ class FailedMessageActionPopup(
                         FailedMessagePopupOverlay(
                             anchorBounds = relativeAnchorBounds,
                             contentBounds = relativeContentBounds,
-                            screenWidth = screenWidth,
                             onResendClick = {
                                 showPopup = false
                                 callbacks.onResend()
@@ -243,7 +239,6 @@ private val ARROW_HEIGHT = 6.dp
 private fun FailedMessagePopupOverlay(
     anchorBounds: Rect,
     contentBounds: Rect,
-    screenWidth: Int,
     onResendClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onOutsideClick: () -> Unit
@@ -271,7 +266,7 @@ private fun FailedMessagePopupOverlay(
                 detectTapGestures { offset ->
                     // Check if tap is outside popup bounds
                     if (isMeasured) {
-                        val x = calculatePopupX(screenWidth, popupWidth, edgePaddingPx)
+                        val x = calculatePopupX(contentBounds, popupWidth, edgePaddingPx)
                         val (y, _) = calculatePopupY(
                             anchorBounds, popupHeight, minY, maxY, arrowGapPx, arrowHeightPx
                         )
@@ -310,7 +305,7 @@ private fun FailedMessagePopupOverlay(
         
         // Display phase: positioned content
         if (isMeasured) {
-            val x = calculatePopupX(screenWidth, popupWidth, edgePaddingPx)
+            val x = calculatePopupX(contentBounds, popupWidth, edgePaddingPx)
             val (y, isBelow) = calculatePopupY(
                 anchorBounds, popupHeight, minY, maxY, arrowGapPx, arrowHeightPx
             )
@@ -335,9 +330,9 @@ private fun FailedMessagePopupOverlay(
     }
 }
 
-private fun calculatePopupX(screenWidth: Int, popupWidth: Int, edgePaddingPx: Int): Int {
-    // Outgoing messages: align right
-    return screenWidth - popupWidth - edgePaddingPx
+private fun calculatePopupX(contentBounds: Rect, popupWidth: Int, edgePaddingPx: Int): Int {
+    // Outgoing messages: align right within content area
+    return contentBounds.right - popupWidth - edgePaddingPx
 }
 
 private fun calculatePopupY(

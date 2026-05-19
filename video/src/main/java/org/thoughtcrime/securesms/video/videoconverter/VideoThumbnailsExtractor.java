@@ -16,11 +16,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 @RequiresApi(api = 23)
-final class VideoThumbnailsExtractor {
+public final class VideoThumbnailsExtractor {
 
   private static final String TAG = "VideoThumbnailsExtractor";
 
-  interface Callback {
+  public interface Callback {
     void durationKnown(long duration);
 
     boolean publishProgress(int index, Bitmap thumbnail);
@@ -28,7 +28,7 @@ final class VideoThumbnailsExtractor {
     void failed();
   }
 
-  static void extractThumbnails(final @NonNull MediaInput input,
+  public static void extractThumbnails(final @NonNull MediaInput input,
                                 final int thumbnailCount,
                                 final int thumbnailResolution,
                                 final @NonNull Callback callback)

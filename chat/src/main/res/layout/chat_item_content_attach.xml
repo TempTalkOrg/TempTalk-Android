@@ -5,43 +5,48 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <com.difft.android.chat.widget.AttachMessageView
-        android:id="@+id/attach_content_view"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/ll_content"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="20dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
 
-    <TextView
-        android:id="@+id/textView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:includeFontPadding="false"
-        android:lineSpacingMultiplier="1.2"
-        android:textColor="@color/t.primary"
-        android:textSize="16sp"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="@+id/attach_content_view"
-        app:layout_constraintTop_toBottomOf="@+id/attach_content_view"
-        tools:text="2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222"
-        tools:visibility="visible" />
+        <com.difft.android.chat.widget.AttachMessageView
+            android:id="@+id/attach_content_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="20dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
+        <TextView
+            android:id="@+id/textView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:includeFontPadding="false"
+            android:lineSpacingMultiplier="1.2"
+            android:textColor="@color/t.primary"
+            android:textSize="16sp"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="@+id/attach_content_view"
+            app:layout_constraintTop_toBottomOf="@+id/attach_content_view"
+            tools:text="2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222 2222222"
+            tools:visibility="visible" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <View
         android:id="@+id/v_cover"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@drawable/chat_message_confidential_bg"
-        android:gravity="center"
-        android:text="@string/chat_tap_to_view"
-        android:textColor="@color/t.white"
-        android:textSize="16sp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintBottom_toBottomOf="@+id/ll_content"
+        app:layout_constraintEnd_toEndOf="@+id/ll_content"
+        app:layout_constraintStart_toStartOf="@+id/ll_content"
+        app:layout_constraintTop_toTopOf="@+id/ll_content" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

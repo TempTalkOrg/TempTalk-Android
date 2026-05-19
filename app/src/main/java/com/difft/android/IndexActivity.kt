@@ -57,6 +57,7 @@ import com.difft.android.chat.group.GroupChatFragment
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ConversationNavigationCallback
+import com.difft.android.chat.recent.DualPaneSelectionListener
 import com.difft.android.chat.recent.RecentChatFragment
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.recent.RecentChatViewModel
@@ -86,6 +87,7 @@ import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -93,14 +95,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataMigrationManager
-import org.thoughtcrime.securesms.messages.FailedMessageProcessor
-import org.thoughtcrime.securesms.messages.MessageForegroundService
-import org.thoughtcrime.securesms.messages.MessageServiceManager
-import org.thoughtcrime.securesms.messages.PendingMessageProcessor
-import org.thoughtcrime.securesms.util.AppIconBadgeManager
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.websocket.WebSocketManager
+import com.difft.android.chat.messages.FailedMessageProcessor
+import com.difft.android.chat.messages.MessageForegroundService
+import com.difft.android.chat.messages.MessageServiceManager
+import com.difft.android.chat.messages.PendingMessageProcessor
+import com.difft.android.chat.util.AppIconBadgeManager
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.websocket.WebSocketManager
 import java.io.File
 import javax.inject.Inject
 import kotlin.system.exitProcess
@@ -114,6 +115,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     // Using a marker view to detect dual-pane mode (w840dp layout)
     override var isDualPaneMode = false
         private set
+    override val currentSelectedConversationId: String?
+        get() = currentConversationId
     private var currentConversationId: String? = null
 
     // Store detail fragment for each tab (tab index -> Fragment)
@@ -166,9 +169,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
     @Inject
     lateinit var webSocketManager: WebSocketManager
-
-    @Inject
-    lateinit var encryptionDataMigrationManager: EncryptionDataMigrationManager
 
     @Inject
     lateinit var conversationSettingsManager: ConversationSettingsManager
@@ -288,8 +288,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         checkRoot()
 
-        checkSign()
-
         registerUpgradeDownloadCompleteReceiver()
 
         checkUpdate()
@@ -305,8 +303,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         observeAndUpdateUnreadMessageCountBadge()
 
         requestNotificationPermission()
-
-        migrateEncryptionKeysIfNeeded()
 
         globalConfigsManager.syncMineConfigs()
 
@@ -383,7 +379,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     private fun initFirebaseCustomKey() {
-        FirebaseCrashlytics.getInstance().setCustomKey("uid", globalServices.myId.formatBase58Id())
+        val crashlytics = FirebaseCrashlytics.getInstance()
+        crashlytics.setCustomKey("uid", globalServices.myId.formatBase58Id())
     }
 
     private fun startReceivingMessages() {
@@ -484,34 +481,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             WCDBUpdateService.cleanEmptyRooms(activeConversationConfig)
         }
     }
-
-    /**
-     * 校验apk签名
-     */
-    private fun checkSign() {
-        if (!BuildConfig.DEBUG) {
-            lifecycleScope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    SecurityLib.checkApkSign(this@IndexActivity)
-                }
-                if (!result) {
-                    ComposeDialogManager.showMessageDialog(
-                        context = this@IndexActivity,
-                        title = getString(R.string.app_sign_error_title),
-                        message = getString(R.string.app_sign_error_tips),
-                        confirmText = getString(R.string.app_close_application),
-                        cancelText = getString(R.string.app_ignore),
-                        cancelable = false,
-                        onConfirm = {
-                            Process.killProcess(Process.myPid())
-                            exitProcess(0)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
 
     /**
      * 检测模拟器
@@ -858,76 +827,84 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private var checkNotificationFullScreenPermissionIgnore = false
     private var checkNotificationPermissionDialog: ComposeDialog? = null
     private var checkNotificationFullScreenPermissionDialog: ComposeDialog? = null
+    private var checkNotificationFullScreenPermissionJob: Job? = null
 
     /**
      * 检查通知权限并显示引导对话框
      */
     private fun checkNotificationPermission() {
-        // 1. 检查会话级别的忽略标志（防止同一会话重复弹出）
         if (checkNotificationPermissionIgnore) return
 
-        // 2. 检查是否在当前版本已经取消过（每个版本只提示一次）
         val notificationPermissionCheckedVersion = userManager.getUserData()?.checkNotificationPermission
         if (notificationPermissionCheckedVersion == PackageUtil.getAppVersionName()) return
 
-        // 3. 使用全面检查，包括权限和系统通知开关
-        if (!messageNotificationUtil.canShowNotifications()) {
-            if (checkNotificationPermissionDialog == null) {
-                checkNotificationPermissionDialog = ComposeDialogManager.showMessageDialog(
-                    context = this@IndexActivity,
-                    title = getString(R.string.tip),
-                    message = getString(R.string.notification_no_permission_tip1, PackageUtil.getAppName()),
-                    confirmText = getString(R.string.notification_go_to_settings),
-                    cancelText = getString(R.string.notification_ignore),
-                    onConfirm = {
-                        messageNotificationUtil.openNotificationSettings(this@IndexActivity)
-                        checkNotificationPermissionIgnore = true
-                    },
-                    onCancel = {
-                        // 保存当前版本号，该版本不再提示
-                        userManager.update {
-                            this.checkNotificationPermission = PackageUtil.getAppVersionName()
-                        }
-                        checkNotificationPermissionIgnore = true
-                    },
-                    onDismiss = {
-                        checkNotificationPermissionDialog = null
-                    }
-                )
+        lifecycleScope.launch {
+            val canShow = withContext(Dispatchers.IO) {
+                messageNotificationUtil.canShowNotifications()
             }
-        } else {
-            // 通知可用，关闭引导对话框（如果正在显示）
-            checkNotificationPermissionDialog?.dismiss()
-            checkNotificationPermissionDialog = null
+            if (!canShow) {
+                if (checkNotificationPermissionDialog == null) {
+                    checkNotificationPermissionDialog = ComposeDialogManager.showMessageDialog(
+                        context = this@IndexActivity,
+                        title = getString(R.string.tip),
+                        message = getString(R.string.notification_no_permission_tip1, PackageUtil.getAppName()),
+                        confirmText = getString(R.string.notification_go_to_settings),
+                        cancelText = getString(R.string.notification_ignore),
+                        onConfirm = {
+                            messageNotificationUtil.openNotificationSettings(this@IndexActivity)
+                            checkNotificationPermissionIgnore = true
+                        },
+                        onCancel = {
+                            userManager.update {
+                                this.checkNotificationPermission = PackageUtil.getAppVersionName()
+                            }
+                            checkNotificationPermissionIgnore = true
+                        },
+                        onDismiss = {
+                            checkNotificationPermissionDialog = null
+                        }
+                    )
+                }
+            } else {
+                checkNotificationPermissionDialog?.dismiss()
+                checkNotificationPermissionDialog = null
+            }
         }
     }
 
     private fun checkNotificationFullScreenPermission() {
         if (checkNotificationFullScreenPermissionIgnore) return
 
-        if (!messageNotificationUtil.hasFullScreenNotificationPermission()) {
-            if (checkNotificationFullScreenPermissionDialog == null) {
-                val message = FullScreenPermissionHelper.getNoPermissionTip()
-                checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
-                    context = this@IndexActivity,
-                    title = getString(R.string.tip),
-                    message = message,
-                    confirmText = getString(R.string.notification_go_to_settings),
-                    cancelText = getString(R.string.notification_ignore),
-                    onConfirm = {
-                        messageNotificationUtil.openFullScreenNotificationSettings(this@IndexActivity)
-                    },
-                    onCancel = {
-                        checkNotificationFullScreenPermissionIgnore = true
-                    },
-                    onDismiss = {
-                        checkNotificationFullScreenPermissionDialog = null
-                    }
-                )
+        checkNotificationFullScreenPermissionJob?.cancel()
+        checkNotificationFullScreenPermissionJob = lifecycleScope.launch {
+            val hasPermission = withContext(Dispatchers.IO) {
+                messageNotificationUtil.hasFullScreenNotificationPermission()
             }
-        } else {
-            checkNotificationFullScreenPermissionDialog?.dismiss()
-            checkNotificationFullScreenPermissionDialog = null
+            if (checkNotificationFullScreenPermissionIgnore) return@launch
+            if (!hasPermission) {
+                if (checkNotificationFullScreenPermissionDialog == null) {
+                    val message = FullScreenPermissionHelper.getNoPermissionTip()
+                    checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
+                        context = this@IndexActivity,
+                        title = getString(R.string.tip),
+                        message = message,
+                        confirmText = getString(R.string.notification_go_to_settings),
+                        cancelText = getString(R.string.notification_ignore),
+                        onConfirm = {
+                            messageNotificationUtil.openFullScreenNotificationSettings(this@IndexActivity)
+                        },
+                        onCancel = {
+                            checkNotificationFullScreenPermissionIgnore = true
+                        },
+                        onDismiss = {
+                            checkNotificationFullScreenPermissionDialog = null
+                        }
+                    )
+                }
+            } else {
+                checkNotificationFullScreenPermissionDialog?.dismiss()
+                checkNotificationFullScreenPermissionDialog = null
+            }
         }
     }
 
@@ -1034,15 +1011,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
 
         return file
-    }
-
-    /**
-     * 执行密钥迁移
-     */
-    private fun migrateEncryptionKeysIfNeeded() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            encryptionDataMigrationManager.migrateIfNeeded()
-        }
     }
 
     private fun initWCDB() {
@@ -1230,6 +1198,20 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         transaction.commit()
         currentTabIndex = newTabIndex
+
+        // Notify the current tab's list fragment to update selection state
+        notifyListFragmentSelectionChanged()
+    }
+
+    /**
+     * Notify list fragments about selection change.
+     * Finds ViewPager2 fragments and forwards the current selection.
+     */
+    private fun notifyListFragmentSelectionChanged() {
+        if (!isDualPaneMode) return
+        supportFragmentManager.fragments.forEach { fragment ->
+            (fragment as? DualPaneSelectionListener)?.updateDualPaneSelection(currentConversationId)
+        }
     }
 
     /**

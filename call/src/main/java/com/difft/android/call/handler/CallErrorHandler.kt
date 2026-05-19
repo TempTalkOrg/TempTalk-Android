@@ -3,7 +3,6 @@ package com.difft.android.call.handler
 import android.app.Activity
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.R

@@ -1,16 +1,16 @@
 package com.difft.android.chat.ui
 
 import android.annotation.SuppressLint
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.text.Spannable
-import android.text.SpannableStringBuilder
+import android.graphics.Outline
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.os.Build
 import android.text.TextUtils
-import android.text.style.ReplacementSpan
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnPreDraw
@@ -33,6 +33,41 @@ import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRema
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isLongText
 
+/** High blur for image/video (rich content needs stronger blur), low blur for others (preserve content outline) */
+private const val BLUR_RADIUS_HIGH = 80f
+private const val BLUR_RADIUS_LOW = 16f
+
+@RequiresApi(Build.VERSION_CODES.S)
+private fun View.applyConfidentialBlur(radius: Float = BLUR_RADIUS_LOW, cornerRadius: Float = 0f) {
+    if (cornerRadius > 0f) {
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, cornerRadius)
+            }
+        }
+    }
+    clipToOutline = true
+    setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP))
+}
+
+private fun View.clearConfidentialBlur() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        setRenderEffect(null)
+        clipToOutline = false
+        outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+    }
+}
+
+private fun View.setupConfidentialCover(isBlurred: Boolean) {
+    visibility = View.VISIBLE
+    if (isBlurred) {
+        setBackgroundColor(Color.TRANSPARENT)
+    } else {
+        setBackgroundResource(R.drawable.chat_message_confidential_bg)
+    }
+}
+
+
 /**
  * 文本内容绑定器
  *
@@ -43,169 +78,65 @@ object TextContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val textView = contentFrame.findViewById<com.difft.android.chat.ui.textpreview.SelectableTextView>(R.id.textView)
+        val llContent = contentFrame.findViewById<View>(R.id.ll_content)
+        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
         val rawText = textMessage.message.toString()
 
         textView.autoLinkMask = 0
-
         textView.textSize = if (TextSizeUtil.isLarger) 24f else 16f
 
-        val content = textMessage.message.toString()
+        val isConfidential = textMessage.isConfidential()
+        val messageId = textMessage.id
+        val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
-        if (textMessage.isConfidential()) {
-            // 机密消息不设置双击预览，点击由 ChatMessageListFragment 统一处理机密消息弹窗
-            textView.movementMethod = null
-            val spannableText = getGrayBlockText(
-                content,
-                ContextCompat.getColor(
-                    textView.context,
-                    com.difft.android.base.R.color.bg_confidential
-                ),
-                textView.width,
-                textView.paint
-            )
-            textView.text = spannableText
-            textView.maxLines = 5
-        } else {
-            // 非机密消息：设置双击打开文本预览
+        textView.setTag(R.id.tag_truncation_message_id, messageId)
+        LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+        textView.maxLines = effectiveMaxLines + 1
+        textView.ellipsize = null
+
+        if (!isConfidential) {
             TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
-
-            // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
-            val messageId = textMessage.id
-            textView.setTag(R.id.tag_truncation_message_id, messageId)
-
-            // First render full text to measure line count
-            LinkTextUtils.setMarkdownToTextview(
-                textView.context,
-                rawText,
-                textView,
-                textMessage.mentions
-            )
-
-            // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
-            textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
-
-            // doOnPreDraw to measure after layout and apply truncation
-            textView.doOnPreDraw {
-                TextTruncationUtil.applyTruncation(
-                    context = textView.context,
-                    textView = textView,
-                    messageId = messageId
-                ) {
-                    TextTruncationUtil.showFullTextDialog(
-                        textView,
-                        rawText,
-                        textMessage.mentions,
-                        textMessage
-                    )
-                }
-            }
         }
-    }
 
-    /**
-     * 将文本渲染为灰色块样式（用于机密消息）
-     * 供外部调用（如 AttachContentBinder 处理长文本机密消息）
-     */
-    fun getGrayBlockText(
-        originalText: String,
-        blockColor: Int,
-        textViewWidth: Int,
-        paint: Paint
-    ): SpannableStringBuilder {
-        val spannableStringBuilder = SpannableStringBuilder(originalText)
-
-        var start = 0
-        while (start < originalText.length) {
-            var end = start
-            while (end < originalText.length && originalText[end] != ' ') {
-                end++
-            }
-
-            while (paint.measureText(originalText, start, end) > textViewWidth) {
-                var splitEnd = start
-                while (splitEnd < end && paint.measureText(originalText, start, splitEnd) <= textViewWidth) {
-                    splitEnd++
-                }
-                if (splitEnd > start) {
-                    spannableStringBuilder.setSpan(
-                        UniformBackgroundSpan(blockColor, 26.dp),
-                        start,
-                        splitEnd,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
-                start = splitEnd
-            }
-
-            if (end > start) {
-                spannableStringBuilder.setSpan(
-                    UniformBackgroundSpan(blockColor, 26.dp),
-                    start,
-                    end,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        textView.doOnPreDraw {
+            TextTruncationUtil.applyTruncation(
+                context = textView.context,
+                textView = textView,
+                messageId = messageId,
+                maxLines = effectiveMaxLines,
+                enableInteraction = !isConfidential
+            ) {
+                TextTruncationUtil.showFullTextDialog(
+                    textView,
+                    rawText,
+                    textMessage.mentions,
+                    textMessage
                 )
             }
-
-            start = end + 1
         }
 
-        return spannableStringBuilder
-    }
-
-    class UniformBackgroundSpan(
-        private val backgroundColor: Int,
-        private val blockHeight: Int
-    ) : ReplacementSpan() {
-
-        override fun getSize(
-            paint: Paint,
-            text: CharSequence,
-            start: Int,
-            end: Int,
-            fm: Paint.FontMetricsInt?
-        ): Int {
-            val textWidth = paint.measureText(text, start, end).toInt()
-            if (fm != null) {
-                val original = paint.fontMetricsInt
-                val realTextHeight = original.descent - original.ascent
-
-                val extra = (blockHeight - realTextHeight).coerceAtLeast(0) / 2
-
-                fm.ascent = original.ascent - extra
-                fm.descent = original.descent + extra
-                fm.top = fm.ascent
-                fm.bottom = fm.descent
+        if (isConfidential) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                llContent?.applyConfidentialBlur()
+                coverView.setupConfidentialCover(isBlurred = true)
+            } else {
+                coverView.setupConfidentialCover(isBlurred = false)
             }
-            return textWidth
-        }
-
-        override fun draw(
-            canvas: Canvas,
-            text: CharSequence,
-            start: Int,
-            end: Int,
-            x: Float,
-            top: Int,
-            y: Int,
-            bottom: Int,
-            paint: Paint
-        ) {
-            val originalColor = paint.color
-
-            val rectTop = y + paint.fontMetrics.top
-            val rectBottom = y + paint.fontMetrics.bottom
-
-            paint.color = backgroundColor
-            canvas.drawRect(
-                x, rectTop, x + paint.measureText(text, start, end), rectBottom, paint
-            )
-
-            paint.color = Color.TRANSPARENT
-            canvas.drawText(text, start, end, x, y.toFloat(), paint)
-
-            paint.color = originalColor
+            coverView.setOnClickListener {
+                LinkTextUtils.findParentChatMessageItemView(coverView)?.performClick()
+            }
+            coverView.setOnLongClickListener {
+                LinkTextUtils.findParentChatMessageItemView(coverView)?.performLongClick()
+                true
+            }
+        } else {
+            llContent?.clearConfidentialBlur()
+            coverView.visibility = View.GONE
+            coverView.setOnClickListener(null)
+            coverView.setOnLongClickListener(null)
         }
     }
+
 }
 
 /**
@@ -218,7 +149,7 @@ object ImageContentBinder : ContentBinder {
         val textMessage = message as TextChatMessage
         val imageMessageView = contentFrame.findViewById<ImageAndVideoMessageView>(R.id.imageMessageView)
         val textView = contentFrame.findViewById<TextView>(R.id.textView)
-        val coverView = contentFrame.findViewById<TextView>(R.id.v_cover)
+        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
 
         imageMessageView.setupImageView(textMessage, shouldSaveToPhotos, containerWidth)
 
@@ -227,54 +158,53 @@ object ImageContentBinder : ContentBinder {
 
             textView.autoLinkMask = 0
 
-            // 机密消息不设置双击预览，coverView 会覆盖在上面处理点击
-            if (!textMessage.isConfidential()) {
-                // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
-                val messageId = textMessage.id
-                val rawText = textMessage.message.toString()
-                textView.setTag(R.id.tag_truncation_message_id, messageId)
+            val isConfidential = textMessage.isConfidential()
+            val messageId = textMessage.id
+            val rawText = textMessage.message.toString()
+            val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
-                // 非机密消息：设置双击打开文本预览
+            textView.setTag(R.id.tag_truncation_message_id, messageId)
+            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+            textView.maxLines = effectiveMaxLines + 1
+            textView.ellipsize = null
+
+            if (!isConfidential) {
                 TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
+            }
 
-                // First render full text to measure line count
-                LinkTextUtils.setMarkdownToTextview(
-                    textView.context,
-                    rawText,
-                    textView,
-                    textMessage.mentions
-                )
-
-                // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
-                textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
-
-                // doOnPreDraw to measure after layout and apply truncation
-                textView.doOnPreDraw {
-                    TextTruncationUtil.applyTruncation(
-                        context = textView.context,
-                        textView = textView,
-                        messageId = messageId
-                    ) {
-                        TextTruncationUtil.showFullTextDialog(
-                            textView,
-                            rawText,
-                            textMessage.mentions,
-                            textMessage
-                        )
-                    }
+            textView.doOnPreDraw {
+                TextTruncationUtil.applyTruncation(
+                    context = textView.context,
+                    textView = textView,
+                    messageId = messageId,
+                    maxLines = effectiveMaxLines,
+                    enableInteraction = !isConfidential
+                ) {
+                    TextTruncationUtil.showFullTextDialog(
+                        textView,
+                        rawText,
+                        textMessage.mentions,
+                        textMessage
+                    )
                 }
-            } else {
-                // 机密消息：简单显示文本，点击由 coverView 处理
-                textView.text = textMessage.message
             }
         } else {
             textView.visibility = View.GONE
         }
 
         if (textMessage.isConfidential()) {
-            coverView.visibility = View.VISIBLE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                contentFrame.findViewById<View>(R.id.ll_content)?.applyConfidentialBlur(BLUR_RADIUS_HIGH, 6.dp.toFloat())
+                coverView.setupConfidentialCover(isBlurred = true)
+
+            } else {
+                coverView.setupConfidentialCover(isBlurred = false)
+
+            }
         } else {
+            contentFrame.findViewById<View>(R.id.ll_content)?.clearConfidentialBlur()
             coverView.visibility = View.GONE
+
         }
     }
 }
@@ -288,7 +218,7 @@ object AudioContentBinder : ContentBinder {
     override fun bind(contentFrame: ViewGroup, message: ChatMessage, contactorCache: com.difft.android.chat.MessageContactsCacheUtil, shouldSaveToPhotos: Boolean, containerWidth: Int) {
         val textMessage = message as TextChatMessage
         val voiceMessageView = contentFrame.findViewById<VoiceMessageView>(R.id.voice_message_view)
-        val coverView = contentFrame.findViewById<TextView>(R.id.v_cover)
+        val coverView = contentFrame.findViewById<View>(R.id.v_cover)
 
         voiceMessageView.setAudioMessage(textMessage)
 
@@ -321,7 +251,14 @@ object AudioContentBinder : ContentBinder {
         }
 
         if (textMessage.isConfidential()) {
-            coverView.visibility = View.VISIBLE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                voiceMessageView.applyConfidentialBlur()
+                coverView.setupConfidentialCover(isBlurred = true)
+
+            } else {
+                coverView.setupConfidentialCover(isBlurred = false)
+
+            }
             coverView.setOnClickListener {
                 LinkTextUtils.findParentChatMessageItemView(coverView)?.performClick()
             }
@@ -330,7 +267,9 @@ object AudioContentBinder : ContentBinder {
                 true
             }
         } else {
+            voiceMessageView.clearConfidentialBlur()
             coverView.visibility = View.GONE
+
             coverView.setOnClickListener(null)
             coverView.setOnLongClickListener(null)
         }
@@ -349,6 +288,7 @@ object AttachContentBinder : ContentBinder {
             R.id.attach_content_view
         )
         val textView = contentFrame.findViewById<TextView>(R.id.textView)
+        val llContent = contentFrame.findViewById<View>(R.id.ll_content)
         val coverView = contentFrame.findViewById<View>(R.id.v_cover)
 
         val attachment = textMessage.attachment
@@ -368,95 +308,60 @@ object AttachContentBinder : ContentBinder {
             isLongTextDownloaded = isFileValid && (attachment?.status == AttachmentStatus.SUCCESS.code || progress == 100 || isCurrentDeviceSend)
 
             if (isLongTextDownloaded) {
-                // File downloaded - hide attachment view
                 attachContentView.visibility = View.GONE
             } else {
-                // File not downloaded yet - show attachment view for download
                 attachContentView.visibility = View.VISIBLE
                 attachContentView.setupAttachmentView(textMessage)
             }
         } else {
-            // Normal attachment handling
             attachContentView.visibility = View.VISIBLE
             attachContentView.setupAttachmentView(textMessage)
         }
 
-        // 长文本已下载的机密消息：按文本机密消息处理
-        val isLongTextConfidential = isLongTextDownloaded && textMessage.isConfidential()
-
+        // Text rendering (confidential messages also render normally; coverView handles masking)
         if (!TextUtils.isEmpty(textMessage.message)) {
             textView.visibility = View.VISIBLE
             textView.autoLinkMask = 0
 
-            if (isLongTextConfidential) {
-                // 长文本机密消息：使用灰色块样式，点击传递给父容器处理（由 ChatMessageListFragment 统一处理转发跳转）
-                textView.movementMethod = null
-                val content = textMessage.message.toString()
-                val spannableText = TextContentBinder.getGrayBlockText(
-                    content,
-                    ContextCompat.getColor(textView.context, com.difft.android.base.R.color.bg_confidential),
-                    textView.width,
-                    textView.paint
-                )
-                textView.text = spannableText
-                textView.maxLines = 5
+            val isConfidential = textMessage.isConfidential()
+            val messageId = textMessage.id
+            val rawText = textMessage.message.toString()
+            val effectiveMaxLines = if (isConfidential) TextTruncationUtil.CONFIDENTIAL_MAX_LINES else TextTruncationUtil.DEFAULT_MAX_LINES
 
-                // 点击传递给父容器处理（与普通文本机密消息一致）
-                textView.setOnClickListener {
-                    LinkTextUtils.findParentChatMessageItemView(textView)?.performClick()
-                }
-                textView.setOnLongClickListener {
-                    LinkTextUtils.findParentChatMessageItemView(textView)?.performLongClick()
-                    true
-                }
-            } else if (textMessage.isConfidential()) {
-                // 普通机密附件消息：简单显示文本，点击由 coverView 处理
-                textView.text = textMessage.message
-            } else {
-                // 非机密消息：普通文本处理
-                // 保存消息 ID 到 tag，用于在 post 回调中检查 View 是否被复用
-                val messageId = textMessage.id
-                val rawText = textMessage.message.toString()
-                textView.setTag(R.id.tag_truncation_message_id, messageId)
+            textView.setTag(R.id.tag_truncation_message_id, messageId)
+            LinkTextUtils.setMarkdownToTextview(textView.context, rawText, textView, textMessage.mentions)
+            textView.maxLines = effectiveMaxLines + 1
+            textView.ellipsize = null
 
-                // 设置双击打开文本预览
+            if (!isConfidential) {
                 TextTruncationUtil.setupDoubleClickPreview(textView, rawText, textMessage.mentions, textMessage)
+            }
 
-                // First render full text to measure line count
-                LinkTextUtils.setMarkdownToTextview(
-                    textView.context,
-                    rawText,
-                    textView,
-                    textMessage.mentions
-                )
-
-                // 先设置为 DEFAULT_MAX_LINES + 1 行，避免刷新时闪动
-                textView.maxLines = TextTruncationUtil.DEFAULT_MAX_LINES + 1
-
-                // doOnPreDraw to measure after layout and apply truncation
-                textView.doOnPreDraw {
-                    TextTruncationUtil.applyTruncation(
-                        context = textView.context,
-                        textView = textView,
-                        messageId = messageId
-                    ) {
-                        // View more click - read full file content if long text is downloaded
-                        if (isLongTextDownloaded && longTextPath != null) {
-                            TextTruncationUtil.showFullTextDialogFromFile(
-                                textView,
-                                longTextPath,
-                                rawText,
-                                textMessage.mentions,
-                                textMessage
-                            )
-                        } else {
-                            TextTruncationUtil.showFullTextDialog(
-                                textView,
-                                rawText,
-                                textMessage.mentions,
-                                textMessage
-                            )
-                        }
+            textView.doOnPreDraw {
+                TextTruncationUtil.applyTruncation(
+                    context = textView.context,
+                    textView = textView,
+                    messageId = messageId,
+                    maxLines = effectiveMaxLines,
+                    enableInteraction = !isConfidential,
+                    // Long-text body is only a 2KB preview — always expose Read More (aligns with iOS/Mac).
+                    alwaysShowReadMore = isLongText
+                ) {
+                    if (isLongTextDownloaded && longTextPath != null) {
+                        TextTruncationUtil.showFullTextDialogFromFile(
+                            textView,
+                            longTextPath,
+                            rawText,
+                            textMessage.mentions,
+                            textMessage
+                        )
+                    } else {
+                        TextTruncationUtil.showFullTextDialog(
+                            textView,
+                            rawText,
+                            textMessage.mentions,
+                            textMessage
+                        )
                     }
                 }
             }
@@ -464,10 +369,16 @@ object AttachContentBinder : ContentBinder {
             textView.visibility = View.GONE
         }
 
-        // 机密消息遮罩处理（长文本已下载的机密消息不需要遮罩，因为文本已经用灰色块处理）
-        // 点击传递给父容器，由 ChatMessageListFragment 统一处理（与 ImageContentBinder 保持一致）
-        if (textMessage.isConfidential() && !isLongTextConfidential) {
-            coverView.visibility = View.VISIBLE
+        // Confidential cover (unified handling for all attach types including long text)
+        if (textMessage.isConfidential()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                llContent?.applyConfidentialBlur()
+                coverView.setupConfidentialCover(isBlurred = true)
+
+            } else {
+                coverView.setupConfidentialCover(isBlurred = false)
+
+            }
             coverView.setOnClickListener {
                 LinkTextUtils.findParentChatMessageItemView(coverView)?.performClick()
             }
@@ -476,9 +387,14 @@ object AttachContentBinder : ContentBinder {
                 true
             }
         } else {
+            llContent?.clearConfidentialBlur()
             coverView.visibility = View.GONE
+
+            coverView.setOnClickListener(null)
+            coverView.setOnLongClickListener(null)
         }
     }
+
 }
 
 /**
@@ -501,12 +417,12 @@ object ContactContentBinder : ContentBinder {
         val name = sharedContact.name?.displayName
         tvName.text = name
 
-        // 从缓存中获取联系人信息
+        // Get contact info from cache
         val contactor = contactorCache.getContactor(id)
         if (contactor != null) {
             avatarView.setAvatar(contactor)
         } else {
-            // 缓存miss，显示默认头像
+            // Cache miss, show default avatar
             avatarView.setAvatar(
                 null,
                 null,
@@ -515,10 +431,20 @@ object ContactContentBinder : ContentBinder {
             )
         }
 
+        val llContent = contentFrame.findViewById<View>(R.id.ll_content)
         if (chatMessage.isConfidential()) {
-            coverView.visibility = View.VISIBLE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                llContent?.applyConfidentialBlur()
+                coverView.setupConfidentialCover(isBlurred = true)
+
+            } else {
+                coverView.setupConfidentialCover(isBlurred = false)
+
+            }
         } else {
+            llContent?.clearConfidentialBlur()
             coverView.visibility = View.GONE
+
         }
     }
 }
@@ -588,7 +514,7 @@ object MultiForwardContentBinder : ContentBinder {
         val rvForwardHistory = contentFrame.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_forward_history)
         val vCover = contentFrame.findViewById<View>(R.id.v_cover)
 
-        // 设置标题
+        // Set title
         val context = contentFrame.context
         if (forwards.firstOrNull()?.isFromGroup == true) {
             tvMultiTitle.text = context.getString(R.string.group_chat_history)
@@ -602,7 +528,7 @@ object MultiForwardContentBinder : ContentBinder {
             }
         }
 
-        // 设置预览列表
+        // Set preview list
         val adapter = ForwardMessagesAdapter(contactorCache)
         rvForwardHistory.adapter = adapter
         rvForwardHistory.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
@@ -611,10 +537,14 @@ object MultiForwardContentBinder : ContentBinder {
         }
         adapter.submitList(forwards.take(5))
 
-        // 机密消息遮罩（覆盖整个合并转发区域）
         if (textMessage.isConfidential()) {
-            vCover.visibility = View.VISIBLE
-            // 点击遮罩触发父视图的点击事件
+            val llContent = contentFrame.findViewById<View>(R.id.ll_content)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                llContent?.applyConfidentialBlur()
+                vCover.setupConfidentialCover(isBlurred = true)
+            } else {
+                vCover.setupConfidentialCover(isBlurred = false)
+            }
             vCover.setOnClickListener {
                 LinkTextUtils.findParentChatMessageItemView(vCover)?.let { parent ->
                     parent.findViewById<View>(R.id.contentContainer)?.performClick()
@@ -627,6 +557,7 @@ object MultiForwardContentBinder : ContentBinder {
                 true
             }
         } else {
+            contentFrame.findViewById<View>(R.id.ll_content)?.clearConfidentialBlur()
             vCover.visibility = View.GONE
         }
     }

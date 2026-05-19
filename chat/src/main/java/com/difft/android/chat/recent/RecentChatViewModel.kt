@@ -29,6 +29,7 @@ import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.requests.ConversationSetRequestBody
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -49,12 +50,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 import org.difft.app.database.WCDBUpdateService
+import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
 import org.difft.app.database.updateRoomUnreadState
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.util.AppIconBadgeManager
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.util.AppIconBadgeManager
+import com.difft.android.chat.util.MessageNotificationUtil
 import util.TimeFormatter
 import javax.inject.Inject
 import dagger.Lazy
@@ -64,15 +66,16 @@ import kotlin.time.Duration.Companion.minutes
 class RecentChatViewModel @Inject constructor(
     private val dbRoomStore: DBRoomStore,
     @param:ChativeHttpClientModule.Call
-    private val httpClient: ChativeHttpClient,
+    private val httpClient: Lazy<ChativeHttpClient>,
     @param:ChativeHttpClientModule.Chat
-    private val chatHttpClient: ChativeHttpClient,
+    private val chatHttpClient: Lazy<ChativeHttpClient>,
     private val draftRepository: DraftRepository,
-    private val appIconBadgeManager: AppIconBadgeManager,
-    private val messageNotificationUtil: MessageNotificationUtil,
+    private val appIconBadgeManager: Lazy<AppIconBadgeManager>,
+    private val messageNotificationUtil: Lazy<MessageNotificationUtil>,
     private val callDataManagerLazy: Lazy<CallDataManager>,
     private val contactorCacheManager: ContactorCacheManager,
-    private val groupUtil: GroupUtil
+    private val groupUtil: Lazy<GroupUtil>,
+    private val deviceRepository: DeviceRepository,
 ) : ViewModel() {
 
     private val language by lazy {
@@ -80,7 +83,7 @@ class RecentChatViewModel @Inject constructor(
     }
 
     private val callService by lazy {
-        httpClient.getService(LCallHttpService::class.java)
+        httpClient.get().getService(LCallHttpService::class.java)
     }
 
     private val callDataManager: CallDataManager by lazy {
@@ -142,22 +145,32 @@ class RecentChatViewModel @Inject constructor(
                         language.language,
                         it.lastActiveTime
                     )
+                    val callData = callDataManager.getCallDataByConversationId(it.roomId)
+                    val activeTime = callData?.createdAt ?: it.lastActiveTime
+                    val isOneOnOne = it.roomType == 0
+                    val remarkAvatarJson = if (isOneOnOne) {
+                        ContactRemarkCache.getRemarkAvatar(it.roomId)?.takeIf { json -> json.isNotEmpty() }
+                    } else {
+                        null
+                    }
                     RoomViewData(
-                        it.roomId,
-                        if (it.roomType == 0) RoomViewData.Type.OneOnOne else RoomViewData.Type.Group,
-                        it.roomName,
-                        it.roomAvatarJson,
-                        it.lastDisplayContent,
-                        lastActiveTime = callDataManager.getCallDataByConversationId(it.roomId)?.createdAt ?: it.lastActiveTime,
-                        lastActiveTimeText,
-                        it.unreadMessageNum,
-                        it.muteStatus,
-                        it.pinnedTime,
-                        it.mentionType,
-                        it.criticalAlertType,
-                        it.messageExpiry,
-                        callData = callDataManager.getCallDataByConversationId(it.roomId),
-                        draftPreview = allDrafts[it.roomId]?.content,
+                        roomId = it.roomId,
+                        type = if (isOneOnOne) RoomViewData.Type.OneOnOne else RoomViewData.Type.Group,
+                        roomName = it.roomName,
+                        roomAvatarJson = it.roomAvatarJson,
+                        remarkAvatarJson = remarkAvatarJson,
+                        lastDisplayContent = it.lastDisplayContent,
+                        lastActiveTime = activeTime,
+                        lastActiveTimeText = lastActiveTimeText,
+                        unreadMessageNum = it.unreadMessageNum,
+                        muteStatus = it.muteStatus,
+                        pinnedTime = it.pinnedTime,
+                        mentionType = it.mentionType,
+                        criticalAlertType = it.criticalAlertType,
+                        messageExpiry = it.messageExpiry,
+                        callData = callData,
+                        draftPreview = allDrafts[it.roomId]?.draft?.content,
+                        sortTime = maxOf(activeTime, allDrafts[it.roomId]?.updatedAt ?: 0L),
                         groupMembersNumber = it.groupMembersNumber,
                     )
                 })
@@ -166,7 +179,7 @@ class RecentChatViewModel @Inject constructor(
                 if (instantCallRoomViewData.isNotEmpty()) {
                     addAll(instantCallRoomViewData.values)
                 }
-            }.sortedByDescending { it.lastActiveTime }
+            }.sortedByDescending { it.sortTime }
 
             allRecentRoomsStateFlow.value = finalRoomList
             L.i { "[ChatList] allRecentRoomsStateFlow updated: ${allRecentRoomsStateFlow.value.size}" }
@@ -208,7 +221,7 @@ class RecentChatViewModel @Inject constructor(
 
                                     CallType.GROUP.type -> {
                                         call.conversation?.let { conversation ->
-                                            val group = groupUtil.getSingleGroupInfo(conversation)
+                                            val group = groupUtil.get().getSingleGroupInfo(conversation)
                                             if (group != null) {
                                                 call.callName = group.name
                                             } else {
@@ -319,8 +332,17 @@ class RecentChatViewModel @Inject constructor(
     }
 
     suspend fun activateDevice(): BaseResponse<Any> {
-        return chatHttpClient.getService(HttpService::class.java)
+        return chatHttpClient.get().getService(HttpService::class.java)
             .activateDevice(SecureSharedPrefsUtil.getBasicAuth())
+    }
+
+    /**
+     * Check device auth via Retrofit suspend fun.
+     * Replaces blocking PushServiceSocket call.
+     * Throws AuthorizationFailedException on 401/403 (handled by caller for logout).
+     */
+    suspend fun checkDeviceAuth() {
+        deviceRepository.checkDeviceAuth()
     }
 
     fun markAllAsRead(activity: Activity) {
@@ -340,8 +362,8 @@ class RecentChatViewModel @Inject constructor(
 
             delay(1000)
             SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)
-            appIconBadgeManager.updateAppIconBadgeNum(0)
-            messageNotificationUtil.cancelAllNotifications()
+            appIconBadgeManager.get().updateAppIconBadgeNum(0)
+            messageNotificationUtil.get().cancelAllNotifications()
         }
     }
 }

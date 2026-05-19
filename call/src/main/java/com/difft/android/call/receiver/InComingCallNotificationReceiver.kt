@@ -12,21 +12,22 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.manager.CallDataManager
-import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 
-
-@AndroidEntryPoint
 class InComingCallNotificationReceiver: BroadcastReceiver() {
 
-    @Inject
-    lateinit var callToChatController: LCallToChatController
-
-    @Inject
-    lateinit var callDataManager: CallDataManager
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface ReceiverEntryPoint {
+        fun callToChatController(): LCallToChatController
+        fun callDataManager(): CallDataManager
+    }
 
     @SuppressLint("NewApi")
-    override fun onReceive(context: Context?, intent: Intent?) {
+    override fun onReceive(context: Context, intent: Intent?) {
         L.d { "[Call] InComingCallNotificationReceiver onReceive" }
         when (intent?.action) {
             CALL_NOTIFICATION_OPERATION_REJECT -> {
@@ -36,15 +37,18 @@ class InComingCallNotificationReceiver: BroadcastReceiver() {
                 val callerId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CALLER_ID)
 
                 if(callType!=null && roomId!=null && callerId!=null){
+                    val entryPoint = EntryPointAccessors.fromApplication(
+                        context.applicationContext, ReceiverEntryPoint::class.java
+                    )
                     // 如果是1v1 call,则向caller发送reject消息
                     if(callType == CallType.ONE_ON_ONE.type){
                         L.i { "[Call] InComingCallNotificationReceiver onReceive, CALL_NOTIFICATION_OPERATION_REJECT roomId:$roomId" }
-                        callDataManager.removeCallData(roomId)
+                        entryPoint.callDataManager().removeCallData(roomId)
                         LCallManager.stopIncomingCallService(roomId, tag = "reject: local reject call")
                     }else{
                         LCallManager.stopIncomingCallService(roomId, tag = "reject: local reject call")
                     }
-                    callToChatController.rejectCall(callerId, CallRole.CALLEE, callType, roomId, conversationId){}
+                    entryPoint.callToChatController().rejectCall(callerId, CallRole.CALLEE, callType, roomId, conversationId){}
                 }
             }
         }

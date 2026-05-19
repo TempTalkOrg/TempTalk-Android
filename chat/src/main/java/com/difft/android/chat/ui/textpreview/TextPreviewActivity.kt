@@ -22,7 +22,7 @@ import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.Util
 import javax.inject.Inject
 import kotlin.math.abs
 

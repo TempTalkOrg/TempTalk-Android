@@ -1,24 +1,14 @@
 <resources>
-    <string name="login_to_chative">注册或登录Yelling</string>
     <string name="login_sign_to_chative">登录Yelling</string>
     <string name="login_email_or_invite_code_hint">邮箱/手机号</string>
     <string name="login_next">下一步</string>
     <string name="login_in">登录</string>
     <string name="login_skip">跳过</string>
-    <string name="login_email_does_not_exist">邮箱不存在，请尝试另一个邮箱</string>
     <string name="login_otp_sent">OTP 已发送，请查看</string>
     <string name="login_otp_sent_to">已发送 OTP 至 "%s"</string>
-    <string name="login_otp_error">OTP 不正确，请重试</string>
     <string name="login_invite_code_invalid">无效，请检查</string>
-    <string name="login_bind_email_hint">输入邮箱</string>
-    <string name="login_bind_email_skip_dissuade">如果不绑定邮箱，您的账户可能会丢失。确定要跳过此步骤吗？</string>
-    <string name="login_bind_email_skip_cancel">取消</string>
-    <string name="login_bind_email_skip_continue">继续</string>
     <string name="login_email_code_not_receive">没有收到？</string>
     <string name="login_email_code_resend">重新发送%s</string>
-    <string name="login_email_code_change_email">更换邮箱</string>
-    <string name="login_email_code_or">或</string>
-    <string name="login_logo" translatable="false">标志</string>
     <string name="login_error_not_exist">登录码过期或不存在，请检查</string>
     <string name="login_error_verification_failed">验证失败</string>
     <string name="login_error_too_many_attempts">尝试次数过多，请稍后再试。</string>
@@ -62,4 +52,11 @@
     <string name="login_different_dialog_ok_text">删除并重新登录</string>
     <string name="login_different_dialog_cancel_text">取消</string>
 
+    <!-- Register Intro / Onboarding -->
+    <string name="register_intro_skip">跳过</string>
+    <string name="register_intro_next">下一步</string>
+    <string name="register_intro_page1_title">消息会消失</string>
+    <string name="register_intro_page1_body">任意一方撤回或退出，双方记录即刻消失，不可恢复。重要内容，请自行保留。</string>
+    <string name="register_intro_page2_title">仅双方可见</string>
+    <string name="register_intro_page2_body">端到端加密。除你和对方之外，任何人都无法查看聊天内容。</string>
 </resources>

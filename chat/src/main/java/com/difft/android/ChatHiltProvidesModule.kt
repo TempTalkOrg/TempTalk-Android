@@ -8,8 +8,8 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import org.thoughtcrime.securesms.jobs.RuntimeTypeAdapterFactory
-import org.thoughtcrime.securesms.util.ByteUnit
+import com.difft.android.chat.jobs.RuntimeTypeAdapterFactory
+import com.difft.android.chat.util.ByteUnit
 import com.difft.android.websocket.util.ByteStringTypeAdapter
 import javax.inject.Named
 import javax.inject.Singleton

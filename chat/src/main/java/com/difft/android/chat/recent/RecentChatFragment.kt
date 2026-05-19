@@ -61,9 +61,9 @@ import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
-import org.thoughtcrime.securesms.websocket.WebSocketManager
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.websocket.WebSocketManager
 import javax.inject.Inject
 import dagger.Lazy
 import kotlinx.coroutines.delay
@@ -72,7 +72,7 @@ import kotlinx.coroutines.launch
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
-class RecentChatFragment : Fragment() {
+class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var userManager: UserManager
@@ -129,6 +129,9 @@ class RecentChatFragment : Fragment() {
                         L.i { "onItemClicked - OneOnOne ChattingRoom" }
                         if (navigationCallback != null) {
                             navigationCallback.onOneOnOneConversationSelected(roomViewData.roomId)
+                            if (navigationCallback.isDualPaneMode) {
+                                selectedId = roomViewData.roomId
+                            }
                         } else {
                             ChatActivity.startActivity(
                                 requireActivity(),
@@ -141,6 +144,9 @@ class RecentChatFragment : Fragment() {
                         L.i { "onItemClicked - Group ChattingRoom" }
                         if (navigationCallback != null) {
                             navigationCallback.onGroupConversationSelected(roomViewData.roomId)
+                            if (navigationCallback.isDualPaneMode) {
+                                selectedId = roomViewData.roomId
+                            }
                         } else {
                             GroupChatContentActivity.startActivity(
                                 requireActivity(),
@@ -268,16 +274,17 @@ class RecentChatFragment : Fragment() {
         val pinnedRooms = workingList.filter { item ->
             item.isPinned && item.callData == null
         }
-        pinnedRooms.sortedByDescending { item ->
-            item.pinnedTime
-        }
         // filter the meeting rooms
         val meetingRooms = workingList.filter { item ->
             item.callData != null && item.callData?.type != CallType.INSTANT.type
         }
+        // filter draft rooms (has draft, not pinned, not in call)
+        val draftRooms = workingList.filter { item ->
+            item.draftPreview != null && !item.isPinned && item.callData == null
+        }
         // filter the others rooms
         val otherRooms = workingList.filter { item ->
-            item.callData == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
+            item.callData == null && item.draftPreview == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
         }
 
         // add instant call rooms
@@ -292,18 +299,20 @@ class RecentChatFragment : Fragment() {
             } else {
                 currentInstantCallRooms
             }
-            sortedList.addAll(roomsToAdd.sortedByDescending { it.lastActiveTime })
+            sortedList.addAll(roomsToAdd.sortedByDescending { it.sortTime })
 
         } else {
-            sortedList.addAll(currentInstantCallRooms.sortedByDescending { it.lastActiveTime })
+            sortedList.addAll(currentInstantCallRooms.sortedByDescending { it.sortTime })
         }
 
         // add meeting rooms
-        sortedList.addAll(meetingRooms.sortedByDescending { it.lastActiveTime })
+        sortedList.addAll(meetingRooms.sortedByDescending { it.sortTime })
         // add pinned rooms
-        sortedList.addAll(pinnedRooms.sortedByDescending { it.lastActiveTime })
-        // add other rooms (sorted by lastActiveTime descending)
-        sortedList.addAll(otherRooms.sortedByDescending { it.lastActiveTime })
+        sortedList.addAll(pinnedRooms.sortedByDescending { it.sortTime })
+        // add draft rooms (sorted by sortTime descending)
+        sortedList.addAll(draftRooms.sortedByDescending { it.sortTime })
+        // add other rooms (sorted by sortTime descending)
+        sortedList.addAll(otherRooms.sortedByDescending { it.sortTime })
         return sortedList to instantCallRoomViewDataMap
     }
 
@@ -419,6 +428,15 @@ class RecentChatFragment : Fragment() {
 
         recentChatViewModel.retrieveCallingList()
 
+        // Restore selected state for dual-pane mode
+        val navigationCallback = activity as? ConversationNavigationCallback
+        if (navigationCallback?.isDualPaneMode == true) {
+            mAdapter.selectedId = navigationCallback.currentSelectedConversationId
+        }
+    }
+
+    override fun updateDualPaneSelection(selectedId: String?) {
+        mAdapter.selectedId = selectedId
     }
 
     override fun onPause() {
@@ -482,15 +500,18 @@ class RecentChatFragment : Fragment() {
     private fun checkDevices() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    ApplicationDependencies.getSignalServiceAccountManager().devices
-                }
+                // Retrofit suspend fun handles threading and responds to cancellation
+                // (fixes LeakCanary issue with old blocking PushServiceSocket call)
+                recentChatViewModel.checkDeviceAuth()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 L.w { "[RecentChatFragment] checkDevices error: ${e.stackTraceToString()}" }
+                // DeviceRepository.checkDeviceAuth() throws AuthorizationFailedException
+                // for BOTH 401 AND 403, matching PushServiceSocket.validateResponse() exactly.
+                // See PR #395 for prior incident where error handling was lost during migration.
                 if (e is AuthorizationFailedException) {
-                    L.i { "[Message] AuthorizationFailedException" }
+                    L.i { "[Message] Auth failed (code=${e.code}), logging out" }
                     logoutManager.doLogoutWithoutRemoveData()
                 }
             }
@@ -593,17 +614,34 @@ class RecentChatFragment : Fragment() {
     }
 
     private fun leaveGroup(group: GroupModel) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.group_leave),
+            message = getString(R.string.group_leave_notice),
+            confirmText = getString(R.string.group_leave_leave),
+            cancelText = getString(R.string.group_leave_cancel),
+            cancelable = false,
+            onConfirm = {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    ComposeDialogManager.showWait(requireActivity())
+                    try {
+                        val response = withContext(Dispatchers.IO) {
+                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                        }
+                        if (!response.isSuccess()) {
+                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        L.w { "[RecentChatFragment] leaveGroup error: ${e.stackTraceToString()}" }
+                        ToastUtil.show(R.string.chat_net_error)
+                    } finally {
+                        ComposeDialogManager.dismissWait()
+                    }
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[RecentChatFragment] leaveGroup error: ${e.stackTraceToString()}" }
             }
-        }
+        )
     }
 
     private fun disbandGroup(group: GroupModel) {
@@ -616,14 +654,21 @@ class RecentChatFragment : Fragment() {
             cancelable = false,
             onConfirm = {
                 viewLifecycleOwner.lifecycleScope.launch {
+                    ComposeDialogManager.showWait(requireActivity())
                     try {
-                        withContext(Dispatchers.IO) {
+                        val response = withContext(Dispatchers.IO) {
                             groupRepo.deleteGroup(group.gid)
+                        }
+                        if (!response.isSuccess()) {
+                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         L.w { "[RecentChatFragment] disbandGroup error: ${e.stackTraceToString()}" }
+                        ToastUtil.show(R.string.chat_net_error)
+                    } finally {
+                        ComposeDialogManager.dismissWait()
                     }
                 }
             }
@@ -631,6 +676,17 @@ class RecentChatFragment : Fragment() {
     }
 
     private fun showItemActionsPop(rootView: View, data: RoomViewData, touchX: Int, touchY: Int) {
+        viewLifecycleOwner.lifecycleScope.launch {
+        val groupData = if (data.type is Type.Group) {
+            withContext(Dispatchers.IO) {
+                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.roomId))
+                if (group != null && group.status == 0) {
+                    val role = group.members.find { it.id == globalServices.myId }?.groupRole
+                    if (role != null) Pair(group, role) else null
+                } else null
+            }
+        } else null
+
         val itemList = mutableListOf<ChativePopupView.Item>().apply {
 
             if (data.isPinned) {
@@ -676,22 +732,19 @@ class RecentChatFragment : Fragment() {
                     })
             }
 
-            if (data.type is Type.Group) {
-                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.roomId))
-                if (group != null && group.status == 0) {
-                    val role = group.members.find { it.id == globalServices.myId }?.groupRole
+            if (groupData != null) {
+                val (group, role) = groupData
                     if (role == GROUP_ROLE_OWNER) {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband), requireActivity().getString(R.string.group_disband_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
                             disbandGroup(group)
                             popupWindow?.dismiss()
                         })
                     } else {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband), requireActivity().getString(R.string.group_leave_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
                             leaveGroup(group)
                             popupWindow?.dismiss()
                         })
                     }
-                }
             }
             add(
                 ChativePopupView.Item(
@@ -705,6 +758,7 @@ class RecentChatFragment : Fragment() {
                 })
         }
         popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, itemList, touchX, touchY)
+        }
     }
 
 

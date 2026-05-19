@@ -16,18 +16,21 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.google.gson.Gson
 import dagger.hilt.InstallIn
-import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.messages.EnvelopToMessageProcessor
-import org.thoughtcrime.securesms.util.MessageNotificationUtil
+import com.difft.android.chat.messages.EnvelopToMessageProcessor
+import com.difft.android.chat.util.MessageNotificationUtil
 
-@AndroidEntryPoint
 class MyFirebaseMessagingService : FirebaseMessagingService() {
+
+    private val entryPoint by lazy {
+        EntryPointAccessors.fromApplication(applicationContext, EntryPoint::class.java)
+    }
+
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         // Not getting messages here? See why this may be: https://goo.gl/39bRNJ
         // Also if you intend on generating your own notifications as a result of a received FCM
@@ -36,7 +39,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         try {
             L.i { "[fcm] onMessageReceived notification:${remoteMessage.notification?.title} ${remoteMessage.notification?.body} data:${remoteMessage.data.keys.joinToString(",")}" }
             val customContent = remoteMessage.data["custom_content"]
-            val entryPoint = EntryPointAccessors.fromApplication(baseContext, EntryPoint::class.java)
             if (!TextUtils.isEmpty(customContent)) {
                 val pushCustomContent = Gson().fromJson(customContent, PushCustomContent::class.java)
 
@@ -184,7 +186,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun sendRegistrationToServer(token: String) {
-        val entryPoint = EntryPointAccessors.fromApplication(baseContext, EntryPoint::class.java)
         appScope.launch {
             entryPoint.pushUtil.sendRegistrationToServer(token)
         }

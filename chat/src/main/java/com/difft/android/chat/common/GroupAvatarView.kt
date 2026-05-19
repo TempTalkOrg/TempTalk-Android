@@ -26,10 +26,8 @@ import java.io.File
 
 class GroupAvatarView @JvmOverloads constructor(
     context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0,
-    defStyleRes: Int = 0
-) : ConstraintLayout(context, attrs, defStyleAttr, defStyleRes) {
+    attrs: AttributeSet? = null
+) : ConstraintLayout(context, attrs) {
 
     val binding: LayoutGroupAvatarBinding by viewbind(this)
 

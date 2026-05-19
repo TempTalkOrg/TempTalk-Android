@@ -23,6 +23,7 @@ import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.databinding.ActivityGroupManagementBinding
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.network.group.ChangeGroupSettingsReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
@@ -84,7 +85,13 @@ class GroupManagementActivity : BaseActivity() {
         }
 
         groupUtil.singleGroupsUpdate
-            .onEach { if (it.gid == groupId) { groupInfo = it; initView(it) } }
+            .onEach {
+                if (it.gid == groupId) {
+                    if (it.status != 0) { finish(); return@onEach }
+                    groupInfo = it
+                    initView(it)
+                }
+            }
             .catch { L.w { "[GroupManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
@@ -149,12 +156,12 @@ class GroupManagementActivity : BaseActivity() {
             val moderators = mutableListOf<GroupMemberModel>()
             val owner = members.find { it.groupMemberContactor?.groupRole == GROUP_ROLE_OWNER }
             owner?.let {
-                val contactAvatar = it.avatar?.getContactAvatarData()
+                val contactAvatar = it.getEffectiveAvatarJson()?.getContactAvatarData()
                 moderators.add(GroupMemberModel(it.getDisplayNameForUI(), it.id, contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, it.getDisplayNameForUI().getSortLetter(), GROUP_ROLE_OWNER, letterName = it.getDisplayNameWithoutRemarkForUI()))
             }
             val otherModerators = members.filter { it.groupMemberContactor?.groupRole == GROUP_ROLE_ADMIN }
             otherModerators.forEach {
-                val contactAvatar = it.avatar?.getContactAvatarData()
+                val contactAvatar = it.getEffectiveAvatarJson()?.getContactAvatarData()
                 moderators.add(GroupMemberModel(it.getDisplayNameForUI(), it.id, contactAvatar?.getContactAvatarUrl(), contactAvatar?.encKey, it.getDisplayNameForUI().getSortLetter(), GROUP_ROLE_ADMIN, letterName = it.getDisplayNameWithoutRemarkForUI()))
             }
             if (moderators.size < members.size) { //所有成员都是管理员，则不显示

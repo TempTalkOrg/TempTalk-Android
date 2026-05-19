@@ -11,7 +11,6 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 
 /**
  * 统一管理通话 Activity 的资源清理
@@ -42,7 +41,6 @@ class CallCleanupManager(
         ringtoneManager: CallRingtoneManager,
         contactorCacheManager: ContactorCacheManager,
         callControlMessageManager: OnGoingCallStateManager,
-        audioProcessor: AudioPipelineProcessor,
         viewModel: LCallViewModel,
         backPressedCallback: androidx.activity.OnBackPressedCallback?
     ) {
@@ -72,7 +70,7 @@ class CallCleanupManager(
         runCatching { stopService(serviceManager) }
             .onFailure { L.e(it) { "[Call] CallCleanupManager: stopService failed" } }
 
-        runCatching { resetState(onGoingCallStateManager, callDataManager, audioProcessor, viewModel) }
+        runCatching { resetState(onGoingCallStateManager, callDataManager, viewModel) }
             .onFailure { L.e(it) { "[Call] CallCleanupManager: resetState failed" } }
 
         runCatching { cleanupListeners() }
@@ -172,23 +170,16 @@ class CallCleanupManager(
     }
 
     /**
-     * 重置状态管理器和音频处理器
+     * 重置状态管理器
      */
     private fun resetState(
         onGoingCallStateManager: OnGoingCallStateManager,
         callDataManager: CallDataManager,
-        audioProcessor: AudioPipelineProcessor,
         viewModel: LCallViewModel
     ) {
-        // 重置状态管理器
         onGoingCallStateManager.reset()
         L.d { "[Call] CallCleanupManager reset state manager" }
 
-        // 释放音频处理器
-        audioProcessor.release()
-        L.d { "[Call] CallCleanupManager released audio processor" }
-
-        // 更新通话状态
         viewModel.getRoomId()?.let { roomId ->
             callDataManager.updateCallingState(roomId, false)
             L.d { "[Call] CallCleanupManager updated calling state for room: $roomId" }

@@ -10,6 +10,7 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.BindPushTokenRequestBody
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -89,9 +90,11 @@ class PushUtil @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             // 检查 Google Play Services 是否可用
             val playServiceStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
+            val gmsAvailable = playServiceStatus == ConnectionResult.SUCCESS
 
-            if (playServiceStatus != ConnectionResult.SUCCESS) {
+            if (!gmsAvailable) {
                 L.w { "[Push][fcm] Google Play Services not available, status:$playServiceStatus" }
+                reportPushTelemetry(gmsAvailable = false, fcmTokenAvailable = false)
                 _fcmInitResult.value = FcmInitResult.PlayServicesUnavailable(playServiceStatus)
                 return@launch
             }
@@ -124,6 +127,7 @@ class PushUtil @Inject constructor(
             when {
                 tokenResult == null -> {
                     L.w { "[Push][fcm] Fetching FCM registration token timeout (15s)" }
+                    reportPushTelemetry(gmsAvailable = true, fcmTokenAvailable = false)
                     _fcmInitResult.value = FcmInitResult.Failure("Timeout after 15 seconds")
                 }
 
@@ -137,15 +141,31 @@ class PushUtil @Inject constructor(
                     // 设置 Firebase Metrics
                     FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
 
+                    reportPushTelemetry(gmsAvailable = true, fcmTokenAvailable = true)
                     _fcmInitResult.value = FcmInitResult.Success(token)
                 }
 
                 else -> {
                     val error = tokenResult.exceptionOrNull()?.message ?: "Unknown error"
                     L.w { "[Push][fcm] Fetching FCM registration token failed: $error" }
+                    reportPushTelemetry(gmsAvailable = true, fcmTokenAvailable = false)
                     _fcmInitResult.value = FcmInitResult.Failure(error)
                 }
             }
+        }
+    }
+
+    // Tag Crashlytics with gms_available + fcm_token_available for push-channel segmentation.
+    // Caveat: when gmsAvailable=false, Crashlytics shares the same Google infra so values may
+    // arrive late (offline cache) or get dropped — that cohort is a partial blind spot.
+    private fun reportPushTelemetry(gmsAvailable: Boolean, fcmTokenAvailable: Boolean) {
+        try {
+            FirebaseCrashlytics.getInstance().apply {
+                setCustomKey("gms_available", gmsAvailable)
+                setCustomKey("fcm_token_available", fcmTokenAvailable)
+            }
+        } catch (e: Exception) {
+            L.e { "[Push][fcm] failed to report telemetry: ${e.stackTraceToString()}" }
         }
     }
 

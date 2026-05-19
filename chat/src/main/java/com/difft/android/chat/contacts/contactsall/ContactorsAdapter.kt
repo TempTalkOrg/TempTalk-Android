@@ -3,6 +3,7 @@ package com.difft.android.chat.contacts.contactsall
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
+import androidx.core.content.ContextCompat
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.R
 import com.difft.android.chat.contacts.data.getSortLetter
@@ -17,6 +18,18 @@ abstract class ContactorsAdapter(private val myID: String) : ListAdapter<Contact
         override fun areContentsTheSame(oldItem: ContactorModel, newItem: ContactorModel): Boolean =
             oldItem == newItem
     }) {
+
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val oldId = field
+            field = value
+            currentList.forEachIndexed { index, item ->
+                if (item.id == oldId || item.id == value) {
+                    notifyItemChanged(index)
+                }
+            }
+        }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ContactItemViewHolder {
         return ContactItemViewHolder(parent)
@@ -36,7 +49,8 @@ abstract class ContactorsAdapter(private val myID: String) : ListAdapter<Contact
             holder.setBotBadgeVisible(data.id.isOfficialBotId())
         }
         holder.content = null
-//        val contactorID = data.id
+        val bgColorRes = if (selectedId != null && data.id == selectedId) R.color.bg3 else R.color.bg1
+        holder.itemView.setBackgroundColor(ContextCompat.getColor(holder.itemView.context, bgColorRes))
         holder.setOnItemClickListener {
 //            startChatActivity(contactorID)
             onContactClicked(data, position)

@@ -15,13 +15,38 @@ plugins {
     alias(libs.plugins.roborazzi) apply false
 }
 
-// 强制所有子项目使用指定的Kotlin版本
 allprojects {
     configurations.all {
         resolutionStrategy.eachDependency {
-            if (requested.group == "org.jetbrains.kotlin" ) {
+            if (requested.group == "org.jetbrains.kotlin") {
                 useVersion("2.3.0")
                 because("Force Kotlin version to 2.3.0 for Coroutines 1.9.0 compatibility")
+            }
+            if (requested.group == "io.netty") {
+                useVersion("4.1.133.Final")
+                because("Fix CVE: HTTP Request Smuggling, DoS, Data Amplification, CRLF Injection")
+            }
+            if (requested.group == "org.bouncycastle" &&
+                (requested.name == "bcprov-jdk18on" ||
+                    requested.name == "bcpkix-jdk18on" ||
+                    requested.name == "bcutil-jdk18on")) {
+                useVersion("1.84")
+                because("Fix CVE: Broken Crypto Algorithm, Timing Attack, LDAP Injection")
+            }
+            if (requested.group == "com.google.protobuf" &&
+                (requested.name == "protobuf-java" ||
+                    requested.name == "protobuf-javalite" ||
+                    requested.name == "protobuf-kotlin-lite")) {
+                useVersion("3.25.5")
+                because("Fix CVE-2024-7254: Stack-based Buffer Overflow")
+            }
+            if (requested.group == "com.google.guava" && requested.name == "guava") {
+                useVersion("33.4.0-android")
+                because("Fix CVE-2023-2976: Creation of Temporary File with Insecure Permissions")
+            }
+            if (requested.group == "junit" && requested.name == "junit") {
+                useVersion("4.13.2")
+                because("Fix Information Exposure vulnerability in junit 4.12")
             }
         }
     }

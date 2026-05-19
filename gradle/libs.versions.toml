@@ -7,7 +7,7 @@ kotlinCoroutine = "1.10.2"
 # Android
 compileSdk = "36"
 targetSdk = "36"
-minSdk = "24"
+minSdk = "26"
 jvmTarget = "17"
 androidGradlePlugin = "8.13.2"
 
@@ -36,7 +36,7 @@ material = "1.11.0"
 hilt = "2.58"
 
 # Firebase
-firebaseBom = "34.9.0"
+firebaseBom = "34.12.0"
 firebaseGoogleServices = "4.4.4"
 firebaseCrashlyticsPlugin = "3.0.6"
 firebasePerfPlugin = "2.0.2"
@@ -65,12 +65,13 @@ smartRefreshLayout = "2.1.0"
 # Picture Selector
 pictureSelector = "v3.11.2"
 
+dtproto = "3.1.0"
+jna = "5.14.0"
 signalAndroid = "0.86.5"
-signalSqlcipher = "4.6.0-S1"
 
 # Jackson
-jacksonDatabind = "2.13.5"
-jacksonModuleKotlin = "2.12.0"
+jacksonDatabind = "2.21.2"
+jacksonModuleKotlin = "2.21.2"
 
 # Other Libraries
 jwtdecode = "2.0.2"
@@ -96,8 +97,8 @@ desugarJdkLibs = "2.1.5"
 accompanistSystemuicontroller = "0.36.0"
 coil = "3.3.0"
 accompanistPermissions = "0.37.3"
-livekitAndroid = "2.23.5.6"
-denoiseFilter = "1.0.11"
+livekitAndroid = "2.24.1.6"
+denoiseFilter = "1.1.0"
 kotlinxSerializationCore = "1.10.0"
 kotlinxSerializationJson = "1.10.0"
 robolectric = "4.14.1"
@@ -137,6 +138,7 @@ androidx-lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-view
 androidx-lifecycle-livedata-ktx = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "androidxLifecycle" }
 androidx-lifecycle-common-java8 = { module = "androidx.lifecycle:lifecycle-common-java8", version.ref = "androidxLifecycle" }
 androidx-lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "androidxLifecycle" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
 
 # AndroidX Navigation
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "androidxNavigation" }
@@ -214,8 +216,9 @@ smart-refresh-footer-ball = { module = "io.github.scwang90:refresh-footer-ball",
 picture-selector-ucrop = { module = "io.github.lucksiege:ucrop", version.ref = "pictureSelector" }
 picture-selector-compress = { module = "io.github.lucksiege:compress", version.ref = "pictureSelector" }
 
+dtproto = { module = "com.github.TempTalkOrg:dtproto", version.ref = "dtproto" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 signal-android = { module = "org.signal:libsignal-android", version.ref = "signalAndroid" }
-signal-sqlcipher-android = { module = "org.signal:sqlcipher-android", version.ref = "signalSqlcipher" }
 
 # Jackson
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jacksonDatabind" }
@@ -250,10 +253,10 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 coil = { module = "io.coil-kt.coil3:coil", version.ref = "coil" }
 coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
-livekit-android = { module = "org.difft.android.libraries:livekit-android", version.ref = "livekitAndroid" }
-livekit-android-camerax = { module = "org.difft.android.libraries:livekit-android-camerax", version.ref = "livekitAndroid" }
-livekit-ttsignal = { module = "org.difft.android.libraries:ttsignal", version.ref = "livekitAndroid" }
-denoise-filter = { module = "org.difft.android.libraries:audio-pipeline", version.ref = "denoiseFilter" }
+livekit-android = { module = "com.github.TempTalkOrg.livekit-client-sdk-android:livekit-android", version.ref = "livekitAndroid" }
+livekit-android-camerax = { module = "com.github.TempTalkOrg.livekit-client-sdk-android:livekit-android-camerax", version.ref = "livekitAndroid" }
+livekit-ttsignal = { module = "com.github.TempTalkOrg.livekit-client-sdk-android:ttsignal", version.ref = "livekitAndroid" }
+denoise-filter = { module = "com.github.TempTalkOrg:audio-pipeline-plugin", version.ref = "denoiseFilter" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinxSerializationCore" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
@@ -336,8 +339,7 @@ firebase = [
 # Signal
 # Note: signal-android already includes signal-client via api dependency
 signal = [
-    "signal-android",
-    "signal-sqlcipher-android"
+    "signal-android"
 ]
 
 # Jackson

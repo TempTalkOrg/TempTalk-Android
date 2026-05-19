@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import com.difft.android.base.call.CallActionType
+import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
@@ -26,11 +27,8 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 
 /**
- * 通话管理器
- * 
- * 作为通话模块的门面（Facade），提供统一的接口访问各种通话相关的功能。
- * 内部通过委托模式将具体功能实现分散到各个专门的管理器类中。
- *
+ * Call manager — facade for the call module, providing a unified interface to call-related features.
+ * Delegates concrete implementations to specialized manager classes.
  */
 object LCallManager {
 
@@ -50,10 +48,7 @@ object LCallManager {
         val callMessageManager: CallMessageManager
     }
 
-    /**
-     * 统一的 EntryPoint 访问器
-     * 所有依赖都通过此属性获取，避免重复的 EntryPointAccessors 调用
-     */
+    /** Unified EntryPoint accessor — all dependencies are obtained through this to avoid redundant EntryPointAccessors calls. */
     private val entryPoint: EntryPoint by lazy {
         EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance)
     }
@@ -92,11 +87,11 @@ object LCallManager {
 
 
     /**
-     * 获取关键提醒通知内容
-     * 
-     * @param conversationId 会话ID
-     * @param sourceId 来源ID（群组ID或用户ID）
-     * @return 返回标题和内容的 Pair，用于显示关键提醒通知
+     * Returns critical alert notification content.
+     *
+     * @param conversationId conversation ID
+     * @param sourceId source ID (group ID or user ID)
+     * @return a Pair of title and body for the critical alert notification
      */
     suspend fun getCriticalAlertNotificationContent(
         conversationId: String,
@@ -106,12 +101,11 @@ object LCallManager {
     }
 
     /**
-     * 加入通话
-     * 根据通话数据加入指定的通话房间
-     * 
-     * @param context 上下文
-     * @param callData 通话数据，包含房间ID、通话类型、呼叫者ID等信息
-     * @param onComplete 完成回调，参数为 true 表示成功，false 表示失败
+     * Joins a call room based on the given call data.
+     *
+     * @param context context
+     * @param callData call data containing room ID, call type, caller ID, etc.
+     * @param onComplete completion callback — `true` for success, `false` for failure
      */
     fun joinCall(context: Context, callData: CallData, onComplete: (Boolean) -> Unit) {
 
@@ -148,10 +142,9 @@ object LCallManager {
     }
 
     /**
-     * 将通话界面带到前台
-     * 如果通话界面在后台，将其重新显示到前台
-     * 
-     * @param context 上下文
+     * Brings the call screen to the foreground.
+     *
+     * @param context context
      */
     fun bringCallScreenToFront(context: Context) {
         try {
@@ -167,59 +160,52 @@ object LCallManager {
     }
 
     /**
-     * 停止来电服务
-     * 停止指定房间的来电通知、铃声、震动等，并发送销毁广播
-     * 
-     * @param roomId 房间ID
-     * @param tag 停止原因标签，用于日志记录，可为 null
+     * Stops the incoming call service for the given room (notification, ringtone, vibration, etc.) and sends a destroy broadcast.
+     *
+     * @param roomId room ID
+     * @param tag reason tag for logging, nullable
      */
     fun stopIncomingCallService(roomId: String, tag: String? = null) {
         incomingCallServiceManager.stopIncomingCallService(application, roomId, tag)
     }
 
     /**
-     * 启动来电服务
-     * 处理来电请求，显示来电界面或通知，播放铃声和震动，启动超时检测
-     * 
-     * @param intent 包含来电信息的 Intent，需要包含房间ID、通话类型、呼叫者ID等信息
+     * Starts the incoming call service — shows the incoming call UI/notification, plays ringtone and vibration, and starts timeout detection.
+     *
+     * @param intent Intent containing incoming call info (room ID, call type, caller ID, etc.)
      */
     fun startIncomingCallService(intent: Intent) {
         incomingCallServiceManager.startIncomingCallService(application, intent)
     }
 
-    /**
-     * 恢复来电界面（如果活跃）
-     * 如果来电界面在后台，将其恢复到前台显示
-     */
+    /** Restores the incoming call screen to the foreground if it is currently active. */
     fun restoreIncomingCallScreenIfActive() {
         callToChatController.restoreIncomingCallScreenIfActive()
     }
 
     /**
-     * 发送或创建通话文本消息
-     * 根据参数发送通话相关的文本消息，或创建本地消息记录
-     * 
-     * @param callActionType 通话操作类型（如开始、结束、挂断等）
-     * @param textContent 消息文本内容
-     * @param sourceDevice 来源设备ID
-     * @param timestamp 消息时间戳
-     * @param systemShowTime 系统显示时间戳
-     * @param fromWho 发送者信息
-     * @param forWhat 接收者信息（群组或用户）
-     * @param callType 通话类型
-     * @param createCallMsg 是否创建通话消息记录
-     * @param inviteeLIst 被邀请者列表，默认为空列表
+     * Sends or creates a local call text message.
+     *
+     * @param callActionType call action type (start, end, hangup, etc.)
+     * @param textContent message text content
+     * @param sourceDevice source device ID
+     * @param timestamp message timestamp
+     * @param systemShowTime system display timestamp
+     * @param fromWho sender info
+     * @param forWhat recipient info (group or user)
+     * @param callType call type
+     * @param createCallMsg whether to create a call message record
+     * @param inviteeLIst invitee list, defaults to empty
      */
     fun sendOrLocalCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For, callType: CallType, createCallMsg: Boolean, inviteeLIst: List<String> = emptyList()) {
         callMessageManager.sendOrLocalCallTextMessage(callActionType, textContent, sourceDevice, timestamp, systemShowTime, fromWho, forWhat, callType, createCallMsg, inviteeLIst)
     }
 
     /**
-     * 移除待处理消息
-     * 从服务器删除指定来源和时间戳的待处理消息
-     * 
-     * @param source 消息来源（用户ID或群组ID）
-     * @param timestamp 消息时间戳
+     * Removes a pending message from the server by source and timestamp.
+     *
+     * @param source message source (user ID or group ID)
+     * @param timestamp message timestamp
      */
     fun removePendingMessage(source: String, timestamp: String) {
         callMessageManager.removePendingMessage(source, timestamp)
@@ -230,50 +216,54 @@ object LCallManager {
     }
 
     /**
-     * 从服务器获取通话服务URL并缓存
-     * 异步从服务器获取通话服务URL列表，并更新本地缓存
-     * 
-     * @return 服务URL列表，如果获取失败则返回空列表
+     * Fetches call service URLs from the server and updates the local cache.
+     *
+     * @return service URL list; empty list on failure
      */
     suspend fun fetchCallServiceUrlAndCache(): List<String> {
         return callServiceUrlManager.fetchCallServiceUrlAndCache()
     }
 
-    /**
-     * 获取缓存的服务URL列表
-     * 返回当前缓存的服务URL列表，不会发起网络请求
-     * 
-     * @return 服务URL列表的副本，如果缓存为空则返回空列表
-     */
-    fun getCallServiceUrl(): List<String> {
-        return callServiceUrlManager.getCallServiceUrl()
+    /** Called by Application when the app returns to the foreground; refreshes [getServiceUrlV2] cache at intervals. */
+    fun onAppForegroundedForCallServiceUrls() {
+        callServiceUrlManager.onAppForegrounded()
+    }
+
+    /** Force-refreshes domain config after a connection failure (still keeps local if local config_version > remote). */
+    suspend fun refreshCallServiceUrlsAfterConnectionFailure() {
+        callServiceUrlManager.refreshAfterConnectionFailure()
+    }
+
+    /** Before initiating a call: waits for fetch within timeout if cache is missing/expired; returns complete [ServiceUrls] or null. */
+    suspend fun ensureCallServiceUrlsForCall(timeoutMs: Long = 15_000L): ServiceUrls? {
+        return callServiceUrlManager.ensureServiceUrlsForCall(timeoutMs)
+    }
+
+    /** Returns the last persisted [ServiceUrls] (no expiration check), used to continue connection after a forced refresh. */
+    fun getCachedServiceUrls(): ServiceUrls? {
+        return callServiceUrlManager.getCachedServiceUrls()
     }
 
     /**
-     * 获取并清空通话反馈信息
-     * 原子操作：获取当前反馈信息后立即清空
-     * 
-     * @return 当前的反馈信息，如果不存在则返回 null
+     * Atomically gets and clears the call feedback info.
+     *
+     * @return current feedback info, or null if none
      */
     fun getAndClearCallFeedbackInfo(): FeedbackCallInfo? {
         return callFeedbackManager.getAndClearCallFeedbackInfo()
     }
 
     /**
-     * 显示通话反馈视图
-     * 在指定的 Activity 上显示通话反馈界面
-     * 
-     * @param activity 要显示反馈视图的 Activity
-     * @param callInfo 反馈信息，包含通话相关数据
+     * Shows the call feedback view on the given activity.
+     *
+     * @param activity the activity to display the feedback view on
+     * @param callInfo feedback info containing call-related data
      */
     fun showCallFeedbackView(activity: Activity, callInfo: FeedbackCallInfo) {
         return callFeedbackManager.showCallFeedbackView(activity, callInfo)
     }
 
-    /**
-     * 检查 QUIC 功能灰度状态
-     * 根据灰度配置决定使用 HTTP3/QUIC 还是 WebSocket 连接方式
-     */
+    /** Checks QUIC feature flag status and sets the connection mode to HTTP3/QUIC or WebSocket accordingly. */
     suspend fun checkQuicFeatureGrayStatus() {
         try {
             if (LCallEngine.hasManualConnectionTypeOverride()) {
@@ -288,28 +278,24 @@ object LCallManager {
         }
     }
 
-    /**
-     * 关闭关键提醒（如果活跃）
-     * 如果当前有关键提醒正在显示，则关闭它
-     */
+    /** Dismisses the critical alert if one is currently active. */
     fun dismissCriticalAlertIfActive() {
         callToChatController.dismissCriticalAlertIfActive()
     }
 
     /**
-     * 关闭指定会话的关键提醒
-     * 
-     * @param conversationId 会话ID
+     * Dismisses the critical alert for the given conversation.
+     *
+     * @param conversationId conversation ID
      */
     fun dismissCriticalAlert(conversationId: String) {
         callToChatController.dismissCriticalAlert(conversationId)
     }
 
     /**
-     * 关闭指定会话的来电通知
-     * 根据会话ID查找对应的通话数据，并停止来电服务
-     * 
-     * @param conversationId 会话ID
+     * Dismisses the incoming call notification for the given conversation.
+     *
+     * @param conversationId conversation ID
      */
     fun dismissIncomingNotification(conversationId: String) {
         val callData = callDataManager.getCallDataByConversationId(conversationId)

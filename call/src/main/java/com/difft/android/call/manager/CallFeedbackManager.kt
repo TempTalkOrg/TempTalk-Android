@@ -10,7 +10,7 @@ import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.repo.LCallHttpService
-import com.difft.android.call.ui.CallRatingFeedbackView
+import com.difft.android.call.ui.feedback.CallRatingFeedbackView
 import com.difft.android.call.util.CallComposeUiUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule

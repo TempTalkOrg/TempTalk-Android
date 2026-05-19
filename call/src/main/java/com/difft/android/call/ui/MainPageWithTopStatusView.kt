@@ -31,12 +31,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -52,6 +52,7 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.CallIntent
+import com.difft.android.call.ui.alert.CallCriticalAlertView
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
@@ -67,12 +68,12 @@ fun MainPageWithTopStatusView(
     viewModel: LCallViewModel,
     isInPipMode:Boolean,
     isOneVOneCall: Boolean,
-    showTopStatusViewEnabled: Boolean = true,
     isUserSharingScreen: Boolean,
     callConfig: CallConfig,
     callIntent: CallIntent,
     windowZoomOutAction: () -> Unit
 ) {
+    val showTopStatusState = viewModel.callUiController.showTopStatusViewEnabled.collectAsState(true)
     val configuration = LocalConfiguration.current
     val windowZoomOutPainter = painterResource(id = R.drawable.chat_ic_window_zoom_out)
     val loadingPainter = painterResource(id = R.drawable.ant_design_loading_outlined)
@@ -104,22 +105,17 @@ fun MainPageWithTopStatusView(
     }
 
     val shouldShowLoading = shouldShowLoadingStatus(callStatus, callIntent, callType)
-    val rotationAngle by if (shouldShowLoading) {
-        val infiniteTransition = rememberInfiniteTransition(label = "loadingRotation")
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = 2000,
-                    easing = LinearEasing
-                ),
-            ),
-            label = "loadingRotationValue"
-        )
-    } else {
-        remember { mutableFloatStateOf(0f) }
-    }
+    val infiniteTransition = rememberInfiniteTransition(label = "loadingRotation")
+    val animatedAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2000, easing = LinearEasing),
+        ),
+        label = "loadingRotationValue"
+    )
+    val rotationAngle = if (shouldShowLoading) animatedAngle else 0f
+    val isTopVisible = (isOneVOneCall && !isUserSharingScreen) || showTopStatusState.value
 
     Column(
         modifier = Modifier
@@ -135,7 +131,13 @@ fun MainPageWithTopStatusView(
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if((isOneVOneCall && !isUserSharingScreen) || showTopStatusViewEnabled){
+        Column(
+            modifier = Modifier
+                .alpha(if (isTopVisible) 1f else 0f)
+                .tapInterceptor(enabled = !isTopVisible) {
+                    viewModel.callUiController.toggleOverlays()
+                }
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -321,4 +323,4 @@ private fun shouldShowLoadingStatus(callStatus: CallStatus, callIntent: CallInte
     return callStatus == CallStatus.RECONNECTING ||
             (callIntent.action != CallIntent.Action.START_CALL && callStatus != CallStatus.DISCONNECTED) ||
             (callType != CallType.ONE_ON_ONE.type && callStatus != CallStatus.DISCONNECTED)
-}
+}                                                                      

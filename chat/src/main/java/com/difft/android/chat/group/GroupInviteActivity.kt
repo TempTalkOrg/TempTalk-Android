@@ -9,7 +9,7 @@ import com.difft.android.chat.databinding.ChatActivityGroupInviteBinding
 import com.difft.android.chat.ui.SelectChatsUtils
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.Util
 import javax.inject.Inject
 
 @AndroidEntryPoint

@@ -1,0 +1,58 @@
+package com.difft.android.chat.scribbles
+
+import android.animation.Animator
+import android.content.Context
+import android.util.AttributeSet
+import android.view.View
+import android.widget.FrameLayout
+import com.difft.android.chat.R
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.util.createDefaultCubicBezierInterpolator
+
+/**
+ * The play button overlay for controlling playback in the video editor.
+ */
+class VideoEditorPlayButtonLayout @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) : android.widget.FrameLayout(context, attrs, defStyleAttr) {
+    private val playOverlay: View = inflate(this.context, R.layout.video_editor_hud, this).findViewById(R.id.play_overlay)
+
+    fun setPlayClickListener(listener: OnClickListener?) {
+        playOverlay.setOnClickListener(listener)
+    }
+
+    fun showPlayButton() {
+        playOverlay.visibility = VISIBLE
+        playOverlay.animate()
+            .setListener(null)
+            .alpha(1f)
+            .setInterpolator(createDefaultCubicBezierInterpolator())
+            .setDuration(500)
+            .start()
+    }
+
+    fun fadePlayButton() {
+        playOverlay.animate()
+            .setListener(object : Animator.AnimatorListener {
+                override fun onAnimationEnd(animation: Animator) {
+                    playOverlay.visibility = GONE
+                }
+
+                override fun onAnimationStart(animation: Animator) = Unit
+                override fun onAnimationCancel(animation: Animator) = Unit
+                override fun onAnimationRepeat(animation: Animator) = Unit
+            })
+            .alpha(0f)
+            .setInterpolator(createDefaultCubicBezierInterpolator())
+            .setDuration(200)
+            .start()
+    }
+
+    fun hidePlayButton() {
+        playOverlay.visibility = GONE
+        playOverlay.setAlpha(0f)
+    }
+
+    companion object {
+        @Suppress("unused")
+        private val TAG = L.tag(VideoEditorPlayButtonLayout::class.java)
+    }
+}

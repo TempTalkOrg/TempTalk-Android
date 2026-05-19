@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.difft.app.database.WCDBUpdateService
-import org.thoughtcrime.securesms.messages.EnvelopToMessageProcessor
+import com.difft.android.chat.messages.EnvelopToMessageProcessor
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.envelope

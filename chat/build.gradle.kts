@@ -104,7 +104,6 @@ dependencies {
     // SQLite
     implementation(libs.androidx.sqlite)
     implementation(libs.androidx.sqlite.ktx)
-    implementation(libs.signal.sqlcipher.android)
 
     // Preference
     implementation(libs.androidx.preference)

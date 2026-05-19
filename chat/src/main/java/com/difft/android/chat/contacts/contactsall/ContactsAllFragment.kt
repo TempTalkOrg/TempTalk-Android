@@ -9,17 +9,18 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sampleAfterFirst
 import com.difft.android.base.widget.sideBar.SectionDecoration
 import com.difft.android.base.widget.sideBar.SideBar
-import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.recent.ConversationNavigationCallback
+import com.difft.android.chat.recent.DualPaneSelectionListener
 import com.difft.android.chat.databinding.ChatFragmentContactsAllBinding
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.hi.dhl.binding.viewbind
@@ -34,7 +35,7 @@ import org.difft.app.database.models.ContactorModel
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ContactsAllFragment : Fragment() {
+class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var wcdb: WCDB
@@ -47,25 +48,34 @@ class ContactsAllFragment : Fragment() {
             override fun onContactClicked(contact: ContactorModel, position: Int) {
                 // Use ConversationNavigationCallback for dual-pane support
                 val navigationCallback = activity as? ConversationNavigationCallback
-                navigationCallback?.onContactDetailSelected(contact.id)
-                    ?: ContactDetailActivity.startActivity(this@ContactsAllFragment.requireActivity(), contact.id)
+                if (navigationCallback != null) {
+                    navigationCallback.onContactDetailSelected(contact.id)
+                    if (navigationCallback.isDualPaneMode) {
+                        selectedId = contact.id
+                    }
+                } else {
+                    ContactDetailActivity.startActivity(this@ContactsAllFragment.requireActivity(), contact.id)
+                }
             }
         }
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        return binding.root
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
         binding.sideBar.setOnTouchingLetterChangedListener(object : SideBar.OnTouchingLetterChangedListener {
             override fun onTouchingLetterChanged(s: String) {
-                //该字母首次出现的位置
                 val position: Int = mAdapter.getLetterPosition(s)
                 if (position != -1) {
-//                    binding.recyclerviewContacts.scrollToPosition(position)
                     (binding.recyclerviewContacts.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(position, 0)
                 }
             }
@@ -87,30 +97,44 @@ class ContactsAllFragment : Fragment() {
             .onEach { binding.smartRefreshLayout.finishRefresh() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
+        // Load contacts on every STARTED lifecycle (handles config changes / split-screen)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                loadContacts()
+            }
+        }
+
+        // Reload on incremental contact changes (friend added/removed/updated)
         ContactorUtil.contactsUpdate
             .sampleAfterFirst(2000)
-            .onEach { initData() }
+            .onEach { loadContacts() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
-
-        initData()
 
         TextSizeUtil.textSizeState
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { mAdapter.notifyDataSetChanged() }
             .launchIn(viewLifecycleOwner.lifecycleScope)
-        return binding.root
     }
 
-    private fun initData() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val contacts = withContext(Dispatchers.IO) {
-                wcdb.contactor.allObjects
-                    .sortedByPinyin()
-            }
-            if (!isAdded || view == null) return@launch
-            mAdapter.submitList(contacts)
-            addLettersDecoration(contacts)
+    override fun onResume() {
+        super.onResume()
+        val navigationCallback = activity as? ConversationNavigationCallback
+        if (navigationCallback?.isDualPaneMode == true) {
+            mAdapter.selectedId = navigationCallback.currentSelectedConversationId
         }
+    }
+
+    override fun updateDualPaneSelection(selectedId: String?) {
+        mAdapter.selectedId = selectedId
+    }
+
+    private suspend fun loadContacts() {
+        val contacts = withContext(Dispatchers.IO) {
+            wcdb.contactor.allObjects
+                .sortedByPinyin()
+        }
+        mAdapter.submitList(contacts)
+        addLettersDecoration(contacts)
     }
 
     private var decoration: SectionDecoration? = null

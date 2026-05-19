@@ -159,11 +159,11 @@ class ChatSettingViewModel @AssistedInject constructor(
                         .fetchConversationSet(
                             SecureSharedPrefsUtil.getBasicAuth(),
                             ConversationSetRequestBody(
-                                conversation,
-                                remark,
-                                muteStatus,
-                                blockStatus,
-                                confidentialMode
+                                conversation = conversation,
+                                remark = remark,
+                                muteStatus = muteStatus,
+                                blockStatus = blockStatus,
+                                confidentialMode = confidentialMode
                             )
                         )
                 }

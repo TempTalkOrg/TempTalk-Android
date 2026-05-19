@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
+import com.difft.android.call.data.VoicePreset
 import com.difft.android.chat.R
 import com.difft.android.databinding.ActivityChatSettingsBinding
 import dagger.hilt.android.AndroidEntryPoint
@@ -47,8 +48,8 @@ class ChatSettingsFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Update voice playback speed display when returning from settings
         updateVoicePlaybackSpeedDisplay()
+        updateVoiceChangerDisplay()
     }
 
     private fun initView() {
@@ -64,6 +65,12 @@ class ChatSettingsFragment : Fragment() {
         binding.clVoicePlaybackSpeed.setOnClickListener {
             VoicePlaybackSpeedSettingsActivity.startActivity(requireActivity())
         }
+
+        // Call voice-changer global preference - local only, no server sync
+        updateVoiceChangerDisplay()
+        binding.clVoiceChanger.setOnClickListener {
+            VoiceChangerSettingsActivity.startActivity(requireActivity())
+        }
     }
 
     private fun updateVoicePlaybackSpeedDisplay() {
@@ -73,6 +80,13 @@ class ChatSettingsFragment : Fragment() {
             2.0f -> getString(R.string.voice_speed_2x)
             else -> getString(R.string.voice_speed_1x)
         }
+    }
+
+    private fun updateVoiceChangerDisplay() {
+        val preset = VoicePreset.fromSdkKey(
+            userManager.getUserData()?.callVoiceChangerPreset ?: VoicePreset.ORIGINAL.sdkKey
+        )
+        binding.tvVoiceChangerValue.text = preset.displayText()
     }
 
     override fun onDestroyView() {

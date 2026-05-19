@@ -2,12 +2,13 @@ package com.difft.android.chat.contacts.contactsgroup
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.chat.databinding.ChatItemGroupBinding
-import com.difft.android.chat.group.getAvatarData
+import com.difft.android.chat.group.getDisplayAvatarData
 import org.difft.app.database.models.GroupModel
 
 abstract class GroupsAdapter : ListAdapter<GroupModel, GroupItemViewHolder>(object : DiffUtil.ItemCallback<GroupModel>() {
@@ -16,12 +17,31 @@ abstract class GroupsAdapter : ListAdapter<GroupModel, GroupItemViewHolder>(obje
 
     override fun areContentsTheSame(oldItem: GroupModel, newItem: GroupModel): Boolean = oldItem.gid == newItem.gid
 }) {
+
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val oldId = field
+            field = value
+            currentList.forEachIndexed { index, item ->
+                if (item.gid == oldId || item.gid == value) {
+                    notifyItemChanged(index)
+                }
+            }
+        }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GroupItemViewHolder =
         GroupItemViewHolder(parent)
 
     override fun onBindViewHolder(holder: GroupItemViewHolder, position: Int) {
         val data = getItem(position)
         holder.bind(data)
+        val bgColorRes = if (selectedId != null && data.gid == selectedId) {
+            com.difft.android.base.R.color.bg3
+        } else {
+            com.difft.android.base.R.color.bg1
+        }
+        holder.itemView.setBackgroundColor(ContextCompat.getColor(holder.itemView.context, bgColorRes))
         holder.itemView.setOnClickListener { onItemClick(data) }
     }
 
@@ -39,6 +59,6 @@ class GroupItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
     fun bind(data: GroupModel) {
         binding.textviewGroupName.textSize = if (TextSizeUtil.isLarger) 24f else 16f
         binding.textviewGroupName.text = data.name
-        binding.imageviewGroup.setAvatar(data.avatar?.getAvatarData())
+        binding.imageviewGroup.setAvatar(data.getDisplayAvatarData())
     }
 }

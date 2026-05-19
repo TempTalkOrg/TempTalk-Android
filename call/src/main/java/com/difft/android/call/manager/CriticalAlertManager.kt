@@ -12,7 +12,6 @@ import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.appScope
-import com.difft.android.base.utils.application
 import com.difft.android.call.R
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
@@ -23,9 +22,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,11 +37,44 @@ class CriticalAlertManager @Inject constructor(
     private val activityProvider: ActivityProvider,
     private val inComingCallStateManager: InComingCallStateManager,
     ) {
-    // 用于防止并发竞争的互斥锁
-    private val soundMutex = Mutex()
-    
-    // 当前播放的 Ringtone 对象
+    // JVM 锁替代协程 Mutex，使 stop 操作可同步调用而无需 launch 协程。
+    // 严格只用于状态变更（微秒级），永不在持锁状态下执行 Ringtone 的 IPC。
+    private val soundLock = Any()
+
     private var currentRingtone: Ringtone? = null
+
+    /**
+     * 专用单线程 executor，串行执行 Ringtone.play() / stop() 这类音频 binder IPC。
+     *
+     * - 使用普通 Thread（非协程池），避免主线程 dispatch 时触发
+     *   CoroutineScheduler.tryUnpark → Object.notifyAll，复现原 ANR
+     * - 单线程保证 play/stop 提交顺序即执行顺序，避免 stop 先于 play 处理导致铃声"漏停"
+     * - 调用方在持 soundLock 时投递（execute 仅入队，开销极低），保证与状态变更的全局有序
+     */
+    private val ringtoneExecutor: ExecutorService by lazy {
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "CriticalAlert-Ringtone").apply { isDaemon = true }
+        }
+    }
+
+    private fun postRingtoneAction(action: () -> Unit) {
+        try {
+            ringtoneExecutor.execute(action)
+        } catch (e: Exception) {
+            L.e { "[Call] CriticalAlertManager Failed to post ringtone action: ${e.message}" }
+        }
+    }
+
+    private fun safeStopRingtone(ringtone: Ringtone?) {
+        if (ringtone == null) return
+        try {
+            ringtone.stop()
+        } catch (e: IllegalStateException) {
+            L.e { "[Call] CriticalAlertManager Ringtone is in an illegal state: ${e.message}" }
+        } catch (e: Exception) {
+            L.e { "[Call] CriticalAlertManager Stop failed: ${e.message}" }
+        }
+    }
     companion object {
         // Critical Alert 持久化存储相关常量
         private const val SP_KEY_CRITICAL_ALERT_INFOS = "SP_KEY_CRITICAL_ALERT_INFOS"
@@ -216,10 +248,14 @@ class CriticalAlertManager @Inject constructor(
     fun playSound(conversationId: String, notificationId: Int) {
         val token = System.currentTimeMillis()
         appScope.launch(Dispatchers.IO) {
-            soundMutex.withLock {
-                // 更新当前 token，清除旧播放
+            // Phase 1: 锁内仅做状态变更与 stop 提交，不持锁做 IPC
+            synchronized(soundLock) {
                 criticalAlertStateManager.setCurrentPlayToken(token)
-                stopSoundInternal()
+                val old = currentRingtone
+                currentRingtone = null
+                if (old != null) {
+                    postRingtoneAction { safeStopRingtone(old) }
+                }
             }
 
             try {
@@ -232,25 +268,35 @@ class CriticalAlertManager @Inject constructor(
                         .build()
                 }
 
-                soundMutex.withLock {
-                    // 若此时已有更新的播放任务，则放弃当前任务
+                // Phase 3: 锁内做 token 校验、状态安装与 play 提交，不持锁做 play() IPC
+                synchronized(soundLock) {
                     if (token != criticalAlertStateManager.getCurrentPlayToken()) {
                         L.i { "[Call] CriticalAlertManager Ignored old play call for id=$notificationId (token=$token)" }
-                        // 清理未使用的ringtone对象，防止资源泄漏
-                        try {
-                            ringtone?.stop()
-                        } catch (e: Exception) {
-                            L.e { "[Call] CriticalAlertManager Failed to stop ringtone during cleanup: ${e.message}" }
+                        if (ringtone != null) {
+                            postRingtoneAction { safeStopRingtone(ringtone) }
                         }
-                        return@withLock
+                        return@synchronized
+                    }
+
+                    // ringtone 为 null 时（RingtoneManager.getRingtone 失败）不安装"播放中"状态，
+                    // 否则会让 isCriticalAlertShowing/isPlayingSound 等门控误判为"正在响铃"
+                    if (ringtone == null) {
+                        L.w { "[Call] CriticalAlertManager getRingtone returned null for notification $notificationId, skip play" }
+                        return@synchronized
                     }
 
                     currentRingtone = ringtone
                     criticalAlertStateManager.setCurrentNotificationId(notificationId)
                     criticalAlertStateManager.setConversationId(conversationId)
-                    L.i { "[Call] CriticalAlertManager Playing ringtone for notification $notificationId" }
-                    ringtone?.play()
                     criticalAlertStateManager.setIsPlayingSound(true)
+                    L.i { "[Call] CriticalAlertManager Playing ringtone for notification $notificationId" }
+                    postRingtoneAction {
+                        try {
+                            ringtone.play()
+                        } catch (e: Exception) {
+                            L.e { "[Call] CriticalAlertManager Play failed: ${e.message}" }
+                        }
+                    }
                 }
 
             } catch (e: Exception) {
@@ -260,49 +306,40 @@ class CriticalAlertManager @Inject constructor(
     }
 
     /**
-     * 停止播放 Critical Alert 声音
+     * 停止播放 Critical Alert 声音（同步非阻塞，可安全在主线程调用）。
+     *
+     * - 锁仅保护状态变更（微秒级），不在持锁状态下执行 Ringtone.stop() 等音频 binder IPC
+     * - stop() 投递到专用单线程 executor，play/stop 提交顺序即执行顺序
+     * - 不 launch 协程，避免 CoroutineScheduler.dispatch 在主线程触发 notifyAll 导致 ANR
+     * - 主动失效 currentPlayToken，让进行中的 playSound 在 Phase 3 校验时落入失效分支
      */
     fun stopSound() {
-        appScope.launch(Dispatchers.IO) {
-            soundMutex.withLock {
-                stopSoundInternal()
-            }
-        }
-    }
-
-    /**
-     * 如果通知ID匹配，则停止播放声音
-     * @param notificationId 通知ID
-     */
-    fun stopSoundIfMatch(notificationId: Int) {
-        appScope.launch(Dispatchers.IO) {
-            soundMutex.withLock {
-                if (notificationId == criticalAlertStateManager.getCurrentNotificationId()) {
-                    stopSoundInternal()
-                    L.i { "[Call] CriticalAlertManager Stopped ringtone for $notificationId" }
-                }
-            }
-        }
-    }
-
-    /**
-     * 内部方法：停止播放声音
-     * 始终调用 stop() 以确保底层 MediaPlayer 被释放，避免 finalize 超时崩溃
-     */
-    private fun stopSoundInternal() {
-        try {
-            currentRingtone?.let {
-                try {
-                    it.stop()
-                } catch (e: IllegalStateException) {
-                    L.e { "[Call] CriticalAlertManager Ringtone is in an illegal state: ${e.message}" }
-                }
-            }
-        } catch (e: Exception) {
-            L.e { "[Call] CriticalAlertManager Stop failed: ${e.message}" }
-        } finally {
+        synchronized(soundLock) {
+            criticalAlertStateManager.setCurrentPlayToken(0L)
+            val rt = currentRingtone
             currentRingtone = null
             criticalAlertStateManager.resetSoundState()
+            if (rt != null) {
+                postRingtoneAction { safeStopRingtone(rt) }
+            }
+        }
+    }
+
+    /**
+     * 如果通知ID匹配，则停止播放声音（同步调用）
+     */
+    fun stopSoundIfMatch(notificationId: Int) {
+        synchronized(soundLock) {
+            if (notificationId == criticalAlertStateManager.getCurrentNotificationId()) {
+                criticalAlertStateManager.setCurrentPlayToken(0L)
+                val rt = currentRingtone
+                currentRingtone = null
+                criticalAlertStateManager.resetSoundState()
+                L.i { "[Call] CriticalAlertManager Stopped ringtone for $notificationId" }
+                if (rt != null) {
+                    postRingtoneAction { safeStopRingtone(rt) }
+                }
+            }
         }
     }
 
@@ -351,7 +388,7 @@ class CriticalAlertManager @Inject constructor(
 
     fun stopSoundAndFlashLight() {
         stopSound()
-        FlashLightBlinker.stopBlinking(application)
+        FlashLightBlinker.stopBlinking()
     }
 
     fun playSoundAndFlashLight(conversationId: String, notificationId: Int) {

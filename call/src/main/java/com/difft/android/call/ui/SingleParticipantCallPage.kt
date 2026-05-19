@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,17 +34,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import android.view.ViewGroup
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.R
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
@@ -51,6 +52,12 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
+import com.difft.android.call.ui.barrage.BarrageMessageView
+import com.difft.android.call.ui.screenshare.ScreenSharingView
+import com.difft.android.call.ui.video.ScaleType
+import com.difft.android.call.ui.video.VideoItemTrackSelector
+import com.difft.android.call.ui.video.ViewType
+import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
@@ -77,61 +84,60 @@ fun SingleParticipantCallPage(
     callConfig: CallConfig,
     conversationId: String?,
     callRole: CallRole?,
+    isDualPane: Boolean = false,
 ){
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
+    val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
+    val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
     val isConnected = callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED
     val remoteParticipant = participants.filterIsInstance<RemoteParticipant>().firstOrNull()
     val participantUid = remoteParticipant?.identity?.value ?: conversationId
 
     val videoTrackMap by room.localParticipant::videoTrackPublications.flow.collectAsState(initial = emptyList())
-    val videoPubs = videoTrackMap.filter { (pub) -> pub.subscribed }
-        .map { (pub) -> pub }
+    val videoPubs by remember { derivedStateOf { videoTrackMap.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
 
     // Find the most appropriate video stream to show
     // Prioritize screen share, then camera, then any video stream.
-    val videoPub = videoPubs.firstOrNull { pub -> pub.source == Track.Source.CAMERA }
-        ?: videoPubs.firstOrNull()
+    val videoPub by remember { derivedStateOf { videoPubs.firstOrNull { pub -> pub.source == Track.Source.CAMERA } ?: videoPubs.firstOrNull() } }
 
     var videoMuted by remember { mutableStateOf(true) }
 
     // monitor video muted state
     LaunchedEffect(videoPub) {
-        if (videoPub != null) {
-            videoPub::muted.flow.collect { muted -> videoMuted = muted }
-        }
+        val pub = videoPub ?: return@LaunchedEffect
+        pub::muted.flow.collect { muted -> videoMuted = muted }
     }
 
     when {
         isConnected && isUserSharingScreen && remoteParticipant != null -> {
-            // 显示屏幕分享画面
-            ScreenSharingView(room = room, participant = remoteParticipant)
-            // 显示屏幕分享时speaker悬浮窗
-            ScreenShareSpeakerView(viewModel = viewModel, shareScreenUser = remoteParticipant, callConfig = callConfig)
+            ScreenSharingView(room = room, participant = remoteParticipant, reconnectCount = reconnectCount)
+            LaunchedEffect(remoteParticipant.sid) {
+                viewModel.updateScreenShareFallback(remoteParticipant)
+            }
         }
         (isConnected || callRole == CallRole.CALLER) && participantUid != null -> {
-            // 统一使用同一个页面容器，避免状态切换时整页闪烁
             SingleParticipantItem(
                 room = room,
                 participant = remoteParticipant,
                 uid = participantUid,
+                speakingEnabled = speakingEnabled,
+                reconnectCount = reconnectCount,
             )
         }
     }
 
 
     if(isConnected && !videoMuted && !isUserSharingScreen) {
-        // 展示自己的悬浮小窗口
         OneVOneSelfVideoView(viewModel, room = room)
     }
 
-    // 显示弹幕
-    BarrageMessageView(
-        viewModel,
-        config = BarrageMessageConfig(
+    val barrageConfig = remember(callConfig, autoHideTimeout) {
+        BarrageMessageConfig(
             isOneVOneCall = true,
-            barrageTexts= callConfig.chatPresets ?: emptyList(),
+            barrageTexts = callConfig.chatPresets ?: emptyList(),
             displayDurationMillis = autoHideTimeout,
             baseSpeed = callConfig.bubbleMessage?.baseSpeed ?: 4600L,
             deltaSpeed = callConfig.bubbleMessage?.deltaSpeed ?: 400L,
@@ -139,8 +145,15 @@ fun SingleParticipantCallPage(
             emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
             textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
             textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
-        ),
-        { message, type, topic ->
+        )
+    }
+
+    BarrageMessageView(
+        viewModel,
+        config = barrageConfig,
+        isDualPane = isDualPane,
+        isShareScreening = isUserSharingScreen,
+        sendBarrageMessage = { message, type, _ ->
             viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
                 if (status) {
                     if (type == RTM_MESSAGE_TYPE_DEFAULT) {
@@ -168,6 +181,7 @@ fun OneVOneSelfVideoView(
     val screenHeight = configuration.screenHeightDp.dp.value // 获取屏幕高度（dp）
 
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
+    val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
 
     var dragViewOffsetX: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(screenWidth.toInt() - videoViewWith.value.toInt() - 12).toFloat()) }
     var dragViewOffsetY: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(screenHeight.toInt() - videoViewHeight.value.toInt() - 40).toFloat()) }
@@ -215,6 +229,7 @@ fun OneVOneSelfVideoView(
                 LocalParticipantVideoView(
                     room = room,
                     participant = room.localParticipant,
+                    reconnectCount = reconnectCount,
                 )
             }
         }
@@ -227,6 +242,7 @@ fun LocalParticipantVideoView(
     room: Room,
     participant: Participant,
     modifier: Modifier = Modifier,
+    reconnectCount: Int = 0,
 ){
     val coroutineScope = rememberCoroutineScope()
     Box(
@@ -242,7 +258,8 @@ fun LocalParticipantVideoView(
             sourceType = Track.Source.CAMERA,
             modifier = Modifier.fillMaxSize(),
             viewType = ViewType.Texture,
-            draggable = false
+            draggable = false,
+            reconnectCount = reconnectCount,
         )
     }
 }
@@ -254,18 +271,21 @@ fun SingleParticipantItem(
     participant: Participant?,
     modifier: Modifier = Modifier,
     uid: String,
+    speakingEnabled: Boolean = true,
+    reconnectCount: Int = 0,
 ){
-    val contactorCacheManager = remember {
-        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance).contactorCacheManager
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
     }
+    val contactorCacheManager = entryPoint.contactorCacheManager
+    val callToChatController = entryPoint.callToChatController
 
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
 
     suspend fun updateNameAndAvatar(userId: String) {
-        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(context, userId)
+        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(userId)
     }
 
     LaunchedEffect(uid) {
@@ -284,39 +304,39 @@ fun SingleParticipantItem(
         ParticipantAvatarInfo(
             modifier = modifier,
             userDisplayInfo = userDisplayInfo,
-            userId = uid
+            userId = uid,
+            callToChatController = callToChatController
         )
         return
     }
 
     val identity by participant::identity.flow.collectAsState()
     val isSpeaking by participant::isSpeaking.flow.collectAsState()
+    val effectiveIsSpeaking = isSpeaking && speakingEnabled
     val imageLoader = LocalImageLoaderProvider.localImageLoader()
 
     val audioTrackMap by participant::audioTrackPublications.flow.collectAsState(initial = emptyList())
-    val audioPubs = audioTrackMap.filter { (pub) -> pub.subscribed }
-        .map { (pub) -> pub }
-    val audioPub = audioPubs.firstOrNull { pub -> pub.source == Track.Source.MICROPHONE }
+    val audioPubs by remember { derivedStateOf { audioTrackMap.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
+    val audioPub by remember { derivedStateOf { audioPubs.firstOrNull { pub -> pub.source == Track.Source.MICROPHONE } } }
 
     val videoTrackMap by participant::videoTrackPublications.flow.collectAsState(initial = emptyList())
-    val videoPubs = videoTrackMap.filter { (pub) -> pub.subscribed }
-        .map { (pub) -> pub }
-    val videoPub = videoPubs.firstOrNull { pub -> pub.source == Track.Source.CAMERA }
+    val videoPubs by remember { derivedStateOf { videoTrackMap.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
+    val videoPub by remember { derivedStateOf { videoPubs.firstOrNull { pub -> pub.source == Track.Source.CAMERA } } }
 
     var videoMuted by remember { mutableStateOf(true) }
     var audioMuted by remember { mutableStateOf(true) }
 
     // monitor audio muted state
     LaunchedEffect(audioPub) {
-        if (audioPub != null) {
-            audioPub::muted.flow.collect { muted -> audioMuted = muted }
-        }
+        val pub = audioPub ?: return@LaunchedEffect
+        pub::muted.flow.collect { muted -> audioMuted = muted }
     }
 
     // monitor video muted state
     LaunchedEffect(videoPub) {
-        if (videoPub != null) {
-            videoPub::muted.flow.collect { muted -> videoMuted = muted }
+        val pub = videoPub
+        if (pub != null) {
+            pub::muted.flow.collect { muted -> videoMuted = muted }
         } else {
             videoMuted = true
         }
@@ -328,25 +348,26 @@ fun SingleParticipantItem(
             .background(Color.Transparent),
         contentAlignment = Alignment.Center
     ) {
-        if (!videoMuted) {
-            VideoItemTrackSelector(
-                coroutineScope = coroutineScope,
-                room = room,
-                participant = participant,
-                // Specifies this view should display camera content
-                sourceType = Track.Source.CAMERA,
-                scaleType = if (IdUtil.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
-                viewType = ViewType.Surface,
-                draggable = !IdUtil.isPersonalMobileDevice(identity?.value),
-            )
-        } else {
+        VideoItemTrackSelector(
+            coroutineScope = coroutineScope,
+            room = room,
+            participant = participant,
+            sourceType = Track.Source.CAMERA,
+            scaleType = if (IdUtil.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
+            viewType = ViewType.Surface,
+            draggable = !IdUtil.isPersonalMobileDevice(identity?.value),
+            reconnectCount = reconnectCount,
+        )
+        if (videoMuted) {
             ParticipantAvatarInfo(
+                modifier = Modifier.background(DifftTheme.colors.background),
                 userDisplayInfo = userDisplayInfo,
                 userId = identity?.value ?: uid,
                 audioMuted = audioMuted,
-                isSpeaking = isSpeaking,
+                isSpeaking = effectiveIsSpeaking,
                 showAudioStatus = true,
-                imageLoader = imageLoader
+                imageLoader = imageLoader,
+                callToChatController = callToChatController
             )
         }
     }
@@ -361,18 +382,27 @@ private fun ParticipantAvatarInfo(
     isSpeaking: Boolean = false,
     showAudioStatus: Boolean = false,
     imageLoader: coil3.ImageLoader? = null,
+    callToChatController: com.difft.android.call.LCallToChatController,
 ) {
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        userDisplayInfo.avatar?.let { avatarImage ->
-            key(avatarImage) {
+        userDisplayInfo.avatarData?.let { avatarData ->
+            key(avatarData) {
                 AndroidView(
-                    factory = {
-                        (avatarImage.parent as? ViewGroup)?.removeView(avatarImage)
-                        avatarImage
+                    factory = { ctx ->
+                        when (avatarData) {
+                            is AvatarData.FromContactor ->
+                                callToChatController.getAvatarByContactor(ctx, avatarData.contactor)
+                            is AvatarData.FromNameOrUid ->
+                                callToChatController.createAvatarByNameOrUid(
+                                    ctx,
+                                    avatarData.name,
+                                    avatarData.userId
+                                )
+                        }
                     },
                     modifier = Modifier
                         .height(96.dp)

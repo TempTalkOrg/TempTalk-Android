@@ -11,7 +11,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.R
 import com.difft.android.chat.databinding.SearchItemMessageBinding
 import com.difft.android.chat.search.setHighLightText
-import com.difft.android.chat.group.getAvatarData
+import com.difft.android.chat.group.getDisplayAvatarData
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
 
@@ -87,7 +87,7 @@ class SearchChatHistoryViewHolder(container: ViewGroup, private val isForMessage
 
                 is SearchChatHistoryViewData.Type.Group -> {
                     binding.groupAvatar.visibility = View.VISIBLE
-                    binding.groupAvatar.setAvatar(data.group?.avatar?.getAvatarData())
+                    binding.groupAvatar.setAvatar(data.group?.getDisplayAvatarData())
                 }
             }
         }

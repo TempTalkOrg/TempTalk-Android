@@ -55,6 +55,8 @@ message Envelope {
     MSG_CLIENT_NOTIFY = 10;
     MSG_SCHEDULE_NORMAL = 11;
     MSG_ENC_CALL = 12;
+    MSG_GROUP_KEY = 13;
+    MSG_FORWARD_NOTICE = 14;
   }
 
   optional Type   type = 1;
@@ -78,12 +80,34 @@ message Envelope {
 }
 
 message Content {
-  optional DataMessage         dataMessage = 1;
-  optional SyncMessage         syncMessage = 2;
-  optional NullMessage         nullMessage = 4;
-  optional ReceiptMessage      receiptMessage = 5;
-  optional NotifyMessage       notifyMessage = 7;
-  optional CallMessage         callMessage = 8;
+  optional DataMessage          dataMessage = 1;
+  optional SyncMessage          syncMessage = 2;
+  optional NullMessage          nullMessage = 4;
+  optional ReceiptMessage       receiptMessage = 5;
+  optional NotifyMessage        notifyMessage = 7;
+  optional CallMessage          callMessage = 8;
+  optional GroupKeyMessage      groupKeyMessage = 9;
+  optional ForwardNoticeMessage forwardNotice = 10;
+}
+
+message ForwardNoticeMessage {
+  enum ForwardScene {
+    UNKNOWN       = 0;
+    SINGLE        = 1;
+    ONE_BY_ONE    = 2;
+    COMBINED      = 3;
+    SAVE_TO_NOTES = 4;
+  }
+  optional ForwardScene   scene           = 1;
+  repeated string         sourceAuthorIds = 2; // deduped, first-seen order, unbounded
+  optional uint32         messageCount    = 3; // top-level count; nested forwards count as 1
+  // Source conversation. Sender fills from its own view (groupId / peer uid).
+  optional ConversationId conversation    = 4;
+}
+
+message GroupKeyMessage {
+  optional bytes  groupId      = 1;
+  optional bytes  groupRootKey = 2;
 }
 
 message Card {
@@ -447,6 +471,7 @@ message DataMessage {
 
     required bytes  id = 1;
     required Type   type = 2;
+    optional bytes  groupRootKey = 6;
   }
 
   optional string             body = 1;
@@ -645,17 +670,17 @@ message SyncMessage {
     optional Flag                 flag = 2; //0 解档 1、 归档
   }
 
-  optional Sent          sent = 1;
-  optional Request       request = 4;
-  repeated Read          read = 5;
-  optional Verified      verified = 7;
-  optional Configuration configuration = 9;
-  optional bytes         padding = 8;
-  repeated Task          tasks = 10;
-  optional MarkAsUnread  markAsUnread = 11;
+  optional Sent                 sent = 1;
+  optional Request              request = 4;
+  repeated Read                 read = 5;
+  optional Verified             verified = 7;
+  optional Configuration        configuration = 9;
+  optional bytes                padding = 8;
+  repeated Task                 tasks = 10;
+  optional MarkAsUnread         markAsUnread = 11;
   optional ConversationArchive  conversationArchive = 12;
-  optional uint64        serverTimestamp = 16;
-
+  optional uint64               serverTimestamp = 16;
+  optional ForwardNoticeMessage forwardNoticeSync = 18;
 }
 
 message AttachmentPointer {

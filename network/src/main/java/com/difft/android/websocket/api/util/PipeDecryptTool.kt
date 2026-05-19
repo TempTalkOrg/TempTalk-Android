@@ -5,7 +5,7 @@ import java.io.IOException
 import java.security.InvalidAlgorithmParameterException
 import java.security.InvalidKeyException
 import java.security.NoSuchAlgorithmException
-import java.util.Arrays
+import java.security.MessageDigest
 import javax.crypto.BadPaddingException
 import javax.crypto.Cipher
 import javax.crypto.IllegalBlockSizeException
@@ -68,7 +68,7 @@ object PipeDecryptTool {
                 0,
                 theirMacBytes.size
             )
-            if (!Arrays.equals(ourMacBytes, theirMacBytes)) {
+            if (!MessageDigest.isEqual(ourMacBytes, theirMacBytes)) {
                 throw IOException("Invalid MAC compare!")
             }
         } catch (e: NoSuchAlgorithmException) {

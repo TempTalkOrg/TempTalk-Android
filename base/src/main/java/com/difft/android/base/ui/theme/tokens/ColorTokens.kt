@@ -27,7 +27,10 @@ object ColorTokens {
     object Light {
         // Background hierarchy
         val Background = Color(0xFFFFFFFF)           // bg1
-        val BackgroundSecondary = Color(0xFFFAFAFA)  // bg.setting (bg2)
+        val BackgroundSetting = Color(0xFFFAFAFA)    // bg.setting (page bg for settings-style screens)
+        val BackgroundSecondary = Color(0xFFFAFAFA)  // bg2 (matches XML values/colors.xml bg2)
+        val BackgroundPopup = Color(0xFFFFFFFF)      // bg.popup (matches XML values/colors.xml bg.popup)
+        val BackgroundModal = Color(0xFFFFFFFF)      // bg.modal (matches XML values/colors.xml bg.modal)
         val BackgroundTertiary = Color(0xFFF5F5F5)   // bg3
         val BackgroundQuaternary = Color(0xFFB7BDC6) // bg4
         val BackgroundActionPopup = Color(0xFFFFFFFF) // Light: pure white (for popup menu)
@@ -68,7 +71,10 @@ object ColorTokens {
     object Dark {
         // Background hierarchy
         val Background = Color(0xFF181A20)           // bg1
-        val BackgroundSecondary = Color(0xFF181A20)  // bg.setting (same as bg1 in dark mode)
+        val BackgroundSetting = Color(0xFF181A20)    // bg.setting (page bg for settings-style screens, = bg1 in dark mode)
+        val BackgroundSecondary = Color(0xFF1E2329)  // bg2 (matches XML values-night/colors.xml bg2)
+        val BackgroundPopup = Color(0xFF1E2329)      // bg.popup (matches XML values-night/colors.xml bg.popup)
+        val BackgroundModal = Color(0xFF2B3139)      // bg.modal (matches XML values-night/colors.xml bg.modal)
         val BackgroundTertiary = Color(0xFF2B3139)   // bg3
         val BackgroundQuaternary = Color(0xFF474D57) // bg4
         val BackgroundActionPopup = Color(0xFF474D57) // Dark: bg4 value (for popup menu)

@@ -41,12 +41,11 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TranslateStatus
-import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.util.Util
 import util.TimeFormatter
 
 /**
@@ -170,6 +169,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val textViewTime: TextView
             get() = if (isMine) mineBinding!!.textViewTime else othersBinding!!.textViewTime
 
+        private val confidentialIcon: View
+            get() = if (isMine) mineBinding!!.ivConfidentialIcon else othersBinding!!.ivConfidentialIcon
+
+        private val timeWrapper: View
+            get() = if (isMine) mineBinding!!.llTimeWrapper else othersBinding!!.llTimeWrapper
+
         private val llNewMsgDivider: ViewGroup
             get() = if (isMine) mineBinding!!.llNewMsgDivider.root else othersBinding!!.llNewMsgDivider.root
 
@@ -229,11 +234,10 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         // ========== 核心 bind 方法 ==========
 
         private fun resetViewDefaults() {
-            val timeView = clMessageTime
-            val timeLayoutParams = timeView.layoutParams as? LinearLayout.LayoutParams
+            val timeLayoutParams = timeWrapper.layoutParams as? LinearLayout.LayoutParams
             timeLayoutParams?.let {
                 it.topMargin = (-26).dp
-                timeView.layoutParams = it
+                timeWrapper.layoutParams = it
             }
 
             val textView = contentFrame.findViewById<TextView>(R.id.textView)
@@ -316,12 +320,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             if (message !is TextChatMessage) return
 
-            // Set container width and message ID for layout optimization
-            val width = containerWidth
-            (contentContainer as? ChatMessageContainerView)?.apply {
-                this.containerWidth = width
-                bindMessageId(message.id)
-            }
+            // Set container width for precise layout calculation in dual-pane mode
+            (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
 
             // Check if this message is currently playing audio and show speed button
             bindVoiceSpeedButton(message)
@@ -430,6 +430,9 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     clMessageTime.visibility = View.GONE
                 }
             }
+
+            // 机密消息图标
+            confidentialIcon.visibility = if (message.isConfidential()) View.VISIBLE else View.GONE
         }
 
         private fun bindQuoteView(
@@ -559,8 +562,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 }
             }
             checkboxSelectForUnpin.visibility =
-                if (message.editMode && message.attachment?.isAudioMessage() != true && message.attachment?.isAudioFile() != true) View.VISIBLE
-                else if (message.editMode && (message.attachment?.isAudioMessage() == true || message.attachment?.isAudioFile() == true)) View.INVISIBLE
+                if (message.editMode && message.attachment?.isAudioMessage() != true) View.VISIBLE
+                else if (message.editMode && message.attachment?.isAudioMessage() == true) View.INVISIBLE
                 else View.GONE
         }
 
@@ -692,19 +695,11 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             ivSendStatus.visibility = View.GONE
             ivReadNumber.visibility = View.GONE
             ivSendFail.visibility = View.GONE
-            ivSendStatus.updateLayoutParams<ConstraintLayout.LayoutParams> {
-                width = 13.dp
-                height = 13.dp
-            }
 
             when (sendStatus) {
                 SendType.Sending.rawValue -> {
                     ivSendStatus.visibility = View.VISIBLE
                     ivSendStatus.setImageResource(R.drawable.chat_icon_message_sending_new)
-                    ivSendStatus.updateLayoutParams<ConstraintLayout.LayoutParams> {
-                        width = 8.dp
-                        height = 8.dp
-                    }
                 }
 
                 SendType.Sent.rawValue -> {
@@ -975,14 +970,15 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
     }
 
     private fun shouldShowMessageTimeShadow(message: TextChatMessage): Boolean {
-        if (!message.reactions.isNullOrEmpty()) {
-            return false
-        }
+        // Confidential messages: time needs background to stay readable over cover/blur
+        if (message.isConfidential()) return true
 
+        if (!message.reactions.isNullOrEmpty()) return false
+
+        // Image/video messages (including single-forwarded image/video)
         if (message.isAttachmentMessage() && message.attachment?.let { it.isImage() || it.isVideo() } == true) {
             return true
         }
-
         if (message.forwardContext?.forwards?.size == 1) {
             val forward = message.forwardContext?.forwards?.firstOrNull()
             if (forward?.attachments?.any { it.isImage() || it.isVideo() } == true) {

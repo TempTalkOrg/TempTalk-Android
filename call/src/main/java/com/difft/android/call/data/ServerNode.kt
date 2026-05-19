@@ -4,8 +4,10 @@ data class ServerNode(
     val name: String,
     val url: String,
     val flag: String,
-    val ping: Int,
-    val recommended: Boolean
+    val region: String,
+    val domain: String,
+    val addrs: List<String>,
+    val isPrimary: Boolean,
 )
 
 enum class CONNECTION_TYPE {

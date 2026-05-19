@@ -55,6 +55,11 @@ interface GroupService {
     @PUT("v1/groups/invitation/join/{inviteCode}")
     suspend fun joinGroupByInviteCode(@Path("inviteCode") inviteCode: String): BaseResponse<JoinGroupByInviteCodeResp>
 
+    @PUT("v1/groups/{gid}/upgrade-to-encrypted")
+    suspend fun upgradeToEncrypted(@Path("gid") gid: String, @Body req: UpgradeGroupToEncryptedReq): BaseResponse<GetGroupInfoResp>
+
+    @POST("v1/groups/{gid}/members/crypto-dispose")
+    suspend fun cryptoDispose(@Path("gid") gid: String, @Body req: CryptoDisposeReq): BaseResponse<CryptoDisposeResp>
 }
 
 class GroupRepo
@@ -90,6 +95,9 @@ constructor(
             this.anyoneRemove = groupResp.anyoneRemove
             this.rejoin = groupResp.rejoin
             this.publishRule = groupResp.publishRule
+            this.groupCryptoMode = groupResp.groupCryptoMode
+            this.encryptedName = groupResp.encryptedName
+            this.encryptedAvatar = groupResp.encryptedAvatar
         }
     }
 
@@ -136,20 +144,34 @@ constructor(
     suspend fun joinGroupByInviteCodeResp(inviteCode: String): BaseResponse<JoinGroupByInviteCodeResp> {
         return groupService.joinGroupByInviteCode(inviteCode)
     }
+
+    suspend fun upgradeToEncrypted(gid: String, req: UpgradeGroupToEncryptedReq): BaseResponse<GetGroupInfoResp> {
+        return groupService.upgradeToEncrypted(gid, req)
+    }
+
+    suspend fun cryptoDispose(gid: String, req: CryptoDisposeReq): BaseResponse<CryptoDisposeResp> {
+        return groupService.cryptoDispose(gid, req)
+    }
+
+    suspend fun addMembersWithBindings(gid: String, numbers: List<String>, memberBindings: List<GroupMemberBinding>?): BaseResponse<CreateGroupResp> {
+        return groupService.addMembers(gid, AddOrRemoveMembersReq(numbers, memberBindings))
+    }
 }
 
 data class CreateGroupReq(
-//    val invitationRule: Int,//默认为2
-//    val notification: Int?,
-//    val messageExpiry: Int,
-    val name: String,
+    val name: String? = null,
     val numbers: List<String>,
-    val avatar: String? = null
+    val avatar: String? = null,
+    val groupCryptoMode: Int? = null,
+    val encryptedName: String? = null,
+    val encryptedAvatar: String? = null,
+    val groupMemberVerifyPublicKey: String? = null,
+    val memberBindings: List<GroupMemberBinding>? = null
 )
 
 data class CreateGroupResp(
     val gid: String,
-    val strangers: List<Stranger>?
+    val strangers: List<Stranger>?,
 )
 
 data class Stranger(
@@ -170,6 +192,8 @@ data class ChangeGroupSettingsReq(
     val privateChat: Boolean? = null,
     val linkInviteSwitch: Boolean? = null,
     val criticalAlert: Boolean? = null,
+    val encryptedName: String? = null,
+    val encryptedAvatar: String? = null,
 )
 
 data class GetGroupInfoResp(
@@ -188,6 +212,10 @@ data class GetGroupInfoResp(
     val privateChat: Boolean,
     val messageClearAnchor: Long,
     val criticalAlert: Boolean,
+    val groupCryptoMode: Int? = null,
+    val encryptedName: String? = null,
+    val encryptedAvatar: String? = null,
+    val groupMemberVerifyPublicKey: String? = null,
 )
 
 data class Member(
@@ -198,7 +226,8 @@ data class Member(
     val remark: String?,
     val role: Int,
     val uid: String,
-    val useGlobal: Boolean
+    val useGlobal: Boolean,
+    val uidSignature: String? = null,
 )
 
 data class GetGroupsResp(
@@ -219,7 +248,10 @@ data class GroupResp(
     val remindCycle: String,
     val status: Int,
     val version: Int,
-    val criticalAlert: Boolean
+    val criticalAlert: Boolean,
+    val groupCryptoMode: Int? = null,
+    val encryptedName: String? = null,
+    val encryptedAvatar: String? = null,
 )
 
 data class GroupAvatarResponse(
@@ -247,7 +279,8 @@ data class SelfInfoResp(
 )
 
 data class AddOrRemoveMembersReq(
-    val numbers: List<String>
+    val numbers: List<String>,
+    val memberBindings: List<GroupMemberBinding>? = null
 )
 
 data class ChangeRolepReq(
@@ -288,6 +321,27 @@ data class JoinGroupByInviteCodeResp(
     val rejoin: Boolean,
     val remindCycle: String,
     val version: Int
+)
+
+data class GroupMemberBinding(
+    val uid: String,
+    val uidSignature: String
+)
+
+data class UpgradeGroupToEncryptedReq(
+    val encryptedName: String,
+    val encryptedAvatar: String? = null,
+    val groupMemberVerifyPublicKey: String,
+    val memberBindings: List<GroupMemberBinding>
+)
+
+data class CryptoDisposeReq(
+    val uids: List<String>
+)
+
+data class CryptoDisposeResp(
+    val removed: List<String>?,
+    val rejected: List<String>?
 )
 
 

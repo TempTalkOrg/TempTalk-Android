@@ -16,6 +16,7 @@ import com.difft.android.base.log.lumberjack.L
 import org.difft.app.database.convertToContactorModels
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.members
 import org.difft.app.database.search
@@ -31,6 +32,10 @@ import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getFirstLetter
 import com.difft.android.chat.contacts.data.isBotId
 import com.difft.android.chat.databinding.ChatActivityGroupSelectMemberBinding
+import com.difft.android.chat.crypto.GroupCrypto
+import com.difft.android.chat.crypto.GroupCryptoRepo
+import com.difft.android.chat.crypto.GroupKeyDistributor
+import com.difft.android.network.group.GroupMemberBinding
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.base.widget.sideBar.GroupMemberDecoration
 import com.hi.dhl.binding.viewbind
@@ -43,7 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupModel
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
+import com.difft.android.chat.dependencies.ApplicationDependencies
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
@@ -74,6 +79,12 @@ class GroupSelectMemberActivity : BaseActivity() {
 
     @Inject
     lateinit var groupUtil: GroupUtil
+
+    @Inject
+    lateinit var groupCryptoRepo: GroupCryptoRepo
+
+    @Inject
+    lateinit var groupKeyDistributor: GroupKeyDistributor
 
     val mAdapter: GroupMembersAdapter by lazy {
         object : GroupMembersAdapter(type) {
@@ -172,7 +183,7 @@ class GroupSelectMemberActivity : BaseActivity() {
             val myRole = groupInfo?.members?.firstOrNull { it.id == globalServices.myId }?.groupRole ?: GROUP_ROLE_MEMBER
             groupInfo?.members?.convertToContactorModels()?.forEach {
                 val name: String = it.getDisplayNameForUI()
-                val contactAvatar = it.avatar?.getContactAvatarData()
+                val contactAvatar = it.getEffectiveAvatarJson()?.getContactAvatarData()
                 val memberRole = it.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER
                 val canOperate = myRole < memberRole || (groupInfo.anyoneRemove == true && memberRole == GROUP_ROLE_MEMBER && it.id != globalServices.myId)
                 list.add(
@@ -297,8 +308,11 @@ class GroupSelectMemberActivity : BaseActivity() {
 
                 lifecycleScope.launch {
                     try {
+                        val newMembers = currentSelectedIds.toList()
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.addMembers(gid, currentSelectedIds.toList())
+                            // For encrypted groups, generate member bindings
+                            val memberBindings = buildMemberBindings(newMembers)
+                            groupRepo.addMembersWithBindings(gid, newMembers, memberBindings)
                         }
 
                         when (response.status) {
@@ -307,6 +321,7 @@ class GroupSelectMemberActivity : BaseActivity() {
                                 try {
                                     withContext(Dispatchers.IO) {
                                         groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
+                                        groupKeyDistributor.distributeToMembers(gid, newMembers)
                                     }
                                 } catch (e: Exception) {
                                     L.e { "[GroupSelectMemberActivity] Failed to refresh group info after adding members: ${e.message}" }
@@ -395,7 +410,7 @@ class GroupSelectMemberActivity : BaseActivity() {
             // 总的选择状态：初始选择 或 新选择
             val isCurrentlySelected = isInInitialSelection || isNewlySelected
 
-            val contactAvatar = contact.avatar?.getContactAvatarData()
+            val contactAvatar = contact.getEffectiveAvatarJson()?.getContactAvatarData()
 
             GroupMemberModel(
                 contact.getDisplayNameForUI(),
@@ -420,6 +435,22 @@ class GroupSelectMemberActivity : BaseActivity() {
             cancel()
             val toAlpha = if (!TextUtils.isEmpty(etContent)) 1.0f else 0f
             alpha(toAlpha)
+        }
+    }
+
+    /**
+     * Build member bindings for encrypted groups.
+     * Returns null for plain groups (no bindings needed).
+     * Must be called from IO thread.
+     */
+    private fun buildMemberBindings(newMembers: List<String>): List<GroupMemberBinding>? {
+        val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(gid))
+        if (group?.groupCryptoMode == null || group.groupCryptoMode == 0) return null
+
+        val rGroupBytes = groupCryptoRepo.getRGroupBytes(gid) ?: return null
+        val skBind = GroupCrypto.deriveSkBind(rGroupBytes)
+        return newMembers.map { uid ->
+            GroupMemberBinding(uid, GroupCrypto.signUid(skBind, uid))
         }
     }
 }

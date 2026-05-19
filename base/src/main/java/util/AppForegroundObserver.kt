@@ -1,5 +1,6 @@
 package util
 
+import android.os.Looper
 import androidx.annotation.AnyThread
 import androidx.annotation.MainThread
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -27,7 +28,7 @@ object AppForegroundObserver {
   @MainThread
   @JvmStatic
   fun begin() {
-    ThreadUtil.assertMainThread()
+    check(Looper.myLooper() == Looper.getMainLooper()) { "Must be called on the main thread" }
 
     ProcessLifecycleOwner.Companion.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
       override fun onStart(owner: LifecycleOwner) {

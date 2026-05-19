@@ -38,7 +38,10 @@ import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.PermissionUtil
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,7 +49,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import javax.inject.Inject
 
 
 /**
@@ -60,13 +62,24 @@ import javax.inject.Inject
  * This ensures that the app will continue to be able to access the camera/microphone
  * in the background. Apps that don't declare these will run into issues when
  * trying to access them from the background.
+ *
  */
 
-@AndroidEntryPoint
 open class ForegroundService : Service() {
 
-    @Inject
-    lateinit var onGoingCallStateManager: OnGoingCallStateManager
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface ServiceEntryPoint {
+        fun onGoingCallStateManager(): OnGoingCallStateManager
+    }
+
+    private val entryPoint by lazy {
+        EntryPointAccessors.fromApplication(applicationContext, ServiceEntryPoint::class.java)
+    }
+
+    private val onGoingCallStateManager: OnGoingCallStateManager by lazy {
+        entryPoint.onGoingCallStateManager()
+    }
 
     private var isForegroundStarted = false
 

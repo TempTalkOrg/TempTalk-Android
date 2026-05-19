@@ -3,8 +3,8 @@ package com.difft.android.chat.ui.textpreview
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
-import androidx.appcompat.widget.AppCompatTextView
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.ui.SafeTextView
 
 /**
  * Custom TextView for text preview.
@@ -15,7 +15,7 @@ class SelectableTextView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : AppCompatTextView(context, attrs, defStyleAttr) {
+) : SafeTextView(context, attrs, defStyleAttr) {
 
     var onSelectionChangedListener: ((Int, Int) -> Unit)? = null
 

@@ -10,7 +10,5 @@ import androidx.constraintlayout.widget.ConstraintLayout
  */
 class ChatMessageItemView @JvmOverloads constructor(
     context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0,
-    defStyleRes: Int = 0
-) : ConstraintLayout(context, attrs, defStyleAttr, defStyleRes)
+    attrs: AttributeSet? = null
+) : ConstraintLayout(context, attrs)

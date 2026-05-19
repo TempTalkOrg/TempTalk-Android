@@ -1,6 +1,8 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -20,6 +22,7 @@ abstract class GroupInCommonAdapter : ListAdapter<GroupModel, GroupInCommonItemV
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): GroupInCommonItemViewHolder =
         GroupInCommonItemViewHolder(parent)
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onBindViewHolder(holder: GroupInCommonItemViewHolder, position: Int) {
         val data = getItem(position)
         holder.avatar = data.avatar
@@ -35,15 +38,24 @@ abstract class GroupInCommonAdapter : ListAdapter<GroupModel, GroupInCommonItemV
             holder.groupMemberNames = builder.substring(0, builder.length - 2).toString()
         }
         holder.itemView.setOnClickListener { onItemClick(data) }
+        var touchX = 0
+        var touchY = 0
+        holder.itemView.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                touchX = event.rawX.toInt()
+                touchY = event.rawY.toInt()
+            }
+            false
+        }
         holder.itemView.setOnLongClickListener {
-            onItemLongClick(it, data)
+            onItemLongClick(it, data, touchX, touchY)
             true
         }
     }
 
     abstract fun onItemClick(group: GroupModel)
 
-    abstract fun onItemLongClick(itemView: View, group: GroupModel)
+    abstract fun onItemLongClick(itemView: View, group: GroupModel, touchX: Int, touchY: Int)
 }
 
 class GroupInCommonItemViewHolder(parentView: ViewGroup) : RecyclerView.ViewHolder(run {

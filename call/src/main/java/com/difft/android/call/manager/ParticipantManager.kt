@@ -6,8 +6,11 @@ import com.difft.android.call.util.sortParticipantsByPriority
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -26,6 +29,9 @@ class ParticipantManager(private val scope: CoroutineScope) {
 
     private val _screenSharingUser = MutableStateFlow<RemoteParticipant?>(null)
     val screenSharingUser = _screenSharingUser.asStateFlow()
+
+    @Volatile
+    private var resortJob: Job? = null
 
     /**
      * Updates the internal participants list with the provided value.
@@ -53,14 +59,22 @@ class ParticipantManager(private val scope: CoroutineScope) {
 
     /**
      * Re-sorts the participants list based on their priority.
+     * Debounced to consolidate rapid sort requests; skips update when order is unchanged.
      */
     fun resortParticipants() {
-        scope.launch {
+        resortJob?.cancel()
+        resortJob = scope.launch {
+            delay(RESORT_DEBOUNCE_MS)
             try {
                 withContext(Dispatchers.Default) {
-                    val sortedList = sortParticipantsByPriority(participants.value)
-                    setParticipants(sortedList)
+                    val currentList = participants.value
+                    val sortedList = sortParticipantsByPriority(currentList)
+                    if (!sortedList.hasSameOrder(currentList)) {
+                        setParticipants(sortedList)
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.e { "[Call] ParticipantManager resortParticipants error = ${e.message}" }
             }
@@ -124,4 +138,15 @@ class ParticipantManager(private val scope: CoroutineScope) {
         }
     }
 
+    private fun List<Participant>.hasSameOrder(other: List<Participant>): Boolean {
+        if (size != other.size) return false
+        for (i in indices) {
+            if (this[i].sid != other[i].sid) return false
+        }
+        return true
+    }
+
+    companion object {
+        private const val RESORT_DEBOUNCE_MS = 300L
+    }
 }

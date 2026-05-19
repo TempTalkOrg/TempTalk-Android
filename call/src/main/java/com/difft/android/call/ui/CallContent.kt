@@ -2,36 +2,38 @@ package com.difft.android.call.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.res.painterResource
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.R
 import com.difft.android.call.data.BottomCallEndAction
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
 import com.difft.android.call.handler.InviteCallHandler
+import com.difft.android.call.ui.barrage.BubbleOverlayWindowHost
+import com.difft.android.call.ui.invite.InviteViewState
+import com.difft.android.call.ui.screenshare.ScreenShareSpeakerBanner
+import com.difft.android.call.ui.invite.MeetingInviteScreen
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.room.Room
-import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 
 /**
  * 通话内容主入口组件
@@ -46,7 +48,6 @@ import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
  * @param conversationId 会话 ID
  * @param autoHideTimeout 自动隐藏超时时间
  * @param muteOtherEnabled 是否允许静音其他人
- * @param audioProcessor 音频降噪处理器
  * @param onScreenClick 屏幕点击回调
  * @param onCallTypeChanged 通话类型变化回调
  * @param onInviteUsersClick 邀请用户点击回调
@@ -68,7 +69,6 @@ fun CallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: AudioPipelineProcessor,
     onScreenClick: () -> Unit,
     onCallTypeChanged: (String) -> Unit,
     onInviteUsersClick: () -> Unit,
@@ -114,7 +114,6 @@ fun CallContent(
             conversationId = conversationId,
             autoHideTimeout = autoHideTimeout,
             muteOtherEnabled = muteOtherEnabled,
-            audioProcessor = audioProcessor,
             onScreenClick = onScreenClick,
             onInviteUsersClick = onInviteUsersClick,
             onWindowZoomOutClick = onWindowZoomOutClick,
@@ -142,7 +141,6 @@ private fun CallContentContainer(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: AudioPipelineProcessor,
     onScreenClick: () -> Unit,
     onInviteUsersClick: () -> Unit,
     onWindowZoomOutClick: () -> Unit,
@@ -150,7 +148,13 @@ private fun CallContentContainer(
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
     onBottomCallEndAction: (BottomCallEndAction) -> Unit
 ) {
-    ConstraintLayout(
+    val configuration = LocalConfiguration.current
+    val activity = LocalActivity.current
+    val isDualPane = remember(configuration, activity) {
+        activity?.let { WindowSizeClassUtil.shouldUseDualPaneLayout(it) } ?: false
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
@@ -168,7 +172,6 @@ private fun CallContentContainer(
                 indication = null,
             ) { onScreenClick() }
     ) {
-        val (speakerView) = createRefs()
         room?.let {
             when (currentCallType) {
                 CallType.ONE_ON_ONE.type -> {
@@ -184,19 +187,12 @@ private fun CallContentContainer(
                         conversationId = conversationId,
                         autoHideTimeout = autoHideTimeout,
                         muteOtherEnabled = muteOtherEnabled,
-                        audioProcessor = audioProcessor,
+                        isDualPane = isDualPane,
                         onInviteUsersClick = onInviteUsersClick,
                         onInviteViewAction = onInviteViewAction,
                         onWindowZoomOutClick = onWindowZoomOutClick,
                         onExitClick = onExitClick,
-                        modifier = Modifier.constrainAs(speakerView) {
-                            top.linkTo(parent.top)
-                            start.linkTo(parent.start)
-                            end.linkTo(parent.end)
-                            bottom.linkTo(parent.bottom)
-                            width = Dimension.fillToConstraints
-                            height = Dimension.fillToConstraints
-                        }
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
                 else -> {
@@ -212,20 +208,13 @@ private fun CallContentContainer(
                         conversationId = conversationId,
                         autoHideTimeout = autoHideTimeout,
                         muteOtherEnabled = muteOtherEnabled,
-                        audioProcessor = audioProcessor,
+                        isDualPane = isDualPane,
                         onInviteUsersClick = onInviteUsersClick,
                         onWindowZoomOutClick = onWindowZoomOutClick,
                         onExitClick = onExitClick,
                         onInviteViewAction = onInviteViewAction,
                         onBottomCallEndAction = onBottomCallEndAction,
-                        modifier = Modifier.constrainAs(speakerView) {
-                            top.linkTo(parent.top)
-                            start.linkTo(parent.start)
-                            end.linkTo(parent.end)
-                            bottom.linkTo(parent.bottom)
-                            width = Dimension.fillToConstraints
-                            height = Dimension.fillToConstraints
-                        }
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
@@ -249,7 +238,7 @@ private fun OneOnOneCallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: AudioPipelineProcessor,
+    isDualPane: Boolean = false,
     onInviteUsersClick: () -> Unit,
     onInviteViewAction: (InviteViewState) -> Unit,
     onWindowZoomOutClick: () -> Unit,
@@ -263,8 +252,13 @@ private fun OneOnOneCallContent(
             autoHideTimeout = autoHideTimeout,
             callConfig = callConfig,
             conversationId = conversationId,
-            callRole = callRole
+            callRole = callRole,
+            isDualPane = isDualPane,
         )
+        // 气泡飘动层：通过 WindowManager 挂在独立的 APPLICATION_PANEL
+        // 子窗口里，和主 Activity 窗口走两条独立的 measure/layout/draw
+        // 流水线，主界面任何 recomposition / remeasure 都影响不到它。
+        BubbleOverlayWindowHost(viewModel = viewModel)
         CommonCallOverlays(
             viewModel = viewModel,
             isOneVOneCall = true,
@@ -275,11 +269,13 @@ private fun OneOnOneCallContent(
             callRole = callRole,
             conversationId = conversationId,
             muteOtherEnabled = muteOtherEnabled,
-            audioProcessor = audioProcessor,
             onInviteUsersClick = onInviteUsersClick,
             onWindowZoomOutClick = onWindowZoomOutClick,
             onExitClick = onExitClick
         )
+        if (isUserSharingScreen) {
+            ScreenShareSpeakerBanner(viewModel = viewModel)
+        }
         // 会议邀请组件
         MeetingInviteScreen(
             callViewModel = viewModel,
@@ -305,7 +301,7 @@ private fun MultiParticipantCallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    audioProcessor: AudioPipelineProcessor,
+    isDualPane: Boolean = false,
     onInviteUsersClick: () -> Unit,
     onInviteViewAction: (InviteViewState) -> Unit,
     onWindowZoomOutClick: () -> Unit,
@@ -319,8 +315,12 @@ private fun MultiParticipantCallContent(
             room = room,
             muteOtherEnabled = muteOtherEnabled,
             autoHideTimeout = autoHideTimeout,
-            callConfig = callConfig
+            callConfig = callConfig,
+            isDualPane = isDualPane,
         )
+        // 气泡飘动层：通过 WindowManager 挂在独立子窗口里，避免主窗口
+        // re-measure 波及气泡。详见 [BubbleOverlayWindowHost]。
+        BubbleOverlayWindowHost(viewModel = viewModel)
         CommonCallOverlays(
             viewModel = viewModel,
             isOneVOneCall = false,
@@ -331,11 +331,13 @@ private fun MultiParticipantCallContent(
             callRole = callRole,
             conversationId = conversationId,
             muteOtherEnabled = muteOtherEnabled,
-            audioProcessor = audioProcessor,
             onInviteUsersClick = onInviteUsersClick,
             onWindowZoomOutClick = onWindowZoomOutClick,
             onExitClick = onExitClick
         )
+        if (isUserSharingScreen) {
+            ScreenShareSpeakerBanner(viewModel = viewModel)
+        }
         // 多人通话特有的组件
         ShowBottomCallEndView(
             viewModel,
@@ -369,159 +371,4 @@ private fun CallSurface(
         PreloadCallPainters()
         content()
     }
-}
-
-/**
- * 公共的通话覆盖层组件（顶部/底部控制栏、举手视图、工具栏等）
- */
-@Composable
-private fun CommonCallOverlays(
-    viewModel: LCallViewModel,
-    isOneVOneCall: Boolean,
-    isUserSharingScreen: Boolean,
-    audioSwitchHandler: AudioSwitchHandler?,
-    callConfig: CallConfig,
-    callIntent: CallIntent,
-    callRole: CallRole,
-    conversationId: String?,
-    muteOtherEnabled: Boolean,
-    audioProcessor: AudioPipelineProcessor,
-    onInviteUsersClick: () -> Unit,
-    onWindowZoomOutClick: () -> Unit,
-    onExitClick: (CallExitParams, CallEndType?) -> Unit
-) {
-    RenderTopAndBottomOverlays(
-        viewModel = viewModel,
-        isOneVOneCall = isOneVOneCall,
-        isUserSharingScreen = isUserSharingScreen,
-        audioSwitchHandler = audioSwitchHandler,
-        callConfig = callConfig,
-        callIntent = callIntent,
-        callRole = callRole,
-        conversationId = conversationId,
-        onWindowZoomOutClick = onWindowZoomOutClick,
-        onExitClick = onExitClick
-    )
-    ShowHandsUpBottomView(
-        viewModel,
-        onDismiss = { viewModel.callUiController.setShowHandsUpBottomViewEnabled(false) }
-    )
-    ShowItemsBottomView(
-        viewModel,
-        isOneVOneCall = isOneVOneCall,
-        onDismiss = { viewModel.callUiController.setShowToolBarBottomViewEnable(false) },
-        deNoiseCallBack = { enable ->
-            audioProcessor.setEnabled(enable)
-            if (enable) {
-                audioProcessor.setModule(viewModel.deNoiseMode.value)
-            }
-        },
-        deNoiseModeCallBack = { mode -> audioProcessor.setModule(mode) },
-        handleInviteUsersClick = onInviteUsersClick
-    )
-    ShowParticipantsListView(
-        viewModel,
-        muteOtherEnabled,
-        handleInviteUsersClick = onInviteUsersClick
-    )
-    ShowCriticalAlertConfirmView(
-        viewModel,
-        onDismiss = { viewModel.callUiController.setShowCriticalAlertConfirmViewEnabled(false) },
-        sendCriticalAlert = { gid -> viewModel.handleCriticalAlertNew(gid, callback = { isSuccess ->
-            viewModel.callUiController.setShowCriticalAlertConfirmViewEnabled(!isSuccess)
-        }) }
-    )
-}
-
-/**
- * 渲染顶部和底部覆盖层
- */
-@Composable
-private fun RenderTopAndBottomOverlays(
-    viewModel: LCallViewModel,
-    isOneVOneCall: Boolean,
-    isUserSharingScreen: Boolean,
-    audioSwitchHandler: AudioSwitchHandler?,
-    callConfig: CallConfig,
-    callIntent: CallIntent,
-    callRole: CallRole,
-    conversationId: String?,
-    onWindowZoomOutClick: () -> Unit,
-    onExitClick: (CallExitParams, CallEndType?) -> Unit
-) {
-    val showTopStatusViewEnabled by viewModel.callUiController.showTopStatusViewEnabled.collectAsState(true)
-    val showBottomToolBarViewEnabled by viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
-    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
-
-    // 屏幕分享模式下，控制栏展示后 5 秒无操作自动隐藏
-    LaunchedEffect(isUserSharingScreen, showTopStatusViewEnabled) {
-        if (isUserSharingScreen && showTopStatusViewEnabled) {
-            viewModel.callUiController.notifyScreenShareInteraction()
-            while (true) {
-                delay(1_000L)
-                val elapsed = System.currentTimeMillis() - viewModel.callUiController.screenShareLastInteractionTime
-                if (elapsed >= 5_000L) {
-                    viewModel.callUiController.setShowTopStatusViewEnabled(false)
-                    viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
-                    break
-                }
-            }
-        }
-    }
-
-    // 顶部悬浮控件布局逻辑
-    MainPageWithTopStatusView(
-        viewModel = viewModel,
-        isInPipMode = isInPipMode,
-        isOneVOneCall = isOneVOneCall,
-        showTopStatusViewEnabled = showTopStatusViewEnabled,
-        isUserSharingScreen = isUserSharingScreen,
-        callConfig = callConfig,
-        callIntent = callIntent,
-        windowZoomOutAction = onWindowZoomOutClick
-    )
-
-    if (!isInPipMode) {
-        // 底部悬浮控件布局逻辑
-        MainPageWithBottomControlView(
-            viewModel = viewModel,
-            isOneVOneCall = isOneVOneCall,
-            showBottomToolBarViewEnabled = showBottomToolBarViewEnabled,
-            isUserSharingScreen = isUserSharingScreen,
-            audioSwitchHandler = audioSwitchHandler,
-            endCallAction = { callType, callEndType ->
-                val callExitParams = CallExitParams(
-                    viewModel.getRoomId(),
-                    callIntent.callerId,
-                    callRole,
-                    callType,
-                    conversationId
-                )
-                onExitClick(callExitParams, callEndType)
-            }
-        )
-    }
-}
-
-@Composable
-private fun PreloadCallPainters() {
-    // 进入页面即预加载，避免首次显示时阻塞主线程
-    painterResource(id = R.drawable.chat_ic_window_zoom_out)
-    painterResource(id = R.drawable.ant_design_loading_outlined)
-    painterResource(id = R.drawable.gg_spinner_alt)
-
-    // 底部控制栏资源预加载
-    painterResource(id = R.drawable.call_btn_microphone_open)
-    painterResource(id = R.drawable.call_btn_microphone_close)
-    painterResource(id = R.drawable.call_btn_camera_open)
-    painterResource(id = R.drawable.call_btn_camera_close)
-    painterResource(id = R.drawable.call_btn_volume_phone)
-    painterResource(id = R.drawable.call_btn_volume_speaker)
-    painterResource(id = R.drawable.call_btn_volume_headphones)
-    painterResource(id = R.drawable.call_btn_volume_airpod)
-    painterResource(id = R.drawable.users)
-    painterResource(id = R.drawable.call_btn_tabler_dots)
-    painterResource(id = R.drawable.call_btn_hangup)
-    painterResource(id = R.drawable.call_btn_tabler_chevron_right)
-    painterResource(id = R.drawable.call_btn_mingcute_exit_line)
 }

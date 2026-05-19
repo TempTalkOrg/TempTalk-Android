@@ -1,0 +1,84 @@
+package com.difft.android.chat.mediasend.v2.review
+
+import android.content.DialogInterface
+import android.os.Bundle
+import android.view.View
+import androidx.core.content.ContextCompat
+import androidx.core.widget.addTextChangedListener
+import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.viewModels
+import com.difft.android.chat.R
+import com.difft.android.chat.databinding.V2MediaAddMessageDialogFragmentBinding
+import com.difft.android.chat.components.KeyboardEntryDialogFragment
+import com.difft.android.chat.components.ViewBinderDelegate
+import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
+import com.difft.android.chat.util.ViewUtil
+
+class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_add_message_dialog_fragment) {
+
+    private val viewModel: MediaSelectionViewModel by viewModels(
+        ownerProducer = { requireActivity() }
+    )
+
+    private val binding by ViewBinderDelegate(com.difft.android.chat.databinding.V2MediaAddMessageDialogFragmentBinding::bind)
+
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+
+        binding.content.addAMessageInput.addTextChangedListener(afterTextChanged = {
+            viewModel.setMessage(it?.toString())
+        })
+
+        binding.content.addAMessageInput.setText(requireArguments().getCharSequence(ARG_INITIAL_TEXT))
+
+        binding.hud.setOnClickListener { dismissAllowingStateLoss() }
+
+        val confirm: View = view.findViewById(R.id.confirm_button)
+        confirm.setOnClickListener { dismissAllowingStateLoss() }
+
+        applyConfidentialStyle()
+    }
+
+    private fun applyConfidentialStyle() {
+        val isConfidential = viewModel.state.value?.confidentialMode == 1
+        val input = binding.content.addAMessageInput
+        val inputAreaContainer = input.parent as View
+        if (isConfidential) {
+            inputAreaContainer.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg_confidential_area))
+            input.setBackgroundResource(R.drawable.chat_msg_input_bg_confidential)
+        } else {
+            inputAreaContainer.setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1))
+            input.setBackgroundResource(R.drawable.chat_msg_input_field_bg)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        ViewUtil.focusAndShowKeyboard(binding.content.addAMessageInput)
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        if (isResumed) {
+            viewModel.setMessage(binding.content.addAMessageInput.text?.toString())
+        }
+    }
+
+    companion object {
+
+        const val TAG = "ADD_MESSAGE_DIALOG_FRAGMENT"
+
+        private const val ARG_INITIAL_TEXT = "arg.initial.text"
+        private const val ARG_INITIAL_EMOJI_TOGGLE = "arg.initial.emojiToggle"
+
+        fun show(fragmentManager: FragmentManager, initialText: CharSequence?, startWithEmojiKeyboard: Boolean) {
+            AddMessageDialogFragment().apply {
+                arguments = Bundle().apply {
+                    putCharSequence(ARG_INITIAL_TEXT, initialText)
+                    putBoolean(ARG_INITIAL_EMOJI_TOGGLE, startWithEmojiKeyboard)
+                }
+            }.show(fragmentManager, TAG)
+        }
+    }
+}

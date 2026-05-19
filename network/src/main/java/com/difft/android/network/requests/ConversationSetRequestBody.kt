@@ -11,6 +11,7 @@ package com.difft.android.network.requests
 data class ConversationSetRequestBody(
     val conversation: String,
     val remark: String? = null,
+    val remarkAvatar: String? = null,
     val muteStatus: Int? = null,
     val blockStatus: Int? = null,
     val confidentialMode: Int? = null,

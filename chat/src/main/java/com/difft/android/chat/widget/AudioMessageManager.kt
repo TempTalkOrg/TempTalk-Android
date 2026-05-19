@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.util.FileDecryptionUtil
+import com.difft.android.chat.util.FileDecryptionUtil
 import java.io.File
 
 object AudioMessageManager {

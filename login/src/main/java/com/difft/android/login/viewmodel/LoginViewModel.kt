@@ -21,12 +21,13 @@ import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.viewmodel.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.signal.libsignal.protocol.util.KeyHelper
-import org.thoughtcrime.securesms.crypto.IdentityKeyUtil
-import org.thoughtcrime.securesms.util.Util
+import com.difft.android.chat.crypto.IdentityKeyUtil
+import com.difft.android.chat.util.Util
 import javax.inject.Inject
-import org.thoughtcrime.securesms.cryptonew.EncryptionDataManager
+import com.difft.android.chat.cryptonew.EncryptionDataManager
 import com.difft.android.websocket.internal.push.PreKeyState
 import com.difft.android.base.utils.Base64
 
@@ -41,11 +42,11 @@ class LoginViewModel @Inject constructor() : ViewModel() {
     lateinit var userManager: UserManager
 
     @Inject
-    lateinit var encryptionDataManager: EncryptionDataManager
+    lateinit var encryptionDataManager: dagger.Lazy<EncryptionDataManager>
 
     @Inject
     @ChativeHttpClientModule.Chat
-    lateinit var httpClient: ChativeHttpClient
+    lateinit var httpClient: dagger.Lazy<ChativeHttpClient>
 
     private val mInviteCodeLiveData = MutableLiveData<Resource<Any>>()
     internal val inviteCodeLiveData: LiveData<Resource<Any>> = mInviteCodeLiveData
@@ -173,7 +174,8 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         }
         mSignInLiveData.value = Resource.loading()
 
-        viewModelScope.launch {
+        // Default: libsignal keygen/signature is CPU-bound. LiveData updates use postValue().
+        viewModelScope.launch(Dispatchers.Default) {
             try {
                 // 准备登录参数
                 val basicAuth = AuthCredentials(account, password).asBasic()
@@ -196,7 +198,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                 }
 
                 // Step 3: Fetch auth token
-                val tokenResult = httpClient.httpService.fetchAuthToken(basicAuth)
+                val tokenResult = httpClient.get().httpService.fetchAuthToken(basicAuth)
                 if (tokenResult.status == 0) {
                     userManager.update {
                         this.baseAuth = basicAuth
@@ -232,7 +234,7 @@ class LoginViewModel @Inject constructor() : ViewModel() {
 
     private suspend fun registerPreKeys(basicAuth: String): BaseResponse<Any> {
         val identityKeyPair = IdentityKeyUtil.generateIdentityKeyPair()
-        encryptionDataManager.updateAciIdentityKey(identityKeyPair)
+        encryptionDataManager.get().updateAciIdentityKey(identityKeyPair)
 
         // 生成PreKeyState
         val identityKey = identityKeyPair.publicKey

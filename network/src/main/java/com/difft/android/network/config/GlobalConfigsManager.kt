@@ -1,6 +1,10 @@
 package com.difft.android.network.config
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.core.content.edit
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.ActiveConversation
 import com.difft.android.base.user.GlobalNotificationType
@@ -15,7 +19,11 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ContactsRequestBody
+import com.difft.android.base.user.Data
+import com.difft.android.network.BuildConfig
+import com.difft.android.network.responses.EncryptedGlobalConfigResponse
 import com.google.gson.Gson
+import org.json.JSONObject
 import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +53,8 @@ class GlobalConfigsManager @Inject constructor(
         private const val FOREGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
         private const val BACKGROUND_REFRESH_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
         private const val DEFAULT_CONFIG_FILE_NAME = "default_global_config.json"
+        private const val PREFS_FILE_NAME = "secure_global_config"
+        private const val PREFS_KEY_CONFIG = "config"
     }
 
     @Volatile
@@ -56,17 +66,52 @@ class GlobalConfigsManager @Inject constructor(
     // Channel to signal state changes and interrupt the delay
     private val stateChangeSignal = Channel<Unit>(Channel.CONFLATED)
 
+    private val isEncryptedConfigEnabled = BuildConfig.CONFIG_PSK.isNotEmpty().also { enabled ->
+        if (!enabled) L.w { "[GlobalConfigsManager] CONFIG_PSK not set — running in plaintext config mode" }
+    }
+
+    private val configPrefs: SharedPreferences by lazy {
+        val start = System.currentTimeMillis()
+        EncryptedSharedPreferences.create(
+            context,
+            PREFS_FILE_NAME,
+            MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build(),
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        ).also {
+            L.i { "[GlobalConfigsManager] EncryptedSharedPreferences init took ${System.currentTimeMillis() - start}ms" }
+        }
+    }
+
     private val globalConfigUrls: List<String> by lazy {
-        if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT)) {
-            listOf(
-                "https://aly-c-config-1307206075.oss-accelerate.aliyuncs.com/testenv/TChative-MultiGlobalConfigureationFile.json"
-            )
+        if (isEncryptedConfigEnabled) {
+            parseConfigUrls(BuildConfig.CONFIG_URLS)
         } else {
-            listOf(
-                "https://d3repcs3hxhwgl.cloudfront.net/Chative-MultiGlobalConfigureationFile.json",
-                "https://aly-c-config-1307206075.oss-accelerate.aliyuncs.com/Chative-MultiGlobalConfigureationFile.json",
-                "https://chative-config-files.s3.me-central-1.amazonaws.com/Chative-MultiGlobalConfigureationFile.json"
-            )
+            if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT)) {
+                listOf(
+                    "https://aly-c-config-1307206075.oss-accelerate.aliyuncs.com/testenv/TChative-MultiGlobalConfigureationFile.json"
+                )
+            } else {
+                listOf(
+                    "https://d3repcs3hxhwgl.cloudfront.net/Chative-MultiGlobalConfigureationFile.json",
+                    "https://aly-c-config-1307206075.oss-accelerate.aliyuncs.com/Chative-MultiGlobalConfigureationFile.json",
+                    "https://chative-config-files.s3.me-central-1.amazonaws.com/Chative-MultiGlobalConfigureationFile.json"
+                )
+            }
+        }
+    }
+
+    private fun parseConfigUrls(json: String): List<String> {
+        val env = if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT)) "test" else "prod"
+        return try {
+            val obj = JSONObject(json)
+            val arr = obj.getJSONArray(env)
+            (0 until arr.length()).map { arr.getString(it) }
+        } catch (e: Exception) {
+            L.e { "[GlobalConfigsManager] Failed to parse config URLs: ${e.message}" }
+            emptyList()
         }
     }
 
@@ -90,6 +135,11 @@ class GlobalConfigsManager @Inject constructor(
 
         periodicRefreshJob = appScope.launch(Dispatchers.IO) {
             L.i { "[GlobalConfigsManager] Starting refresh job" }
+            try {
+                inMemoryGlobalConfig = initialConfig
+            } catch (e: Exception) {
+                L.e { "[GlobalConfigsManager] Failed to init config cache: ${e.message}" }
+            }
             while (isActive) {
                 refreshMutex.withLock {
                     doRefreshIfNeeded()
@@ -130,34 +180,64 @@ class GlobalConfigsManager @Inject constructor(
     }
 
     private suspend fun fetchGlobalConfigsWithRetry() {
+        if (globalConfigUrls.isEmpty()) {
+            L.e { "[GlobalConfigsManager] No config URLs available" }
+            return
+        }
         for ((index, url) in globalConfigUrls.withIndex()) {
             try {
-                val config = httpClient2.get().httpService.getNewGlobalConfigs(url)
+                val config = if (isEncryptedConfigEnabled) {
+                    val encrypted = httpClient2.get().httpService.getEncryptedGlobalConfig(url)
+                    decryptGlobalConfig(encrypted)
+                } else {
+                    httpClient2.get().httpService.getGlobalConfig(url)
+                }
 
                 if (config.code == 0) {
                     L.i { "[GlobalConfigsManager] get global configs success: $url" }
                     inMemoryGlobalConfig = config
                     saveConfigToPrefs(config)
+                    removeLegacyConfig()
                     config.data?.emojiReaction?.let { emojis ->
                         updateMostUseEmojis(emojis)
                     }
-                    return // Success, exit retry loop
+                    return
                 } else {
                     L.i { "[GlobalConfigsManager] get global configs fail: $url code:${config.code}" }
                 }
+            } catch (e: SecurityException) {
+                L.e { "[GlobalConfigsManager] Security verification failed: $url error:${e.message}" }
             } catch (e: Exception) {
                 L.e { "[GlobalConfigsManager] get global configs fail: $url error:${e.stackTraceToString()}" }
-                if (index == globalConfigUrls.lastIndex) {
-                    L.e { "[GlobalConfigsManager] All URLs failed" }
-                }
             }
+            if (index == globalConfigUrls.lastIndex) {
+                L.e { "[GlobalConfigsManager] All URLs failed, using cached config" }
+            }
+        }
+    }
+
+    private fun decryptGlobalConfig(encrypted: EncryptedGlobalConfigResponse): NewGlobalConfig {
+        val decryptedJson = GlobalConfigCrypto.decryptGlobalConfig(encrypted)
+        L.i { "[GlobalConfigsManager] Decrypted config, keyId=${encrypted.keyId}" }
+        val innerData = Gson().fromJson(decryptedJson, Data::class.java)
+        return NewGlobalConfig(code = encrypted.code, data = innerData)
+    }
+
+    private fun removeLegacyConfig() {
+        try {
+            if (SharedPrefsUtil.getString(SharedPrefsUtil.SP_NEW_CONFIG) != null) {
+                SharedPrefsUtil.remove(SharedPrefsUtil.SP_NEW_CONFIG)
+                L.i { "[GlobalConfigsManager] Removed legacy config from SharedPrefsUtil" }
+            }
+        } catch (e: Exception) {
+            L.e { "[GlobalConfigsManager] Failed to remove legacy config: ${e.message}" }
         }
     }
 
     private fun saveConfigToPrefs(config: NewGlobalConfig) {
         try {
             val configJson = Gson().toJson(config)
-            SharedPrefsUtil.putString(SharedPrefsUtil.SP_NEW_CONFIG, configJson)
+            configPrefs.edit { putString(PREFS_KEY_CONFIG, configJson) }
         } catch (e: Exception) {
             L.e { "[GlobalConfigsManager] save config to prefs error: ${e.stackTraceToString()}" }
         }
@@ -167,17 +247,15 @@ class GlobalConfigsManager @Inject constructor(
         return inMemoryGlobalConfig ?: initialConfig.also { inMemoryGlobalConfig = it }
     }
 
-    // Lazy load from SP or assets (thread-safe, only executes once)
     private val initialConfig: NewGlobalConfig? by lazy {
-        // Try SharedPreferences first
         try {
-            SharedPrefsUtil.getString(SharedPrefsUtil.SP_NEW_CONFIG)?.let { json ->
+            configPrefs.getString(PREFS_KEY_CONFIG, null)?.let { json ->
                 return@lazy Gson().fromJson(json, NewGlobalConfig::class.java).also {
-                    L.i { "[GlobalConfigsManager] Loaded config from SharedPreferences" }
+                    L.i { "[GlobalConfigsManager] Loaded config from encrypted prefs" }
                 }
             }
         } catch (e: Exception) {
-            L.e { "[GlobalConfigsManager] load from SP error: ${e.stackTraceToString()}" }
+            L.e { "[GlobalConfigsManager] load from encrypted prefs error: ${e.stackTraceToString()}" }
         }
 
         // Fallback to assets
@@ -274,5 +352,15 @@ class GlobalConfigsManager @Inject constructor(
      */
     fun getGroupConfidentialMemberLimit(): Int {
         return getNewGlobalConfigs()?.data?.group?.confidentialModeThreshold ?: 20
+    }
+
+    /**
+     * Group encryption feature flag.
+     * When disabled: new groups are created as plain (non-encrypted),
+     * and the upgrade entry is hidden on the group info page.
+     * Existing encrypted groups remain displayed as encrypted regardless of this flag.
+     */
+    fun isGroupEncryptionEnabled(): Boolean {
+        return getNewGlobalConfigs()?.data?.group?.encryptionEnabled ?: false
     }
 }

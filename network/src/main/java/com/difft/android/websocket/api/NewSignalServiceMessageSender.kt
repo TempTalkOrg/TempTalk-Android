@@ -16,9 +16,8 @@ import com.difft.android.websocket.api.util.RustEncryptionException
 import com.difft.android.websocket.api.util.SignalServiceContentCreator
 import com.difft.android.websocket.api.util.toOutgoingReadPositionEntity
 import com.difft.android.websocket.api.websocket.WebSocketUnavailableException
-import com.difft.android.websocket.internal.configuration.ServiceConfig
+import com.difft.android.network.signal.MessageSendRepository
 import com.difft.android.websocket.internal.push.NewOutgoingPushMessage
-import com.difft.android.websocket.internal.push.PushServiceSocket
 import com.difft.android.websocket.internal.push.exceptions.InvalidUnidentifiedAccessHeaderException
 import com.difft.android.websocket.internal.push.exceptions.MismatchedDevicesException
 import com.difft.android.websocket.internal.push.exceptions.StaleDevicesException
@@ -43,19 +42,18 @@ import javax.inject.Singleton
 
 @Singleton
 class NewSignalServiceMessageSender @Inject constructor(
-    serviceConfig: ServiceConfig,
     private val messagingService: NewMessagingService,
     @param:Named("message_sender_max_envelope_size")
     private val maxEnvelopeSize: Long,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val conversationManager: ConversationManager,
+    private val messageSendRepository: MessageSendRepository,
 ) {
     companion object {
         private const val TAG = "SignalServiceMessageSender"
         private const val RETRY_COUNT = 3
     }
 
-    private val socket = PushServiceSocket(serviceConfig, true)
     private val localAddress: For = For.Account(globalServices.myId)
     private val contentCreator: SignalServiceContentCreator = SignalServiceContentCreator(maxEnvelopeSize)
 
@@ -105,6 +103,30 @@ class NewSignalServiceMessageSender @Inject constructor(
         L.i { "[Message] sendDataMessage result is Success: ${result.success}" }
         // v4 API: server handles sync for both 1v1 and group messages
         return result
+    }
+
+    /**
+     * Send a GroupKeyMessage to distribute R_group to group members.
+     * Used after creating/upgrading an encrypted group (via group message)
+     * or after adding members (via 1v1 message).
+     */
+    suspend fun sendGroupKeyMessage(
+        recipient: For,
+        room: For,
+        groupKeyMessage: SignalServiceProtos.GroupKeyMessage,
+    ): SendMessageResult {
+        val timestamp = System.currentTimeMillis()
+        val content = contentCreator.createFrom(groupKeyMessage)
+        L.i { "[Message] [$timestamp] Sending group key message to ${recipient.id}" }
+        // Ensure public key info is available before sending
+        if (conversationManager.hasPublicKeyInfoData(room).not()) {
+            L.i { "[Message] sendGroupKeyMessage: updating public key info for room ${room.id}" }
+            conversationManager.updatePublicKeyInfoData(room)
+        }
+        return sendMessage(
+            recipient, room, timestamp, content, false,
+            Optional.empty(), Optional.empty(), null, null
+        )
     }
 
     /**
@@ -227,6 +249,7 @@ class NewSignalServiceMessageSender @Inject constructor(
                     readPositionEntity.orElse(null),
                     realSourceEntity.orElse(null),
                     syncContent,  // 传递 syncContent
+                    timestamp = timestamp,
                 )
                 try {
                     val response = if (recipient is For.Group) {
@@ -245,11 +268,36 @@ class NewSignalServiceMessageSender @Inject constructor(
                         ).resultOrThrow
                     }
                     if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
-                        //Here can also in group message case
-                        val error = "Invalid session for ${if (room is For.Group) "Group" else ""} ${recipient.id} "
-                        L.w { error }
+                        L.w {
+                            "[Message] [sendMessage][$timestamp] retry(ws) status=${response.status} " +
+                                "missing=${response.data.missing?.size ?: 0} " +
+                                "stale=${response.data.stale?.size ?: 0} " +
+                                "recipient=${recipient.id} roomType=${if (room is For.Group) "group" else "dm"}"
+                        }
                         conversationManager.updateConversationMemberData(room)
-                        conversationManager.updatePublicKeyInfoData(room)
+                        val flaggedUids = response.data.missing.orEmpty().map { it.uid } +
+                                response.data.stale.orEmpty().map { it.uid }
+                        if (flaggedUids.isNotEmpty()) {
+                            // Server flagged specific uids — narrow refresh.
+                            // For 1v1 (For.Account) also add recipient.id as extra hint; for groups,
+                            // recipient.id is a gid (not a uid) so skip it.
+                            val staleUids = (flaggedUids +
+                                    listOfNotNull((recipient as? For.Account)?.id)).distinct()
+                            L.i { "[Message] [sendMessage][$timestamp] retry(ws) narrowed staleUids size=${staleUids.size}" }
+                            conversationManager.updatePublicKeyInfoData(staleUids)
+                        } else {
+                            // status=11001 without any flagged uids — server didn't tell us which
+                            // uid is stale. Fall back to a broad refresh:
+                            //  - For.Group → For-keyed full-member refresh (matches Rust branch).
+                            //  - For.Account → refresh recipient uid.
+                            if (recipient is For.Group) {
+                                L.i { "[Message] [sendMessage][$timestamp] retry(ws) fallback=group_for_keyed_refresh gid=${recipient.id}" }
+                                conversationManager.updatePublicKeyInfoData(room)
+                            } else {
+                                L.i { "[Message] [sendMessage][$timestamp] retry(ws) fallback=account_narrow uid=${recipient.id}" }
+                                conversationManager.updatePublicKeyInfoData(listOf(recipient.id))
+                            }
+                        }
                         continue // Retry with updated key info
                     } else {
                         return SendMessageResult.success(
@@ -278,13 +326,32 @@ class NewSignalServiceMessageSender @Inject constructor(
                 } catch (e: IOException) {
                     L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
                 }
-                val response = socket.sendMessageNew(newOutgoingMessage, recipient)
+                val response = messageSendRepository.sendMessage(newOutgoingMessage, recipient)
                 if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
-                    //Here can also in group message case
-                    val error = "Invalid session for ${if (room is For.Group) "Group" else ""} ${recipient.id} "
-                    L.w { error }
+                    L.w {
+                        "[Message] [sendMessage][$timestamp] retry(http) status=${response.status} " +
+                            "missing=${response.data.missing?.size ?: 0} " +
+                            "stale=${response.data.stale?.size ?: 0} " +
+                            "recipient=${recipient.id} roomType=${if (room is For.Group) "group" else "dm"}"
+                    }
                     conversationManager.updateConversationMemberData(room)
-                    conversationManager.updatePublicKeyInfoData(room)
+                    val flaggedUids = response.data.missing.orEmpty().map { it.uid } +
+                            response.data.stale.orEmpty().map { it.uid }
+                    if (flaggedUids.isNotEmpty()) {
+                        val staleUids = (flaggedUids +
+                                listOfNotNull((recipient as? For.Account)?.id)).distinct()
+                        L.i { "[Message] [sendMessage][$timestamp] retry(http) narrowed staleUids size=${staleUids.size}" }
+                        conversationManager.updatePublicKeyInfoData(staleUids)
+                    } else {
+                        // status=11001 without flagged uids — see WS branch above for rationale.
+                        if (recipient is For.Group) {
+                            L.i { "[Message] [sendMessage][$timestamp] retry(http) fallback=group_for_keyed_refresh gid=${recipient.id}" }
+                            conversationManager.updatePublicKeyInfoData(room)
+                        } else {
+                            L.i { "[Message] [sendMessage][$timestamp] retry(http) fallback=account_narrow uid=${recipient.id}" }
+                            conversationManager.updatePublicKeyInfoData(listOf(recipient.id))
+                        }
+                    }
                     continue // Retry with updated key info
                 } else {
                     return SendMessageResult.success(
@@ -313,9 +380,20 @@ class NewSignalServiceMessageSender @Inject constructor(
                     L.e { "[Message] [sendMessage][$timestamp] Rust encryption key length exception. (${errorMessage})" }
                     L.w { "[Message] [sendMessage][$timestamp] Forcing public key update (attempt ${i + 1}/$RETRY_COUNT)" }
 
-                    // Force update public key data
                     conversationManager.updateConversationMemberData(room)
-                    conversationManager.updatePublicKeyInfoData(room)
+                    // Branch on recipient type to avoid silent no-op for group sends.
+                    // - 1v1: narrow to recipient uid only (catch block has NO server response with stale uid list).
+                    // - Group: `recipient.id` is a group id, not a member uid — calling the uid-keyed overload
+                    //   with `[groupId]` returns an empty /keys result, upsert is skipped, and the same stale
+                    //   keys are re-read on the next retry → infinite-loop / 3× fail. Fall back to the
+                    //   For-keyed overload so the facade resolves all members internally.
+                    if (recipient is For.Group) {
+                        L.i { "[Message] [sendMessage][$timestamp] retry(rust) path=group_for_keyed_refresh gid=${recipient.id}" }
+                        conversationManager.updatePublicKeyInfoData(room)
+                    } else {
+                        L.i { "[Message] [sendMessage][$timestamp] retry(rust) path=account_narrow uid=${recipient.id}" }
+                        conversationManager.updatePublicKeyInfoData(listOf(recipient.id))
+                    }
                 } else {
                     L.e { "[Message] [sendMessage][$timestamp] Rust encryption exception. (${errorMessage})" }
                 }
@@ -334,6 +412,13 @@ class NewSignalServiceMessageSender @Inject constructor(
         readPositionEntity: NewOutgoingPushMessage.ReadPositionEntity?,
         realSourceEntity: NewOutgoingPushMessage.RealSourceEntity?,
         syncContent: String? = null,  // 1v1消息的同步内容（v4接口使用）
+        // Message-identifying timestamp from the caller. Becomes Envelope.timestamp.
+        // Must match the basis used for the sender's local DB messageId so the
+        // server-echoed envelope dedupes against the local insert via putWhenNonExist.
+        // No default value — every call site must pass it explicitly to prevent the
+        // silent currentTimeMillis() drift that previously caused dup forward-notice
+        // messages on group sends once the server began echoing back to senders.
+        timestamp: Long,
     ): NewOutgoingPushMessage {
         if (conversationManager.hasPublicKeyInfoData(room).not()) {
             if (!conversationManager.updatePublicKeyInfoData(room)) {
@@ -459,7 +544,6 @@ class NewSignalServiceMessageSender @Inject constructor(
             })
         }
 
-        val timestamp = if (content.hasDataMessage()) content.dataMessage.timestamp else System.currentTimeMillis()
         val conversation = NewOutgoingPushMessage.Conversation(
             if (room is For.Account) room.id else null,
             if (room is For.Group) room.id else null,
@@ -512,8 +596,12 @@ class NewSignalServiceMessageSender @Inject constructor(
             if (content.dataMessage.hasRecall()) {
                 msgType = Envelope.MsgType.MSG_RECALL_VALUE
             }
+        } else if (content.hasGroupKeyMessage()) {
+            msgType = Envelope.MsgType.MSG_GROUP_KEY_VALUE
         } else if (content.hasNotifyMessage()) {
             msgType = Envelope.MsgType.MSG_CLIENT_NOTIFY_VALUE
+        } else if (content.hasForwardNotice()) {
+            msgType = Envelope.MsgType.MSG_FORWARD_NOTICE_VALUE
         }
         return msgType
     }
@@ -627,5 +715,130 @@ class NewSignalServiceMessageSender @Inject constructor(
             L.i { "[Message] sendSyncClientNotifyMessage send sync message is Success: ${result1.isSuccess()}" }
         }
         return result
+    }
+
+    /**
+     * Send a ForwardNoticeMessage — a "visible but silent" system message inserted into
+     * the target conversation after a forward action completes. Not a receipt, not a data
+     * message: never carries a notification payload, never counts toward unread count.
+     *
+     * 1v1-to-other: the sender's own other devices need to display the same notice.
+     * The recipient list contains only the peer (sender is not in it), so server-side
+     * fan-out won't reach those devices. Instead, piggyback the SyncMessage-wrapped
+     * envelope as `syncContent` on the SAME request — server extracts it and routes
+     * to the sender's other devices, stamping both envelopes with one
+     * `systemShowTimestamp`. Mirrors [sendDataMessage] / DataMessage's SyncMessage.Sent
+     * transcript, eliminating the cross-device timestamp drift the v1 two-call
+     * implementation produced. See issue #695 for the rationale.
+     *
+     * Group / Note-to-Self: `sendSyncToSelf` is false. Group recipients already include
+     * the sender via membership fan-out; NTS recipient is self → all self devices are
+     * covered by the primary call. `syncContent` stays null in both cases.
+     *
+     * `sendTimestamp` is passed in by the Job so the same value becomes the
+     *  Envelope.timestamp AND the local DB insert's `NotifyMessage.timestamp` —
+     *  three-tuple messageId alignment across paths. See §4.2/§4.11 of the design doc.
+     *
+     * Notification parameter: explicitly `null` — forward notices never trigger APNs/FCM.
+     */
+    suspend fun sendForwardNoticeMessage(
+        recipient: For,
+        room: For,
+        message: SignalServiceProtos.ForwardNoticeMessage,
+        sendSyncToSelf: Boolean,
+        sendTimestamp: Long
+    ): SendMessageResult {
+        L.i { "[Message] [$sendTimestamp] Sending a forward notice message to ${recipient.id} (sync=$sendSyncToSelf)" }
+        // Primary: Content.forwardNotice → recipient (source conversation).
+        // payload.conversation (tag 4) is filled by caller PushForwardNoticeSendJob.
+        val primaryContent = contentCreator.createFrom(message)
+
+        val syncContent: String? = if (sendSyncToSelf && recipient is For.Account) {
+            if (conversationManager.hasPublicKeyInfoData(room).not()) {
+                L.i { "[Message] sendForwardNoticeMessage: updating public key info for room ${room.id}" }
+                conversationManager.updatePublicKeyInfoData(room)
+            }
+            generateForwardNoticeSyncContent(message, room)
+        } else {
+            null
+        }
+
+        val result = sendMessage(
+            recipient,
+            room,
+            sendTimestamp,
+            primaryContent,
+            false,
+            Optional.empty(),
+            Optional.empty(),
+            null,
+            syncContent
+        )
+        L.i { "[Message] sendForwardNoticeMessage success=${result.isSuccess()} syncCarried=${syncContent != null}" }
+        return result
+    }
+
+    /**
+     * Build the encrypted base64 `syncContent` payload for a forward notice — the
+     * SyncMessage wrapper carrying [forwardNoticeSync], encrypted with my own public
+     * key so the server can route it to my other devices alongside the primary
+     * envelope. Same shape as [generateSyncContent] (DataMessage's SyncMessage.Sent
+     * transcript) but wraps `Content.syncMessage.forwardNoticeSync` instead.
+     *
+     * Returns null if my public key is missing from the room (rare — caller already
+     * tried `updatePublicKeyInfoData`) or if encryption throws. In that case the
+     * primary send still goes through; only cross-device sync is skipped.
+     */
+    private suspend fun generateForwardNoticeSyncContent(
+        message: SignalServiceProtos.ForwardNoticeMessage,
+        room: For
+    ): String? {
+        return try {
+            val syncMessageContent = createMultiDeviceForwardNoticeContent(message)
+
+            val publicKeyInfos = conversationManager.getPublicKeyInfos(room)
+            val myPublicKey = publicKeyInfos.firstOrNull { it.uid == localAddress.id }?.identityKey
+            if (myPublicKey.isNullOrBlank()) {
+                L.w { "[Message] generateForwardNoticeSyncContent: my public key not found in room ${room.id}, skip syncContent" }
+                return null
+            }
+
+            val encryptedMessage = messageEncryptor.encryptOneToOneMessage(
+                syncMessageContent.toByteArray(),
+                myPublicKey
+            )
+
+            val encryptedMessageContent = encryptContent {
+                version = MESSAGE_CURRENT_VERSION
+                cipherText = ByteString.copyFrom(encryptedMessage.cipherText)
+                eKey = ByteString.copyFrom(encryptedMessage.eKey)
+                identityKey = ByteString.copyFrom(encryptedMessage.identityKey)
+                signedEKey = ByteString.copyFrom(encryptedMessage.signedEKey)
+            }
+
+            Base64.encodeBytes(
+                byteArrayOf(
+                    intsToByteHigh(MESSAGE_CURRENT_VERSION, MESSAGE_MINIMUM_SUPPORTED_VERSION)
+                ) + encryptedMessageContent.toByteArray()
+            )
+        } catch (e: Exception) {
+            L.e { "[Message] generateForwardNoticeSyncContent failed: ${e.stackTraceToString()}" }
+            null
+        }
+    }
+
+    /**
+     * Build a SyncMessage-wrapped Content for 1v1-to-other self-sync. Directly
+     * references ForwardNoticeMessage — no inner wrapper type (v1's
+     * `ForwardNoticeSync { destination; message }` had a redundant destination
+     * field since [ForwardNoticeMessage.conversation] now self-carries the source
+     * conversation).
+     */
+    internal fun createMultiDeviceForwardNoticeContent(
+        message: SignalServiceProtos.ForwardNoticeMessage
+    ): Content = content {
+        syncMessage = syncMessage {
+            forwardNoticeSync = message
+        }
     }
 }

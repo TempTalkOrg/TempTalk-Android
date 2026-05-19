@@ -132,6 +132,48 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <View
+                android:id="@+id/divider_encryption_top"
+                android:layout_width="match_parent"
+                android:layout_height="16dp"
+                android:background="@color/bg2"
+                android:visibility="gone" />
+
+            <!-- Encryption status / upgrade entry -->
+            <LinearLayout
+                android:id="@+id/ll_encryption_row"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="8dp"
+                android:visibility="gone">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_encryption_lock"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="6dp"
+                    android:src="@drawable/chat_ic_lock_cog"
+                    android:visibility="gone" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_encryption_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/iv_encryption_arrow"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/chat_ic_arrow_right"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+
+            <View
                 android:layout_width="match_parent"
                 android:layout_height="16dp"
                 android:background="@color/bg2" />

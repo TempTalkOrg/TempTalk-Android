@@ -23,6 +23,7 @@ import com.difft.android.base.utils.ResUtils
 import org.difft.app.database.getContactorsFromAllTable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallToChatController
 import com.difft.android.chat.R
@@ -33,9 +34,9 @@ import com.difft.android.chat.databinding.FragmentInviteParticipantsBinding
 import com.difft.android.chat.group.GROUP_ROLE_MEMBER
 import com.difft.android.chat.group.GroupMemberModel
 import com.difft.android.chat.group.GroupSelectMemberActivity
-import com.difft.android.meeting.activities.AttendeeClickListener
-import com.difft.android.meeting.activities.AttendeeListItem
-import com.difft.android.meeting.activities.UserMeetingAttendeeAdapter
+import com.difft.android.chat.call.AttendeeClickListener
+import com.difft.android.chat.call.AttendeeListItem
+import com.difft.android.chat.call.UserMeetingAttendeeAdapter
 import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
@@ -44,7 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
-import org.thoughtcrime.securesms.util.ViewUtil
+import com.difft.android.chat.util.ViewUtil
 
 @AndroidEntryPoint
 class InviteParticipantsFragment : Fragment() {
@@ -249,17 +250,17 @@ class InviteParticipantsFragment : Fragment() {
                     }
 
                     if (newMemberIds.isNotEmpty()) {
-                        // 批量查询新成员的联系人信息
-                        lifecycleScope.launch(Dispatchers.IO) {
+                        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                             try {
                                 val contactors = wcdb.getContactorsFromAllTable(newMemberIds)
                                 val newMembers = contactors.map { contactor ->
                                     // 将 ContactorModel 转换为 GroupMemberModel
+                                    val effectiveAvatar = contactor.getEffectiveAvatarJson()?.getContactAvatarData()
                                     GroupMemberModel(
                                         name = contactor.getDisplayNameForUI(),
                                         uid = contactor.id,
-                                        avatarUrl = contactor.avatar?.getContactAvatarData()?.getContactAvatarUrl(),
-                                        avatarEncKey = contactor.avatar?.getContactAvatarData()?.encKey,
+                                        avatarUrl = effectiveAvatar?.getContactAvatarUrl(),
+                                        avatarEncKey = effectiveAvatar?.encKey,
                                         sortLetters = contactor.getDisplayNameForUI().getFirstLetter(),
                                         role = contactor.groupMemberContactor?.groupRole ?: GROUP_ROLE_MEMBER,
                                         isSelected = false,
@@ -280,7 +281,7 @@ class InviteParticipantsFragment : Fragment() {
                                     viewModel.setAttendees(allMembers)
                                 }
                             } catch (e: Exception) {
-                                L.e { "Failed to fetch new members: ${e.message}" }
+                                L.e { "Failed to fetch new members: ${e.stackTraceToString()}" }
                             }
                         }
                     }
@@ -392,13 +393,12 @@ class InviteParticipantsFragment : Fragment() {
 
             val inputMeetingName = viewModel.getMeetingName()
             if (inputMeetingName.isEmpty()) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val defaultMeetingName = "${viewModel.getMyDisplayName(requireContext(), globalServices.myId)} Meeting"
-                    withContext(Dispatchers.Main) {
-                        if (isAdded) {
-                            binding.instantMeetingTitleInput.setText(defaultMeetingName)
-                        }
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val defaultMeetingName = withContext(Dispatchers.IO) {
+                        "${viewModel.getMyDisplayName(requireContext(), globalServices.myId)} Meeting"
                     }
+                    if (!isAdded || view == null) return@launch
+                    binding.instantMeetingTitleInput.setText(defaultMeetingName)
                 }
             }
 

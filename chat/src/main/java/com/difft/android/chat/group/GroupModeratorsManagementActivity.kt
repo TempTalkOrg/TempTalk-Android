@@ -82,7 +82,13 @@ class GroupModeratorsManagementActivity : BaseActivity() {
         }
 
         groupUtil.singleGroupsUpdate
-            .onEach { if (it.gid == groupId) { groupInfo = it; initView(it) } }
+            .onEach {
+                if (it.gid == groupId) {
+                    if (it.status != 0) { finish(); return@onEach }
+                    groupInfo = it
+                    initView(it)
+                }
+            }
             .catch { L.w { "[GroupModeratorsManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)

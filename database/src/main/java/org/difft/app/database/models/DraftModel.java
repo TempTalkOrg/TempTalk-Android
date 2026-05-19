@@ -15,15 +15,18 @@ public class DraftModel {
     @WCDBField
     public String draftJson;
 
+    @WCDBField
+    public long updatedAt;
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         DraftModel that = (DraftModel) o;
-        return Objects.equals(roomId, that.roomId) && Objects.equals(draftJson, that.draftJson);
+        return updatedAt == that.updatedAt && Objects.equals(roomId, that.roomId) && Objects.equals(draftJson, that.draftJson);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(roomId, draftJson);
+        return Objects.hash(roomId, draftJson, updatedAt);
     }
 }

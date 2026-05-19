@@ -23,34 +23,26 @@ class ChatMessageContainerView @JvmOverloads constructor(
      */
     var containerWidth: Int = 0
 
-    /**
-     * Track the last bound message ID. Padding reset only happens when
-     * the message changes (different item reusing ViewHolder), not on
-     * re-measure of the same message (e.g., scroll adjustments).
-     */
-    private var lastBoundMessageId: String? = null
-
-    fun bindMessageId(messageId: String) {
-        if (messageId != lastBoundMessageId) {
-            lastBoundMessageId = messageId
-            resetAllPaddingsToDefault()
-        }
-    }
-
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // Reset paddings to default before measuring to ensure clean state for RecyclerView reuse
+        resetAllPaddingsToDefault()
 
         // First measure to get initial sizes
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
 
-        // Get the time view and its width
-        val timeView = findViewById<View>(R.id.cl_message_time) ?: return
-        val timeViewWidth = timeView.measuredWidth
+        // Time wrapper holds icon + cl_message_time; used for margin adjustments
+        val timeWrapper = findViewById<View>(R.id.ll_time_wrapper) ?: return
+        if (timeWrapper.visibility != VISIBLE) return
 
-        // Check if time view is not visible or has zero width
-        if (timeView.visibility != VISIBLE || timeViewWidth == 0) {
-            // Already reset, just return
-            return
+        val clMessageTime = findViewById<View>(R.id.cl_message_time)
+        val icon = findViewById<View>(R.id.iv_confidential_icon)
+        var timeViewWidth = if (clMessageTime != null && clMessageTime.visibility == VISIBLE) clMessageTime.measuredWidth else 0
+        // Confidential icon visible: fixed offset covers icon(22) + gap(3) + margin(8) + buffer(7)
+        if (icon != null && icon.visibility == VISIBLE) {
+            timeViewWidth += 40.dp
         }
+
+        if (timeViewWidth == 0) return
 
         // Calculate the maximum possible width for content
         val effectiveMaxWidth = calculateEffectiveMaxWidth()
@@ -76,13 +68,15 @@ class ChatMessageContainerView @JvmOverloads constructor(
             }
         }
 
-        // Adjust time view margin based on needsExtraBottomSpace
-        val timeParams = timeView.layoutParams as? MarginLayoutParams
+        // Adjust time wrapper margin based on needsExtraBottomSpace
+        val timeParams = timeWrapper.layoutParams as? MarginLayoutParams
         timeParams?.let { params ->
             val newMarginTop = if (needsExtraBottomSpace) 0 else (-26).dp
             if (params.topMargin != newMarginTop) {
                 params.topMargin = newMarginTop
-                timeView.layoutParams = params
+                // Don't call setLayoutParams() — params is already the same reference,
+                // and setLayoutParams() triggers requestLayout() which can cause
+                // re-entrant layout issues on Android 16.
                 needsRemeasure = true
             }
         }

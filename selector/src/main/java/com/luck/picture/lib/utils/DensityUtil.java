@@ -32,7 +32,13 @@ public class DensityUtil {
      * @return
      */
     public static int getRealScreenWidth(Context context) {
-        WindowManager wm = (WindowManager) context.getApplicationContext().getSystemService(Context.WINDOW_SERVICE);
+        if (context instanceof Activity) {
+            WindowManager wm = ((Activity) context).getWindowManager();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                return wm.getCurrentWindowMetrics().getBounds().width();
+            }
+        }
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         Point point = new Point();
         wm.getDefaultDisplay().getRealSize(point);
         return point.x;
@@ -45,7 +51,13 @@ public class DensityUtil {
      * @return
      */
     public static int getRealScreenHeight(Context context) {
-        WindowManager wm = (WindowManager) context.getApplicationContext().getSystemService(Context.WINDOW_SERVICE);
+        if (context instanceof Activity) {
+            WindowManager wm = ((Activity) context).getWindowManager();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                return wm.getCurrentWindowMetrics().getBounds().height();
+            }
+        }
+        WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         Point point = new Point();
         wm.getDefaultDisplay().getRealSize(point);
         return point.y;

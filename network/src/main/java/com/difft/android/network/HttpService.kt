@@ -1,6 +1,5 @@
 package com.difft.android.network
 
-import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.network.requests.AddContactorRequestBody
 import com.difft.android.network.requests.BindPushTokenRequestBody
 import com.difft.android.network.requests.ContactsRequestBody
@@ -14,7 +13,9 @@ import com.difft.android.network.requests.GetConversationShareResponse
 import com.difft.android.network.requests.GrayCheckRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
 import com.difft.android.network.requests.SpeechToTextRequestBody
+import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.network.responses.AddContactorResponse
+import com.difft.android.network.responses.EncryptedGlobalConfigResponse
 import com.difft.android.network.responses.AppVersionResponse
 import com.difft.android.network.responses.AuthToken
 import com.difft.android.network.responses.ContactsDataResponse
@@ -145,7 +146,12 @@ interface HttpService {
     ): BaseResponse<Any>
 
     @GET
-    suspend fun getNewGlobalConfigs(
+    suspend fun getEncryptedGlobalConfig(
+        @Url url: String
+    ): EncryptedGlobalConfigResponse
+
+    @GET
+    suspend fun getGlobalConfig(
         @Url url: String
     ): NewGlobalConfig
 

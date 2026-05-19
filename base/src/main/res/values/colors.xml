@@ -59,6 +59,8 @@
     <!--Blue (only used shades)-->
     <color name="blue_10" tools:ignore="ResourceName">#EBF7FF</color>
     <color name="blue_200" tools:ignore="ResourceName">#82C1FC</color>
+    <color name="blue_300" tools:ignore="ResourceName">#4DA0FF</color>
+    <color name="blue_400" tools:ignore="ResourceName">#328AFD</color>
 
     <!--Green (only used shades)-->
     <color name="green_600" tools:ignore="ResourceName">#009659</color>

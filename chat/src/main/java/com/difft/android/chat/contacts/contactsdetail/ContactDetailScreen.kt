@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -41,6 +40,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarView
+import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.contacts.data.getContactAvatarData
+import com.difft.android.chat.contacts.data.getContactAvatarUrl
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import org.difft.app.database.models.ContactorModel
 
 /**
@@ -55,6 +58,9 @@ data class ContactDetailUiState(
     val displayName: String = "",
     val originalName: String? = null,
     val hasRemark: Boolean = false,
+    val hasRemarkAvatar: Boolean = false,
+    /** Public (non-remark) avatar JSON, rendered as the inline 20dp original avatar in the subtitle. */
+    val originalAvatarJson: String? = null,
     val userId: String = "",
     val joinedAt: String? = null,
     val sourceDescribe: String? = null,
@@ -85,6 +91,7 @@ fun ContactDetailScreen(
     onCloseClick: () -> Unit,
     onMoreClick: () -> Unit,
     onAvatarClick: () -> Unit,
+    onOriginalAvatarClick: () -> Unit,
     onEditClick: () -> Unit,
     onMessageClick: () -> Unit,
     onCallClick: () -> Unit,
@@ -116,7 +123,7 @@ fun ContactDetailScreen(
                     Modifier.fillMaxSize()
                 }
             )
-            .background(DifftTheme.colors.backgroundSecondary)
+            .background(DifftTheme.colors.backgroundSetting)
     ) {
         // Top bar (fixed)
         TopBar(
@@ -137,8 +144,11 @@ fun ContactDetailScreen(
             displayName = uiState.displayName,
             originalName = uiState.originalName,
             hasRemark = uiState.hasRemark,
+            hasRemarkAvatar = uiState.hasRemarkAvatar,
+            originalAvatarJson = uiState.originalAvatarJson,
             isOfficialBot = uiState.isOfficialBot,
             onAvatarClick = onAvatarClick,
+            onOriginalAvatarClick = onOriginalAvatarClick,
             modifier = Modifier.padding(horizontal = DifftTheme.spacing.insetLarge)
         )
 
@@ -261,8 +271,11 @@ private fun AvatarNameSection(
     displayName: String,
     originalName: String?,
     hasRemark: Boolean,
+    hasRemarkAvatar: Boolean,
+    originalAvatarJson: String?,
     isOfficialBot: Boolean,
     onAvatarClick: () -> Unit,
+    onOriginalAvatarClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -277,7 +290,6 @@ private fun AvatarNameSection(
                 .clickable { onAvatarClick() }
         ) {
             contactor?.let { contact ->
-                val context = LocalContext.current
                 val avatarSizePx = with(LocalDensity.current) {
                     DifftTheme.spacing.avatarLarge.roundToPx()
                 }
@@ -285,7 +297,7 @@ private fun AvatarNameSection(
                     factory = { ctx -> AvatarView(ctx) },
                     update = { avatarView ->
                         // Pass explicit size to avoid layout timing issues in Compose AndroidView
-                        avatarView.setAvatar(contactor, 22, avatarSizePx)
+                        avatarView.setAvatar(contact, 22, avatarSizePx)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -324,37 +336,124 @@ private fun AvatarNameSection(
                 }
             }
 
-            // Subtitle line:
-            // Bot + remark: "Official Account・Name: xxx"
-            // Bot without remark: "Official Account"
-            // Normal + remark: "Name: xxx"
-            val subtitle = when {
-                isOfficialBot && hasRemark && !originalName.isNullOrEmpty() -> {
-                    stringResource(R.string.contact_official_account_label) +
-                            "・" +
-                            stringResource(R.string.contact_name_label, originalName)
-                }
-                isOfficialBot -> stringResource(R.string.contact_official_account_label)
-                hasRemark && !originalName.isNullOrEmpty() -> {
-                    stringResource(R.string.contact_name_label, originalName)
-                }
-                else -> null
-            }
-
-            if (subtitle != null) {
+            val showSubtitle = isOfficialBot ||
+                (hasRemark && !originalName.isNullOrEmpty()) ||
+                hasRemarkAvatar
+            if (showSubtitle) {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtitle,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Normal,
-                        fontSize = 14.sp
-                    ),
-                    color = DifftTheme.colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                SubtitleRow(
+                    isOfficialBot = isOfficialBot,
+                    hasRemark = hasRemark,
+                    hasRemarkAvatar = hasRemarkAvatar,
+                    originalName = originalName,
+                    originalAvatarJson = originalAvatarJson,
+                    contactor = contactor,
+                    onOriginalAvatarClick = onOriginalAvatarClick,
                 )
             }
         }
+    }
+}
+
+private val subtitleStyle = TextStyle(
+    fontWeight = FontWeight.Normal,
+    fontSize = 14.sp
+)
+
+@Composable
+private fun SubtitleRow(
+    isOfficialBot: Boolean,
+    hasRemark: Boolean,
+    hasRemarkAvatar: Boolean,
+    originalName: String?,
+    originalAvatarJson: String?,
+    contactor: ContactorModel?,
+    onOriginalAvatarClick: () -> Unit,
+) {
+    val tertiary = DifftTheme.colors.textTertiary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (isOfficialBot) {
+            Text(
+                text = stringResource(R.string.contact_official_account_label),
+                style = subtitleStyle,
+                color = tertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if ((hasRemark && !originalName.isNullOrEmpty()) || hasRemarkAvatar) {
+                Text(text = "・", style = subtitleStyle, color = tertiary)
+            }
+        }
+        when {
+            // Both remarked: inline "[smallAvatar] originalName" without key labels.
+            hasRemark && hasRemarkAvatar && !originalName.isNullOrEmpty() -> {
+                SmallOriginalAvatar(originalAvatarJson, contactor, onOriginalAvatarClick)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = originalName,
+                    style = subtitleStyle,
+                    color = tertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // Only name remarked: "Name: originalName"
+            hasRemark && !originalName.isNullOrEmpty() -> {
+                Text(
+                    text = stringResource(R.string.contact_name_label, originalName),
+                    style = subtitleStyle,
+                    color = tertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // Only avatar remarked: "Original: [smallAvatar]"
+            hasRemarkAvatar -> {
+                Text(
+                    text = stringResource(R.string.contact_avatar_label),
+                    style = subtitleStyle,
+                    color = tertiary,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                SmallOriginalAvatar(originalAvatarJson, contactor, onOriginalAvatarClick)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallOriginalAvatar(
+    originalAvatarJson: String?,
+    contactor: ContactorModel?,
+    onClick: () -> Unit,
+) {
+    val avatarSizePx = with(LocalDensity.current) { 20.dp.roundToPx() }
+    Box(
+        modifier = Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .clickable { onClick() }
+    ) {
+        AndroidView(
+            factory = { ctx -> AvatarView(ctx) },
+            update = { avatarView ->
+                val avatarData = originalAvatarJson?.getContactAvatarData()
+                avatarView.setAvatar(
+                    url = avatarData?.getContactAvatarUrl(),
+                    key = avatarData?.encKey,
+                    firstLetter = ContactorUtil.getFirstLetter(
+                        contactor?.getDisplayNameWithoutRemarkForUI().orEmpty()
+                    ),
+                    id = contactor?.id.orEmpty(),
+                    letterTextSizeDp = 11,
+                    targetSizePx = avatarSizePx,
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -415,13 +514,7 @@ private fun ActionButtonsSection(
             }
 
             else -> {
-                // Non-friend: show "Add & Message" and "Add Contact" buttons (each takes 50%)
-                ActionButton(
-                    iconRes = R.drawable.chat_contact_detail_ic_message,
-                    label = stringResource(R.string.contact_action_add_and_message),
-                    onClick = onMessageClick,
-                    modifier = Modifier.weight(1f)
-                )
+                // Non-friend: show only "Add Contact" button, which adds friend then navigates to chat
                 ActionButton(
                     iconRes = R.drawable.chat_icon_add_contact,
                     label = stringResource(R.string.contact_add_contacts),
@@ -621,6 +714,7 @@ private fun ContactDetailScreenPreview() {
             onCloseClick = {},
             onMoreClick = {},
             onAvatarClick = {},
+            onOriginalAvatarClick = {},
             onEditClick = {},
             onMessageClick = {},
             onCallClick = {},
@@ -649,6 +743,7 @@ private fun ContactDetailScreenSelfPreview() {
             onCloseClick = {},
             onMoreClick = {},
             onAvatarClick = {},
+            onOriginalAvatarClick = {},
             onEditClick = {},
             onMessageClick = {},
             onCallClick = {},
@@ -678,6 +773,7 @@ private fun ContactDetailScreenNonFriendPreview() {
             onCloseClick = {},
             onMoreClick = {},
             onAvatarClick = {},
+            onOriginalAvatarClick = {},
             onEditClick = {},
             onMessageClick = {},
             onCallClick = {},
@@ -707,6 +803,7 @@ private fun ContactDetailScreenPopupPreview() {
             onCloseClick = {},
             onMoreClick = {},
             onAvatarClick = {},
+            onOriginalAvatarClick = {},
             onEditClick = {},
             onMessageClick = {},
             onCallClick = {},

@@ -146,11 +146,14 @@ class ChatHeaderFragment : CommonHeaderFragment() {
 
                     binding.buttonCall.visibility = View.VISIBLE
                     binding.buttonCall.setOnClickListener {
-                        lifecycleScope.launch {
+                        // viewLifecycleOwner scope + post-suspend isAdded/view guard; activity?: avoids requireActivity() ISE.
+                        viewLifecycleOwner.lifecycleScope.launch {
                             val chatRoomName = withContext(Dispatchers.IO) {
                                 chatViewModel.chatUIData.value.contact?.getDisplayNameForUI() ?: ""
                             }
-                            chatViewModel.startCall(requireActivity(), chatRoomName)
+                            val act = activity ?: return@launch
+                            if (!isAdded || view == null) return@launch
+                            chatViewModel.startCall(act, chatRoomName)
                         }
                     }
                 } else {

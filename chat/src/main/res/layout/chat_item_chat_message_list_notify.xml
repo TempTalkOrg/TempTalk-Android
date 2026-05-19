@@ -26,7 +26,7 @@
         app:layout_constraintTop_toBottomOf="@+id/ll_new_msg_divider"
         tools:text="FRI ,DEC 25" />
 
-    <FrameLayout
+    <com.difft.android.chat.ui.SafeFrameLayout
         android:id="@+id/contentFrame"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

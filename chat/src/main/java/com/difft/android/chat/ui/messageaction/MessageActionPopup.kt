@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.base.utils.dp as dpToPx
@@ -158,7 +157,6 @@ class MessageActionPopup(
             contentBounds.bottom - rootBounds.top
         )
         
-        val screenWidth = WindowSizeClassUtil.getWindowWidthPx(activity)
         val isOutgoing = config.isOutgoing
         
         // Capture callbacks for use in lambdas
@@ -225,7 +223,6 @@ class MessageActionPopup(
                         MessageActionPopupOverlay(
                             anchorBounds = relativeAnchorBounds,
                             contentBounds = relativeContentBounds,
-                            screenWidth = screenWidth,
                             isOutgoing = isOutgoing,
                             config = config,
                             menuMode = menuMode,
@@ -508,7 +505,6 @@ class MessageActionPopup(
 private fun MessageActionPopupOverlay(
     anchorBounds: Rect,
     contentBounds: Rect,
-    screenWidth: Int,
     isOutgoing: Boolean,
     config: MessageActionConfigBuilder.Config,
     menuMode: MessageActionPopup.MenuMode,
@@ -571,7 +567,7 @@ private fun MessageActionPopupOverlay(
         
         // Display phase: positioned content
         if (isMeasured) {
-            val x = calculatePopupX(screenWidth, popupWidth, edgePaddingPx, isOutgoing)
+            val x = calculatePopupX(contentBounds, popupWidth, edgePaddingPx, isOutgoing)
             val (y, isBelow) = calculatePopupY(
                 anchorBounds, popupHeight, minY, maxY, arrowGapPx
             )
@@ -604,11 +600,11 @@ private fun MessageActionPopupOverlay(
     }
 }
 
-private fun calculatePopupX(screenWidth: Int, popupWidth: Int, edgePaddingPx: Int, isOutgoing: Boolean): Int {
+private fun calculatePopupX(contentBounds: Rect, popupWidth: Int, edgePaddingPx: Int, isOutgoing: Boolean): Int {
     return if (isOutgoing) {
-        screenWidth - popupWidth - edgePaddingPx
+        contentBounds.right - popupWidth - edgePaddingPx
     } else {
-        edgePaddingPx
+        contentBounds.left + edgePaddingPx
     }
 }
 

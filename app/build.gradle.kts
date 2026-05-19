@@ -14,7 +14,7 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-val appVersionName = "2.1.6"
+val appVersionName = "2.2.3"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -24,6 +24,7 @@ fun getCurrentDayTimestamp(): String {
 }
 
 fun getTimeBasedVersionCode(): Int {
+    System.getenv("VERSION_CODE")?.toIntOrNull()?.let { return it }
     val baseTime = 1735689600000L // 2025-01-01 00:00:00 UTC
     val currentTime = System.currentTimeMillis()
     val timeDiff = currentTime - baseTime
@@ -311,6 +312,7 @@ dependencies {
 
     // 性能监控
     implementation(libs.anrwatchdog)
+    // Pinned to 1.4.1: avoids transitive .module dependency verification failures. Initializer disabled in AndroidManifest (no baseline-prof.txt).
     implementation(libs.profileinstaller)
 
     // Test dependencies

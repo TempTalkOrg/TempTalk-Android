@@ -1,6 +1,8 @@
 package com.difft.android.chat.ui
 
 import android.app.Activity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
@@ -30,6 +32,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.BaseActivity
@@ -92,6 +95,7 @@ import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.Draft
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
+import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
 import difft.android.messageserialization.model.Quote
@@ -117,7 +121,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.yslibrary.android.keyboardvisibilityevent.KeyboardVisibilityEvent
+import com.difft.android.base.widget.InsetAwareConstraintLayout
 import org.difft.app.database.convertToContactorModels
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.forwardContext
@@ -129,14 +133,14 @@ import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.sharedContacts
 import org.difft.app.database.wcdb
-import org.thoughtcrime.securesms.dependencies.ApplicationDependencies
-import org.thoughtcrime.securesms.jobs.create
-import org.thoughtcrime.securesms.mediasend.MediaSendActivityResult
-import org.thoughtcrime.securesms.mediasend.v2.MediaSelectionActivity
-import org.thoughtcrime.securesms.util.MediaUtil
-import org.thoughtcrime.securesms.util.ServiceUtil
-import org.thoughtcrime.securesms.util.ViewUtil
-import org.thoughtcrime.securesms.util.visible
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.jobs.create
+import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
+import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.util.ServiceUtil
+import com.difft.android.chat.util.ViewUtil
+import com.difft.android.chat.util.visible
 import util.FileUtils
 import util.ScreenLockUtil
 import java.io.File
@@ -193,6 +197,9 @@ class ChatMessageInputFragment : Fragment() {
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
 
     @Inject
+    lateinit var pushReactionSendJobFactory: PushReactionSendJobFactory
+
+    @Inject
     lateinit var pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory
 
     @Inject
@@ -204,8 +211,7 @@ class ChatMessageInputFragment : Fragment() {
     @Inject
     lateinit var localMessageCreator: LocalMessageCreator
 
-    // Keyboard visibility listener is managed by KeyboardVisibilityEvent with viewLifecycleOwner
-    private var isKeyboardListenerRegistered = false
+    private var keyboardStateListener: InsetAwareConstraintLayout.KeyboardStateListener? = null
 
     private var screenshotDetector: ScreenshotDetector? = null
 
@@ -235,6 +241,7 @@ class ChatMessageInputFragment : Fragment() {
         // panel was likely open. The callback has ~944ms system delay (Pixel Android 14+),
         // so 2000ms safely covers ROM variation while staying below the notification-panel minimum.
         private const val SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
+        private const val PANEL_ANIM_DURATION = 250L
     }
 
     /**
@@ -377,7 +384,11 @@ class ChatMessageInputFragment : Fragment() {
                                 selectChatsUtils.saveToNotes(
                                     requireActivity(),
                                     content,
-                                    forwardContext
+                                    forwardContext?.let { listOf(it) },
+                                    // Source conversation = the currently opened chat.
+                                    sourceConversation = chatViewModel.forWhat,
+                                    // Single selected message → exactly one outer author.
+                                    sourceAuthorIds = listOf(messageToForward.authorId)
                                 )
                             } else {
                                 selectChatsUtils.showChatSelectAndSendDialog(
@@ -386,6 +397,12 @@ class ChatMessageInputFragment : Fragment() {
                                     null,
                                     null,
                                     forwardContext?.let { listOf(it) },
+                                    // Single-message forward: long-press → Forward on ONE message
+                                    scene = ForwardNoticeData.Scene.SINGLE,
+                                    // Source conversation = the currently opened chat.
+                                    sourceConversation = chatViewModel.forWhat,
+                                    // Single selected message → exactly one outer author.
+                                    sourceAuthorIds = listOf(messageToForward.authorId),
                                 )
                             }
                             forwardContext = null
@@ -458,6 +475,14 @@ class ChatMessageInputFragment : Fragment() {
         chatViewModel.selectMessagesState.onEach {
             binding.combineForward.isVisible = it.editModel
             binding.clSendMessage.visible = !it.editModel
+            if (it.editModel && isVoiceMode) {
+                // Voice recorder lives in the parent ChatFragment and is anchored to the
+                // bottom of the screen. It would cover the multi-select action bar, so we
+                // exit voice mode when entering selection mode.
+                isVoiceMode = false
+                chatViewModel.setVoiceVisibility(false)
+                updateSubmitButtonView()
+            }
             if (binding.combineForward.isVisible) {
                 binding.combineForward.setContent {
                     val state = chatViewModel.selectMessagesState.collectAsState()
@@ -480,22 +505,41 @@ class ChatMessageInputFragment : Fragment() {
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         chatViewModel.forwardMultiMessage.filterNotNull().onEach {
-            selectChatsUtils.showChatSelectAndSendDialog(requireActivity(), it.content, null, null, it.forwardContexts)
-        }.launchIn(viewLifecycleOwner.lifecycleScope)
-
-        chatViewModel.saveMultiMessageToNote.filterNotNull().onEach {
-            selectChatsUtils.saveToNotes(
+            selectChatsUtils.showChatSelectAndSendDialog(
                 requireActivity(),
                 it.content,
-                it.forwardContexts.first()
+                null,
+                null,
+                it.forwardContexts,
+                scene = it.scene,
+                // Source conversation = the user's current chat, plumbed through ForwardContextData from the ViewModel.
+                sourceConversation = it.sourceConversation,
+                sourceAuthorIds = it.sourceAuthorIds,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
-        registerKeyboardVisibilityListener()
+        chatViewModel.saveMultiMessageToNote.filterNotNull().onEach {
+            // Pass the WHOLE list — not `.first()`. Previous bug dropped N-1 attachments
+            // + produced wrong notice text on multi-select save-to-notes.
+            selectChatsUtils.saveToNotes(
+                requireActivity(),
+                it.content,
+                it.forwardContexts,
+                sourceConversation = it.sourceConversation,
+                sourceAuthorIds = it.sourceAuthorIds
+            )
+        }.launchIn(viewLifecycleOwner.lifecycleScope)
+
+        registerKeyboardStateListener()
 
         chatViewModel.listClick
             .onEach {
-                binding.llChatActions.visibility = View.GONE
+                if (binding.llChatActions.visibility == View.VISIBLE) {
+                    // Tap list while panel open → close panel (same as "×" button)
+                    hidePanel {
+                        (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+                    }
+                }
 
                 binding.buttonMoreActions.visibility = View.VISIBLE
                 binding.buttonMoreActionsClose.visibility = View.GONE
@@ -507,8 +551,11 @@ class ChatMessageInputFragment : Fragment() {
 
         chatViewModel.voiceMessageSend
             .onEach { path ->
-                val mimeType = MediaUtil.getMimeType(requireContext(), path.toUri()) ?: ""
-                prepareSendAttachmentPush(path.toUri(), mimeType, isAudioMessage = true)
+                // VoiceRecorderView always produces MPEG-4/AAC. Pin the MIME explicitly because
+                // MimeTypeMap.getMimeTypeFromExtension("m4a") returns "audio/mpeg" on some vendor
+                // ROMs, which breaks cross-platform receiver rendering (decoded as MP3 / shown as
+                // generic file).
+                prepareSendAttachmentPush(path.toUri(), MediaUtil.AUDIO_MP4, isAudioMessage = true)
             }
             .catch { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } }
             .launchIn(viewLifecycleOwner.lifecycleScope)
@@ -673,7 +720,11 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.edittextInput.setOnClickListener {
-            binding.llChatActions.visibility = View.GONE
+            // Don't hide panel here — keyboard will cover it as overlay.
+            // Panel is dismissed in onKeyboardAnimationEnded when keyboard fully opens.
+            if (binding.llChatActions.visibility != View.VISIBLE) {
+                binding.llChatActions.visibility = View.GONE
+            }
             //防止闪烁
             viewLifecycleOwner.lifecycleScope.launch {
                 delay(100)
@@ -805,31 +856,41 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonMoreActions.setOnClickListener {
-            ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+            val root = parentFragment?.view as? InsetAwareConstraintLayout
 
-            viewLifecycleOwner.lifecycleScope.launch {
-                delay(100)
-                if (!isAdded || view == null) return@launch
-                binding.llChatActions.visibility = View.VISIBLE
-
-                binding.buttonMoreActions.visibility = View.GONE
-                binding.buttonMoreActionsClose.visibility = View.VISIBLE
+            if (binding.llChatActions.visibility == View.VISIBLE) {
+                // Panel already behind keyboard — just hide keyboard to reveal it
+                ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+            } else {
+                // Enter panel mode: freeze padding, show panel, hide keyboard
+                val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                root?.freezeKeyboardPadding()
+                val keyboardHeight = InsetAwareConstraintLayout.getKeyboardHeight(requireContext())
+                if (keyboardHeight > 0) {
+                    binding.llChatActions.minHeight = keyboardHeight
+                }
+                showPanel(animated = !hasKeyboard)
                 chatViewModel.setVoiceVisibility(false)
                 chatViewModel.showChatActions()
-
-                isVoiceMode = false
-                updateSubmitButtonView()
+                ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
             }
+
+            binding.buttonMoreActions.visibility = View.GONE
+            binding.buttonMoreActionsClose.visibility = View.VISIBLE
+            isVoiceMode = false
+            updateSubmitButtonView()
         }
 
         binding.buttonMoreActionsClose.setOnClickListener {
-            binding.llChatActions.visibility = View.GONE
-
+            // Show keyboard to replace panel — keyboard slides up as overlay,
+            // panel dismissed in onKeyboardAnimationEnded (same as tapping EditText)
             binding.buttonMoreActions.visibility = View.VISIBLE
             binding.buttonMoreActionsClose.visibility = View.GONE
 
             isVoiceMode = false
             updateSubmitButtonView()
+            ViewUtil.focusAndShowKeyboard(binding.edittextInput)
         }
 
         binding.buttonVoice.setOnClickListener {
@@ -843,7 +904,9 @@ class ChatMessageInputFragment : Fragment() {
 
                 chatViewModel.setVoiceVisibility(true)
 
-                binding.llChatActions.visibility = View.GONE
+                hidePanel {
+                    (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+                }
 
                 binding.buttonMoreActions.visibility = View.VISIBLE
                 binding.buttonMoreActionsClose.visibility = View.GONE
@@ -1031,7 +1094,7 @@ class ChatMessageInputFragment : Fragment() {
             binding.buttonAt.setOnClickListener {
                 insertTextToEdittext("@")
 
-                binding.llChatActions.visibility = View.GONE
+                hidePanel(animated = false)
                 ViewUtil.focusAndShowKeyboard(binding.edittextInput)
             }
         } else {
@@ -2051,7 +2114,7 @@ class ChatMessageInputFragment : Fragment() {
             null,
             null,
         )
-        ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
+        ApplicationDependencies.getJobManager().add(pushReactionSendJobFactory.create(null, textMessage))
     }
 
     private fun recallMessage(messageID: String) {
@@ -2320,10 +2383,6 @@ class ChatMessageInputFragment : Fragment() {
             )
         }
         screenshotDetector?.startListening()
-        // 如果键盘监听器因 SOFT_INPUT_ADJUST_NOTHING 注册失败，在 resume 时重新注册
-        if (!isKeyboardListenerRegistered) {
-            registerKeyboardVisibilityListener()
-        }
     }
 
     override fun onPause() {
@@ -2351,37 +2410,120 @@ class ChatMessageInputFragment : Fragment() {
         inputLayoutAttachListener = null
         updateConfidentialJob?.cancel()
         updateConfidentialJob = null
+        panelAnimator?.cancel()
+        panelAnimator = null
         super.onDestroyView()
         screenshotDetector?.release()
         screenshotDetector = null
-        // KeyboardVisibilityEvent with viewLifecycleOwner will auto-unregister
-        isKeyboardListenerRegistered = false
+        (parentFragment?.view as? InsetAwareConstraintLayout)?.let { insetLayout ->
+            keyboardStateListener?.let { insetLayout.removeKeyboardStateListener(it) }
+            // Ensure freeze is released if Fragment is destroyed while panel is open
+            insetLayout.releaseKeyboardPaddingFreeze()
+        }
+        keyboardStateListener = null
     }
 
-    /**
-     * 注册键盘可见性监听器
-     * 使用 setEventListener 绑定 viewLifecycleOwner，自动管理生命周期，避免内存泄漏
-     * 如果 Activity 的 softInputMode 为 SOFT_INPUT_ADJUST_NOTHING 会注册失败，
-     * 这种情况下会在 onResume 时重新尝试注册
-     */
-    private fun registerKeyboardVisibilityListener() {
-        if (activity == null || !isAdded || view == null) return
-        try {
-            // Use setEventListener with viewLifecycleOwner to auto-manage lifecycle
-            // This prevents memory leaks when Fragment is destroyed but Activity is still alive (dual-pane mode)
-            KeyboardVisibilityEvent.setEventListener(requireActivity(), viewLifecycleOwner) {
-                if (it) { // 键盘弹出
-                    binding.llChatActions.visibility = View.GONE
-                    binding.buttonMoreActions.visibility = View.VISIBLE
-                    binding.buttonMoreActionsClose.visibility = View.GONE
+    private fun registerKeyboardStateListener() {
+        val insetLayout = (parentFragment?.view as? InsetAwareConstraintLayout) ?: return
+        keyboardStateListener = object : InsetAwareConstraintLayout.KeyboardStateListener {
+            override fun onKeyboardShown() {
+                if (!isAdded || view == null) return
+                val panelVisible = binding.llChatActions.visibility == View.VISIBLE
+                if (!panelVisible) {
+                    hidePanel(animated = false)
                 }
+                binding.buttonMoreActions.visibility = View.VISIBLE
+                binding.buttonMoreActionsClose.visibility = View.GONE
                 updateSubmitButtonView()
             }
-            isKeyboardListenerRegistered = true
-        } catch (e: IllegalArgumentException) {
-            // Activity 的 softInputMode 为 SOFT_INPUT_ADJUST_NOTHING 时会抛异常
-            // 这种情况会在 onResume 时重新尝试注册
-            L.w { "[ChatMessageInputFragment] keyboard listener register failed: ${e.stackTraceToString()}" }
+            override fun onKeyboardHidden() {
+                if (!isAdded || view == null) return
+                updateSubmitButtonView()
+            }
+            override fun onKeyboardAnimationEnded(isKeyboardVisible: Boolean) {
+                if (!isAdded || view == null) return
+                val panelVisible = binding.llChatActions.visibility == View.VISIBLE
+                if (isKeyboardVisible && panelVisible) {
+                    hidePanel(animated = false)
+                    insetLayout.releaseKeyboardPaddingFreeze()
+                }
+            }
+        }.also { insetLayout.addKeyboardStateListener(it) }
+    }
+
+    private var panelAnimator: android.animation.ValueAnimator? = null
+
+    /**
+     * Show the action panel. Caller MUST set `binding.llChatActions.minHeight` to the
+     * desired final height (typically the cached keyboard height) before calling this —
+     * `minHeight` is used as the animation target. If `minHeight` is 0, the panel is
+     * shown without animation (degraded display, no error).
+     */
+    private fun showPanel(animated: Boolean = true) {
+        panelAnimator?.cancel()
+        val panel = binding.llChatActions
+        val targetHeight = panel.minHeight
+        if (animated && targetHeight > 0) {
+            val lp = panel.layoutParams
+            lp.height = 0
+            panel.layoutParams = lp
+            panel.visibility = View.VISIBLE
+            panelAnimator = android.animation.ValueAnimator.ofInt(0, targetHeight).apply {
+                duration = PANEL_ANIM_DURATION
+                interpolator = android.view.animation.DecelerateInterpolator()
+                addUpdateListener {
+                    lp.height = it.animatedValue as Int
+                    panel.layoutParams = lp
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                        panel.layoutParams = lp
+                    }
+                })
+                start()
+            }
+        } else {
+            panel.layoutParams = panel.layoutParams.apply {
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            panel.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hidePanel(animated: Boolean = true, onEnd: (() -> Unit)? = null) {
+        panelAnimator?.cancel()
+        val panel = binding.llChatActions
+        if (panel.visibility != View.VISIBLE) {
+            onEnd?.invoke()
+            return
+        }
+        if (animated) {
+            val startHeight = panel.height
+            val lp = panel.layoutParams
+            panelAnimator = android.animation.ValueAnimator.ofInt(startHeight, 0).apply {
+                duration = PANEL_ANIM_DURATION
+                interpolator = android.view.animation.AccelerateInterpolator()
+                addUpdateListener {
+                    lp.height = it.animatedValue as Int
+                    panel.layoutParams = lp
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        panel.visibility = View.GONE
+                        lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                        panel.layoutParams = lp
+                        onEnd?.invoke()
+                    }
+                })
+                start()
+            }
+        } else {
+            panel.layoutParams = panel.layoutParams.apply {
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            panel.visibility = View.GONE
+            onEnd?.invoke()
         }
     }
 

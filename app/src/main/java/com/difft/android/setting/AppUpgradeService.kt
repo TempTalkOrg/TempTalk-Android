@@ -10,7 +10,10 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,15 +22,23 @@ import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import java.io.File
 import java.io.FileOutputStream
-import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 
-@AndroidEntryPoint
+/**
+ * APK download service for app upgrades.
+ */
 class AppUpgradeService : Service() {
 
-    @Inject
-    @ChativeHttpClientModule.NoHeader
-    lateinit var httpClient: ChativeHttpClient
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface ServiceEntryPoint {
+        @ChativeHttpClientModule.NoHeader
+        fun noHeaderHttpClient(): ChativeHttpClient
+    }
+
+    private val entryPoint by lazy {
+        EntryPointAccessors.fromApplication(applicationContext, ServiceEntryPoint::class.java)
+    }
 
     private var downloadJob: Job? = null
 
@@ -54,11 +65,11 @@ class AppUpgradeService : Service() {
     private fun downloadApkAndInstall(url: String, filepath: String, apkHash: String, isForce: Boolean = false){
         // 取消之前的下载任务，避免多个并发下载
         downloadJob?.cancel()
-        
+
         ToastUtil.showLong(R.string.status_upgrade_downloading)
-        
+
         val newFile = File(filepath)
-        
+
         // 使用协程简化嵌套逻辑
         downloadJob = appScope.launch {
             try {
@@ -66,17 +77,17 @@ class AppUpgradeService : Service() {
                 // 2. 流式保存文件到本地，避免一次性加载整个文件到内存
                 // 直接链式调用 awaitFirst().use，确保 ResponseBody 生命周期在获取作用域内，自动管理资源
                 withContext(Dispatchers.IO) {
-                    httpClient.httpService.getResponseBody(url, emptyMap(), emptyMap())
+                    entryPoint.noHeaderHttpClient().httpService.getResponseBody(url, emptyMap(), emptyMap())
                         .use { responseBody ->
                             saveResponseToFile(responseBody, filepath)
                         }
                 }
-                
+
                 // 3. 在后台线程执行 APK 验证，避免 ANR（使用流式哈希计算避免内存溢出）
                 val isValid = withContext(Dispatchers.IO) {
                     UpdateManager.verifyApk(filepath, apkHash)
                 }
-                
+
                 // 4. 处理验证结果
                 if(isValid){
                     L.i { "AppUpgradeService downloadApkAndInstall verifyApk success." }
@@ -91,7 +102,7 @@ class AppUpgradeService : Service() {
                     L.i { "AppUpgradeService downloadApkAndInstall cancelled" }
                     throw error // 重新抛出，让协程取消语义正确传播
                 }
-                
+
                 L.w { "[AppUpgradeService] download error: ${error.stackTraceToString()}" }
                 if (newFile.exists()) {
                     newFile.delete()

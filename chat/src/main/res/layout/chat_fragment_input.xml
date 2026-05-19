@@ -307,6 +307,8 @@
             android:id="@+id/ll_chat_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="20dp"
             android:visibility="gone"
             tools:visibility="visible">
 
@@ -608,8 +610,6 @@
                 android:id="@+id/flow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="20dp"
                 app:constraint_referenced_ids="button_contact,button_attachment,button_at,placeholder1,placeholder2"
                 app:flow_horizontalAlign="start"
                 app:flow_horizontalStyle="spread_inside"

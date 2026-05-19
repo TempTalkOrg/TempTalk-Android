@@ -69,9 +69,9 @@ class ContactsUpdater @Inject constructor(
                 currentVersion = pendingMessage.directoryVersion
                 setCurrentDirectoryVersion(currentVersion)
             } else if (pendingMessage.directoryVersion > currentVersion + 1) {
-                L.i { "[ContactsUpdater] Version gap current:$currentVersion, msg:${pendingMessage.directoryVersion}, members:$memberIds, triggering full sync" }
-                ContactorUtil.fetchAndSaveContactors()
+                L.i { "[ContactsUpdater] Version gap current:$currentVersion, msg:${pendingMessage.directoryVersion}, members:$memberIds, apply notify then schedule full sync" }
                 processContactNotifyMessage(pendingMessage.message)
+                ContactorUtil.fetchAndSaveContactors()
                 currentVersion = pendingMessage.directoryVersion
                 setCurrentDirectoryVersion(currentVersion)
                 break
@@ -95,8 +95,12 @@ class ContactsUpdater @Inject constructor(
                 0 -> {
                     val newContact = member.toContactor()
                     L.i { "[ContactsUpdater] action=0(Add) id:$memberId, hasName:${member.name != null}, hasAvatar:${member.avatar != null}" }
-                    wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number))
-                    wcdb.contactor.insertObject(newContact)
+                    try {
+                        wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
+                        wcdb.contactor.insertObject(newContact)
+                    } catch (e: Exception) {
+                        L.e(e) { "[ContactsUpdater] action=0(Add) failed id:$memberId, next full sync will recover" }
+                    }
                     ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
                     ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
                 }
@@ -108,8 +112,12 @@ class ContactsUpdater @Inject constructor(
                         val localName = contact.name
                         contact.updateFrom(member)
                         L.i { "[ContactsUpdater] action=1(Update) id:$memberId, localName:$localName, serverName:${member.name}, localHasAvatar:$localHasAvatar, serverHasAvatar:${member.avatar != null}, resultHasAvatar:${contact.avatar != null}" }
-                        wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
-                        wcdb.contactor.insertObject(contact)
+                        try {
+                            wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
+                            wcdb.contactor.insertObject(contact)
+                        } catch (e: Exception) {
+                            L.e(e) { "[ContactsUpdater] action=1(Update) failed id:$memberId, next full sync will recover" }
+                        }
                         ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
                     } else {
                         L.w { "[ContactsUpdater] action=1(Update) id:$memberId not in contactor table, skipped. serverHasAvatar:${member.avatar != null}" }
@@ -152,6 +160,11 @@ class ContactsUpdater @Inject constructor(
     }
 
     private fun setCurrentDirectoryVersion(version: Int) {
+        val current = getCurrentDirectoryVersion()
+        if (version <= current) {
+            L.i { "[ContactsUpdater] setCurrentDirectoryVersion skipped version:$version <= current:$current" }
+            return
+        }
         userManager.update {
             directoryVersionForContactors = version
         }

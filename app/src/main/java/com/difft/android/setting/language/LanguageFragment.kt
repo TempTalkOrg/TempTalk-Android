@@ -40,7 +40,7 @@ class LanguageFragment : Fragment() {
                 val title = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart_required)
                 val content = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart_tips)
                 val ok = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart)
-                val cancel = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart_later)
+                val cancel = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart_cancel)
 
                 ComposeDialogManager.showMessageDialog(
                     context = context,
@@ -58,11 +58,7 @@ class LanguageFragment : Fragment() {
                         android.os.Process.killProcess(android.os.Process.myPid())
                         exitProcess(0)
                     },
-                    onCancel = {
-                        LanguageUtils.locale = LanguageUtils.getLanguage(context)
-                        LanguageUtils.saveLanguage(context, languageData.locale)
-                        adapter.submitList(LanguageUtils.getLanguageList(context))
-                    }
+                    onCancel = {}
                 )
             }
         }

@@ -19,6 +19,7 @@ import com.difft.android.base.widget.ChativePopupView
 import com.difft.android.base.widget.ChativePopupWindow
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ActivityGroupInCommonBinding
+import com.difft.android.chat.group.GROUP_ROLE_MEMBER
 import com.difft.android.chat.group.GROUP_ROLE_OWNER
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
@@ -26,7 +27,7 @@ import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.GroupModel
@@ -86,8 +87,8 @@ class GroupInCommonActivity : BaseActivity() {
                 GroupChatContentActivity.startActivity(this@GroupInCommonActivity, group.gid)
             }
 
-            override fun onItemLongClick(itemView: View, group: GroupModel) {
-                showItemActionsPop(itemView, group)
+            override fun onItemLongClick(itemView: View, group: GroupModel, touchX: Int, touchY: Int) {
+                showItemActionsPop(itemView, group, touchX, touchY)
             }
         }
     }
@@ -201,24 +202,41 @@ class GroupInCommonActivity : BaseActivity() {
     }
 
     private var popupWindow: PopupWindow? = null
-    private fun showItemActionsPop(rootView: View, group: GroupModel) {
-        val itemList = mutableListOf<ChativePopupView.Item>().apply {
-            if (group.status == 0) {
-                val role = group.members.find { it.id == myID }?.groupRole
-                if (role == GROUP_ROLE_OWNER) {
-                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband), getString(R.string.group_disband_disband), ContextCompat.getColor(this@GroupInCommonActivity, com.difft.android.base.R.color.error)) {
+    private fun showItemActionsPop(rootView: View, group: GroupModel, touchX: Int, touchY: Int) {
+        if (group.status != 0) return
+        lifecycleScope.launch {
+            val members = withContext(Dispatchers.IO) { group.members }
+            val myRole = members.find { it.id == myID }?.groupRole ?: return@launch
+            val errorColor = ContextCompat.getColor(this@GroupInCommonActivity, com.difft.android.base.R.color.error)
+
+            val itemList = mutableListOf<ChativePopupView.Item>().apply {
+                if (myRole == GROUP_ROLE_OWNER) {
+                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), getString(R.string.group_disband), errorColor) {
                         disbandGroup(group)
                         popupWindow?.dismiss()
                     })
                 } else {
-                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband), getString(R.string.group_leave_leave), ContextCompat.getColor(this@GroupInCommonActivity, com.difft.android.base.R.color.error)) {
+                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), getString(R.string.group_leave), errorColor) {
                         leaveGroup(group)
                         popupWindow?.dismiss()
                     })
                 }
+
+                val contactMember = contactId?.let { cid -> members.find { it.id == cid } }
+                if (contactMember != null) {
+                    val contactRole = contactMember.groupRole ?: GROUP_ROLE_MEMBER
+                    val canRemove = myRole < contactRole ||
+                        (group.anyoneRemove == true && contactRole == GROUP_ROLE_MEMBER && contactId != myID)
+                    if (canRemove) {
+                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_remove_member), getString(R.string.group_remove_member_action), errorColor) {
+                            removeMemberFromGroup(group)
+                            popupWindow?.dismiss()
+                        })
+                    }
+                }
             }
+            popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, itemList, touchX, touchY)
         }
-        popupWindow = ChativePopupWindow.showAsDropDown(rootView, itemList)
     }
 
     private fun leaveGroup(group: GroupModel) {
@@ -231,14 +249,21 @@ class GroupInCommonActivity : BaseActivity() {
             cancelable = false,
             onConfirm = {
                 lifecycleScope.launch {
+                    ComposeDialogManager.showWait(this@GroupInCommonActivity)
                     try {
-                        withContext(Dispatchers.IO) {
+                        val response = withContext(Dispatchers.IO) {
                             groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(myID)))
+                        }
+                        if (!response.isSuccess()) {
+                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         L.w { "[GroupInCommonActivity] leaveGroup error: ${e.stackTraceToString()}" }
+                        ToastUtil.show(R.string.chat_net_error)
+                    } finally {
+                        ComposeDialogManager.dismissWait()
                     }
                 }
             }
@@ -255,17 +280,64 @@ class GroupInCommonActivity : BaseActivity() {
             cancelable = false,
             onConfirm = {
                 lifecycleScope.launch {
+                    ComposeDialogManager.showWait(this@GroupInCommonActivity)
                     try {
-                        withContext(Dispatchers.IO) {
+                        val response = withContext(Dispatchers.IO) {
                             groupRepo.deleteGroup(group.gid)
+                        }
+                        if (!response.isSuccess()) {
+                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         L.w { "[GroupInCommonActivity] disbandGroup error: ${e.stackTraceToString()}" }
+                        ToastUtil.show(R.string.chat_net_error)
+                    } finally {
+                        ComposeDialogManager.dismissWait()
                     }
                 }
             }
         )
+    }
+
+    private fun removeMemberFromGroup(group: GroupModel) {
+        val cid = contactId ?: return
+        lifecycleScope.launch {
+            val displayName = withContext(Dispatchers.IO) {
+                wcdb.groupMemberContactor.getFirstObject(
+                    DBGroupMemberContactorModel.gid.eq(group.gid)
+                        .and(DBGroupMemberContactorModel.id.eq(cid))
+                )?.displayName ?: cid
+            }
+            ComposeDialogManager.showMessageDialog(
+                context = this@GroupInCommonActivity,
+                title = getString(R.string.group_remove_member_title, displayName),
+                message = getString(R.string.group_remove_member_body),
+                confirmText = getString(R.string.group_remove_member_confirm),
+                cancelText = getString(R.string.group_leave_cancel),
+                cancelable = false,
+                onConfirm = {
+                    lifecycleScope.launch {
+                        ComposeDialogManager.showWait(this@GroupInCommonActivity)
+                        try {
+                            val response = withContext(Dispatchers.IO) {
+                                groupRepo.removeMembers(group.gid, listOf(cid))
+                            }
+                            if (!response.isSuccess()) {
+                                ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            L.w { "[GroupInCommonActivity] removeMember error: ${e.stackTraceToString()}" }
+                            ToastUtil.show(R.string.chat_net_error)
+                        } finally {
+                            ComposeDialogManager.dismissWait()
+                        }
+                    }
+                }
+            )
+        }
     }
 }

@@ -100,6 +100,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                 chatHolder.bind(
                     searchKey,
                     data,
+                    isSelected = selectedId != null && data.roomId == selectedId,
                     { onItemClicked(data, position - 2) }, // Adjust position
                     { onItemLongClicked(holder.itemView, data, position - 2, lastTouchX, lastTouchY) })
             }
@@ -152,6 +153,19 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         this.recyclerView = null
     }
 
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val oldId = field
+            field = value
+            currentList.forEachIndexed { index, item ->
+                val itemId = (item as? ListItem.ChatItem)?.data?.roomId
+                if (itemId != null && (itemId == oldId || itemId == value)) {
+                    notifyItemChanged(index)
+                }
+            }
+        }
+
     private var searchKey: String = ""
 
     @SuppressLint("NotifyDataSetChanged")
@@ -174,9 +188,11 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
 }) {
 
     private val binding = ChatFragmentRecentChatListItemBinding.bind(itemView)
+    private var currentIsSelected: Boolean = false
 
     @SuppressLint("ClickableViewAccessibility")
-    fun bind(searchKey: String, data: RoomViewData, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
+    fun bind(searchKey: String, data: RoomViewData, isSelected: Boolean = false, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
+        currentIsSelected = isSelected
         updateTextSizes(TextSizeUtil.isLarger)
 
         if (isForSearch && searchKey.isNotEmpty()) {
@@ -214,7 +230,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                     }
                 } else {
                     binding.imageviewBotBadge.isVisible = data.roomId.isOfficialBotId()
-                    val contactAvatar = data.roomAvatarJson?.getContactAvatarData()
+                    val contactAvatar = (data.remarkAvatarJson?.takeIf { it.isNotEmpty() } ?: data.roomAvatarJson)
+                        ?.getContactAvatarData()
                     binding.imageviewAvatar.setAvatar(
                         contactAvatar?.getContactAvatarUrl(),
                         contactAvatar?.encKey,
@@ -237,11 +254,12 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         }
         binding.textviewDetail.isVisible = !data.isInstantCall
 
-        if (!isForSearch && data.isPinned) {
-            binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
-        } else {
-            binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg1))
+        val bgColorRes = when {
+            isSelected -> com.difft.android.base.R.color.bg3
+            !isForSearch && data.isPinned -> com.difft.android.base.R.color.bg2
+            else -> com.difft.android.base.R.color.bg1
         }
+        binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, bgColorRes))
 
         binding.textviewDate.text = data.lastActiveTimeText
         if (!data.draftPreview.isNullOrEmpty()) {
@@ -354,7 +372,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         if (callData != null) {
             val roomId = callData.roomId
             if (!roomId.isNullOrEmpty()) {
-                if(!data.isPinned) {
+                if(!currentIsSelected && !data.isPinned) {
                     binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
                 }
                 binding.callBarDuration.isVisible = true
@@ -381,7 +399,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 }
             }
         } else {
-            if(!data.isPinned) {
+            if(!currentIsSelected && !data.isPinned) {
                 binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg1))
             }
             binding.callBarDuration.isVisible = false
