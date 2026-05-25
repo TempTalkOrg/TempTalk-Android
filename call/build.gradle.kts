@@ -23,25 +23,17 @@ android {
 
     buildFeatures {
         viewBinding = true
+        compose = true
+        buildConfig = true
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kapt {
         correctErrorTypes = true
-    }
-
-    viewBinding.isEnabled = true
-
-
-    buildFeatures {
-        compose = true
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
     testOptions {

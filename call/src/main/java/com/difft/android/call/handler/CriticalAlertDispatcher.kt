@@ -1,10 +1,11 @@
 package com.difft.android.call.handler
 
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils.getString
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.R
@@ -43,66 +44,64 @@ class CriticalAlertDispatcher(
     private val showToast: (message: String) -> Unit,
 ) {
 
-    fun send(gid: String? = null, callback: ((Boolean) -> Unit)? = null) {
-        scope.launch {
-            val chatHttpClient = httpClientProvider()
-            val auth = SecureSharedPrefsUtil.getBasicAuth()
-            var baseTimestamp = System.currentTimeMillis()
+    suspend fun send(gid: String? = null): Boolean {
+        val chatHttpClient = httpClientProvider()
+        val auth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
+        var baseTimestamp = System.currentTimeMillis()
 
-            val awaitingJoinInvitees = participantManager.awaitingJoinInvitees.value
-            val destinations = if (awaitingJoinInvitees.isEmpty()) emptyList() else {
-                awaitingJoinInvitees.map {
-                    baseTimestamp += 1
-                    CriticalAlertDestination(number = it, timestamp = baseTimestamp)
-                }
+        val awaitingJoinInvitees = participantManager.awaitingJoinInvitees.value
+        val destinations = if (awaitingJoinInvitees.isEmpty()) emptyList() else {
+            awaitingJoinInvitees.map {
+                baseTimestamp += 1
+                CriticalAlertDestination(number = it, timestamp = baseTimestamp)
             }
+        }
 
-            val criticalAlertGroup = if (gid.isNullOrEmpty()) null else CriticalAlertGroup(
-                gid = gid,
-                timestamp = baseTimestamp + 1,
-            )
+        val criticalAlertGroup = if (gid.isNullOrEmpty()) null else CriticalAlertGroup(
+            gid = gid,
+            timestamp = baseTimestamp + 1,
+        )
 
-            val requestBody = CriticalAlertRequestBodyNew(
-                destinations = destinations,
-                group = criticalAlertGroup,
-                roomId = roomIdGetter().orEmpty(),
-            )
+        val requestBody = CriticalAlertRequestBodyNew(
+            destinations = destinations,
+            group = criticalAlertGroup,
+            roomId = roomIdGetter().orEmpty(),
+        )
 
-            try {
-                val response = withContext(Dispatchers.IO) {
-                    chatHttpClient.httpService.sendCriticalAlertNew(auth, requestBody)
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                chatHttpClient.httpService.sendCriticalAlertNew(auth, requestBody)
+            }
+            if (response.status == 0) {
+                showBarrage(
+                    room.localParticipant,
+                    getString(R.string.call_barrage_message_critical_alert_success),
+                )
+                response.serverTimestamp?.let { serverTimestamp ->
+                    L.i { "[Call] sendCriticalAlert response serverTimestamp:$serverTimestamp" }
+                    scope.launch { persistDeliveries(requestBody, response, serverTimestamp, gid) }
                 }
-                if (response.status == 0) {
-                    callback?.invoke(true)
-                    showBarrage(
-                        room.localParticipant,
-                        getString(R.string.call_barrage_message_critical_alert_success),
-                    )
-                    response.serverTimestamp?.let { serverTimestamp ->
-                        L.i { "[Call] sendCriticalAlert response serverTimestamp:$serverTimestamp" }
-                        persistDeliveries(requestBody, response, serverTimestamp, gid)
-                    }
-                } else {
-                    L.e { "[Call] handleCriticalAlert failed, status = ${response.status} reason = ${response.reason}" }
-                    callback?.invoke(false)
+                true
+            } else {
+                L.e { "[Call] handleCriticalAlert failed, status = ${response.status} reason = ${response.reason}" }
+                showToast(getString(R.string.call_barrage_message_critical_alert_failed))
+                false
+            }
+        } catch (e: Exception) {
+            L.w { "[Call] sendCriticalAlert error: ${e.stackTraceToString()}" }
+            val reason = e.message
+            val code = (e as? HttpException)?.code()
+            when (code) {
+                413 -> {
+                    L.w { "[Call] Critical alert limited - status: $code reason: $reason" }
+                    showToast(getString(R.string.call_barrage_message_critical_alert_limited))
+                }
+                else -> {
+                    L.e { "[Call] Critical alert failed - status: $code, reason: $reason" }
                     showToast(getString(R.string.call_barrage_message_critical_alert_failed))
                 }
-            } catch (e: Exception) {
-                L.w { "[LCallViewModel] handleCriticalAlertNew error: ${e.stackTraceToString()}" }
-                val reason = e.message
-                val code = (e as? HttpException)?.code()
-                callback?.invoke(false)
-                when (code) {
-                    413 -> {
-                        L.w { "[Call] Critical alert limited - status: $code reason: $reason" }
-                        showToast(getString(R.string.call_barrage_message_critical_alert_limited))
-                    }
-                    else -> {
-                        L.e { "[Call] Critical alert failed - status: $code, reason: $reason" }
-                        showToast(getString(R.string.call_barrage_message_critical_alert_failed))
-                    }
-                }
             }
+            false
         }
     }
 

@@ -9,7 +9,6 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.core.view.isVisible
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -180,7 +179,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source)
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), (globalServices.userManager.getUserData()?.microToken ?: ""), chatViewModel.forWhat.id, sourceType, source)
                 }
                 if (!isAdded || view == null) return@launch
                 ComposeDialogManager.dismissWait()

@@ -12,7 +12,7 @@ plugins {
 
 }
 
-val appVersionName = "2.2.3"
+val appVersionName = "2.2.5"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -21,7 +21,7 @@ fun getCurrentDayTimestamp(): String {
     return simpleDateFormat.format(currentDate)
 }
 
-val appVersionCode = 710793
+val appVersionCode = 732318
 
 fun getBuildTime(): String {
     return System.currentTimeMillis().toString()
@@ -157,7 +157,8 @@ android {
     buildTypes {
         debug {
             ndk {
-                abiFilters += listOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+                //noinspection ChromeOsAbiSupport
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
             isMinifyEnabled = false
         }

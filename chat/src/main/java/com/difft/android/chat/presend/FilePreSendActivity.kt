@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -47,12 +48,15 @@ import androidx.compose.ui.unit.sp
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
+import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
+import com.difft.android.chat.common.MESSAGE_INPUT_MAX_LINES
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -126,7 +130,7 @@ class FilePreSendActivity : BaseActivity() {
         conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: ""
 
         setContent {
-            DifftTheme {
+            DifftTheme(useFlatBackground = true) {
                 FilePreSendScreen(
                     fileName = fileName,
                     fileSize = fileSize,
@@ -167,7 +171,7 @@ class FilePreSendActivity : BaseActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(conversationId, confidentialMode = mode)
                     )
                 }
@@ -298,7 +302,7 @@ private fun FilePreSendScreen(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .heightIn(min = 44.dp)
                     .border(
                         width = 0.5.dp,
                         color = colorResource(id = com.difft.android.base.R.color.line),
@@ -329,13 +333,21 @@ private fun FilePreSendScreen(
                     }
                     BasicTextField(
                         value = messageBody,
-                        onValueChange = { messageBody = it },
+                        onValueChange = { newValue ->
+                            val utf8Size = newValue.toByteArray(Charsets.UTF_8).size
+                            messageBody = if (utf8Size > MAX_TEXT_FILE_SIZE) {
+                                ToastUtil.show(R.string.text_file_exceeds_10mb_limit)
+                                newValue.utf8Substring(MAX_TEXT_FILE_SIZE)
+                            } else {
+                                newValue
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = TextStyle(
                             color = DifftTheme.colors.textPrimary,
                             fontSize = 16.sp
                         ),
-                        singleLine = true,
+                        maxLines = MESSAGE_INPUT_MAX_LINES,
                         cursorBrush = SolidColor(DifftTheme.colors.primary)
                     )
                 }

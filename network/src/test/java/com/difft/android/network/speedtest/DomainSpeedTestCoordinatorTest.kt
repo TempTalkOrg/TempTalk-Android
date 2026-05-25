@@ -1,50 +1,62 @@
 package com.difft.android.network.speedtest
 
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserData
+import com.difft.android.base.user.UserManager
 import com.difft.android.network.config.GlobalConfigsManager
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/**
+ * Coordinator unit tests. Post-issue-#725, the legacy `SharedPrefsUtil` is gone;
+ * persisted best-host now lives in the unified UserManager snapshot. An
+ * in-memory [UserManager] gives us a real snapshot so we can verify level-2
+ * fallback behavior end-to-end (write → read → invalidate).
+ *
+ * Uses a local in-memory UserManager rather than `FakeUserManager` from
+ * `:base` testFixtures because the testFixtures Kotlin source set is not
+ * compiled for downstream consumers (see base/build.gradle.kts workaround comment).
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE)
 class DomainSpeedTestCoordinatorTest {
+
+    private class InMemoryUserManager(
+        private var data: UserData? = UserData()
+    ) : UserManager {
+        override fun setUserData(userData: UserData, commit: Boolean) {
+            this.data = userData
+        }
+
+        override fun getUserData(): UserData? = data
+    }
 
     private val mockSpeedTester = mockk<DomainSpeedTester>(relaxed = true)
     private val mockGlobalConfigsManager = mockk<GlobalConfigsManager>(relaxed = true)
-    private lateinit var coordinator: DomainSpeedTestCoordinator
 
-    private var storedBestHost: String? = null
+    private lateinit var userManager: InMemoryUserManager
+    private lateinit var coordinator: DomainSpeedTestCoordinator
 
     @Before
     fun setUp() {
-        storedBestHost = null
-
-        mockkObject(SharedPrefsUtil)
-        every { SharedPrefsUtil.getString("sp_speed_test_success_host", any()) } answers { storedBestHost }
-        every { SharedPrefsUtil.getString("sp_speed_test_success_host") } answers { storedBestHost }
-        every { SharedPrefsUtil.putString("sp_speed_test_success_host", any()) } answers {
-            storedBestHost = secondArg()
-        }
-        every { SharedPrefsUtil.remove("sp_speed_test_success_host") } answers {
-            storedBestHost = null
-        }
+        userManager = InMemoryUserManager()
 
         coordinator = DomainSpeedTestCoordinator(
             globalConfigsManager = dagger.Lazy { mockGlobalConfigsManager },
-            speedTester = mockSpeedTester
+            speedTester = mockSpeedTester,
+            userManager = userManager,
         )
     }
 
-    @After
-    fun tearDown() {
-        unmockkObject(SharedPrefsUtil)
+    private fun setPersistedBestHost(host: String?) {
+        userManager.update { bestHost = host }
     }
 
     // -- getBestHostSync --
@@ -66,14 +78,14 @@ class DomainSpeedTestCoordinatorTest {
 
     @Test
     fun `getBestHostSync falls back to persisted host when snapshot empty`() {
-        storedBestHost = "persisted.host"
+        setPersistedBestHost("persisted.host")
 
         assertEquals("persisted.host", coordinator.getBestHostSync())
     }
 
     @Test
     fun `getBestHostSync skips invalidated persisted host`() {
-        storedBestHost = "persisted.host"
+        setPersistedBestHost("persisted.host")
         coordinator.markHostUnavailable("persisted.host")
 
         // No GlobalConfig mock, so returns null
@@ -100,7 +112,7 @@ class DomainSpeedTestCoordinatorTest {
 
     @Test
     fun `markHostUnavailable with empty snapshot still blocks getBestHostSync`() {
-        storedBestHost = "bad.host"
+        setPersistedBestHost("bad.host")
         coordinator.markHostUnavailable("bad.host")
 
         assertNull(coordinator.getBestHostSync(), "Invalidated host should be skipped even from persisted")
@@ -153,7 +165,7 @@ class DomainSpeedTestCoordinatorTest {
         coordinator.resetSession()
         // Snapshot is also cleared, so still null (no persisted host)
         // But invalidation set should be clear
-        storedBestHost = "host.a"
+        setPersistedBestHost("host.a")
         assertEquals("host.a", coordinator.getBestHostSync(), "After resetSession, invalidation set is cleared")
     }
 

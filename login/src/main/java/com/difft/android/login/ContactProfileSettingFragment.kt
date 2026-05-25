@@ -22,7 +22,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -84,7 +83,7 @@ class ContactProfileSettingFragment : Fragment() {
     }
 
     val token: String by lazy {
-        SecureSharedPrefsUtil.getToken()
+        (userManager.getUserData()?.microToken ?: "")
     }
 
     @Inject

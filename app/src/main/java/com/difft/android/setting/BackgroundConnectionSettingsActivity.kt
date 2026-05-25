@@ -87,7 +87,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 MainContent()
             }
         }
@@ -230,7 +230,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                                 Color(
                                     ContextCompat.getColor(
                                         context,
-                                        R.color.bg_setting_item
+                                        R.color.bg_elevated
                                     )
                                 ),
                                 RoundedCornerShape(8.dp)
@@ -490,7 +490,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                     Color(
                         ContextCompat.getColor(
                             context,
-                            R.color.bg_setting
+                            R.color.bg
                         )
                     )
                 )

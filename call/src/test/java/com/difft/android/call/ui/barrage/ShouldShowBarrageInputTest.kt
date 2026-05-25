@@ -40,26 +40,26 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Compose UI tests for `ShouldShowBarrageInput` validating the lazy-once
- * composition + `graphicsLayer { alpha }` design.
+ * composition + conditional `placeRelative` design.
  *
  * Design: content is NOT composed until the first expand (ANR fix). After the
- * first expand, content stays in the tree permanently and visibility is toggled
- * via `graphicsLayer { alpha }` — zero re-composition, zero re-measure on
- * subsequent toggles, keeping overlay-window bubble animations smooth.
+ * first expand, content stays in the tree permanently but is only placed
+ * (via placeRelative) when expanded — unplaced content is excluded from
+ * hit-testing and rendering, so collapsed picker never intercepts scroll/tap.
  *
  * Coverage matrix:
  *   #1  composition gate when never expanded (primary ANR-fix regression guard)
  *   #2  composition presence when expanded
  *   #3  lazy-once: after first expand, content stays in tree permanently
  *   #4  first expand puts subtree in tree
- *   #5  idle-closed tap → `toggleTopBottomBars()`
+ *   #5  idle-closed tap does NOT invoke any toggle (no inner tapInterceptor)
  *   #6  outer Box has non-zero size in idle-closed state (size-preservation guard)
- *   #7  outer Box width >= `SIMPLE_BARRAGE_UI_WIDTH`
- *   #8  outer Box height >= `SIMPLE_BARRAGE_PICKER_MIN_HEIGHT`
- *   #9  expanded taps reach picker items (interceptor disabled when expanded)
+ *   #7  expanded outer Box width >= `SIMPLE_BARRAGE_UI_WIDTH`
+ *   #8  expanded outer Box height >= `SIMPLE_BARRAGE_PICKER_MIN_HEIGHT`
+ *   #9  expanded taps reach picker items
  *  #10  shouldShow=false tap → `toggleOverlays()` (outer Box interceptor)
- *  #11  share-screening uses 360 dp width
- *  #12  1V1 portrait `alwaysShow` path keeps `shouldShow=true` even when bottom-bar disabled
+ *  #11  share-screening expanded uses 360 dp width
+ *  #12  1V1 portrait `alwaysShow` path — no toggle invoked
  *
  * `BubbleBarrageMessage` calls `colorResource(...)` against `:base` color resources;
  * every `setContent` block therefore wraps in `DifftTheme` so the correct
@@ -222,8 +222,9 @@ class ShouldShowBarrageInputTest {
 
     // -----------------------------------------------------------------
     // #3 lazy-once: after first expand, content stays in tree permanently
-    // (hidden via graphicsLayer alpha, not removed — avoids re-composition
-    // jank that causes bubble animation stutter on subsequent toggles)
+    // (controlled via conditional placeRelative — unplaced content is
+    // excluded from hit-testing and rendering, avoiding scroll/tap
+    // interference while keeping composition stable)
     // -----------------------------------------------------------------
     @Test
     fun `expanded true to false - picker stays in composition tree permanently`() {
@@ -232,19 +233,10 @@ class ShouldShowBarrageInputTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("barrage-picker-content").assertExists()
 
-        // Collapse — content must remain in the tree (only alpha → 0).
+        // Collapse — content must remain in the tree (lazy-once optimization).
         state.value = false
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("barrage-picker-content").assertExists()
-
-        // Tap the outer box — tapInterceptor (PointerEventPass.Initial) must
-        // still route to toggleTopBottomBars, NOT be silently consumed by the
-        // hidden BubbleBarrageMessage that remains in the tree.
-        composeTestRule.onNodeWithTag("barrage-outer-box").performTouchInput {
-            click(position = Offset(width / 2f, height / 2f))
-        }
-        composeTestRule.waitForIdle()
-        verify(exactly = 1) { callUiController.toggleTopBottomBars() }
     }
 
     // -----------------------------------------------------------------
@@ -271,24 +263,21 @@ class ShouldShowBarrageInputTest {
     }
 
     // -----------------------------------------------------------------
-    // #5 idle-closed tap routes to toggleTopBottomBars
+    // #5 idle-closed tap does NOT invoke any toggle (inner tapInterceptor
+    // was removed; collapsed picker is not placed, so no hit-testing)
     // -----------------------------------------------------------------
     @Test
-    fun `idle-closed tap on outer Box invokes toggleTopBottomBars`() {
+    fun `idle-closed tap on outer Box does not invoke any toggle`() {
         showBottomToolBarViewEnabled.value = true
         setBarrageContent(expanded = false)
         composeTestRule.waitForIdle()
 
-        // Tap at the box CENTER — not (0,0). A zero-sized box would still
-        // accept clicks at the origin even without size preservation, so
-        // clicking the center proves both that the interceptor is armed
-        // AND that the box covers a real, picker-sized region.
         composeTestRule.onNodeWithTag("barrage-outer-box").performTouchInput {
             click(position = Offset(width / 2f, height / 2f))
         }
         composeTestRule.waitForIdle()
 
-        verify(exactly = 1) { callUiController.toggleTopBottomBars() }
+        verify(exactly = 0) { callUiController.toggleTopBottomBars() }
         verify(exactly = 0) { callUiController.toggleOverlays() }
     }
 
@@ -314,11 +303,13 @@ class ShouldShowBarrageInputTest {
     }
 
     // -----------------------------------------------------------------
-    // #7 outer Box width >= SIMPLE_BARRAGE_UI_WIDTH
+    // #7 outer Box width >= SIMPLE_BARRAGE_UI_WIDTH (expanded state —
+    // collapsed picker is not placed, so size assertions only apply
+    // when the picker is visible)
     // -----------------------------------------------------------------
     @Test
-    fun `idle-closed - outer Box width is at least bubbleWidthDp`() {
-        setBarrageContent(expanded = false)
+    fun `expanded - outer Box width is at least bubbleWidthDp`() {
+        setBarrageContent(expanded = true)
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("barrage-outer-box")
@@ -326,11 +317,11 @@ class ShouldShowBarrageInputTest {
     }
 
     // -----------------------------------------------------------------
-    // #8 outer Box height >= SIMPLE_BARRAGE_PICKER_MIN_HEIGHT
+    // #8 outer Box height >= SIMPLE_BARRAGE_PICKER_MIN_HEIGHT (expanded)
     // -----------------------------------------------------------------
     @Test
-    fun `idle-closed - outer Box height is at least picker min height`() {
-        setBarrageContent(expanded = false)
+    fun `expanded - outer Box height is at least picker min height`() {
+        setBarrageContent(expanded = true)
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("barrage-outer-box")
@@ -396,11 +387,12 @@ class ShouldShowBarrageInputTest {
     }
 
     // -----------------------------------------------------------------
-    // #11 share-screening uses 360 dp width
+    // #11 share-screening uses 360 dp width (expanded — collapsed picker
+    // is not placed)
     // -----------------------------------------------------------------
     @Test
-    fun `share-screening - outer Box width is at least 360 dp`() {
-        setBarrageContent(expanded = false, isShareScreening = true)
+    fun `share-screening expanded - outer Box width is at least 360 dp`() {
+        setBarrageContent(expanded = true, isShareScreening = true)
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("barrage-outer-box")
@@ -408,12 +400,12 @@ class ShouldShowBarrageInputTest {
     }
 
     // -----------------------------------------------------------------
-    // #12 1V1 portrait alwaysShow path
+    // #12 1V1 portrait alwaysShow path — outer tapInterceptor is
+    // DISABLED (shouldShow=true via alwaysShow), inner tapInterceptor
+    // was removed, so tap does not invoke any toggle.
     // -----------------------------------------------------------------
     @Test
     fun `1V1 portrait - alwaysShow keeps shouldShow true even when bottom bars disabled`() {
-        // Bottom-bar gate is OFF, but isOneVOneCall=true (and Robolectric
-        // default qualifiers are portrait) → alwaysShow=true → shouldShow=true.
         showBottomToolBarViewEnabled.value = false
         setBarrageContent(
             expanded = false,
@@ -421,16 +413,12 @@ class ShouldShowBarrageInputTest {
         )
         composeTestRule.waitForIdle()
 
-        // Tap at the outer-box center: the OUTER Box interceptor must be
-        // DISABLED (shouldShow=true), and the INNER picker Box interceptor
-        // must be ARMED (!expanded && shouldShow). Therefore tap routes to
-        // toggleTopBottomBars, NOT to toggleOverlays.
         composeTestRule.onNodeWithTag("barrage-outer-box").performTouchInput {
             click(position = Offset(width / 2f, height / 2f))
         }
         composeTestRule.waitForIdle()
 
-        verify(exactly = 1) { callUiController.toggleTopBottomBars() }
+        verify(exactly = 0) { callUiController.toggleTopBottomBars() }
         verify(exactly = 0) { callUiController.toggleOverlays() }
     }
 }

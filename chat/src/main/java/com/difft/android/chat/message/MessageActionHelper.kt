@@ -18,6 +18,7 @@ import com.difft.android.chat.util.ClearClipboardAlarmReceiver
 import com.difft.android.chat.util.ServiceUtil
 import com.difft.android.chat.util.Util
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardNoticeData
 import java.io.File
 
@@ -35,95 +36,72 @@ class MessageActionHelper(
     private val selectChatsUtils: SelectChatsUtils? = null
 ) {
 
-    /**
-     * Copy message content to clipboard
-     * Handles text, long text attachments, and file attachments
-     */
-    fun copyMessageContent(data: TextChatMessage) {
-        // Check if it's a long text attachment - copy full text content from file
-        if (data.isLongTextAttachment()) {
-            copyLongTextContent(data)
-            return
-        }
-
-        // Check if it's a file attachment that can be copied as file URI
-        if (data.canDownloadFile()) {
-            copyFileToClipboard(data)
-            return
-        }
-
-        // Copy text content using extension function
-        data.getCopyableTextContent()?.let { Util.copyToClipboard(activity, it) }
+    /** Returns true iff the clipboard write succeeded; PRD §4.1 gates the trace notice on this. */
+    suspend fun copyMessageContent(data: TextChatMessage): Boolean {
+        if (data.isLongTextAttachment()) return copyLongTextContent(data)
+        if (data.canDownloadFile()) return copyFileToClipboard(data)
+        val text = data.getCopyableTextContent() ?: return false
+        Util.copyToClipboard(activity, text)
+        return true
     }
 
-    /**
-     * Copy long text content from file
-     */
-    private fun copyLongTextContent(data: TextChatMessage) {
+    /** Reads the backing file off-main-thread; falls back to data.message on read failure. */
+    private suspend fun copyLongTextContent(data: TextChatMessage): Boolean {
         val fileInfo = data.getLongTextFileInfo()
         if (fileInfo == null) {
-            // Fallback to copying message content
-            data.message?.let { Util.copyToClipboard(activity, it) }
-            return
+            val fallback = data.message ?: return false
+            Util.copyToClipboard(activity, fallback)
+            return true
         }
 
-        val filePath = fileInfo.filePath
-
-        // Read file content asynchronously and copy to clipboard
-        lifecycleScope.launch {
-            val content = withContext(Dispatchers.IO) {
-                try {
-                    File(filePath).takeIf { it.exists() }?.readText() ?: ""
-                } catch (e: Exception) {
-                    L.e { "Failed to read long text file: ${e.message}" }
-                    ""
-                }
-            }
-
-            withContext(Dispatchers.Main) {
-                if (content.isNotEmpty()) {
-                    Util.copyToClipboard(activity, content)
-                } else {
-                    // Fallback to message content if file read fails
-                    data.message?.let { Util.copyToClipboard(activity, it) }
-                }
+        val content = withContext(Dispatchers.IO) {
+            try {
+                File(fileInfo.filePath).takeIf { it.exists() }?.readText() ?: ""
+            } catch (e: Exception) {
+                L.e { "Failed to read long text file: ${e.message}" }
+                ""
             }
         }
+
+        if (content.isNotEmpty()) {
+            Util.copyToClipboard(activity, content)
+            return true
+        }
+        val fallback = data.message ?: return false
+        Util.copyToClipboard(activity, fallback)
+        return true
     }
 
-    /**
-     * Copy file to clipboard as URI
-     */
-    private fun copyFileToClipboard(data: TextChatMessage) {
-        val fileInfo = data.getFileInfoForCopy() ?: return
+    /** Returns false if the underlying file is missing on disk. */
+    private fun copyFileToClipboard(data: TextChatMessage): Boolean {
+        val fileInfo = data.getFileInfoForCopy() ?: return false
         val file = File(fileInfo.filePath)
+        if (!file.exists()) return false
 
-        if (file.exists()) {
-            // Use FileProvider to generate a secure URI
-            val uri = FileProvider.getUriForFile(
-                activity,
-                "${activity.packageName}.provider",
-                file
-            )
-            // Copy file to clipboard with special label for identification
-            val clipboard = ServiceUtil.getClipboardManager(activity)
-            val clipData = ClipData.newUri(
-                activity.contentResolver,
-                ClearClipboardAlarmReceiver.CLIPBOARD_LABEL,
-                uri
-            )
-            // Mark as sensitive to prevent clipboard preview and cross-device sync (Android 13+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                clipData.description.extras = PersistableBundle().apply {
-                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-                }
+        // Use FileProvider to generate a secure URI
+        val uri = FileProvider.getUriForFile(
+            activity,
+            "${activity.packageName}.provider",
+            file
+        )
+        // Copy file to clipboard with special label for identification
+        val clipboard = ServiceUtil.getClipboardManager(activity)
+        val clipData = ClipData.newUri(
+            activity.contentResolver,
+            ClearClipboardAlarmReceiver.CLIPBOARD_LABEL,
+            uri
+        )
+        // Mark as sensitive to prevent clipboard preview and cross-device sync (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clipData.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
             }
-            clipboard.setPrimaryClip(clipData)
-            ToastUtil.show(activity.getString(R.string.chat_message_action_copied))
-
-            // Schedule clipboard clear after 5 minutes
-            Util.scheduleClipboardClear(activity, 5 * 60)
         }
+        clipboard.setPrimaryClip(clipData)
+        ToastUtil.show(activity.getString(R.string.chat_message_action_copied))
+        // Schedule clipboard clear after 5 minutes
+        Util.scheduleClipboardClear(activity, 5 * 60)
+        return true
     }
 
     /**
@@ -137,7 +115,16 @@ class MessageActionHelper(
      *                            the source conversation (e.g. ChatForwardMessageFragment) pass
      *                            null; the notice is skipped in that case.
      */
-    fun forwardMessage(data: TextChatMessage, sourceConversation: For? = null) {
+    fun forwardMessage(
+        data: TextChatMessage,
+        sourceConversation: For? = null,
+        /** Override authors when the source attribution differs from data.authorId
+         *  (e.g. forwarding from inside a combined-forward preview → outer sender). */
+        sourceAuthorIdsOverride: List<String>? = null,
+        /** PRD v1.0 §5.3 combined-forward mode. Default UNKNOWN; pass SUB_COMBINED_FORWARD when
+         *  forwarding from inside a CF detail view (caller decides). */
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+    ) {
         val utils = selectChatsUtils ?: run {
             L.w { "forwardMessage called but selectChatsUtils is null" }
             return
@@ -152,13 +139,10 @@ class MessageActionHelper(
             null,
             null,
             listOf(forwardContext),
-            // Long-press → Forward: single message, the original 1-tap forward entry point.
             scene = ForwardNoticeData.Scene.SINGLE,
             sourceConversation = sourceConversation,
-            // Single selected message → exactly one outer author. Using data.authorId so a
-            // combined-forward message is attributed to its outer uploader, NOT expanded
-            // into its nested authors.
-            sourceAuthorIds = listOf(data.authorId),
+            sourceAuthorIds = sourceAuthorIdsOverride ?: listOf(data.authorId),
+            combinedForwardMode = combinedForwardMode,
         )
     }
 }

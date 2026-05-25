@@ -45,7 +45,6 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.utf8Substring
@@ -53,6 +52,9 @@ import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
+import com.difft.android.chat.common.OVERSIZED_TEXT_BODY_LENGTH
+import com.difft.android.chat.common.OVERSIZED_TEXT_THRESHOLD
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.CombineForwardBar
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
@@ -64,6 +66,8 @@ import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.NoticeAggregator
+import com.difft.android.chat.jobs.ReactionSendCoordinator
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
@@ -112,6 +116,7 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.mapToMessageId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -200,6 +205,9 @@ class ChatMessageInputFragment : Fragment() {
     lateinit var pushReactionSendJobFactory: PushReactionSendJobFactory
 
     @Inject
+    lateinit var reactionSendCoordinator: ReactionSendCoordinator
+
+    @Inject
     lateinit var pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory
 
     @Inject
@@ -233,10 +241,6 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     companion object {
-        const val OVERSIZED_TEXT_THRESHOLD = 4096  // 4KB - when to convert text to file
-        const val OVERSIZED_TEXT_BODY_LENGTH = 2048  // 2KB - truncated text in message body
-        const val MAX_TEXT_FILE_SIZE = 10 * 1024 * 1024  // 10MB - maximum text file size
-
         // If focus was lost more than this before the screenshot callback, the notification
         // panel was likely open. The callback has ~944ms system delay (Pixel Android 14+),
         // so 2000ms safely covers ROM variation while staying below the notification-panel minimum.
@@ -380,6 +384,11 @@ class ChatMessageInputFragment : Fragment() {
                                 }, isGroup)
                             }
 
+                            // PRD §5.3: derive mode from the single main-conv source message.
+                            val singleMode = NoticeAggregator.computeCombinedForwardMode(
+                                listOf(messageToForward),
+                                isSubContext = false,
+                            )
                             if (saveToNote) {
                                 selectChatsUtils.saveToNotes(
                                     requireActivity(),
@@ -388,7 +397,8 @@ class ChatMessageInputFragment : Fragment() {
                                     // Source conversation = the currently opened chat.
                                     sourceConversation = chatViewModel.forWhat,
                                     // Single selected message → exactly one outer author.
-                                    sourceAuthorIds = listOf(messageToForward.authorId)
+                                    sourceAuthorIds = listOf(messageToForward.authorId),
+                                    combinedForwardMode = singleMode,
                                 )
                             } else {
                                 selectChatsUtils.showChatSelectAndSendDialog(
@@ -403,6 +413,7 @@ class ChatMessageInputFragment : Fragment() {
                                     sourceConversation = chatViewModel.forWhat,
                                     // Single selected message → exactly one outer author.
                                     sourceAuthorIds = listOf(messageToForward.authorId),
+                                    combinedForwardMode = singleMode,
                                 )
                             }
                             forwardContext = null
@@ -494,6 +505,9 @@ class ChatMessageInputFragment : Fragment() {
                         onCombineClick = {
                             chatViewModel.onCombineClick()
                         },
+                        onCopyClick = {
+                            chatViewModel.onCopyClick()
+                        },
                         onSaveClick = {
                             chatViewModel.onSaveSelectedMessages()
                         },
@@ -515,6 +529,8 @@ class ChatMessageInputFragment : Fragment() {
                 // Source conversation = the user's current chat, plumbed through ForwardContextData from the ViewModel.
                 sourceConversation = it.sourceConversation,
                 sourceAuthorIds = it.sourceAuthorIds,
+                messageCount = it.messageCount,
+                combinedForwardMode = it.combinedForwardMode,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -526,7 +542,9 @@ class ChatMessageInputFragment : Fragment() {
                 it.content,
                 it.forwardContexts,
                 sourceConversation = it.sourceConversation,
-                sourceAuthorIds = it.sourceAuthorIds
+                sourceAuthorIds = it.sourceAuthorIds,
+                messageCount = it.messageCount,
+                combinedForwardMode = it.combinedForwardMode,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -738,6 +756,7 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonMedia.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             // check permission
             // callback to select picture in onPicturePermissionForMessageResult
             onPicturePermissionForMessage.launchMultiplePermission(PermissionUtil.picturePermissions)
@@ -746,6 +765,7 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonAttachment.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             ScreenLockUtil.temporarilyDisabled = true
             fileActivityLauncher.launch(
                 Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -756,6 +776,7 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonContact.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             selectChatsUtils.showContactSelectDialog(requireActivity()) { contact ->
                 // 用户取消选择，直接返回
                 if (contact == null) return@showContactSelectDialog
@@ -787,70 +808,11 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonSubmit.setOnClickListener {
-            if (isGroup) { //判断是否仅协调人可发言
-                val group = chatUIData?.group
-                if (group != null && !groupUtil.canSpeak(group, globalServices.myId)) {
-                    ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
-                    return@setOnClickListener
-                }
-            }
+            if (!checkCanSpeak()) return@setOnClickListener
             val message: String = binding.edittextInput.text.toString().trim()
             if (!TextUtils.isEmpty(message)) {
-                // Check if text exceeds maximum file size (10MB) before processing
-                val messageBytes = message.toByteArray(Charsets.UTF_8)
-                if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
-                    ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
-                    L.w { "Text message exceeds MAX_TEXT_FILE_SIZE (${messageBytes.size} bytes), send blocked." }
-                    return@setOnClickListener
-                }
-
-                // Check if text is oversized (>= 4KB) and needs to be converted to file attachment
-                if (messageBytes.size >= OVERSIZED_TEXT_THRESHOLD) {
-                    // Generate file name and create text file in background thread
-                    val timeStamp = System.currentTimeMillis()
-                    val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
-                    val fileName = generateOversizedTextFileName()
-                    val truncatedText = message.utf8Substring(OVERSIZED_TEXT_BODY_LENGTH)
-
-                    L.i { "Text message oversized (${messageBytes.size} bytes), converting to file attachment. Body truncated to $OVERSIZED_TEXT_BODY_LENGTH bytes." }
-
-                    // Create file and send in background thread using coroutines
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        val filePath = withContext(Dispatchers.IO) {
-                            createTextFile(messageId, fileName, message)
-                        }
-
-                        // Check if fragment is still in valid state before UI updates
-                        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                            return@launch
-                        }
-
-                        if (filePath != null) {
-                            sendTextPush(
-                                content = truncatedText,
-                                timeStamp = timeStamp,
-                                messageId = messageId,
-                                attachmentInfo = AttachmentInfo(
-                                    filePath = filePath,
-                                    fileName = fileName,
-                                    mimeType = CONTENT_TYPE_LONG_TEXT,
-                                    isAudioMessage = false
-                                )
-                            )
-                            // Clear UI only after successful send
-                            binding.edittextInput.setText("")
-                            binding.quoteZone.visibility = View.GONE
-                        } else {
-                            // Keep user input when file creation fails
-                            L.e { "Failed to create text file: file creation exception" }
-                            ToastUtil.show(getString(R.string.chat_status_fail))
-                        }
-                    }
-                } else {
-                    // Send as normal text message
-                    sendTextPush(message)
+                sendValidatedText(message) {
                     binding.edittextInput.setText("")
-                    binding.quoteZone.visibility = View.GONE
                 }
             }
         }
@@ -894,6 +856,7 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonVoice.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
 
             viewLifecycleOwner.lifecycleScope.launch {
@@ -1228,7 +1191,7 @@ class ChatMessageInputFragment : Fragment() {
                         }
                         delay(500)
                         if (body.isNotEmpty()) {
-                            sendTextPush(body)
+                            sendValidatedText(body)
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -1322,7 +1285,7 @@ class ChatMessageInputFragment : Fragment() {
                         prepareSendAttachmentPush(filePath.toUri(), mimeType, fileName)
                         if (body.isNotEmpty()) {
                             delay(500)
-                            sendTextPush(body)
+                            sendValidatedText(body)
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -1573,7 +1536,7 @@ class ChatMessageInputFragment : Fragment() {
                 val response = withContext(Dispatchers.IO) {
                     chatHttpClient.httpService
                         .fetchShareConversationConfig(
-                            SecureSharedPrefsUtil.getToken(),
+                            (globalServices.userManager.getUserData()?.microToken ?: ""),
                             GetConversationShareRequestBody(
                                 listOf(messageArchiveManager.conversationParams(chatViewModel.forWhat.id)),
                                 true
@@ -1868,6 +1831,57 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    /** Sends text with size validation: >10MB blocked, ≥4KB → text-file attachment, <4KB → normal. */
+    private fun sendValidatedText(message: String, onSent: (() -> Unit)? = null): Boolean {
+        val messageBytes = message.toByteArray(Charsets.UTF_8)
+        if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
+            ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
+            L.w { "Text message exceeds MAX_TEXT_FILE_SIZE (${messageBytes.size} bytes), send blocked." }
+            return false
+        }
+
+        if (messageBytes.size >= OVERSIZED_TEXT_THRESHOLD) {
+            val timeStamp = System.currentTimeMillis()
+            val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+            val fileName = generateOversizedTextFileName()
+            val truncatedText = message.utf8Substring(OVERSIZED_TEXT_BODY_LENGTH)
+
+            L.i { "Text message oversized (${messageBytes.size} bytes), converting to file attachment. Body truncated to $OVERSIZED_TEXT_BODY_LENGTH bytes." }
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                val filePath = withContext(Dispatchers.IO) {
+                    createTextFile(messageId, fileName, message)
+                }
+
+                if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    return@launch
+                }
+
+                if (filePath != null) {
+                    sendTextPush(
+                        content = truncatedText,
+                        timeStamp = timeStamp,
+                        messageId = messageId,
+                        attachmentInfo = AttachmentInfo(
+                            filePath = filePath,
+                            fileName = fileName,
+                            mimeType = CONTENT_TYPE_LONG_TEXT,
+                            isAudioMessage = false
+                        )
+                    )
+                    onSent?.invoke()
+                } else {
+                    L.e { "Failed to create text file: file creation exception" }
+                    ToastUtil.show(getString(R.string.chat_status_fail))
+                }
+            }
+        } else {
+            sendTextPush(message)
+            onSent?.invoke()
+        }
+        return true
+    }
+
     /**
      * Unified method to send text messages with optional attachment
      * @param content Text content (can be null for attachment-only messages)
@@ -1884,8 +1898,11 @@ class ChatMessageInputFragment : Fragment() {
     ) {
         val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
 
+        // Mentions live in `content`; attachment-only sends must skip them to avoid phantom @-notifications.
+        val hasContent = !content.isNullOrEmpty()
+
         var atPersonsString: String? = null
-        if (mentions.isNotEmpty()) {
+        if (hasContent && mentions.isNotEmpty()) {
             val atPersons = StringBuilder()
             mentions.forEach { mention ->
                 atPersons.append(mention.uid)
@@ -1940,7 +1957,7 @@ class ChatMessageInputFragment : Fragment() {
                 quote,
                 forwardContext,
                 recall,
-                mentions.toMutableList(),
+                if (hasContent) mentions.toMutableList() else mutableListOf(),
                 atPersonsString,
                 reactions.toMutableList(),
                 screenShot,
@@ -1956,8 +1973,19 @@ class ChatMessageInputFragment : Fragment() {
 
             checkAndSendAddFriendRequest()
 
-            resetData()
+            resetData(clearInputBoundState = hasContent)
         }
+    }
+
+    /** Returns false (and shows a toast) when the user is restricted by group speak permission. */
+    private fun checkCanSpeak(): Boolean {
+        if (!isGroup) return true
+        val group = chatUIData?.group ?: return true
+        if (!groupUtil.canSpeak(group, globalServices.myId)) {
+            ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
+            return false
+        }
+        return true
     }
 
     /**
@@ -1989,7 +2017,7 @@ class ChatMessageInputFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source, action)
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), (globalServices.userManager.getUserData()?.microToken ?: ""), chatViewModel.forWhat.id, sourceType, source, action)
                 }
                 ComposeDialogManager.dismissWait()
                 if (response.status == 0) {
@@ -2012,16 +2040,21 @@ class ChatMessageInputFragment : Fragment() {
     }
 
 
-    private fun resetData() {
-        mentionsSelectedContacts.clear()
-        mentions.clear()
-        prevInputTextLength = 0
-
+    private fun resetData(clearInputBoundState: Boolean = true) {
         quote = null
         forwardContext = null
         recall = null
         reactions.clear()
         sharedContacts.clear()
+
+        binding.quoteZone.visibility = View.GONE
+
+        // Preserve mentions / length tracker when input text is kept (attachment-only sends).
+        if (clearInputBoundState) {
+            mentionsSelectedContacts.clear()
+            mentions.clear()
+            prevInputTextLength = 0
+        }
     }
 
     private fun prepareSendAttachmentPush(
@@ -2082,40 +2115,55 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
-    /**
-     * Sends a reaction-only message without clearing the composing input.
-     * This is separate from sendTextPush() to avoid clearing the user's draft message
-     * when they react to a message while composing.
-     */
     private fun sendReactionPush(reaction: Reaction, timeStamp: Long) {
         val forWhat = chatViewModel.forWhat
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+        val textMessage = buildReactionTextMessage(reaction, timeStamp, messageId, forWhat)
 
-        val textMessage = TextMessage(
-            messageId,
-            For.Account(globalServices.myId),
-            forWhat,
-            timeStamp,
-            timeStamp,
-            System.currentTimeMillis(),
-            SendType.Sending.rawValue,
-            chatSettingViewModel.getMessageExpirySeconds(),
-            0,
-            0,
-            0,
-            "",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            mutableListOf(reaction),
-            null,
-            null,
+        val realMessageId = reaction.realSource?.mapToMessageId()?.idValue
+        if (realMessageId == null) {
+            L.w { "[Reaction] realMessageId=null, bypassing dedupe target=${forWhat.id} emoji=${reaction.emoji}" }
+            ApplicationDependencies.getJobManager().add(pushReactionSendJobFactory.create(null, textMessage))
+            return
+        }
+
+        reactionSendCoordinator.enqueueReactionWithDedupe(
+            conversationId = forWhat.id,
+            realMessageId = realMessageId,
+            reaction = reaction,
+            textMessage = textMessage,
+            factory = pushReactionSendJobFactory,
         )
-        ApplicationDependencies.getJobManager().add(pushReactionSendJobFactory.create(null, textMessage))
     }
+
+    private fun buildReactionTextMessage(
+        reaction: Reaction,
+        timeStamp: Long,
+        messageId: String,
+        forWhat: For,
+    ): TextMessage = TextMessage(
+        messageId,
+        For.Account(globalServices.myId),
+        forWhat,
+        timeStamp,
+        timeStamp,
+        System.currentTimeMillis(),
+        SendType.Sending.rawValue,
+        chatSettingViewModel.getMessageExpirySeconds(),
+        0,
+        0,
+        0,
+        "",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        mutableListOf(reaction),
+        null,
+        null,
+    )
 
     private fun recallMessage(messageID: String) {
         ComposeDialogManager.showWait(requireActivity(), cancelable = false)
@@ -2144,7 +2192,6 @@ class ChatMessageInputFragment : Fragment() {
                     resultJob.cancel()
                     ComposeDialogManager.dismissWait()
                     ToastUtil.show(R.string.operation_failed)
-                    resetData()
                     return@launch
                 }
                 if (originMessage.fromWho != globalServices.myId) {
@@ -2152,7 +2199,6 @@ class ChatMessageInputFragment : Fragment() {
                     resultJob.cancel()
                     ComposeDialogManager.dismissWait()
                     ToastUtil.show(R.string.operation_failed)
-                    resetData()
                     return@launch
                 }
                 val textMessage = TextMessage(
@@ -2195,12 +2241,12 @@ class ChatMessageInputFragment : Fragment() {
                     ComposeDialogManager.dismissWait()
                 }
 
-                resetData()
+                recall = null
             } catch (e: Exception) {
                 L.e { "Recall message failed: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show(R.string.operation_failed)
-                resetData()
+                recall = null
             }
         }
     }

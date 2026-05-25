@@ -136,10 +136,19 @@ class PushReactionSendJobTest {
 
     // --- 3) onFailure rolls back via LWW reverse-write (add → remove) ---
 
+    /**
+     * Rollback timestamp is exactly `original.originTimestamp + 1`. This narrow +1 lets the
+     * rollback beat the original optimistic write in DB LWW (which carries
+     * `original.originTimestamp`), while intentionally LOSING to any newer user action whose
+     * `originTimestamp` is strictly greater than `original+1` (typical: a newer optimistic
+     * write driven by [com.difft.android.chat.jobs.ReactionSendCoordinator] supersede).
+     * The previous formula `maxOf(now, original+1)` could overwrite a legitimately newer
+     * optimistic update, silently dropping the user's reaction.
+     */
     @Test
-    fun `onFailure writes a rollback Reaction with flipped remove flag and now-ish timestamp`() {
-        val testStart = System.currentTimeMillis()
-        val textMessage = buildReactionTextMessage(emoji = "❤", remove = false, originTimestamp = 1L)
+    fun `onFailure writes a rollback Reaction with flipped remove flag and originTimestamp+1`() {
+        val originalTs = 1_700_000_000_000L
+        val textMessage = buildReactionTextMessage(emoji = "❤", remove = false, originTimestamp = originalTs)
         val original = textMessage.reactions!!.first()
 
         val capturedReaction = slot<Reaction>()
@@ -170,22 +179,19 @@ class PushReactionSendJobTest {
         assertEquals(original.uid, rollback.uid)
         assertEquals(original.realSource, rollback.realSource)
         assertEquals(!original.remove, rollback.remove, "remove flag should be flipped")
-        assertTrue(
-            rollback.originTimestamp >= testStart,
-            "rollback originTimestamp ${rollback.originTimestamp} should be >= test start $testStart"
-        )
-        assertTrue(
-            rollback.originTimestamp > original.originTimestamp,
-            "rollback originTimestamp ${rollback.originTimestamp} should be > original ${original.originTimestamp}"
+        assertEquals(
+            original.originTimestamp + 1,
+            rollback.originTimestamp,
+            "rollback originTimestamp must be exactly original+1 so it loses to newer optimistic updates",
         )
     }
 
     // --- 3b) onFailure rolls back the opposite direction (remove → add) ---
 
     @Test
-    fun `onFailure rollback for remove=true writes a Reaction with remove=false (re-insert)`() {
+    fun `onFailure rollback for remove=true writes a Reaction with remove=false (re-insert) and originTimestamp+1`() {
         // Original action was "remove the reaction"; that send permanently failed.
-        // Rollback must re-insert the reaction by writing remove=false.
+        // Rollback must re-insert the reaction by writing remove=false at original+1.
         val originalTs = 1_700_000_000_000L
         val textMessage = buildReactionTextMessage(
             emoji = "👎",
@@ -221,11 +227,12 @@ class PushReactionSendJobTest {
         assertEquals(original.uid, rollback.uid)
         assertEquals(original.realSource, rollback.realSource)
         assertFalse(rollback.remove, "rollback of remove=true must re-insert (remove=false)")
-        // Defensive monotonic timestamp: rollback ts must be strictly greater than original
-        // even if wall-clock has gone backwards.
-        assertTrue(
-            rollback.originTimestamp >= original.originTimestamp + 1,
-            "rollback originTimestamp ${rollback.originTimestamp} must be >= original+1 ${original.originTimestamp + 1}"
+        // Rollback ts is exactly original+1: beats the original optimistic write, loses to any
+        // newer user action (which would carry a strictly greater originTimestamp).
+        assertEquals(
+            original.originTimestamp + 1,
+            rollback.originTimestamp,
+            "rollback originTimestamp must be exactly original+1",
         )
     }
 

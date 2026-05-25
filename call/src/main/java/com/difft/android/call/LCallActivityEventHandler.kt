@@ -91,24 +91,22 @@ internal fun LCallActivity.handleInviteViewAction(action: InviteViewState) {
         InviteViewState.INVITE -> {
             viewModel.callUiController.setShowInviteViewEnable(false)
             lifecycleScope.launch(Dispatchers.IO) {
-                inviteCallManager?.inviteMembers(
-                    callback = { state, invitees ->
-                        L.i { "[Call] invite call state: $state invitees:$invitees" }
-                        if (state == InviteRequestState.SUCCESS) {
-                            if (onGoingCallStateManager.callType() != CallType.GROUP.type) {
-                                viewModel.callUiController.setCriticalAlertEnable(true)
-                            }
-                            viewModel.addAwaitingJoinInvitees(invitees)
-                        }
-                        val isOneOneCall = onGoingCallStateManager.callType() == CallType.ONE_ON_ONE.type
-                        if (state == InviteRequestState.SUCCESS && isOneOneCall) {
-                            viewModel.switchToInstantCall()
-                            viewModel.stopRingToneAndTimeoutCheck()
-                            viewModel.handleConnectedState()
-                        }
-                        inviteCallManager?.resetState()
+                val (state, invitees) = inviteCallManager?.inviteMembers()
+                    ?: (InviteRequestState.FAILED to emptyList())
+                L.i { "[Call] invite call state: $state invitees:$invitees" }
+                if (state == InviteRequestState.SUCCESS) {
+                    if (onGoingCallStateManager.callType() != CallType.GROUP.type) {
+                        viewModel.callUiController.setCriticalAlertEnable(true)
                     }
-                )
+                    viewModel.addAwaitingJoinInvitees(invitees)
+                }
+                val isOneOneCall = onGoingCallStateManager.callType() == CallType.ONE_ON_ONE.type
+                if (state == InviteRequestState.SUCCESS && isOneOneCall) {
+                    viewModel.switchToInstantCall()
+                    viewModel.stopRingToneAndTimeoutCheck()
+                    viewModel.handleConnectedState()
+                }
+                inviteCallManager?.resetState()
             }
         }
 

@@ -14,8 +14,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.user.CallConfig
@@ -87,18 +91,11 @@ fun CallContent(
         val systemUiController = rememberSystemUiController()
         val backgroundElevateColor = DifftTheme.colors.backgroundElevate
 
-        // 设置 systembar 颜色为 darkTheme 模式
         SideEffect {
             systemUiController.setStatusBarColor(
                 color = backgroundElevateColor,
-                darkIcons = false // darkTheme 使用浅色图标
+                darkIcons = false
             )
-            systemUiController.setNavigationBarColor(
-                color = backgroundElevateColor,
-                darkIcons = false // darkTheme 使用浅色图标
-            )
-            // 隐藏底部系统导航栏，避免影响 insets 状态
-            systemUiController.isNavigationBarVisible = false
         }
 
         CallContentContainer(
@@ -157,6 +154,8 @@ private fun CallContentContainer(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+            .testTag("call_root")
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -368,7 +367,6 @@ private fun CallSurface(
         modifier = modifier.fillMaxSize(),
         color = DifftTheme.colors.backgroundElevate
     ) {
-        PreloadCallPainters()
         content()
     }
 }

@@ -22,6 +22,8 @@ import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.MessageModel
 
 // care of  ConversationUtils.messagesUpdate.filter { it == forWhat.id }
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 class ChatNormalPaginationController @AssistedInject constructor(
     @Assisted
     private val forWhat: For,

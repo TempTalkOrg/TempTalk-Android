@@ -1,8 +1,9 @@
 package com.difft.android.chat.speech2text
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
@@ -66,14 +67,13 @@ class SpeechToTextManager @Inject constructor(
                 val result = withContext(Dispatchers.IO) {
                     val keyDigest = MessageDigest.getInstance("SHA-256").digest(attachment.key)
                     val fileHash = android.util.Base64.encodeToString(keyDigest, android.util.Base64.NO_WRAP)
-                    val fileExistResponse = fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, listOf(SPEECH_TO_TEXT))).execute()
+                    val fileExistResponse = fileShareRepo.isExist(FileExistReq((globalServices.userManager.getUserData()?.microToken ?: ""), fileHash, listOf(SPEECH_TO_TEXT))).execute()
 
                     if (!fileExistResponse.isSuccessful) {
                         throw Exception("File permission application failed")
                     }
 
                     val fileExistResp = fileExistResponse.body()?.data
-                    L.i { "[SpeechToTextManager]  fileExistResp:${fileExistResp}" }
 
                     if (fileExistResp?.exists == true) {
                         // Already exists, directly request speech-to-text service
@@ -81,7 +81,7 @@ class SpeechToTextManager @Inject constructor(
                             authorizeId = fileExistResp.authorizeId.toString(),
                             key = Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
                         )
-                        chatHttpClient.httpService.voiceToText(SecureSharedPrefsUtil.getToken(), requestBody)
+                        chatHttpClient.httpService.voiceToText((globalServices.userManager.getUserData()?.microToken ?: ""), requestBody)
                     } else {
                         // Does not exist, upload audio file first then request speech-to-text service
                         val urlString = fileExistResp?.url
@@ -103,7 +103,7 @@ class SpeechToTextManager @Inject constructor(
                         val fileHash2 = android.util.Base64.encodeToString(keyDigest2, android.util.Base64.NO_WRAP)
                         val uploadInfoCallResponse = fileShareRepo.uploadInfo(
                             UploadInfoReq(
-                                token = SecureSharedPrefsUtil.getToken(),
+                                token = (globalServices.userManager.getUserData()?.microToken ?: ""),
                                 numbers = listOf(SPEECH_TO_TEXT),
                                 attachmentId = fileExistResp.attachmentId,
                                 fileHash = fileHash2,
@@ -128,7 +128,7 @@ class SpeechToTextManager @Inject constructor(
                             authorizeId = authorityId.toString(),
                             key = Base64.encodeBytes(attachment.key, Base64.NO_OPTIONS)
                         )
-                        chatHttpClient.httpService.voiceToText(SecureSharedPrefsUtil.getToken(), requestBody)
+                        chatHttpClient.httpService.voiceToText((globalServices.userManager.getUserData()?.microToken ?: ""), requestBody)
                     }
                 }
 

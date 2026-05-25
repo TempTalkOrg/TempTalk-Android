@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -201,6 +202,7 @@ fun MainPageWithBottomControlView(
                                             contentDescription = "Mic",
                                             contentScale = ContentScale.Fit,
                                             modifier = Modifier
+                                                .testTag("call_btn_mic")
                                                 .clickable(
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,
@@ -251,7 +253,9 @@ fun MainPageWithBottomControlView(
                                         painter = painter,
                                         contentDescription = "Camera",
                                         contentScale = ContentScale.Fit, // 根据需要调整
-                                        modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
+                                        modifier = Modifier
+                                            .testTag("call_btn_camera")
+                                            .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
                                         {
                                             L.i { "[call] LCallActivity onClick Camera" }
                                             if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
@@ -279,6 +283,7 @@ fun MainPageWithBottomControlView(
                                         contentDescription = "Horn",
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier
+                                            .testTag("call_btn_horn")
                                             .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
                                             {
                                                 L.i { "[call] LCallActivity onClick Horn" }
@@ -319,7 +324,9 @@ fun MainPageWithBottomControlView(
                                                 painter = usersPainter,
                                                 contentDescription = "Users",
                                                 contentScale = ContentScale.Fit, // 根据需要调整
-                                                modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
+                                                modifier = Modifier
+                                                    .testTag("call_btn_users")
+                                                    .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
                                                 {
                                                     //展开参会人列表
                                                     L.i { "[call] LCallActivity onClick Users" }
@@ -358,6 +365,7 @@ fun MainPageWithBottomControlView(
 
                                 Row(
                                     modifier = Modifier
+                                        .testTag("call_btn_more")
                                         .width(48.dp)
                                         .height(48.dp)
                                         .background(

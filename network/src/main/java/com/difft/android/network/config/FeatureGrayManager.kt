@@ -2,8 +2,6 @@ package com.difft.android.network.config
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.GrayCheckRequestBody
@@ -17,7 +15,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 object FeatureGrayManager {
 
-    private const val GRAY_PREFS_KEY = "gray_map_json"
     const val FEATURE_GRAY_CALL_QUICK = "quic"
     private const val GRAY_CONFIG_UPDATE_INTERVAL: Long = 1000 * 60 * 5
 
@@ -30,9 +27,11 @@ object FeatureGrayManager {
         val userManager: UserManager
     }
 
-    private val chatHttpClient by lazy {
-        EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application).httpClient()
+    private val entryPoint by lazy {
+        EntryPointAccessors.fromApplication<EntryPoint>(com.difft.android.base.utils.application)
     }
+    private val chatHttpClient by lazy { entryPoint.httpClient() }
+    private val userManager by lazy { entryPoint.userManager }
     private val mutex = Mutex()
     private val grayCache = ConcurrentHashMap<String, Boolean>()
 
@@ -63,9 +62,9 @@ object FeatureGrayManager {
      */
     suspend fun refreshFromServer(sources: List<String>?) {
         try {
-            val token = SecureSharedPrefsUtil.getToken()
+            val token = (userManager.getUserData()?.microToken ?: "")
             if (token.isEmpty()) return
-            val resp = chatHttpClient.httpService.grayCheck(SecureSharedPrefsUtil.getToken(), GrayCheckRequestBody(sources))
+            val resp = chatHttpClient.httpService.grayCheck((userManager.getUserData()?.microToken ?: ""), GrayCheckRequestBody(sources))
 
             if (resp.status != 0) {
                 L.e { "[FeatureGrayManager] server returned status=${resp.status}" }
@@ -99,11 +98,12 @@ object FeatureGrayManager {
     }
 
     private fun saveGrayMap(map: Map<String, Boolean>) {
-        SharedPrefsUtil.putString(GRAY_PREFS_KEY, JSONObject(map).toString())
+        userManager.update { grayMapJson = JSONObject(map).toString() }
     }
 
     private fun loadGrayMap(): Map<String, Boolean> {
-        val json = SharedPrefsUtil.getString(GRAY_PREFS_KEY) ?: return emptyMap()
+        val json = userManager.getUserData()?.grayMapJson?.takeIf { it.isNotEmpty() }
+            ?: return emptyMap()
         return JSONObject(json).let { obj ->
             obj.keys().asSequence().associateWith { obj.getBoolean(it) }
         }

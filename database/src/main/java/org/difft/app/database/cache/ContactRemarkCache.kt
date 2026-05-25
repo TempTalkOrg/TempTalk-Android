@@ -100,7 +100,11 @@ object ContactRemarkCache {
      * groupMemberContactor stubs (non-friend); contactor wins on conflict. Rows
      * with gid="someGroup" are intentionally skipped — they're treated as stale
      * once the cache becomes the read source of truth.
+     *
+     * Callers MUST invoke this from a `Dispatchers.IO`-bound coroutine
+     * (e.g., wrapped in `withContext(Dispatchers.IO)` at the call site).
      */
+    @Suppress("BlockingWcdbInSuspend")
     suspend fun preload() {
         val gen = generation
         val start = System.currentTimeMillis()

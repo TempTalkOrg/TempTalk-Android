@@ -4,8 +4,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Handler
-import android.os.Looper
 import android.view.Window
 import android.view.WindowManager
 import androidx.lifecycle.LifecycleOwner
@@ -27,6 +25,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.jvm.Synchronized
 import java.lang.ref.WeakReference
 
@@ -71,8 +70,6 @@ class ProximitySensorManager(
 
     @Volatile
     private var initJob: Job? = null
-
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var appliedIsNear: Boolean? = null
@@ -143,27 +140,29 @@ class ProximitySensorManager(
 
         sensorJob?.cancel()
         sensorJob = windowScope.launch {
-            initJob?.join()
+            try {
+                initJob?.join()
 
-            val sensor = proximitySensor
-            val manager = sensorManager
-            if (sensor == null || manager == null) {
-                L.w { "[Call] ProximitySensorManager: Cannot register, sensor or manager not available" }
-                return@launch
-            }
-
-            createProximityFlow(manager, sensor)
-                .buffer(Channel.CONFLATED)
-                .collect { isNear ->
-                    updateDesiredState(isNear)
+                val sensor = proximitySensor
+                val manager = sensorManager
+                if (sensor == null || manager == null) {
+                    L.w { "[Call] ProximitySensorManager: Cannot register, sensor or manager not available" }
+                    return@launch
                 }
-        }.also { job ->
-            job.invokeOnCompletion { cause ->
-                isRegistered = false
-                if (cause == null || cause is CancellationException) {
-                    L.i { "[Call] ProximitySensorManager: Sensor job completed (normal)" }
-                } else {
-                    L.e { "[Call] ProximitySensorManager: Sensor job failed: ${cause.message}" }
+
+                createProximityFlow(manager, sensor)
+                    .buffer(Channel.CONFLATED)
+                    .collect { isNear ->
+                        updateDesiredState(isNear)
+                    }
+            } catch (e: CancellationException) {
+                L.i { "[Call] ProximitySensorManager: Sensor job cancelled" }
+                throw e
+            } catch (e: Exception) {
+                L.e { "[Call] ProximitySensorManager: Sensor job failed: ${e.stackTraceToString()}" }
+            } finally {
+                if (sensorJob === coroutineContext[Job]) {
+                    isRegistered = false
                 }
             }
         }
@@ -232,7 +231,7 @@ class ProximitySensorManager(
             }
         }
 
-        val registerAction = Runnable {
+        withContext(Dispatchers.Main.immediate) {
             try {
                 val success = manager.registerListener(
                     listener,
@@ -244,28 +243,16 @@ class ProximitySensorManager(
                     close()
                 }
             } catch (e: Exception) {
-                L.e { "[Call] ProximitySensorManager: Failed to register sensor: ${e.message}" }
+                L.e { "[Call] ProximitySensorManager: Failed to register sensor: ${e.stackTraceToString()}" }
                 close()
             }
         }
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            registerAction.run()
-        } else {
-            mainHandler.post(registerAction)
-        }
 
         awaitClose {
-            val unregisterAction = Runnable {
-                try {
-                    manager.unregisterListener(listener)
-                } catch (e: Exception) {
-                    L.e { "[Call] ProximitySensorManager: Failed to unregister sensor: ${e.message}" }
-                }
-            }
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                unregisterAction.run()
-            } else {
-                mainHandler.post(unregisterAction)
+            try {
+                manager.unregisterListener(listener)
+            } catch (e: Exception) {
+                L.e { "[Call] ProximitySensorManager: Failed to unregister sensor: ${e.stackTraceToString()}" }
             }
         }
     }
@@ -293,7 +280,7 @@ class ProximitySensorManager(
             }
             L.d { "[Call] ProximitySensorManager: Window disabled for touch, brightness dimmed" }
         } catch (e: Exception) {
-            L.e { "[Call] ProximitySensorManager: Failed to disable window: ${e.message}" }
+            L.e { "[Call] ProximitySensorManager: Failed to disable window: ${e.stackTraceToString()}" }
         }
     }
 
@@ -317,7 +304,7 @@ class ProximitySensorManager(
             }
             L.d { "[Call] ProximitySensorManager: Window enabled for touch, brightness restored" }
         } catch (e: Exception) {
-            L.e { "[Call] ProximitySensorManager: Failed to enable window: ${e.message}" }
+            L.e { "[Call] ProximitySensorManager: Failed to enable window: ${e.stackTraceToString()}" }
         }
     }
 
@@ -326,8 +313,7 @@ class ProximitySensorManager(
         lastIsNear = null
         wasScreenSharingActive = false
         desiredIsNearFlow.value = null
-        // 立即恢复，避免 RESUMED 之外无法生效
-        mainHandler.post {
+        windowScope.launch(Dispatchers.Main.immediate) {
             enableWindowForTouchAndKeepScreenOn()
         }
     }

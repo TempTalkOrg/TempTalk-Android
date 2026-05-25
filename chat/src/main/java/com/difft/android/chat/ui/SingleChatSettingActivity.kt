@@ -12,7 +12,6 @@ import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import org.difft.app.database.getCommonGroupsCount
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -299,7 +298,7 @@ class SingleChatSettingActivity : BaseActivity() {
     }
 
     val token: String by lazy {
-        SecureSharedPrefsUtil.getToken()
+        (userManager.getUserData()?.microToken ?: "")
     }
 
     private fun showRemoveDialog() {

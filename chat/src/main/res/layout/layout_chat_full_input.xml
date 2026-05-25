@@ -49,6 +49,7 @@
         android:background="@android:color/transparent"
         android:gravity="start|top"
         android:hint="@string/chat_message_input_hint"
+        android:imeOptions="flagNoExtractUi"
         android:padding="12dp"
         android:textColor="@color/t.primary"
         android:textColorHint="@color/t.disable"

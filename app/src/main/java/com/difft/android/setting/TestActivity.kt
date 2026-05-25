@@ -34,7 +34,7 @@ class TestActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 TestScreen(
                     onNavigateBack = { finish() },
                     onCreateGroups = { memberIds, count ->

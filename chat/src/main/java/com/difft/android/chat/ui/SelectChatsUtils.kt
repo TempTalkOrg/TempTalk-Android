@@ -19,7 +19,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
@@ -49,6 +48,7 @@ import com.difft.android.chat.setting.archive.MessageArchiveManager
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.ForwardNoticeData
@@ -172,11 +172,17 @@ class SelectChatsUtils @Inject constructor(
         // messages were forwarded away. Share callers (file / plain text share) pass null; no
         // notice is sent.
         sourceConversation: For? = null,
-        // Authors of user-selected messages (NOT de-duplicated, preserving selection order).
-        // One entry per outer/selected message; a combined-forward message contributes only
-        // its outer author, not the inner/nested authors. Used as the authoritative source
-        // for notice count and authors, bypassing flatMap ambiguity on nested forwards.
+        // Authors of user-selected messages. PRD §5.3.4: deduped and priority-sorted by the
+        // caller via NoticeAggregator (CF sender first → count desc → ts desc → authorId asc).
+        // Used as the authoritative source for the notice's author display list.
         sourceAuthorIds: List<String>? = null,
+        // PRD §5.3: explicit selected-message count (CF bubble counts as 1). When null,
+        // falls back to sourceAuthorIds.size — only safe when caller didn't dedup (e.g.,
+        // single-message paths where size == 1).
+        messageCount: Int? = null,
+        // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN keeps
+        // legacy share/external entries untouched; Phase 4 dispatch sites populate explicitly.
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) {
         val fragment = ChatSelectBottomSheetFragment.newInstance(
             isContactOnly = false,
@@ -201,6 +207,8 @@ class SelectChatsUtils @Inject constructor(
                 scene,
                 sourceConversation,
                 sourceAuthorIds,
+                messageCount,
+                combinedForwardMode,
                 scope = fragment.lifecycleScope,
                 onDismiss = { fragment.dismiss() }
             )
@@ -336,6 +344,8 @@ class SelectChatsUtils @Inject constructor(
         scene: ForwardNoticeData.Scene? = null,
         sourceConversation: For? = null,
         sourceAuthorIds: List<String>? = null,
+        messageCount: Int? = null,
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
         scope: CoroutineScope,
         onDismiss: () -> Unit
     ) {
@@ -413,12 +423,27 @@ class SelectChatsUtils @Inject constructor(
                             confidentialMode = mode,
                             scene = resolvedScene,
                             sourceConversation = sourceConversation,
-                            sourceAuthorIds = sourceAuthorIds
+                            sourceAuthorIds = sourceAuthorIds,
+                            messageCount = messageCount,
+                            combinedForwardMode = combinedForwardMode,
                         )
                     }
                 } else {
                     sendTasks.add {
                         sendTextPush(context, content, chatsContact.id, chatsContact.isGroup)
+                        // PRD §5: partial-text forward emits SINGLE notice (mirrors partial copy).
+                        // Propagate combinedForwardMode the caller computed (UNKNOWN for main-conv
+                        // partial-select, SUB_COMBINED_FORWARD for CF-detail partial-select).
+                        if (sourceConversation != null && !sourceAuthorIds.isNullOrEmpty()) {
+                            sendForwardNotice(
+                                sourceConversation,
+                                emptyList(),
+                                ForwardNoticeData.Scene.SINGLE,
+                                sourceAuthorIds,
+                                messageCount,
+                                combinedForwardMode,
+                            )
+                        }
                     }
                 }
 
@@ -463,8 +488,12 @@ class SelectChatsUtils @Inject constructor(
         forwardContexts: List<ForwardContext>? = null,
         // Source conversation where the user initiated save-to-notes. Pass null to skip the notice.
         sourceConversation: For? = null,
-        // Authors of the user-selected messages for the notice. See sendForwardNotice.
-        sourceAuthorIds: List<String>? = null
+        // Authors of the user-selected messages (deduped/priority-sorted by caller). See sendForwardNotice.
+        sourceAuthorIds: List<String>? = null,
+        // PRD §5.3: explicit selected-message count (CF as 1). Null → falls back to sourceAuthorIds.size.
+        messageCount: Int? = null,
+        // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN.
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) {
         // 显示全局 WaitDialog，设置为不可取消
         showWaitDialog(context)
@@ -504,7 +533,9 @@ class SelectChatsUtils @Inject constructor(
                             sourceConversation,
                             forwardContexts,
                             ForwardNoticeData.Scene.SAVE_TO_NOTES,
-                            sourceAuthorIds
+                            sourceAuthorIds,
+                            messageCount,
+                            combinedForwardMode,
                         )
                     } else {
                         L.w { "[ForwardNotice] saveToNotes called without sourceConversation, skip notice" }
@@ -569,7 +600,9 @@ class SelectChatsUtils @Inject constructor(
         confidentialMode: Int? = null,
         scene: ForwardNoticeData.Scene,
         sourceConversation: For? = null,   // Source conversation (where the forwarded messages originally lived); notice is posted here.
-        sourceAuthorIds: List<String>? = null   // Authors of the user-selected messages (outer, not nested). Used for notice count and authors.
+        sourceAuthorIds: List<String>? = null,   // Deduped/priority-sorted authors of the user-selected messages (outer, not nested).
+        messageCount: Int? = null,   // PRD §5.3: explicit selected-message count; null falls back to sourceAuthorIds.size.
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) = coroutineScope {
         // 使用 async 等待所有内部协程完成
         val deferredTasks = forwardContexts.map { forwardContext ->
@@ -598,7 +631,7 @@ class SelectChatsUtils @Inject constructor(
         // "someone forwarded your messages away". This mirrors screenshot-notification semantics.
         // NOT to the forward target — target-side already sees the forwarded messages themselves.
         if (sourceConversation != null) {
-            sendForwardNotice(sourceConversation, forwardContexts, scene, sourceAuthorIds)
+            sendForwardNotice(sourceConversation, forwardContexts, scene, sourceAuthorIds, messageCount, combinedForwardMode)
         } else {
             L.w { "[ForwardNotice] sourceConversation missing, skip notice (non-forward share or caller bug?)" }
         }
@@ -623,19 +656,26 @@ class SelectChatsUtils @Inject constructor(
         sourceConversation: For,   // Source conversation; the notice is posted here.
         forwardedContexts: List<ForwardContext>,
         scene: ForwardNoticeData.Scene,
-        // Preferred authoritative author list from the caller: one entry per user-selected
-        // (outer) message, NOT de-duplicated. When provided, this is used directly:
-        //   count   = size (selected message count, treats a combined-forward as 1)
-        //   authors = distinct() (for rendering)
+        // Preferred authoritative author list from the caller. PRD §5.3.4: callers SHOULD
+        // pass a deduped + priority-sorted list (NoticeAggregator.computeSortedSourceAuthorIds...).
+        // When non-null, used directly for the notice's authors block.
         // When null, fall back to the old flat-map aggregation over top-level forwards
         // (may incorrectly expand a combined-forward message into its nested entries).
-        sourceAuthorIds: List<String>? = null
+        sourceAuthorIds: List<String>? = null,
+        // PRD §5.3: explicit selected-message count (treats a CF bubble as 1). When provided
+        // alongside sourceAuthorIds, this is authoritative — required because the author list
+        // is deduped, so `.size` no longer equals the selected count. When null, falls back
+        // to `sourceAuthorIds.size` (safe only for single-message callers where size == 1).
+        messageCount: Int? = null,
+        // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN matches
+        // pre-PRD callers; Phase 4 dispatch sites populate explicitly.
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) {
         val authorIds: List<String>
         val totalCount: Int
         if (sourceAuthorIds != null) {
             authorIds = sourceAuthorIds.distinct()
-            totalCount = sourceAuthorIds.size
+            totalCount = messageCount ?: sourceAuthorIds.size
         } else {
             authorIds = forwardedContexts
                 .flatMap { it.forwards.orEmpty() }
@@ -655,14 +695,15 @@ class SelectChatsUtils @Inject constructor(
         L.i {
             "[ForwardNotice] enqueue notice job: sourceConversation=${sourceConversation.id}, " +
                 "isGroup=${sourceConversation is For.Group}, scene=$scene, " +
-                "authors=${authorIds.size}, count=$totalCount, explicitAuthors=${sourceAuthorIds != null}"
+                "authors=${authorIds.size}, count=$totalCount, mode=$combinedForwardMode, " +
+                "explicitAuthors=${sourceAuthorIds != null}"
         }
 
         ApplicationDependencies.getJobManager().add(
             pushForwardNoticeSendJobFactory.create(
                 null,
                 sourceConversation,
-                ForwardNoticeData(scene, authorIds, totalCount)
+                ForwardNoticeData(scene, authorIds, totalCount, combinedForwardMode)
             )
         )
     }
@@ -763,7 +804,7 @@ class SelectChatsUtils @Inject constructor(
             attachment.key?.let {
                 val digest = MessageDigest.getInstance("SHA-256").digest(it)
                 val fileHash = android.util.Base64.encodeToString(digest, android.util.Base64.NO_WRAP)
-                val response = fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, recipientIds))
+                val response = fileShareRepo.isExist(FileExistReq((globalServices.userManager.getUserData()?.microToken ?: ""), fileHash, recipientIds))
                 val fileExistResp = response.execute().body()?.data
                 if (fileExistResp?.exists == true) {
                     forwardContext?.forwards?.forEach { forward ->
@@ -974,7 +1015,7 @@ class SelectChatsUtils @Inject constructor(
     ): BaseResponse<GetConversationSetResponseBody> {
         return try {
             activity.getEntryPoint().getHttpClient().httpService
-                .fetchGetConversationSet(SecureSharedPrefsUtil.getBasicAuth(), GetConversationSetRequestBody(conversations))
+                .fetchGetConversationSet((globalServices.userManager.getUserData()?.baseAuth ?: ""), GetConversationSetRequestBody(conversations))
         } catch (e: Exception) {
             L.e { "[SelectChatsUtils] getConversationConfigs error: ${e.stackTraceToString()}" }
             throw e

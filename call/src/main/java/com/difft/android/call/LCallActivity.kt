@@ -7,10 +7,9 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import com.difft.android.base.call.CallRole
@@ -43,9 +42,11 @@ import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.ScreenDeviceUtil
+import com.difft.android.call.util.ViewUtil
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
 
 
@@ -142,21 +143,20 @@ class LCallActivity : AppCompatActivity() {
 
     internal val callbackId = "LCallActivity_${System.identityHashCode(this)}"
 
-    internal val viewModel: LCallViewModel by viewModelByFactory {
-        LCallViewModel(
-            e2eeEnable = true,
-            application = application,
-            callIntent = callIntent,
-            callConfig = callConfig,
-            callRole = callRole,
-            initialVoicePreset = VoicePreset.fromSdkKey(
-                userManager.getUserData()?.callVoiceChangerPreset
-                    ?: VoicePreset.ORIGINAL.sdkKey
-            ),
-        )
-    }
-
-    internal val handler = Handler(Looper.getMainLooper())
+    internal val viewModel: LCallViewModel by viewModels(extrasProducer = {
+        defaultViewModelCreationExtras.withCreationCallback<LCallViewModelFactory> {
+            it.create(
+                e2eeEnable = true,
+                callIntent = callIntent,
+                callConfig = callConfig,
+                callRole = callRole,
+                initialVoicePreset = VoicePreset.fromSdkKey(
+                    userManager.getUserData()?.callVoiceChangerPreset
+                        ?: VoicePreset.ORIGINAL.sdkKey
+                ),
+            )
+        }
+    })
 
     /**
      * Timestamp when the window last lost focus.
@@ -229,7 +229,6 @@ class LCallActivity : AppCompatActivity() {
         callCleanupManager?.cleanup(
             lifecycleObserver = callLifecycleObserver,
             dialogManager = callDialogManager,
-            handler = handler,
             proximitySensorManager = proximitySensorManager,
             pictureInPictureManager = pictureInPictureManager,
             callActivityBroadcastReceiver = callActivityBroadcastReceiver,
@@ -316,6 +315,7 @@ class LCallActivity : AppCompatActivity() {
             viewModel.callUiController.setRequestPermissionStatus(false)
         }
         updateScreenshotListeningState()
+        ViewUtil.hideNavigationBar(window)
     }
 
     @RequiresApi(Build.VERSION_CODES.O)

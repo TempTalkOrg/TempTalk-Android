@@ -30,6 +30,10 @@ class ChativeHttpClient(
         fun provideAuth(): String?
     }
 
+    // Retrofit converter Gson — intentionally NOT the chat-domain singleton:
+    // constructed once per @Singleton ChativeHttpClient (no GC pressure), network DTOs
+    // need no For/ByteString adapters, and serializeNulls=true (signalApi protocol-defensive,
+    // Match Jackson's default null-field serialization) must not leak globally.
     private val gson = if (serializeNulls) GsonBuilder().serializeNulls().create() else Gson()
 
     private val customConnectionSpec = ConnectionSpec.Builder(ConnectionSpec.RESTRICTED_TLS)

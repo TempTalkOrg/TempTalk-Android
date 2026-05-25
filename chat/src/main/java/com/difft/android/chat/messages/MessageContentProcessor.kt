@@ -30,6 +30,7 @@ import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
+import com.difft.android.websocket.api.util.toKotlinDataOrNull
 import com.difft.android.websocket.api.util.toKotlinEnum
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
@@ -67,6 +68,8 @@ import javax.inject.Singleton
  * Takes data about a decrypted message, transforms it into user-presentable data, and writes that
  * data to our data stores.
  */
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class MessageContentProcessor @Inject constructor(
     @param:ApplicationContext
@@ -84,9 +87,8 @@ class MessageContentProcessor @Inject constructor(
     private val localMessageCreator: LocalMessageCreator,
     private val groupCryptoRepo: com.difft.android.chat.crypto.GroupCryptoRepo,
     private val groupUtil: com.difft.android.chat.group.GroupUtil,
+    private val gson: Gson,
 ) {
-
-    private var tag: String = ""
 
     /**
      * Given the details about a message decryption, this will insert the proper message content into
@@ -98,23 +100,23 @@ class MessageContentProcessor @Inject constructor(
      */
     suspend fun process(content: SignalServiceDataClass, tag: String): Message? {
         L.i { "[Message][${tag}] process message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
-        this.tag = tag
-        return handleMessage(content)
+        return handleMessage(content, tag)
     }
 
-    private suspend fun handleMessage(content: SignalServiceDataClass): Message? {
+    private suspend fun handleMessage(content: SignalServiceDataClass, tag: String): Message? {
         if (content.signalCustomNotifyMessage != null) {
-            handleNotifyMessage(content)
+            handleNotifyMessage(content, tag)
         } else if (content.signalServiceContent != null) {
             val serviceContent: SignalServiceProtos.Content = content.signalServiceContent ?: return null
             if (serviceContent.hasGroupKeyMessage()) {
                 return handleGroupKeyMessage(content)
             } else if (serviceContent.hasNotifyMessage()) {
-                return handleClientNotifyMessage(content)
+                return handleClientNotifyMessage(content, tag)
             } else if (serviceContent.hasDataMessage()) {
                 return handleDataMessage(
                     content,
-                    isSyncMessage = false
+                    isSyncMessage = false,
+                    tag = tag,
                 )
             } else if (serviceContent.hasSyncMessage()) {
                 if (content.senderId != globalServices.myId) {
@@ -124,7 +126,8 @@ class MessageContentProcessor @Inject constructor(
                 if (serviceContent.syncMessage.hasSent()) {
                     return handleDataMessage(
                         content,
-                        isSyncMessage = true
+                        isSyncMessage = true,
+                        tag = tag,
                     )
                 } else if (serviceContent.syncMessage.readCount > 0) {
                     L.i { "[Message][${tag}] process sync read message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
@@ -156,6 +159,12 @@ class MessageContentProcessor @Inject constructor(
                             messageStore.updateMessageReadTime(forWhat.id, firstReadMessage.timestamp)
                         }
                     }
+                } else if (serviceContent.syncMessage.hasActivityNoticeSync()) {
+                    // Place ahead of forwardNoticeSync so that if both fields are
+                    // mistakenly populated, the new generic channel wins. In normal
+                    // operation only one is set per envelope by the sender.
+                    L.i { "[Message][${tag}] process activity notice sync -> timestamp:${content.signalServiceEnvelope.timestamp}" }
+                    return handleActivityNoticeSync(content, serviceContent.syncMessage.activityNoticeSync, tag)
                 } else if (serviceContent.syncMessage.hasForwardNoticeSync()) {
                     L.i { "[Message][${tag}] process forward notice sync -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                     return handleForwardNoticeSync(content, serviceContent.syncMessage.forwardNoticeSync, tag)
@@ -167,6 +176,17 @@ class MessageContentProcessor @Inject constructor(
                 L.i { "[Message][${tag}] process call message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 LCallManager.removePendingMessage(content.signalServiceEnvelope.source, content.signalServiceEnvelope.timestamp.toString())
                 lCallManagerProvider.get().handleCallMessage(content)
+            } else if (serviceContent.hasActivityNotice()) {
+                // Place ahead of forwardNotice — same rationale as the sync branch
+                // above: prefer the generic channel if both fields are populated.
+                L.i { "[Message][${tag}] process activity notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
+                return handleActivityNoticeMessage(
+                    content = content,
+                    activityNotice = serviceContent.activityNotice,
+                    operatorId = content.signalServiceEnvelope.source,
+                    conversation = content.conversation,
+                    tag = tag
+                )
             } else if (serviceContent.hasForwardNotice()) {
                 L.i { "[Message][${tag}] process forward notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 return handleForwardNoticeMessage(
@@ -189,8 +209,9 @@ class MessageContentProcessor @Inject constructor(
      * Delegates the "resolve names → render showContent → persist NotifyMessage"
      * pipeline to [LocalMessageCreator.createForwardNoticeMessage].
      *
-     * Uses the function parameter [tag] for logging — `this.tag` is a mutable
-     * `var` and may be overwritten by a concurrent call on the @Singleton.
+     * Uses the function parameter [tag] for logging — this class is a
+     * @Singleton, so logging through a parameter (vs. a class-level field)
+     * keeps concurrent callers' tags from racing.
      */
     private suspend fun handleForwardNoticeMessage(
         content: SignalServiceDataClass,
@@ -235,7 +256,8 @@ class MessageContentProcessor @Inject constructor(
             // Protocol-violation degrade: coerce to >= 1 so plurals always renders.
             // Do NOT raise to authorIds.size — a peer could craft a payload with
             // messageCount=1 and 100 authors to inflate the displayed count.
-            messageCount = maxOf(1, forwardNotice.messageCount)
+            messageCount = maxOf(1, forwardNotice.messageCount),
+            combinedForwardMode = forwardNotice.combinedForwardMode.toKotlinEnum(),
         )
         L.i {
             "[Message][${tag}] handle forward notice -> operator=$operatorId, " +
@@ -284,9 +306,99 @@ class MessageContentProcessor @Inject constructor(
         )
     }
 
+    /**
+     * Handle a top-level `Content.activityNotice` (primary path: from peer / group /
+     * self-as-NTS). Self-sync uses [handleActivityNoticeSync].
+     *
+     * Mirrors [handleForwardNoticeMessage] 1:1; differences:
+     *   - Parses payload via [toKotlinDataOrNull] so unknown / TYPEDATA_NOT_SET
+     *     oneof cases drop silently with a warn log (forward-compat: future activity
+     *     types on the wire that this client doesn't know about must NOT render as
+     *     an unrelated type — design doc §3.1 rule 1+2).
+     *   - Delegates to [LocalMessageCreator.createActivityNoticeMessage] for the
+     *     "resolve names → render showContent → persist NotifyMessage" pipeline.
+     */
+    private suspend fun handleActivityNoticeMessage(
+        content: SignalServiceDataClass,
+        activityNotice: SignalServiceProtos.MessageActivityNotice,
+        operatorId: String,
+        conversation: For,
+        tag: String
+    ): Message? {
+        val envelop = content.signalServiceEnvelope
+
+        val noticeData = activityNotice.toKotlinDataOrNull()
+            ?: run {
+                L.w {
+                    "[Message][${tag}] activityNotice unknown/unset typeData_case=${activityNotice.typeDataCase}, drop"
+                }
+                return null
+            }
+
+        // Cross-conversation injection guard (group case): if resolved conversation
+        // is a group, verify the envelope sender is actually a member. Without this,
+        // a peer could craft payload.conversation.groupId pointing at any group the
+        // victim is in and inject a fake "X copied your messages" system message via
+        // a 1v1 envelope. Same defense as forward notice (PR #683).
+        if (conversation is For.Group) {
+            val senderId = envelop.source
+            if (!wcdb.isGroupMember(conversation.id, senderId)) {
+                L.w {
+                    "[Message][${tag}] activityNotice group=${conversation.id} " +
+                        "envelope.source=$senderId is NOT a member of that group, " +
+                        "drop (cross-conversation injection attempt)"
+                }
+                return null
+            }
+        }
+
+        L.i {
+            "[Message][${tag}] handle activity notice -> operator=$operatorId, " +
+                "conversation=${conversation.id}, type=${noticeData.type}, " +
+                "count=${noticeData.messageCount}, authors=${noticeData.sourceAuthorIds.size}"
+        }
+        return localMessageCreator.createActivityNoticeMessage(
+            operatorId = operatorId,
+            forWhat = conversation,
+            noticeData = noticeData,
+            systemShowTimestamp = envelop.systemShowTimestamp.takeIf { it > 0 } ?: envelop.timestamp,
+            timestamp = envelop.timestamp,
+            sourceDevice = envelop.sourceDevice
+        )
+    }
+
+    /**
+     * Handle a self-sync `SyncMessage.activityNoticeSync`. The outer dispatcher has
+     * already verified `senderId == myId`. Mirrors [handleForwardNoticeSync]:
+     * drops with a warn log if `conversation` is missing/empty, otherwise delegates
+     * to [handleActivityNoticeMessage] with operatorId=myId.
+     */
+    private suspend fun handleActivityNoticeSync(
+        content: SignalServiceDataClass,
+        activityNotice: SignalServiceProtos.MessageActivityNotice,
+        tag: String
+    ): Message? {
+        val conv = activityNotice.takeIf { it.hasConversation() }?.conversation
+        val hasValidConv = conv != null && (
+            conv.hasGroupId() || (conv.hasNumber() && conv.number.isNotEmpty())
+        )
+        if (!hasValidConv) {
+            L.w { "[Message][${tag}] activityNoticeSync missing or empty conversation, drop" }
+            return null
+        }
+        return handleActivityNoticeMessage(
+            content = content,
+            activityNotice = activityNotice,
+            operatorId = globalServices.myId,
+            conversation = content.conversation,
+            tag = tag
+        )
+    }
+
     private suspend fun handleDataMessage(
         content: SignalServiceDataClass,
-        isSyncMessage: Boolean
+        isSyncMessage: Boolean,
+        tag: String,
     ): Message? {
         val (envelop, _, _) = content
         val message = if (isSyncMessage) content.signalServiceContent?.syncMessage?.sent?.message else content.signalServiceContent?.dataMessage
@@ -324,7 +436,8 @@ class MessageContentProcessor @Inject constructor(
             message,
             fromWho,
             body,
-            isSyncMessage
+            isSyncMessage,
+            tag,
         )
     }
 
@@ -334,6 +447,7 @@ class MessageContentProcessor @Inject constructor(
         fromWho: For,
         messageBody: String,
         isSyncMessage: Boolean,
+        tag: String,
     ): Message? {
         L.i {
             "[Message][${tag}] handle text message -> " +
@@ -572,7 +686,7 @@ class MessageContentProcessor @Inject constructor(
             var receiverIds: String? = null
             if (content.senderId == globalServices.myId && content.conversation is For.Group) {
                 val receiverIdList = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.gid.eq(content.conversation.id)).map { it.id } - globalServices.myId
-                receiverIds = globalServices.gson.toJson(receiverIdList)
+                receiverIds = gson.toJson(receiverIdList)
             }
 
             if (content.senderId != globalServices.myId) {
@@ -619,7 +733,7 @@ class MessageContentProcessor @Inject constructor(
         return null // Not displayed in UI
     }
 
-    private suspend fun handleClientNotifyMessage(signalServiceDataClass: SignalServiceDataClass): Message? {
+    private suspend fun handleClientNotifyMessage(signalServiceDataClass: SignalServiceDataClass, tag: String): Message? {
         val notifyMessage = signalServiceDataClass.signalServiceContent?.notifyMessage
         L.i { "[Message][${tag}] handleClientNotifyMessage -> timestamp:${signalServiceDataClass.messageId}" }
         if (notifyMessage != null) {
@@ -628,7 +742,8 @@ class MessageContentProcessor @Inject constructor(
     }
 
     private suspend fun handleNotifyMessage(
-        content: SignalServiceDataClass
+        content: SignalServiceDataClass,
+        tag: String,
     ) {
         val (envelop, _, notifyMessageContent) = content
         if (notifyMessageContent != null) {
@@ -649,7 +764,7 @@ class MessageContentProcessor @Inject constructor(
                 // Type 4: muteStatus, blockStatus, confidentialMode
                 message.data?.conversation?.let {
                     kotlin.runCatching {
-                        val notifyConversation = Gson().fromJson(it.toString(), NotifyConversation::class.java)
+                        val notifyConversation = gson.fromJson(it.toString(), NotifyConversation::class.java)
                         // 批量更新配置到数据库
                         dbRoomStore.updateConversationSettings(
                             roomId = notifyConversation.conversation,

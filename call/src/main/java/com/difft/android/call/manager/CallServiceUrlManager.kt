@@ -1,26 +1,22 @@
 package com.difft.android.call.manager
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.core.content.edit
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.difft.android.base.call.ServiceUrlDataV2
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.storage.SecureConfigStore
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -36,40 +32,18 @@ import javax.inject.Singleton
  */
 @Singleton
 class CallServiceUrlManager @Inject constructor(
-    @ApplicationContext private val appContext: Context,
+    @param:ApplicationContext private val appContext: Context,
+    @ChativeHttpClientModule.Call private val callHttpClient: dagger.Lazy<ChativeHttpClient>,
+    private val secureConfigStore: SecureConfigStore,
 ) {
 
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        @ChativeHttpClientModule.Call
-        fun callHttpClient(): ChativeHttpClient
-    }
-
     private val callHttpService: LCallHttpService by lazy {
-        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance)
-            .callHttpClient()
-            .getService(LCallHttpService::class.java)
+        callHttpClient.get().getService(LCallHttpService::class.java)
     }
 
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
-    }
-
-    private val prefs: SharedPreferences by lazy {
-        val start = System.currentTimeMillis()
-        EncryptedSharedPreferences.create(
-            appContext,
-            PREFS_FILE_NAME,
-            MasterKey.Builder(appContext)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        ).also {
-            L.i { "[Call] CallServiceUrlManager EncryptedSharedPreferences init took ${System.currentTimeMillis() - start}ms" }
-        }
     }
 
     private val lock = Any()
@@ -89,10 +63,25 @@ class CallServiceUrlManager @Inject constructor(
 
     private val foregroundRefreshMinIntervalMs = 20 * 60 * 1000L
 
+    /**
+     * Loads the persisted [CallServiceUrlDiskState] from [SecureConfigStore] into the
+     * in-memory cache. Must be invoked under [lock].
+     *
+     * **`runBlocking` bridge rationale**: the public surface of this class includes
+     * non-suspend accessors ([getCachedServiceUrls]) and sync `synchronized(lock) { ... }`
+     * blocks inside suspend methods. The DataStore is pre-warmed by `StoragePreloader`
+     * at application startup (issue #725 Task 2), so `.first()` returns from the
+     * in-memory cache without blocking on disk I/O. The bridge sits inside an
+     * already-IO-bound caller (every public method dispatches to [Dispatchers.IO]
+     * before touching this method) — see issue #725 design §3.7.
+     */
+    @Suppress("BanRunBlockingOutsideTests")
     private fun loadFromDiskLocked() {
         if (loadedFromDisk) return
-        val raw = prefs.getString(PREFS_KEY_STATE, null)
-        memState = if (raw.isNullOrBlank()) {
+        val raw = runBlocking(Dispatchers.IO) {
+            secureConfigStore.callServiceUrlStateV3Flow.first()
+        }
+        memState = if (raw.isBlank()) {
             null
         } else {
             try {
@@ -105,8 +94,16 @@ class CallServiceUrlManager @Inject constructor(
         loadedFromDisk = true
     }
 
+    /**
+     * Persists [state] via [SecureConfigStore] and updates [memState]. Must be invoked
+     * under [lock]. Same `runBlocking` bridge rationale as [loadFromDiskLocked].
+     */
+    @Suppress("BanRunBlockingOutsideTests")
     private fun persistLocked(state: CallServiceUrlDiskState) {
-        prefs.edit { putString(PREFS_KEY_STATE, json.encodeToString(state)) }
+        val encoded = json.encodeToString(state)
+        runBlocking(Dispatchers.IO) {
+            secureConfigStore.saveCallServiceUrlStateV3(encoded)
+        }
         memState = state
     }
 
@@ -175,10 +172,7 @@ class CallServiceUrlManager @Inject constructor(
     /**
      * Triggered on app foreground from [ProcessLifecycleOwner] / [util.AppForegroundObserver],
      * i.e. on the **main thread**. The whole body is dispatched to [Dispatchers.IO] because the
-     * throttle check itself touches disk: [loadFromDiskLocked] lazily initializes
-     * [EncryptedSharedPreferences], which performs Android Keystore load + AES256_GCM master key
-     * derivation on first access (see the init-took log below) and subsequently a GCM-decrypted
-     * `prefs.getString(...)`. Keeping this off main avoids cold-start jank / potential ANR.
+     * throttle check itself touches the DataStore on first access via [loadFromDiskLocked].
      */
     fun onAppForegrounded() {
         appScope.launch(Dispatchers.IO) {
@@ -255,7 +249,7 @@ class CallServiceUrlManager @Inject constructor(
     }
 
     private suspend fun doFetchAndCache(): List<String> {
-        val token = SecureSharedPrefsUtil.getToken()
+        val token = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (token.isEmpty()) {
             return synchronized(lock) {
                 loadFromDiskLocked()
@@ -320,9 +314,6 @@ class CallServiceUrlManager @Inject constructor(
     }
 
     companion object {
-        private const val PREFS_FILE_NAME = "secure_global_config"
-        private const val PREFS_KEY_STATE = "call_service_url_state_v3"
-
         private const val FAILURE_REFRESH_MIN_INTERVAL_MS = 30_000L
         private const val COALESCE_WINDOW_MS = 5_000L
         private val FALLBACK_HARDCODED_URLS = emptyList<String>()

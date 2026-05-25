@@ -80,11 +80,9 @@ open class PushReactionSendJob @AssistedInject constructor(
             }
             return
         }
-        // Defensive monotonic timestamp: NTP/user clock corrections could push wall-clock
-        // backwards, which would cause DBMessageStore.updateMessageReaction's LWW guard
-        // (reaction.originTimestamp > existing.timeStamp) to silently drop the rollback.
-        val now = System.currentTimeMillis()
-        val rollbackTimestamp = maxOf(now, original.originTimestamp + 1)
+        // +1 (not maxOf(now, +1)) so rollback wins LWW against the original optimistic
+        // write but loses to any newer user action that's already in DB.
+        val rollbackTimestamp = original.originTimestamp + 1
         val rollback = Reaction(
             emoji = original.emoji,
             uid = original.uid,
@@ -135,7 +133,7 @@ open class PushReactionSendJob @AssistedInject constructor(
 
     companion object {
         const val KEY = "PushReactionSendJob"
-        private const val KEY_MESSAGE_OUT = "message_out"
+        internal const val KEY_MESSAGE_OUT = "message_out"
         private const val LIFESPAN_DAYS = 7L
 
         private fun buildParameters(textMessage: TextMessage): Parameters {

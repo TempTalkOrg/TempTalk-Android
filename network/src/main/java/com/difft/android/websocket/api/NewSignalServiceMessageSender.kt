@@ -841,4 +841,103 @@ class NewSignalServiceMessageSender @Inject constructor(
             forwardNoticeSync = message
         }
     }
+
+    /**
+     * Sends a [MessageActivityNotice] proto (Phase 1 schema; current type: COPY).
+     * Mirrors [sendForwardNoticeMessage] 1:1 — primary send + optional syncContent
+     * piggyback for 1v1-to-other so all of my own devices see the notice with the
+     * same `systemShowTimestamp` (avoids cross-device drift; see PR #705 fix).
+     *
+     * sendTimestamp/sendSyncToSelf/syncContent semantics are identical to
+     * forward notice; see that function's doc for the three-way alignment rationale.
+     */
+    suspend fun sendActivityNoticeMessage(
+        recipient: For,
+        room: For,
+        message: SignalServiceProtos.MessageActivityNotice,
+        sendSyncToSelf: Boolean,
+        sendTimestamp: Long
+    ): SendMessageResult {
+        L.i { "[Message] [$sendTimestamp] Sending an activity notice message to ${recipient.id} (sync=$sendSyncToSelf)" }
+        val primaryContent = contentCreator.createFrom(message)
+
+        val syncContent: String? = if (sendSyncToSelf && recipient is For.Account) {
+            if (conversationManager.hasPublicKeyInfoData(room).not()) {
+                L.i { "[Message] sendActivityNoticeMessage: updating public key info for room ${room.id}" }
+                conversationManager.updatePublicKeyInfoData(room)
+            }
+            generateActivityNoticeSyncContent(message, room)
+        } else {
+            null
+        }
+
+        val result = sendMessage(
+            recipient,
+            room,
+            sendTimestamp,
+            primaryContent,
+            false,
+            Optional.empty(),
+            Optional.empty(),
+            null,
+            syncContent
+        )
+        L.i { "[Message] sendActivityNoticeMessage success=${result.isSuccess()} syncCarried=${syncContent != null}" }
+        return result
+    }
+
+    /**
+     * Build the encrypted base64 `syncContent` payload for an activity notice —
+     * mirrors [generateForwardNoticeSyncContent] but wraps
+     * `Content.syncMessage.activityNoticeSync`.
+     */
+    private suspend fun generateActivityNoticeSyncContent(
+        message: SignalServiceProtos.MessageActivityNotice,
+        room: For
+    ): String? {
+        return try {
+            val syncMessageContent = createMultiDeviceActivityNoticeContent(message)
+
+            val publicKeyInfos = conversationManager.getPublicKeyInfos(room)
+            val myPublicKey = publicKeyInfos.firstOrNull { it.uid == localAddress.id }?.identityKey
+            if (myPublicKey.isNullOrBlank()) {
+                L.w { "[Message] generateActivityNoticeSyncContent: my public key not found in room ${room.id}, skip syncContent" }
+                return null
+            }
+
+            val encryptedMessage = messageEncryptor.encryptOneToOneMessage(
+                syncMessageContent.toByteArray(),
+                myPublicKey
+            )
+
+            val encryptedMessageContent = encryptContent {
+                version = MESSAGE_CURRENT_VERSION
+                cipherText = ByteString.copyFrom(encryptedMessage.cipherText)
+                eKey = ByteString.copyFrom(encryptedMessage.eKey)
+                identityKey = ByteString.copyFrom(encryptedMessage.identityKey)
+                signedEKey = ByteString.copyFrom(encryptedMessage.signedEKey)
+            }
+
+            Base64.encodeBytes(
+                byteArrayOf(
+                    intsToByteHigh(MESSAGE_CURRENT_VERSION, MESSAGE_MINIMUM_SUPPORTED_VERSION)
+                ) + encryptedMessageContent.toByteArray()
+            )
+        } catch (e: Exception) {
+            L.e { "[Message] generateActivityNoticeSyncContent failed: ${e.stackTraceToString()}" }
+            null
+        }
+    }
+
+    /**
+     * SyncMessage-wrapped Content for 1v1-to-other activity-notice self-sync.
+     * Mirrors [createMultiDeviceForwardNoticeContent].
+     */
+    internal fun createMultiDeviceActivityNoticeContent(
+        message: SignalServiceProtos.MessageActivityNotice
+    ): Content = content {
+        syncMessage = syncMessage {
+            activityNoticeSync = message
+        }
+    }
 }

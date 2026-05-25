@@ -38,6 +38,7 @@ import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TranslateStatus
@@ -45,6 +46,7 @@ import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
+import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.util.Util
 import util.TimeFormatter
 
@@ -861,11 +863,11 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 }
 
                 TranslateStatus.ShowEN -> {
-                    showContent(tvTranslateContent, it.translatedContentEN ?: "")
+                    showContent(tvTranslateContent, it.translatedContentEN ?: "", message)
                 }
 
                 TranslateStatus.ShowCN -> {
-                    showContent(tvTranslateContent, it.translatedContentCN ?: "")
+                    showContent(tvTranslateContent, it.translatedContentCN ?: "", message)
                 }
 
                 else -> {
@@ -899,7 +901,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
                 SpeechToTextStatus.Show -> {
                     if (message.attachment?.flags == 1) {
-                        showContent(tvSpeechToTextContent, it.speechToTextContent ?: "")
+                        showContent(tvSpeechToTextContent, it.speechToTextContent ?: "", message)
                         ivSpeech2textServerTipIcon.isVisible = true
                     } else {
                         pbSpeechToText.isVisible = false
@@ -916,10 +918,27 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
     }
 
-    private fun showContent(tvTranslateContent: AppCompatTextView, content: String) {
-        tvTranslateContent.text = content
-        tvTranslateContent.setOnLongClickListener {
-            Util.copyToClipboard(tvTranslateContent.context, content)
+    /** Bind derived-content (inline translate / speech-to-text) with long-press copy + notice (PRD §4). */
+    private fun showContent(
+        textView: AppCompatTextView,
+        content: String,
+        sourceMessage: TextChatMessage,
+    ) {
+        textView.text = content
+        textView.setOnLongClickListener {
+            Util.copyToClipboard(textView.context, content)
+            val conv = sourceMessage.forWhat
+            if (conv != null && sourceMessage.authorId.isNotEmpty()) {
+                // PRD §5.1: derived-content copy (translate / STT) is NOT visible inside CF detail
+                // per spec → mode is always UNKNOWN. Pass explicitly to keep reviewer awareness.
+                ApplicationDependencies.getActivityNoticeDispatcher()
+                    .dispatchCopyNotice(
+                        sourceConversation = conv,
+                        sourceAuthorIds = listOf(sourceMessage.authorId),
+                        messageCount = 1,
+                        combinedForwardMode = CombinedForwardMode.UNKNOWN,
+                    )
+            }
             true
         }
     }

@@ -32,10 +32,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +50,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.VoicePreset
+import com.difft.android.call.ui.HideNavigationBarEffect
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import kotlinx.coroutines.launch
 
@@ -86,10 +90,6 @@ fun ShowItemsBottomView(
         else -> 32.dp
     }
 
-    val onCriticalAlertComplete: (Boolean) -> Unit = { isSuccess ->
-        if (isSuccess) viewModel.callUiController.setShowToolBarBottomViewEnable(false)
-    }
-
     val shouldShowSheet = showToolBarBottomViewEnable && !isInPipMode
     val dismissSheet: () -> Unit = {
         coroutineScope.launch {
@@ -118,8 +118,11 @@ fun ShowItemsBottomView(
                 dismissSheet()
             },
         ) {
+            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
+                    .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+                    .testTag("call_more_sheet")
                     .fillMaxWidth()
                     .wrapContentHeight()
                     .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
@@ -142,6 +145,7 @@ fun ShowItemsBottomView(
                     ) {
                         Row(
                             modifier = Modifier
+                                .testTag("call_more_btn_invite")
                                 .width(48.dp)
                                 .height(48.dp)
                                 .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
@@ -195,6 +199,7 @@ fun ShowItemsBottomView(
                         ) {
                             Row(
                                 modifier = Modifier
+                                    .testTag("call_more_btn_switch_camera")
                                     .width(48.dp)
                                     .height(48.dp)
                                     .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
@@ -244,6 +249,7 @@ fun ShowItemsBottomView(
                         ) {
                             Row(
                                 modifier = Modifier
+                                    .testTag("call_more_btn_critical_alert")
                                     .width(48.dp)
                                     .height(48.dp)
                                     .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
@@ -253,7 +259,10 @@ fun ShowItemsBottomView(
                                             L.i { "[call] ShowItemsBottomView click critical alert" }
                                             if (callType == CallType.ONE_ON_ONE.type) {
                                                 viewModel.conversationId?.let {
-                                                    viewModel.handleCriticalAlertNew(callback = onCriticalAlertComplete)
+                                                    coroutineScope.launch {
+                                                        val success = viewModel.handleCriticalAlertNew()
+                                                        if (success) viewModel.callUiController.setShowToolBarBottomViewEnable(false)
+                                                    }
                                                 }
                                             } else {
                                                 viewModel.callUiController.setShowToolBarBottomViewEnable(false)
@@ -325,6 +334,7 @@ fun ShowItemsBottomView(
 
                         Switch(
                             modifier = Modifier
+                                .testTag("call_more_btn_denoise")
                                 .width(51.dp)
                                 .height(31.dp)
                                 .padding(end = 10.dp)

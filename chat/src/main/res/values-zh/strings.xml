@@ -89,6 +89,7 @@
     <string name="chat_message_attachment">[附件]</string>
     <string name="chat_message_image">[图片]</string>
     <string name="chat_message_video">[视频]</string>
+    <string name="chat_message_short_for_generic">[消息]</string>
     <string name="chat_message_audio">[语音]</string>
     <string name="chat_message_confidential_message">[消息]</string>
     <string name="chat_message_contact_card">[个人名片]</string>
@@ -561,9 +562,9 @@
     <string name="group_edit_name_done">完成</string>
     <string name="group_edit_name_empty">群组名不能为空</string>
     <!-- Forward notice (system message shown after a forward completes).
-         Terminal punctuation is appended by ForwardNoticeRenderer: the plurals text
-         itself has none, so the renderer can choose "。" for a fully rendered list, or
-         nothing when the list ends in "..." (ellipsis already closes the sentence). -->
+         Terminal punctuation is appended by ForwardNoticeRenderer; %3$s is the
+         locale-formatted author list (Chinese uses 、 separator, 等 N 人 overflow).
+         PRD v1.0 §5.4.2. -->
     <plurals name="chat_forward_notice">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 的消息</item>
     </plurals>
@@ -572,5 +573,39 @@
     <plurals name="chat_forward_notice_self_only">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条消息</item>
     </plurals>
+    <!-- Combined-forward (聊天记录) variants — PRD v1.0 §5.4.2 -->
+    <plurals name="chat_forward_notice_chat_history">
+        <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 的聊天记录</item>
+    </plurals>
+    <plurals name="chat_forward_notice_chat_history_self_only">
+        <item quantity="other">\"%1$s\" 转发了 %2$d 条聊天记录</item>
+    </plurals>
+    <plurals name="chat_forward_notice_plural_mixed">
+        <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 的消息（含聊天记录）</item>
+    </plurals>
+    <plurals name="chat_forward_notice_plural_mixed_self_only">
+        <item quantity="other">\"%1$s\" 转发了 %2$d 条消息（含聊天记录）</item>
+    </plurals>
+    <plurals name="chat_forward_notice_from_chat_history">
+        <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 聊天记录中的消息</item>
+    </plurals>
+    <plurals name="chat_forward_notice_from_chat_history_self_only">
+        <item quantity="other">\"%1$s\" 转发了 %2$d 条来自聊天记录中的消息</item>
+    </plurals>
     <string name="chat_forward_notice_sentence_terminator">。</string>
+
+    <plurals name="chat_copy_notice">
+        <item quantity="other">\"%1$s\" 复制了 %2$d 条来自 %3$s 的消息</item>
+    </plurals>
+    <plurals name="chat_copy_notice_self_only">
+        <item quantity="other">\"%1$s\" 复制了 %2$d 条消息</item>
+    </plurals>
+    <!-- SUB_COMBINED_FORWARD copy variant — PRD v1.0 §5.4.1 -->
+    <plurals name="chat_copy_notice_from_chat_history">
+        <item quantity="other">\"%1$s\" 复制了 %2$d 条来自 %3$s 聊天记录中的消息</item>
+    </plurals>
+    <plurals name="chat_copy_notice_from_chat_history_self_only">
+        <item quantity="other">\"%1$s\" 复制了 %2$d 条来自聊天记录中的消息</item>
+    </plurals>
+    <string name="chat_copy_notice_sentence_terminator">。</string>
 </resources>

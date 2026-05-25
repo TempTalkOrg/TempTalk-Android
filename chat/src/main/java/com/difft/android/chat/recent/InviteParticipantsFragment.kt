@@ -46,6 +46,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import com.difft.android.chat.util.ViewUtil
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.handler.InviteRequestState
 
 @AndroidEntryPoint
 class InviteParticipantsFragment : Fragment() {
@@ -404,9 +406,12 @@ class InviteParticipantsFragment : Fragment() {
 
             if (actionType == InviteParticipantsActivity.NEW_REQUEST_ACTION_TYPE_INVITE) {
                 L.i { "[Call]: InviteParticipant NEW_REQUEST_ACTION_TYPE_INVITE idsWithPlusPrefix:$idsWithPlusPrefix" }
-//                L.i { "[Call]: InviteParticipant NEW_REQUEST_ACTION_TYPE_INVITE inputMeetingName:$inputMeetingName" }
-//                L.i { "[Call]: InviteParticipant NEW_REQUEST_ACTION_TYPE_INVITE meetingName:${viewModel.getMeetingName()}" }
-                chatToCallController.inviteCall(roomId, callName, callType, mKey, ArrayList(idsWithPlusPrefix), conversationId)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val state = chatToCallController.inviteCall(roomId, callName, callType, mKey, ArrayList(idsWithPlusPrefix), conversationId)
+                    if (state == InviteRequestState.FAILED) {
+                        ToastUtil.show(com.difft.android.call.R.string.call_invite_fail_tip)
+                    }
+                }
             }
         }
 

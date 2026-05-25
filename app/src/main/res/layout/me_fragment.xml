@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg.setting"
     android:orientation="vertical">
 
     <!--    <androidx.appcompat.widget.AppCompatTextView-->
@@ -100,7 +99,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_invite"
@@ -146,7 +145,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.appcompat.widget.AppCompatTextView
                     android:id="@+id/user_signature"
@@ -202,7 +201,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_privacy"
@@ -236,7 +235,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_chat"
@@ -307,7 +306,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_theme"
@@ -353,7 +352,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_language"
@@ -399,7 +398,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_text_size"
@@ -489,7 +488,7 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:background="@color/bg.setting" />
+                        android:background="@color/bg" />
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:layout_width="match_parent"
@@ -525,7 +524,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_about"

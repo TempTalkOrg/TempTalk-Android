@@ -5,12 +5,12 @@ import android.util.Base64
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
+import com.difft.android.base.utils.sanitizeUrl
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.common.SendType
@@ -30,7 +30,6 @@ import com.difft.android.websocket.internal.push.OutgoingPushMessage
 import com.difft.android.websocket.internal.push.OutgoingPushMessage.PassThrough
 import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.tencent.wcdb.base.Value
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -45,7 +44,6 @@ import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioMessage
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import okhttp3.RequestBody
 import org.difft.app.database.delete
 import org.difft.app.database.members
@@ -72,6 +70,8 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.properties.Delegates
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 class PushTextSendJob @AssistedInject constructor(
     @Assisted
     parameters: Parameters? = null,
@@ -99,7 +99,7 @@ class PushTextSendJob @AssistedInject constructor(
         val builder = Data.Builder()
             .putString(KEY_MESSAGE_OUT, gson.toJson(textMessage))
         if (notification != null) {
-            builder.putString(KEY_NOTIFICATION, Gson().toJson(notification))
+            builder.putString(KEY_NOTIFICATION, gson.toJson(notification))
         } else {
             builder.putString(KEY_NOTIFICATION, "")
         }
@@ -119,7 +119,7 @@ class PushTextSendJob @AssistedInject constructor(
                 .filter { it != globalServices.myId }
                 .toMutableSet()
             if (receiverIds.isNotEmpty()) {
-                textMessage.receiverIds = globalServices.gson.toJson(receiverIds)
+                textMessage.receiverIds = gson.toJson(receiverIds)
             }
         }
         updateMessage(SendType.Sending.rawValue)
@@ -324,7 +324,7 @@ class PushTextSendJob @AssistedInject constructor(
         )
     }
 
-    private fun uploadAttachment() {
+    private suspend fun uploadAttachment() {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
         attachment.path ?: return
 
@@ -388,7 +388,7 @@ class PushTextSendJob @AssistedInject constructor(
                 recipientIds.add(textMessage.forWhat.id)
                 recipientIds.add(globalServices.myId)
             } else {
-                val group = runBlocking { groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false) }
+                val group = groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false)
                 group?.members?.forEach { member ->
                     recipientIds.add(member.id)
                 }
@@ -396,7 +396,7 @@ class PushTextSendJob @AssistedInject constructor(
 
             var lastEmitTime = System.currentTimeMillis()
             var lastEmitProgress = 0
-            val fileExistResponse = fileShareRepo.isExist(FileExistReq(SecureSharedPrefsUtil.getToken(), fileHash, recipientIds)).execute()
+            val fileExistResponse = fileShareRepo.isExist(FileExistReq((globalServices.userManager.getUserData()?.microToken ?: ""), fileHash, recipientIds)).execute()
             if (fileExistResponse.isSuccessful) {
                 fileExistResponse.body()?.data?.let { res ->
                     if (!res.exists) {
@@ -409,7 +409,7 @@ class PushTextSendJob @AssistedInject constructor(
 
                         for ((index, urlString) in urlsToTry.withIndex()) {
                             try {
-                                L.i { "[PushTextSendJob] Attempting upload with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: $urlString" }
+                                L.i { "[PushTextSendJob] Attempting upload with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: ${urlString.sanitizeUrl()}" }
 
                                 val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
                                     override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
@@ -426,15 +426,15 @@ class PushTextSendJob @AssistedInject constructor(
                                 val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
 
                                 if (uploadToOSSCallResponse.isSuccessful) {
-                                    L.i { "[PushTextSendJob] Upload successful with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: $urlString" }
+                                    L.i { "[PushTextSendJob] Upload successful with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: ${urlString.sanitizeUrl()}" }
                                     uploadSuccess = true
                                     break
                                 } else {
-                                    L.w { "[PushTextSendJob] Upload failed with URL ${index + 1}/${urlsToTry.size}: ${uploadToOSSCallResponse.message}, messageId: ${textMessage.id}, url: $urlString" }
+                                    L.w { "[PushTextSendJob] Upload failed with URL ${index + 1}/${urlsToTry.size}: ${uploadToOSSCallResponse.message}, messageId: ${textMessage.id}, url: ${urlString.sanitizeUrl()}" }
                                     lastUploadException = IOException("uploadToOSSCall execute fail: ${uploadToOSSCallResponse.message}")
                                 }
                             } catch (e: Exception) {
-                                L.w { "[PushTextSendJob] Upload exception with URL ${index + 1}/${urlsToTry.size}: ${e.message}, messageId: ${textMessage.id}, url: $urlString" }
+                                L.e { "[PushTextSendJob] Upload exception ${e::class.simpleName} ${index + 1}/${urlsToTry.size} messageId=${textMessage.id} url=${urlString.sanitizeUrl()}\n${e.stackTraceToString().sanitizeUrl()}" }
                                 lastUploadException = e
                             }
                         }
@@ -458,7 +458,7 @@ class PushTextSendJob @AssistedInject constructor(
 
                         val uploadInfoCallResponse = fileShareRepo.uploadInfo(
                             UploadInfoReq(
-                                token = SecureSharedPrefsUtil.getToken(),
+                                token = (globalServices.userManager.getUserData()?.microToken ?: ""),
                                 numbers = recipientIds,
                                 attachmentId = res.attachmentId,
                                 fileHash = fileHash,
@@ -526,28 +526,24 @@ class PushTextSendJob @AssistedInject constructor(
         @InstallIn(SingletonComponent::class)
         interface EntryPoint {
             fun getPushTextJobFactory(): PushTextSendJobFactory
+            val gson: Gson
         }
 
         override fun create(parameters: Parameters, data: Data): PushTextSendJob {
-            val valueTypeAdapter = RuntimeTypeAdapterFactory.of(For::class.java)
-                .registerSubtype(For.Account::class.java)
-                .registerSubtype(For.Group::class.java)
-            val gson = GsonBuilder().registerTypeAdapterFactory(valueTypeAdapter).create()
+            val entryPoint = EntryPointAccessors.fromApplication(
+                ApplicationDependencies.getApplication(),
+                EntryPoint::class.java
+            )
+            val gson = entryPoint.gson
             val textMessage = gson.fromJson(
                 data.getString(KEY_MESSAGE_OUT),
                 TextMessage::class.java
             )
-            val gson2 = Gson()
-            var notification: OutgoingPushMessage.Notification? = null
-            val notificationJson = data.getString(KEY_NOTIFICATION)
-            if (!TextUtils.isEmpty(notificationJson)) {
-                notification =
-                    gson2.fromJson(notificationJson, OutgoingPushMessage.Notification::class.java)
-            }
-            return EntryPointAccessors.fromApplication(
-                ApplicationDependencies.getApplication(),
-                EntryPoint::class.java
-            ).getPushTextJobFactory().create(parameters, textMessage, notification)
+            val notification: OutgoingPushMessage.Notification? =
+                data.getString(KEY_NOTIFICATION).takeIf { !TextUtils.isEmpty(it) }
+                    ?.let { gson.fromJson(it, OutgoingPushMessage.Notification::class.java) }
+            return entryPoint.getPushTextJobFactory()
+                .create(parameters, textMessage, notification)
         }
     }
 

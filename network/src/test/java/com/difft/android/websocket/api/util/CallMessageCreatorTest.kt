@@ -1,6 +1,7 @@
 package com.difft.android.websocket.api.util
 
 import com.difft.android.base.call.CallActionType
+import com.difft.android.base.call.CallEncryptOutcome
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.utils.GlobalHiltEntryPoint
@@ -24,6 +25,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 
 /**
@@ -232,5 +234,72 @@ class CallMessageCreatorTest {
         coVerify(atLeast = 1) {
             conversationManager.getPublicKeyInfos(match<List<String>> { true })
         }
+    }
+
+    @Test
+    fun encryption_fails_when_publicKeyInfos_is_empty() = runTest {
+        coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns emptyList()
+
+        val outcome = creator.createCallMessage(
+            forWhat = For.Account("peer-1"),
+            callType = CallType.ONE_ON_ONE,
+            callRole = CallRole.CALLER,
+            callActionType = CallActionType.START,
+            conversationId = "peer-1",
+            members = null,
+            roomId = null,
+            roomName = null,
+            caller = "selfUid",
+            mKey = ByteArray(32),
+        )
+
+        assertIs<CallEncryptOutcome.Failed>(outcome)
+    }
+
+    @Test
+    fun encryption_fails_when_encInfos_are_empty() = runTest {
+        every { messageEncryptor.encryptCallKey(any(), any()) } returns EncryptCallKeyResult(
+            mKey = ByteArray(0),
+            eMKeys = null,
+            eKey = ByteArray(0),
+        )
+
+        val outcome = creator.createCallMessage(
+            forWhat = For.Account("peer-1"),
+            callType = CallType.ONE_ON_ONE,
+            callRole = CallRole.CALLER,
+            callActionType = CallActionType.START,
+            conversationId = "peer-1",
+            members = null,
+            roomId = null,
+            roomName = null,
+            caller = "selfUid",
+            mKey = ByteArray(32),
+        )
+
+        assertIs<CallEncryptOutcome.Failed>(outcome)
+    }
+
+    @Test
+    fun encryption_fails_when_all_identityKeys_are_blank() = runTest {
+        coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
+            PublicKeyInfo(uid = "peer-1", identityKey = "", registrationId = 1, resetIdentityKeyTime = 0),
+            PublicKeyInfo(uid = "peer-2", identityKey = "  ", registrationId = 2, resetIdentityKeyTime = 0),
+        )
+
+        val outcome = creator.createCallMessage(
+            forWhat = For.Account("peer-1"),
+            callType = CallType.ONE_ON_ONE,
+            callRole = CallRole.CALLER,
+            callActionType = CallActionType.START,
+            conversationId = "peer-1",
+            members = null,
+            roomId = null,
+            roomName = null,
+            caller = "selfUid",
+            mKey = ByteArray(32),
+        )
+
+        assertIs<CallEncryptOutcome.Failed>(outcome)
     }
 }

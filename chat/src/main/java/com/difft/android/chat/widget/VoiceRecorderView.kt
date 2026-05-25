@@ -32,6 +32,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.difft.android.chat.audio.MediaRecorderWrapper
+import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.chat.providers.MyBlobProvider
 
 class VoiceRecorderView @JvmOverloads constructor(
@@ -90,6 +91,7 @@ class VoiceRecorderView @JvmOverloads constructor(
         // Mark not-recording up-front so any surviving callback (audio focus listener,
         // amplitude loop) early-returns instead of touching a dead recorder.
         isRecording = false
+        VoiceRecordingTracker.setRecording(false, "detach")
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
 
@@ -149,6 +151,7 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     private fun startRecordingIfPermissionGranted() {
         isRecording = true
+        VoiceRecordingTracker.setRecording(true, "start")
         isCancelled = false
 
         // Must initialize synchronously before any coroutine is dispatched. Otherwise startCountdown()
@@ -367,6 +370,7 @@ class VoiceRecorderView @JvmOverloads constructor(
     private fun stopRecording() {
         if (!isRecording) return
         isRecording = false
+        VoiceRecordingTracker.setRecording(false, if (isCancelled) "cancel" else "stop")
 
         // 计算录制时长
         val recordingDuration = System.currentTimeMillis() - recordingStartTime
@@ -468,6 +472,7 @@ class VoiceRecorderView @JvmOverloads constructor(
     // No MediaRecorder to tear down — caller detected failure before recording started.
     private fun abortRecording(reason: RecordingState.Reason) {
         isRecording = false
+        VoiceRecordingTracker.setRecording(false, "abort")
         countdownJob?.cancel()
         amplitudeUpdateJob?.cancel()
         deleteRecordingFile()

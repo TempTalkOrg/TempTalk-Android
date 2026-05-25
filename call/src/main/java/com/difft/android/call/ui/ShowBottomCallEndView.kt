@@ -28,13 +28,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.BottomButtonTextStyle
 import com.difft.android.call.data.BottomCallEndAction
+import com.difft.android.call.ui.HideNavigationBarEffect
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,8 +84,11 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
                 dismissSheet()
             },
         ){
+            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
+                    .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+                    .testTag("call_end_sheet")
                     .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
                     .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
             ) {
@@ -106,6 +114,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
     ) {
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_end_for_all")
                 .padding(0.25.dp)
                 .width(238.dp)
                 .height(60.dp)
@@ -127,6 +136,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
 
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_leave")
                 .padding(0.25.dp)
                 .width(238.dp)
                 .height(60.dp)
@@ -150,6 +160,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
 
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_cancel")
                 .padding(0.dp)
                 .width(212.dp)
                 .height(60.dp)
@@ -194,6 +205,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
         ) {
             Row(
                 modifier = Modifier
+                    .testTag("call_end_sheet_end_for_all")
                     .padding(0.25.dp)
                     .fillMaxWidth()
                     .height(60.dp)
@@ -216,6 +228,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
 
             Row(
                 modifier = Modifier
+                    .testTag("call_end_sheet_leave")
                     .padding(0.25.dp)
                     .fillMaxWidth()
                     .height(60.dp)
@@ -239,6 +252,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
 
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_cancel")
                 .padding(0.dp)
                 .fillMaxWidth()
                 .height(60.dp)

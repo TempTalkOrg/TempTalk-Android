@@ -4,19 +4,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.res.painterResource
+import androidx.compose.runtime.rememberCoroutineScope
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.user.CallConfig
 import com.difft.android.call.CallIntent
 import com.difft.android.call.ui.alert.ShowCriticalAlertConfirmView
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.R
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
 import io.livekit.android.audio.AudioSwitchHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * 公共的通话覆盖层组件（顶部/底部控制栏、工具栏等）
@@ -62,12 +62,16 @@ fun CommonCallOverlays(
         muteOtherEnabled,
         handleInviteUsersClick = onInviteUsersClick
     )
+    val criticalAlertScope = rememberCoroutineScope()
     ShowCriticalAlertConfirmView(
         viewModel,
         onDismiss = { viewModel.callUiController.setShowCriticalAlertConfirmViewEnabled(false) },
-        sendCriticalAlert = { gid -> viewModel.handleCriticalAlertNew(gid, callback = { isSuccess ->
-            viewModel.callUiController.setShowCriticalAlertConfirmViewEnabled(!isSuccess)
-        }) }
+        sendCriticalAlert = { gid ->
+            criticalAlertScope.launch {
+                val success = viewModel.handleCriticalAlertNew(gid)
+                viewModel.callUiController.setShowCriticalAlertConfirmViewEnabled(!success)
+            }
+        }
     )
 }
 
@@ -142,23 +146,3 @@ private fun RenderTopAndBottomOverlays(
     }
 }
 
-@Composable
-fun PreloadCallPainters() {
-    painterResource(id = R.drawable.chat_ic_window_zoom_out)
-    painterResource(id = R.drawable.ant_design_loading_outlined)
-    painterResource(id = R.drawable.gg_spinner_alt)
-
-    painterResource(id = R.drawable.call_btn_microphone_open)
-    painterResource(id = R.drawable.call_btn_microphone_close)
-    painterResource(id = R.drawable.call_btn_camera_open)
-    painterResource(id = R.drawable.call_btn_camera_close)
-    painterResource(id = R.drawable.call_btn_volume_phone)
-    painterResource(id = R.drawable.call_btn_volume_speaker)
-    painterResource(id = R.drawable.call_btn_volume_headphones)
-    painterResource(id = R.drawable.call_btn_volume_airpod)
-    painterResource(id = R.drawable.users)
-    painterResource(id = R.drawable.call_btn_tabler_dots)
-    painterResource(id = R.drawable.call_btn_hangup)
-    painterResource(id = R.drawable.call_btn_tabler_chevron_on)
-    painterResource(id = R.drawable.call_btn_mingcute_exit_line)
-}

@@ -1,11 +1,6 @@
 package com.difft.android.call.ui.barrage
 
 import android.content.res.Configuration
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -15,12 +10,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
@@ -30,19 +27,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.R
-import com.difft.android.call.data.BubbleAnimationState
 import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.TextBubbleMessage
-import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+import kotlinx.coroutines.isActive
 
 private data class BubbleAnimParams(
     val bubblePadding: Float,
     val bubbleRiseHeight: Float,
     val animationDuration: Int,
-    val alphaFadeStartMillis: Int,
     val offsetX: Float,
+    val screenHeightPx: Float,
 )
 
+/**
+ * 单个气泡飘动 Composable。
+ *
+ * ### 绝对坐标定位 + 虚拟时间驱动
+ *
+ * **定位**：使用 [Modifier.layout] 将 Column 放置到基于 [BubbleAnimParams.screenHeightPx]
+ * （气泡创建时冻结）的绝对屏幕坐标，完全脱离父 Box 的尺寸和 alignment。
+ * 即使父容器 relayout、WindowInsets 变化或 Compose 重组，气泡位置不受影响。
+ *
+ * **动画**：维护独立的 virtualElapsedMs，每帧推进量 ≤ 1.5 帧
+ * （[MAX_FRAME_ADVANCE]），丢帧时虚拟时间不跳跃。
+ */
 @Composable
 fun BoxScope.BubbleView(
     emoji: String?,
@@ -51,13 +60,11 @@ fun BoxScope.BubbleView(
     startOffsetPercent: Int,
     durationMillis: Long,
     messageId: Long,
-    onAnimationEnd: () -> Unit
+    onAnimationEnd: () -> Unit,
 ) {
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
 
-    // 气泡起飞后冻结所有动画参数，避免后续 recomposition（新气泡加入/移除列表、
-    // 遮罩切换等）重新求值导致 animateFloat 目标跳变而产生抖动。
     val params = remember(messageId) {
         val screenHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -76,60 +83,57 @@ fun BoxScope.BubbleView(
             bubblePadding = bubblePadding,
             bubbleRiseHeight = bubbleRiseHeight,
             animationDuration = animationDuration,
-            alphaFadeStartMillis = (animationDuration * 0.7f).toInt(),
             offsetX = screenWidth * (startOffsetPercent / 100f),
+            screenHeightPx = screenHeight,
         )
     }
 
-    var animationState by remember { mutableStateOf(BubbleAnimationState.Start) }
-
-    val transition = updateTransition(targetState = animationState, label = "bubbleAnimation")
-
-    val offsetY by transition.animateFloat(
-        transitionSpec = {
-            tween(durationMillis = params.animationDuration, easing = LinearEasing)
-        },
-        label = "offsetY"
-    ) { state ->
-        when (state) {
-            BubbleAnimationState.Start -> -params.bubblePadding
-            BubbleAnimationState.End -> -(params.bubblePadding + params.bubbleRiseHeight)
-        }
-    }
-
-    val alpha by transition.animateFloat(
-        transitionSpec = {
-            keyframes {
-                this.durationMillis = params.animationDuration
-                1f at 0
-                1f at params.alphaFadeStartMillis
-                0f at params.animationDuration
-            }
-        },
-        label = "alpha"
-    ) { state ->
-        when (state) {
-            BubbleAnimationState.Start -> 1f
-            BubbleAnimationState.End -> 0f
-        }
-    }
+    var renderedOffsetY by remember { mutableFloatStateOf(-params.bubblePadding) }
+    var renderedAlpha by remember { mutableFloatStateOf(1f) }
 
     LaunchedEffect(messageId) {
-        animationState = BubbleAnimationState.End
-        delay(params.animationDuration.toLong())
+        var virtualElapsedMs = 0f
+        var prevFrameNanos = withFrameNanos { it }
+        val maxAdvanceMs = FRAME_MS * MAX_FRAME_ADVANCE
+
+        while (isActive) {
+            withFrameNanos { frameNanos ->
+                val frameDeltaMs = (frameNanos - prevFrameNanos) / 1_000_000f
+                prevFrameNanos = frameNanos
+
+                virtualElapsedMs += frameDeltaMs.coerceAtMost(maxAdvanceMs)
+
+                val fraction = (virtualElapsedMs / params.animationDuration).coerceAtMost(1f)
+                renderedOffsetY = -params.bubblePadding - params.bubbleRiseHeight * fraction
+
+                renderedAlpha = when {
+                    fraction < FADE_START -> 1f
+                    fraction >= 1f -> 0f
+                    else -> 1f - (fraction - FADE_START) / (1f - FADE_START)
+                }
+            }
+
+            if (virtualElapsedMs >= params.animationDuration) break
+        }
         onAnimationEnd()
     }
 
     Column(
         modifier = Modifier
-            .align(Alignment.BottomStart)
-            .graphicsLayer {
-                translationX = params.offsetX
-                translationY = offsetY
-                this.alpha = alpha
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(
+                    constraints.copy(minWidth = 0, minHeight = 0)
+                )
+                layout(placeable.width, placeable.height) {
+                    placeable.place(
+                        x = params.offsetX.roundToInt(),
+                        y = (params.screenHeightPx - placeable.height + renderedOffsetY).roundToInt()
+                    )
+                }
             }
+            .graphicsLayer { this.alpha = renderedAlpha }
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (!emoji.isNullOrEmpty()) {
             Text(
@@ -137,8 +141,8 @@ fun BoxScope.BubbleView(
                 style = TextStyle(
                     fontSize = 48.sp,
                     fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight(400)
-                )
+                    fontWeight = FontWeight(400),
+                ),
             )
         }
 
@@ -166,7 +170,7 @@ fun BoxScope.BubbleView(
             modifier = bottomTextModifier
                 .background(
                     color = colorResource(id = R.color.bg3_night),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(4.dp),
                 )
                 .padding(horizontal = 6.dp, vertical = 2.dp),
             text = bottomText,
@@ -175,8 +179,8 @@ fun BoxScope.BubbleView(
                 lineHeight = 20.sp,
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight(400),
-                color = colorResource(id = R.color.t_primary_night)
-            )
+                color = colorResource(id = R.color.t_primary_night),
+            ),
         )
     }
 }
@@ -184,7 +188,7 @@ fun BoxScope.BubbleView(
 @Composable
 fun BoxScope.EmojiBubbleView(
     bubbleMessage: EmojiBubbleMessage,
-    onAnimationEnd: () -> Unit
+    onAnimationEnd: () -> Unit,
 ) {
     BubbleView(
         emoji = bubbleMessage.emoji,
@@ -193,14 +197,14 @@ fun BoxScope.EmojiBubbleView(
         startOffsetPercent = bubbleMessage.startOffsetPercent,
         durationMillis = bubbleMessage.durationMillis,
         messageId = bubbleMessage.id,
-        onAnimationEnd = onAnimationEnd
+        onAnimationEnd = onAnimationEnd,
     )
 }
 
 @Composable
 fun BoxScope.TextBubbleView(
     bubbleMessage: TextBubbleMessage,
-    onAnimationEnd: () -> Unit
+    onAnimationEnd: () -> Unit,
 ) {
     BubbleView(
         emoji = bubbleMessage.emoji,
@@ -209,6 +213,10 @@ fun BoxScope.TextBubbleView(
         startOffsetPercent = bubbleMessage.startOffsetPercent,
         durationMillis = bubbleMessage.durationMillis,
         messageId = bubbleMessage.id,
-        onAnimationEnd = onAnimationEnd
+        onAnimationEnd = onAnimationEnd,
     )
 }
+
+private const val FADE_START = 0.7f
+private const val MAX_FRAME_ADVANCE = 1.5f
+private const val FRAME_MS = 16.67f

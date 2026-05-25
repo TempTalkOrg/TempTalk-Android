@@ -2,6 +2,7 @@ package com.difft.android.call
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -30,6 +31,7 @@ import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.ui.CallContent
 import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.call.util.ViewUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -156,6 +158,13 @@ internal fun LCallActivity.configureWindow() {
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
     allowOnLockScreen()
+    ViewUtil.hideNavigationBar(window)
+    @Suppress("DEPRECATION")
+    window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
+        if (visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION == 0) {
+            ViewUtil.hideNavigationBar(window)
+        }
+    }
 }
 
 internal fun LCallActivity.initializeView() {
@@ -211,6 +220,7 @@ internal fun LCallActivity.initializePictureInPictureManager() {
     pictureInPictureManager = PictureInPictureManager(
         activity = this,
         lifecycle = lifecycle,
+        scope = lifecycleScope,
         onPipModeChanged = { isInPipMode ->
             viewModel.callUiController.setPipModeEnabled(isInPipMode)
             onGoingCallStateManager.setIsInPipMode(isInPipMode)

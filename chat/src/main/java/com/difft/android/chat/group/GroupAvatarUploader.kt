@@ -1,11 +1,12 @@
 package com.difft.android.chat.group
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.chat.common.GroupAvatarUtil
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.network.ChativeHttpClient
@@ -47,7 +48,7 @@ class GroupAvatarUploader @Inject constructor(
 ) {
     suspend fun uploadAndBuildJson(filePath: String): String = withContext(Dispatchers.IO) {
         val response = httpClient.httpService
-            .fetchAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
+            .fetchAttachmentInfo((globalServices.userManager.getUserData()?.baseAuth ?: ""))
         if (response.status != 0) {
             L.w { "[GroupAvatarUploader] fetchAttachmentInfo failed: status=${response.status}, reason=${response.reason}" }
             throw NetworkException(response.status, response.reason ?: "")

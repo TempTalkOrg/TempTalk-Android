@@ -26,7 +26,6 @@ import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.CriticalAlertManager
@@ -335,7 +334,7 @@ class CriticalAlertActivity: ComponentActivity() {
                     messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
                 } else {
                     // 2. 如果当前未进行通话，则调用 getCallingList 方法获取最新的会议列表
-                    val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
+                    val response = callService.getCallingList((globalServices.userManager.getUserData()?.microToken ?: ""))
 
                     if (response.status != 0) {
                         L.e { "[CriticalAlert] getCallingList failed with status: ${response.status}" }
@@ -398,15 +397,11 @@ class CriticalAlertActivity: ComponentActivity() {
                                 // 关闭通知
                                 messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
 
-                                withContext(Dispatchers.Main) {
-                                    // 加入会议
-                                    LCallManager.joinCall(this@CriticalAlertActivity, matchedCall) { status ->
-                                        if (status) {
-                                            L.i { "[CriticalAlert] Successfully joined call for conversationId: $conversationId" }
-                                        } else {
-                                            L.e { "[CriticalAlert] Failed to join call for conversationId: $conversationId" }
-                                        }
-                                    }
+                                val status = LCallManager.joinCall(this@CriticalAlertActivity, matchedCall)
+                                if (status) {
+                                    L.i { "[CriticalAlert] Successfully joined call for conversationId: $conversationId" }
+                                } else {
+                                    L.e { "[CriticalAlert] Failed to join call for conversationId: $conversationId" }
                                 }
                             }
                         }

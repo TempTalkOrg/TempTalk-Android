@@ -1,19 +1,19 @@
 package com.difft.android.chat
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.Base64
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
-import com.difft.android.messageserialization.db.store.DBMessageStore
+import com.difft.android.chat.messages.DropReason
+import com.difft.android.chat.messages.EnvelopToMessageProcessor
+import com.difft.android.chat.messages.EnvelopeProcessResult
+import com.difft.android.chat.messages.FailedMessageProcessor
+import com.difft.android.chat.messages.reportPermanentDrop
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.responses.PendingMessage
-import com.difft.android.base.utils.Base64
 import com.google.protobuf.ByteString
-import com.tencent.wcdb.base.WCDBException
 import kotlinx.coroutines.Dispatchers
-import org.difft.app.database.models.FailedMessageModel
-import org.difft.app.database.wcdb
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -22,7 +22,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.difft.app.database.WCDBUpdateService
-import com.difft.android.chat.messages.EnvelopToMessageProcessor
+import org.difft.app.database.models.DBFailedMessageModel
+import org.difft.app.database.wcdb
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.envelope
@@ -30,11 +31,13 @@ import org.whispersystems.signalservice.internal.push.msgExtra
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 class PendingMessageHelper @Inject constructor(
     @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
-    private val dbMessageStore: DBMessageStore
+    private val failedMessageProcessor: FailedMessageProcessor,
 ) {
 
     suspend fun obtainPendingMessageAndSave(): Boolean = withContext(Dispatchers.IO) {
@@ -94,7 +97,7 @@ class PendingMessageHelper @Inject constructor(
         var more = true
         while (more) {
             val pendingMessageResponse = try {
-                httpClient.httpService.getPendingMessage(SecureSharedPrefsUtil.getBasicAuth())
+                httpClient.httpService.getPendingMessage((globalServices.userManager.getUserData()?.baseAuth ?: ""))
             } catch (e: Exception) {
                 L.e { "[Message][PendingMessageHelper] obtainPendingMessage failed -> ${e.stackTraceToString()}" }
                 return false
@@ -108,40 +111,47 @@ class PendingMessageHelper @Inject constructor(
             val sortedMessages = messages.sortedBy { it.systemShowTimestamp }
             val failedEnvelopes = mutableListOf<SignalServiceProtos.Envelope>()
 
-            // Process and save messages one by one with exception handling
             sortedMessages.forEach { msg ->
-                try {
-                    val envelope = buildEnvelope(msg) ?: return@forEach
-                    val result = envelopToMessageProcessor.process(envelope, "PendingMessageHelper")
-                    if (result != null) {
-                        dbMessageStore.putWhenNonExist(result.message)
-                        L.d { "[Message][PendingMessageHelper] Successfully processed and saved message ${msg.timestamp}" }
+                val envelope = buildEnvelope(msg) ?: return@forEach
+                when (val processRes = envelopToMessageProcessor.process(envelope, "PendingMessageHelper")) {
+                    is EnvelopeProcessResult.Success -> {
+                        // G-3: dedup if this ts is still sitting in the retry queue.
+                        runCatching {
+                            wcdb.failedMessage.deleteObjects(
+                                DBFailedMessageModel.timestamp.eq(envelope.timestamp)
+                            )
+                        }.onFailure { e ->
+                            L.w { "[Message][PendingMessageHelper] dedup deleteObjects failed ts=${envelope.timestamp}: ${e.stackTraceToString()}" }
+                        }
                     }
-                } catch (e: Exception) {
-                    L.e { "[Message][PendingMessageHelper] Failed to process message ${msg.timestamp}: ${e.stackTraceToString()}" }
-                    // Save failed envelope for retry via FailedMessageProcessor
-                    buildEnvelope(msg)?.let { failedEnvelopes.add(it) }
+                    is EnvelopeProcessResult.PermanentFailure -> {
+                        reportPermanentDrop(
+                            processRes.reason,
+                            processRes.cause,
+                            envelope.timestamp,
+                            tag = "PendingMessageHelper",
+                        )
+                    }
+                    is EnvelopeProcessResult.TransientFailure -> {
+                        failedEnvelopes.add(envelope)
+                    }
                 }
             }
 
-            // Save failed messages to FailedMessage table for retry
             if (failedEnvelopes.isNotEmpty()) {
-                L.w { "[Message][PendingMessageHelper] ${failedEnvelopes.size} messages failed, saving to FailedMessage" }
-                try {
-                    val messageModels = failedEnvelopes.map { envelope ->
-                        FailedMessageModel().apply {
-                            this.timestamp = envelope.timestamp
-                            this.messageEnvelopBytes = envelope.toByteArray()
-                        }
-                    }
-                    wcdb.failedMessage.insertOrReplaceObjects(messageModels)
-                } catch (e: WCDBException) {
-                    L.e { "[Message][PendingMessageHelper] saveFailedMessage error: ${e.stackTraceToString()}" }
-                }
+                L.w { "[Message][PendingMessageHelper] ${failedEnvelopes.size} messages failed transient, saving for retry" }
+                failedMessageProcessor.saveTransient(failedEnvelopes)
+                // Kick the retry tick so this batch doesn't have to wait for the
+                // next WebSocket message before being retried (FCM/pull path
+                // has no other trigger source).
+                failedMessageProcessor.triggerProcess()
             }
 
             WCDBUpdateService.updatingRooms()
-            // Delete all messages from server (successful ones are saved, failed ones are in FailedMessage table)
+            // Delete all messages from server (successful, permanent-drop, and
+            // transient-enqueued ones — same eager-ACK rationale as
+            // IncomingEnvelopMessageProcessor. Transient retries are now owned
+            // by the local FailedMessageProcessor.
             deletePendingMessages(messages)
         }
         return true
@@ -155,7 +165,7 @@ class PendingMessageHelper @Inject constructor(
                 async(Dispatchers.IO) {
                     try {
                         val result = httpClient.httpService.removePendingMessage(
-                            SecureSharedPrefsUtil.getBasicAuth(),
+                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             msg.source.toString(),
                             msg.timestamp.toString()
                         )
@@ -221,7 +231,25 @@ class PendingMessageHelper @Inject constructor(
             }
             return envelope
         } catch (e: Exception) {
-            L.e { "[Message][PendingMessageHelper] Failed to build envelope from pending message: ${e.stackTraceToString()}" }
+            // buildEnvelope can fail several distinct ways: `Base64.decode`
+            // throws IOException on malformed input; protobuf builder /
+            // null fields can throw NPE or IllegalArgumentException. Same
+            // bytes will fail the same way on retry — record a permanent
+            // drop. Distinguish IOException (the Base64 path) from other
+            // failures so Crashlytics aggregates them as separate issues
+            // and keeps the diagnostic signal intact. ACK still happens
+            // upstream (deletePendingMessages runs unconditionally).
+            val reason = if (e is java.io.IOException) {
+                DropReason.BASE64_DECODE_FAILED
+            } else {
+                DropReason.BUILD_ENVELOPE_FAILED
+            }
+            reportPermanentDrop(
+                reason,
+                e,
+                message.timestamp,
+                tag = "PendingMessageHelper",
+            )
             return null
         }
     }

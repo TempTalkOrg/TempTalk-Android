@@ -6,15 +6,6 @@
         <!-- Customize your theme here. -->
     </style>
 
-    <style name="TransparentStatusBar" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:windowBackground">@color/bg1.night</item>
-        <item name="android:windowTranslucentStatus">true</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@color/bg1.night</item>
-    </style>
-
 
     <style name="EventEditorLabelStyle">
         <item name="android:fontFamily">sans-serif</item>

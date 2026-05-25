@@ -2,7 +2,7 @@ package com.difft.android.call.media
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserManager
 import com.difft.android.call.manager.AudioDeviceManager
 import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 import com.twilio.audioswitch.AudioDevice
@@ -35,6 +35,7 @@ class CallAudioSetup(
     private val audioProcessor: AudioPipelineProcessor,
     private val callConfig: CallConfig,
     private val isDenoiseEnabledProvider: () -> Boolean,
+    private val userManager: UserManager,
 ) {
     @Volatile private var registered: AudioDeviceChangeListener? = null
     @Volatile private var stopped = false
@@ -94,7 +95,8 @@ class CallAudioSetup(
     }
 
     private fun initDeNoiseMode() {
-        val cachedMode = SharedPrefsUtil.getString(SharedPrefsUtil.SP_DENOISE_MODE)
+        // Synchronous read via UserManager's in-memory snapshot — no I/O.
+        val cachedMode = userManager.getUserData()?.denoiseMode?.takeIf { it.isNotEmpty() }
         val configMode = callConfig.denoise?.mode
         val mode = AudioDeviceManager.resolveDeNoiseMode(cachedMode ?: configMode)
         L.i { "[call] CallAudioSetup initDeNoiseMode cachedMode=$cachedMode, configMode=$configMode, resolved=$mode" }

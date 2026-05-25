@@ -9,12 +9,22 @@
         <item name="colorSecondary">@android:color/transparent</item>
         <item name="colorSecondaryVariant">@android:color/transparent</item>
         <item name="colorOnSecondary">@android:color/transparent</item>
-        <!-- Status bar color. -->
-        <item name="android:windowBackground">@color/bg1</item>
-        <item name="android:statusBarColor">@color/bg1</item>
-        <item name="android:navigationBarColor">@color/bg1</item>
+        <!-- Default page background (settings idiom — light gray in light, dark in dark).
+             In dark mode bg == bg1 (#181A20), so visually unchanged from previous behavior. -->
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
         <!-- Customize your theme here. -->
+    </style>
+
+    <!-- Dark variant for uCrop activities (see values/themes.xml for details). -->
+    <style name="Theme.Chative.UCrop" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
     </style>
 </resources>

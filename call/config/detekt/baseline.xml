@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LongMethod:BarrageMessageView.kt:@Composable fun BarrageMessageView</ID>
+    <ID>LongMethod:BubbleView.kt:@Composable fun BoxScope.BubbleView</ID>
+    <ID>LongMethod:CallConnectionCoordinator.kt:CallConnectionCoordinator$suspend fun connectToRoomWithFailover: Boolean</ID>
+    <ID>LongMethod:CallCriticalAlertBanner.kt:@Composable fun CallCriticalAlertBanner</ID>
+    <ID>LongMethod:CallQuestionView.kt:@Composable internal fun CallQuestionView</ID>
+    <ID>LongMethod:CallRatingView.kt:@Composable internal fun CallRatingView</ID>
+    <ID>LongMethod:MainPageWithBottomControlView.kt:@OptIn(ExperimentalFoundationApi::class, ExperimentalPermissionsApi::class) @Composable fun MainPageWithBottomControlView</ID>
+    <ID>LongMethod:MainPageWithTopStatusView.kt:@Composable fun MainPageWithTopStatusView</ID>
+    <ID>LongMethod:MeetingInviteBottomSheetFragment.kt:MeetingInviteBottomSheetFragment$private fun setupAddMembersScreen</ID>
+    <ID>LongMethod:MultiParticipantCallPage.kt:@OptIn(ExperimentalFoundationApi::class) @Composable fun MultiParticipantCallPage</ID>
+    <ID>LongMethod:MultiParticipantItem.kt:@Composable fun MultiParticipantItem</ID>
+    <ID>LongMethod:ScreenShareFloatingSpeakerVideoTransition.kt:@Composable fun ScreenShareFloatingSpeakerVideoTransition</ID>
+    <ID>LongMethod:ScreenShareSpeakerBanner.kt:@Composable fun ScreenShareSpeakerBanner</ID>
+    <ID>LongMethod:ShowCriticalAlertConfirmView.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ShowCriticalAlertConfirmView</ID>
+    <ID>LongMethod:ShowItemsBottomView.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ShowItemsBottomView</ID>
+    <ID>LongMethod:ShowParticipantsListView.kt:@Composable fun SmallParticipantViewItem</ID>
+    <ID>LongMethod:ShowParticipantsListView.kt:@OptIn(ExperimentalFoundationApi::class) @Composable fun ShowParticipantsListView</ID>
+    <ID>LongMethod:VideoRenderer.kt:@Composable fun VideoRenderer</ID>
+  </CurrentIssues>
+</SmellBaseline>

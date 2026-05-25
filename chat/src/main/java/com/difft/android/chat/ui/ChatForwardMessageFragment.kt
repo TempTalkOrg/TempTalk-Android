@@ -46,6 +46,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.Attachment
 import javax.inject.Inject
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.isAudioMessage
@@ -63,13 +64,22 @@ class ChatForwardMessageFragment : Fragment() {
 
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
-    
+
     @Inject
     lateinit var globalConfigsManager: IGlobalConfigsManager
+
+    @Inject
+    lateinit var activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
 
     private val messageActionHelper by lazy {
         MessageActionHelper(requireActivity(), viewLifecycleOwner.lifecycleScope, selectChatsUtils)
     }
+
+    /** Outer combined-forward message context — source attribution for copy/forward notices. */
+    private val outerSourceConversation: difft.android.messageserialization.For?
+        get() = (activity as? ChatForwardMessageActivity)?.getOuterSourceConversation()
+    private val outerSourceAuthorIds: List<String>?
+        get() = (activity as? ChatForwardMessageActivity)?.getOuterSourceAuthorId()?.let { listOf(it) }
 
     companion object {
         const val ARG_TITLE = "arg_title"
@@ -149,13 +159,36 @@ class ChatForwardMessageFragment : Fragment() {
                 }
             }
             MessageAction.Type.COPY -> {
-                messageActionHelper.copyMessageContent(message)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    if (messageActionHelper.copyMessageContent(message)) {
+                        dispatchOuterCopyNotice()
+                    }
+                }
             }
             MessageAction.Type.FORWARD -> {
-                messageActionHelper.forwardMessage(message)
+                // Notice attribution: outer combined-forward sender, not nested authors.
+                // PRD §5.3.2: operation inside a CF detail view → SUB_COMBINED_FORWARD.
+                messageActionHelper.forwardMessage(
+                    message,
+                    sourceConversation = outerSourceConversation,
+                    sourceAuthorIdsOverride = outerSourceAuthorIds,
+                    combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
+                )
             }
             else -> {}
         }
+    }
+
+    private fun dispatchOuterCopyNotice() {
+        val conv = outerSourceConversation ?: return
+        val authors = outerSourceAuthorIds ?: return
+        // PRD §5.3.2: copy from inside a CF detail view → SUB_COMBINED_FORWARD.
+        activityNoticeDispatcher.dispatchCopyNotice(
+            sourceConversation = conv,
+            sourceAuthorIds = authors,
+            messageCount = 1,
+            combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
+        )
     }
 
     /**
@@ -358,11 +391,10 @@ class ChatForwardMessageFragment : Fragment() {
                         override fun onQuote(message: TextChatMessage) {}
                         override fun onCopy(message: TextChatMessage, selectedText: String?) {
                             if (selectedText != null) {
-                                // Partial selection - copy selected text only
                                 _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                                 ToastUtil.show(getString(R.string.chat_message_action_copied))
+                                dispatchOuterCopyNotice()
                             } else {
-                                // Full selection - copy entire message
                                 handleActionSelected(MessageAction.Type.COPY, message)
                             }
                         }
@@ -370,8 +402,15 @@ class ChatForwardMessageFragment : Fragment() {
                         override fun onTranslateOff(message: TextChatMessage) {}
                         override fun onForward(message: TextChatMessage, selectedText: String?) {
                             if (selectedText != null) {
-                                // Partial selection - forward as plain text
-                                selectChatsUtils.showChatSelectAndSendDialog(requireActivity(), selectedText)
+                                // Partial selection - forward as plain text (outer-attributed notice).
+                                // PRD §5.3.2: operation inside a CF detail view → SUB_COMBINED_FORWARD.
+                                selectChatsUtils.showChatSelectAndSendDialog(
+                                    requireActivity(),
+                                    selectedText,
+                                    sourceConversation = outerSourceConversation,
+                                    sourceAuthorIds = outerSourceAuthorIds,
+                                    combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
+                                )
                             } else {
                                 // Full selection - forward as original message
                                 handleActionSelected(MessageAction.Type.FORWARD, message)
@@ -469,7 +508,24 @@ class ChatForwardMessageFragment : Fragment() {
                         message
                     }
 
-                chatMessageAdapter.submitList(newList)
+                // PRD §5.3.2 SUB_COMBINED_FORWARD: decorate inner CF messages with the
+                // outermost CF's source attribution so any derived surface (large-font /
+                // translation / STT) dispatched from inside CF detail emits correctly
+                // attributed notices. outerSource* is Activity-scope on
+                // ChatForwardMessageActivity and stays pinned across navigateToNestedForward(),
+                // so this same decoration is correct at any nesting level.
+                val outerActivity = activity as? ChatForwardMessageActivity
+                val outerConv = outerActivity?.getOuterSourceConversation()
+                val outerAuthorId = outerActivity?.getOuterSourceAuthorId()
+                chatMessageAdapter.submitList(
+                    newList.map { msg ->
+                        msg.apply {
+                            forWhat = outerConv ?: forWhat
+                            sourceAuthorOverride = outerAuthorId
+                            sourceMode = CombinedForwardMode.SUB_COMBINED_FORWARD
+                        }
+                    }
+                )
             }
         }
     }

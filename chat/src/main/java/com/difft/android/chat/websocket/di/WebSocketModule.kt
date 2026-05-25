@@ -1,7 +1,8 @@
 package com.difft.android.chat.websocket.di
 
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.WebSocketConnectionFactory
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.network.UrlManager
 import com.difft.android.network.config.UserAgentManager
 import dagger.Module
@@ -23,7 +24,7 @@ object WebSocketModule {
         urlManager: UrlManager,
     ): ServiceConfig {
         val headers = mapOf(
-            "Authorization" to SecureSharedPrefsUtil.getBasicAuth(),
+            "Authorization" to (globalServices.userManager.getUserData()?.baseAuth ?: ""),
             "User-Agent" to UserAgentManager.getUserAgent()
         )
 
@@ -41,7 +42,7 @@ object WebSocketModule {
         webSocketConnectionFactory: WebSocketConnectionFactory,
     ) = webSocketConnectionFactory.createWebSocketConnection(
         {
-            SecureSharedPrefsUtil.getBasicAuth()
+            (globalServices.userManager.getUserData()?.baseAuth ?: "")
         },
         {
             urlManager.getChatWebsocketUrl()

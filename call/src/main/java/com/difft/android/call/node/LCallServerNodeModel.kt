@@ -11,12 +11,15 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.connect.DefaultGlobalConfigCallServiceUrlsReader
 import com.difft.android.call.connect.MeetingConnectionPlanner
 import com.difft.android.call.data.ServerNode
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class LCallServerNodeModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class LCallServerNodeModel @Inject constructor(application: Application) : AndroidViewModel(application) {
 
     val serverUrlConnected = LCallEngine.serverUrlConnected
 

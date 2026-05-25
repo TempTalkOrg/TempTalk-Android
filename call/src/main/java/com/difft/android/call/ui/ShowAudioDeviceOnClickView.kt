@@ -19,7 +19,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,6 +48,8 @@ fun ShowAudioDeviceOnClickView(
 
     DropdownMenu(
         modifier = Modifier
+            .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+            .testTag("call_audio_picker")
             .clip(shape = RoundedCornerShape(12.dp))
             .background(colorResource(id = com.difft.android.base.R.color.bg_popup_night)),
         expanded = expanded,
@@ -56,6 +62,7 @@ fun ShowAudioDeviceOnClickView(
         audioDevices.forEachIndexed { index, item ->
             DropdownMenuItem(
                 modifier = Modifier
+                    .testTag("call_audio_picker_item_$index")
                     .size(width = 247.dp, height = 30.dp)
                     .background(
                         colorResource(id = com.difft.android.base.R.color.bg_popup_night)

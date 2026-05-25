@@ -1,18 +1,15 @@
 package com.difft.android.call.manager
 
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.LCallToChatController
 import com.difft.android.network.HttpService
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.base.utils.ApplicationHelper
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -29,19 +26,12 @@ import javax.inject.Singleton
  */
 @Singleton
 class CallMessageManager @Inject constructor(
-    private val callToChatController: LCallToChatController
+    private val callToChatController: LCallToChatController,
+    @ChativeHttpClientModule.Chat private val chatHttpClient: dagger.Lazy<ChativeHttpClient>,
 ) {
 
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        @ChativeHttpClientModule.Chat
-        fun chatHttpClient(): ChativeHttpClient
-    }
-
     private val chatHttpService by lazy {
-        val chatHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).chatHttpClient()
-        chatHttpClient.getService(HttpService::class.java)
+        chatHttpClient.get().getService(HttpService::class.java)
     }
 
     /**
@@ -96,7 +86,7 @@ class CallMessageManager @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             try {
                 val result = chatHttpService.removePendingMessage(
-                    SecureSharedPrefsUtil.getBasicAuth(),
+                    (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                     source,
                     timestamp
                 )

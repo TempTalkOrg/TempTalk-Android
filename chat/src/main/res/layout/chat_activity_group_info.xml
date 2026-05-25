@@ -51,98 +51,102 @@
             android:orientation="vertical"
             android:paddingBottom="20dp">
 
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <!-- Card A: header (search input + member list + view-all toggle) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingLeft="16dp"
-                android:paddingRight="16dp">
+                android:layout_marginTop="12dp"
+                android:background="@color/bg.elevated"
+                android:orientation="vertical">
 
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/edittext_search_input"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/chat_fragment_search_input_bg_search_input"
-                    android:drawableStart="@drawable/chat_fragment_search_input_ic_search_input"
-                    android:drawablePadding="6dp"
-                    android:hint="@string/search_default_hint"
-                    android:textColorHint="@color/t.disable"
-                    android:textSize="14sp"
-                    app:drawableTint="@color/icon"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
-
-            <RelativeLayout
-                android:id="@+id/member_info_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="16dp">
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rv_members"
+                <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:scrollbars="vertical"
-                    app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-                    app:spanCount="5"
-                    tools:listitem="@layout/layout_group_member" />
-            </RelativeLayout>
+                    android:paddingTop="12dp"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp">
 
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/rel_view_all"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/edittext_search_input"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chat_search_input_bg_on_card"
+                        android:drawableStart="@drawable/chat_fragment_search_input_ic_search_input"
+                        android:drawablePadding="6dp"
+                        android:hint="@string/search_default_hint"
+                        android:textColorHint="@color/t.disable"
+                        android:textSize="14sp"
+                        app:drawableTint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
 
-                android:paddingBottom="16dp">
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_collapse"
-                    android:layout_width="wrap_content"
+                <RelativeLayout
+                    android:id="@+id/member_info_container"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:drawableEnd="@drawable/chat_ic_arrow_up"
-                    android:drawablePadding="3dp"
-                    android:text="@string/group_members_collapse"
-                    android:textColor="@color/t.primary"
-                    android:textSize="12sp"
-                    android:visibility="gone"
-                    app:drawableTint="@color/icon"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    android:padding="16dp">
 
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_view_all"
-                    android:layout_width="wrap_content"
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rv_members"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="vertical"
+                        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+                        app:spanCount="5"
+                        tools:listitem="@layout/layout_group_member" />
+                </RelativeLayout>
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/rel_view_all"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:drawableEnd="@drawable/chat_ic_arrow_down"
-                    android:drawablePadding="3dp"
-                    android:text="@string/group_members_view_all"
-                    android:textColor="@color/t.primary"
-                    android:textSize="12sp"
-                    app:drawableTint="@color/icon"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    android:paddingBottom="16dp">
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_collapse"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:drawableEnd="@drawable/chat_ic_arrow_up"
+                        android:drawablePadding="3dp"
+                        android:text="@string/group_members_collapse"
+                        android:textColor="@color/t.primary"
+                        android:textSize="12sp"
+                        android:visibility="gone"
+                        app:drawableTint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
 
-            <View
-                android:id="@+id/divider_encryption_top"
-                android:layout_width="match_parent"
-                android:layout_height="16dp"
-                android:background="@color/bg2"
-                android:visibility="gone" />
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_view_all"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:drawableEnd="@drawable/chat_ic_arrow_down"
+                        android:drawablePadding="3dp"
+                        android:text="@string/group_members_view_all"
+                        android:textColor="@color/t.primary"
+                        android:textSize="12sp"
+                        app:drawableTint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
 
-            <!-- Encryption status / upgrade entry -->
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </LinearLayout>
+
+            <!-- Card B: encryption status / upgrade entry (visibility controlled by setupEncryptionRow) -->
             <LinearLayout
                 android:id="@+id/ll_encryption_row"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
+                android:layout_marginTop="16dp"
+                android:background="@color/bg.elevated"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -173,135 +177,101 @@
 
             </LinearLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="16dp"
-                android:background="@color/bg2" />
-
-            <LinearLayout
-                android:id="@+id/ll_search_chat_history"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp">
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/search_chat_history"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_chat_history_arrow"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    android:tint="@color/t.primary" />
-
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="16dp"
-                android:background="@color/bg2" />
-
-            <RelativeLayout
-                android:id="@+id/rel_group_management"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone"
-                tools:visibility="visible">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_centerVertical="true"
-                    android:text="@string/group_management"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/arrow_group_management"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    android:tint="@color/t.primary" />
-
-            </RelativeLayout>
-
-
-            <RelativeLayout
-                android:id="@+id/edit_group_container"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp"
-                app:layout_goneMarginTop="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_centerVertical="true"
-                    android:text="@string/group_edit_info"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/arrow2"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    android:tint="@color/t.primary" />
-
-            </RelativeLayout>
-
-
-            <!--                <RelativeLayout-->
-            <!--                    android:id="@+id/group_link_container"-->
-            <!--                    android:layout_width="match_parent"-->
-            <!--                    android:layout_height="52dp"-->
-            <!--                    android:paddingStart="16dp"-->
-            <!--                    android:paddingEnd="8dp"-->
-            <!--                    android:visibility="gone"-->
-            <!--                    app:layout_goneMarginTop="16dp"-->
-            <!--                    tools:visibility="visible">-->
-
-            <!--                    <TextView-->
-            <!--                        android:layout_width="wrap_content"-->
-            <!--                        android:layout_height="wrap_content"-->
-            <!--                        android:layout_centerVertical="true"-->
-            <!--                        android:text="@string/invite_link"-->
-            <!--                        android:textColor="@color/t.primary"-->
-            <!--                        android:textSize="16sp" />-->
-
-            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
-            <!--                        android:id="@+id/arrow4"-->
-            <!--                        android:layout_width="20dp"-->
-            <!--                        android:layout_height="20dp"-->
-            <!--                        android:layout_alignParentEnd="true"-->
-            <!--                        android:layout_centerVertical="true"-->
-            <!--                        android:src="@drawable/chat_ic_arrow_right"-->
-            <!--                        android:tint="@color/t.primary" />-->
-            <!--                </RelativeLayout>-->
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="16dp"
-                android:background="@color/bg2" />
-
+            <!-- Card C: search chat history + group management + edit group info -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@color/bg.elevated"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/ll_search_chat_history"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/search_chat_history"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_chat_history_arrow"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </LinearLayout>
+
+                <RelativeLayout
+                    android:id="@+id/rel_group_management"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:text="@string/group_management"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/arrow_group_management"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </RelativeLayout>
+
+                <RelativeLayout
+                    android:id="@+id/edit_group_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:text="@string/group_edit_info"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/arrow2"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/chat_ic_arrow_right"
+                        android:tint="@color/t.primary" />
+
+                </RelativeLayout>
+            </LinearLayout>
+
+            <!-- Card D: switches & notifications & disappearing & save to photos -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@color/bg.elevated"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -488,15 +458,13 @@
                 </RelativeLayout>
             </LinearLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="16dp"
-                android:background="@color/bg2" />
-
+            <!-- Card E: leave group -->
             <FrameLayout
                 android:id="@+id/leave_container"
                 android:layout_width="match_parent"
-                android:layout_height="52dp">
+                android:layout_height="52dp"
+                android:layout_marginTop="16dp"
+                android:background="@color/bg.elevated">
 
 
                 <TextView
@@ -512,11 +480,6 @@
                     app:layout_constraintBottom_toBottomOf="parent" />
             </FrameLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="@color/bg2" />
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>

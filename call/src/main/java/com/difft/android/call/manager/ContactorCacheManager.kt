@@ -3,7 +3,6 @@ package com.difft.android.call.manager
 import android.content.Context
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.call.LCallToChatController
@@ -12,10 +11,14 @@ import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import java.util.concurrent.ConcurrentHashMap
@@ -27,20 +30,13 @@ import javax.inject.Singleton
  * 负责管理通话相关的通讯录缓存和显示信息
  */
 @Singleton
-class ContactorCacheManager @Inject constructor() {
-    
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        val callToChatController: LCallToChatController
-    }
-    
-    private val callToChatController: LCallToChatController by lazy {
-        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callToChatController
-    }
-    
-    private val application = ApplicationHelper.instance
-    
+class ContactorCacheManager @Inject constructor(
+    private val lazyCallToChatController: dagger.Lazy<LCallToChatController>,
+    @param:ApplicationContext private val context: Context,
+) {
+    private val callToChatController: LCallToChatController
+        get() = lazyCallToChatController.get()
+
     // 通讯录缓存：userId -> ContactorModel
     private val contactorCache: ConcurrentHashMap<String, CacheEntry> = ConcurrentHashMap()
 
@@ -59,7 +55,7 @@ class ContactorCacheManager @Inject constructor() {
         withContext(Dispatchers.IO) {
             val toUpdate = uidList.filter { uid -> contactorCache.containsKey(uid) }
             toUpdate.forEach { uid ->
-                val result = callToChatController.getContactorById(application, uid)
+                val result = callToChatController.getContactorById(context, uid)
                 if (result.isPresent) {
                     contactorCache[result.get().id] = CacheEntry.Hit(result.get())
                 } else {
@@ -83,7 +79,7 @@ class ContactorCacheManager @Inject constructor() {
                 val cached = contactorCache[userId]
                 if (cached is CacheEntry.Hit) return@withContext cached.contactor.getDisplayNameForUI()
 
-                val result = callToChatController.getContactorById(application, userId)
+                val result = callToChatController.getContactorById(context, userId)
                 if (result.isPresent) {
                     contactorCache[userId] = CacheEntry.Hit(result.get())
                     return@withContext result.get().getDisplayNameForUI()
@@ -198,7 +194,7 @@ class ContactorCacheManager @Inject constructor() {
         return withContext(Dispatchers.IO) {
             val entry = contactorCache[userId]
             if (entry is CacheEntry.Hit) return@withContext entry.contactor
-            val result = callToChatController.getContactorById(application, userId)
+            val result = callToChatController.getContactorById(context, userId)
             if (result.isPresent) {
                 contactorCache[userId] = CacheEntry.Hit(result.get())
                 result.get()
@@ -236,6 +232,57 @@ class ContactorCacheManager @Inject constructor() {
         return alertTitle to alertContent
     }
     
+    // region Participant display observation
+
+    private val _participantDisplayMap = MutableStateFlow<Map<String, CallUserDisplayInfo>>(emptyMap())
+    val participantDisplayMap: StateFlow<Map<String, CallUserDisplayInfo>> = _participantDisplayMap
+
+    private var contactsObserveJob: Job? = null
+
+    /**
+     * 启动通话参会者显示信息的集中监听。
+     * 内部有 isActive 守卫，重复调用安全。通话结束时调用 [stopParticipantObservation]。
+     */
+    fun startParticipantObservation(scope: CoroutineScope) {
+        if (contactsObserveJob?.isActive == true) return
+        L.i { "[Call][ContactorCache] startParticipantObservation started" }
+        contactsObserveJob = scope.launch(Dispatchers.IO) {
+            callToChatController.getContactsUpdateListener().collect { updatedIds ->
+                val currentMap = _participantDisplayMap.value
+                val toUpdate = currentMap.keys.filter { uid ->
+                    val userId = uid.split(".").firstOrNull() ?: uid
+                    updatedIds.contains(userId)
+                }
+                if (toUpdate.isEmpty()) return@collect
+                val participantUserIds = toUpdate.map { uid -> uid.split(".").firstOrNull() ?: uid }
+                updateCallContactorCache(participantUserIds)
+                val updated = toUpdate.associateWith { uid -> getParticipantDisplayInfo(uid) }
+                _participantDisplayMap.update { it + updated }
+            }
+        }
+    }
+
+    /**
+     * 加载单个参会者的显示信息并加入 [participantDisplayMap]。
+     * 参会者首次出现时调用。
+     */
+    suspend fun loadParticipantDisplay(uid: String) {
+        val info = getParticipantDisplayInfo(uid)
+        _participantDisplayMap.update { it + (uid to info) }
+    }
+
+    /**
+     * 通话结束，取消监听并清空参会者显示信息。
+     */
+    fun stopParticipantObservation() {
+        L.i { "[Call][ContactorCache] stopParticipantObservation called" }
+        contactsObserveJob?.cancel()
+        contactsObserveJob = null
+        _participantDisplayMap.value = emptyMap()
+    }
+
+    // endregion
+
     /**
      * 清空通讯录缓存
      * 在需要刷新缓存时调用

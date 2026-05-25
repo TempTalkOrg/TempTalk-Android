@@ -11,7 +11,6 @@ import com.difft.android.R
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivityPrivacySettingBinding
@@ -131,7 +130,7 @@ class PrivacySettingFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    loginRepo.renewIdentityKey(SecureSharedPrefsUtil.getBasicAuth(), JsonUtil.toJson(requestBody))
+                    loginRepo.renewIdentityKey((userManager.getUserData()?.baseAuth ?: ""), JsonUtil.toJson(requestBody))
                 }
                 ComposeDialogManager.dismissWait()
                 if (!isAdded || view == null) return@launch

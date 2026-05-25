@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LargeClass:IndexActivity.kt:IndexActivity : BaseActivityConversationNavigationCallbackChatMessageListProviderChatInputFocusable</ID>
+    <ID>LongMethod:DialogTestActivity.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun DialogTestScreen</ID>
+    <ID>LongMethod:SetCustomIdActivity.kt:@Composable fun SetOwnIdScreen</ID>
+  </CurrentIssues>
+</SmellBaseline>

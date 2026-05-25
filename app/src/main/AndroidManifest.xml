@@ -300,15 +300,21 @@
                 tools:node="remove" />
         </provider>
 
-        <!-- Override UCrop library Activity configuration to prevent direct external launch -->
+        <!-- Override UCrop library Activity configuration:
+             1. exported=false to prevent direct external launch
+             2. Custom theme so windowBackground / status / nav bars follow night
+                mode. uCrop's built-in theme is light-only; in edge-to-edge mode
+                its white windowBackground bleeds through system bars in dark mode. -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:exported="false"
-            tools:replace="android:exported" />
+            android:theme="@style/Theme.Chative.UCrop"
+            tools:replace="android:exported,android:theme" />
         <activity
             android:name="com.yalantis.ucrop.UCropMultipleActivity"
             android:exported="false"
-            tools:replace="android:exported" />
+            android:theme="@style/Theme.Chative.UCrop"
+            tools:replace="android:exported,android:theme" />
 
         <!--        <activity-->
         <!--            android:name="com.michaelflisar.lumberjack.view.LumberjackViewerActivity"-->

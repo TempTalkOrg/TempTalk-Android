@@ -23,6 +23,8 @@ import javax.inject.Singleton
  * that have already been confirmed to exist locally. The caches are automatically cleared on
  * app restart. For logout/account switch scenarios, call [clearCaches] explicitly.
  */
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class AsyncMessageJobsManager @Inject constructor(
     @param:ApplicationContext

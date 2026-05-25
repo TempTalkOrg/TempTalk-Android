@@ -2,7 +2,6 @@ package com.difft.android.chat.widget
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.View
@@ -10,6 +9,8 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.getLifecycleOwner
+import com.difft.android.base.utils.windowHeightPx
+import com.difft.android.base.utils.windowWidthPx
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
@@ -250,14 +251,15 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     ) {
         var finalWidth: Int
         var finalHeight: Int
-        // Use containerWidth if available (passed from Adapter), otherwise fallback to displayMetrics
-        val displayWidth = Resources.getSystem().displayMetrics.widthPixels
+        // Prefer currentContainerWidth (set by ChatMessageViewHolder for dual-pane), fall back
+        // to the current Activity window bounds via WindowMetrics. Avoids Resources.getSystem(),
+        // which always returns device-level dimensions and breaks on foldables (see PR #580).
         val containerWidth = if (currentContainerWidth > 0) {
             currentContainerWidth
         } else {
-            displayWidth
+            windowWidthPx()
         }
-        val containerHeight = Resources.getSystem().displayMetrics.heightPixels
+        val containerHeight = windowHeightPx()
 
         val maxWidth = containerWidth - 70.dp
         val maxHeight = (containerHeight / 3f).toInt()

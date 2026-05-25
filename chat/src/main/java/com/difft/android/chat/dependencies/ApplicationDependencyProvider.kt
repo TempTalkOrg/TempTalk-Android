@@ -40,6 +40,8 @@ class ApplicationDependencyProvider(
             .fromApplication(context, DepsEntryPoint::class.java)
             .wcdbJobStorage()
         val config = JobManager.Configuration.Builder()
+            // NOTE: ChatHiltProvidesModule.provideJobDataSerializer() provides a Hilt-bound twin
+            // of this serializer for ReactionSendCoordinator. Keep in sync if this line changes.
             .setDataSerializer(JsonDataSerializer())
             .setJobFactories(JobManagerFactories.getJobFactories(context))
             .setConstraintFactories(JobManagerFactories.getConstraintFactories(context))

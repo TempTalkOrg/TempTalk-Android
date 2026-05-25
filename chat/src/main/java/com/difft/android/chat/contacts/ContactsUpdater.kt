@@ -18,6 +18,8 @@ import com.difft.android.websocket.api.messages.TTNotifyMessage
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class ContactsUpdater @Inject constructor(

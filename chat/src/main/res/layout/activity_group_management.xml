@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg.setting"
     android:orientation="vertical">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -43,7 +42,7 @@
         android:id="@+id/cl_moderators"
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:paddingStart="16dp"
         android:paddingEnd="8dp">
 
@@ -88,7 +87,7 @@
         android:id="@+id/rv_moderators"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:scrollbars="vertical"
         app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
         app:spanCount="5"
@@ -98,7 +97,7 @@
         android:id="@+id/cl_transfer_owner"
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:paddingStart="16dp"
         android:paddingEnd="8dp">
 
@@ -128,7 +127,7 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginTop="16dp"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:checked="false"
         android:paddingStart="16dp"
         android:paddingEnd="8dp"
@@ -144,7 +143,7 @@
         style="@style/Widget.Chative.Switch"
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:checked="false"
         android:paddingStart="16dp"
         android:paddingEnd="8dp"
@@ -161,7 +160,7 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginTop="16dp"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:checked="false"
         android:paddingStart="16dp"
         android:paddingEnd="8dp"
@@ -177,7 +176,7 @@
         style="@style/Widget.Chative.Switch"
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:background="@color/bg.setting.item"
+        android:background="@color/bg.elevated"
         android:checked="false"
         android:paddingStart="16dp"
         android:paddingEnd="8dp"

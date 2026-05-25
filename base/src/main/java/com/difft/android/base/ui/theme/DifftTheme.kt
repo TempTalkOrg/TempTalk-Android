@@ -24,13 +24,16 @@ import androidx.core.graphics.drawable.toDrawable
  * - Unified accessor API via DifftTheme object
  *
  * @param darkTheme Whether to use dark theme. Defaults to system setting.
- * @param useSecondaryBackground If true, uses backgroundSetting color (page bg for settings-style screens); otherwise uses default background. Param name retained for API compatibility — does NOT map to the new colors.backgroundSecondary (true bg2).
+ * @param useFlatBackground If false (default), uses `colors.bg` — the settings idiom
+ *   page background that the majority of screens want. If true, uses `colors.background`
+ *   (= bg1, pure white in light / #181A20 in dark) for immersive content pages such as
+ *   FilePreSendActivity that need a flat surface without elevated cards.
  * @param content The composable content to display within the theme.
  */
 @Composable
 fun DifftTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    useSecondaryBackground: Boolean = false,
+    useFlatBackground: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -39,13 +42,11 @@ fun DifftTheme(
     val colorScheme = if (darkTheme) createDarkColorScheme() else createLightColorScheme()
     val extendedColors = if (darkTheme) createDarkExtendedColors() else createLightExtendedColors()
 
-    // Determine background color based on useSecondaryBackground flag.
-    // Behavior preserved: maps to backgroundSetting (renamed from old backgroundSecondary),
-    // not the new backgroundSecondary that holds the true bg2 color.
-    val backgroundColor = if (useSecondaryBackground) {
-        extendedColors.backgroundSetting
+    // Default = settings idiom (colors.bg). Immersive pages opt out with useFlatBackground = true.
+    val backgroundColor = if (useFlatBackground) {
+        colorScheme.background  // bg1 — flat surface for immersive content pages
     } else {
-        colorScheme.background
+        extendedColors.bg       // settings idiom — page bg, cards use colors.bgElevated
     }
 
     // Set window background color to affect status bar on Android 15+
@@ -325,9 +326,21 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.textInfo
 
-    val backgroundSetting: Color
+    /**
+     * Default page background (settings idiom).
+     * Matches XML `@color/bg`. Use this for the page-level background on almost all screens —
+     * `DifftTheme {}` already sets this as the window background by default.
+     *
+     * In light mode this is #FAFAFA (= `bg2` value); in dark mode #181A20 (= `bg1` value).
+     * Pair with `colors.bgElevated` for cards/list items that visually sit on top of the page.
+     *
+     * NOT to be confused with `colors.background` (Material3 raw `colorScheme.background`,
+     * which equals `bg1` — pure white in light / #181A20 in dark; used for immersive pages
+     * via `DifftTheme(useFlatBackground = true)`).
+     */
+    val bg: Color
         @Composable @ReadOnlyComposable
-        get() = extended.backgroundSetting
+        get() = extended.bg
 
     val backgroundSecondary: Color
         @Composable @ReadOnlyComposable
@@ -373,9 +386,19 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.backgroundElevate
 
-    val backgroundSettingItem: Color
+    /**
+     * Elevated/card background, sits one tier above `colors.bg`.
+     * Matches XML `@color/bg.elevated`. Use for cards / list items / sections that
+     * visually float on the page background.
+     *
+     * In light mode this is #FFFFFF (= `bg1` value, the page is the lighter gray `bg`);
+     * in dark mode #1E2329 (= `bg2` value, the page is the darker `bg`). The relationship
+     * between `bg` and `bgElevated` is **inverted** between light and dark — that's why
+     * semantic tokens (`bg` / `bgElevated`) are separate from raw tier tokens (`bg1` / `bg2`).
+     */
+    val bgElevated: Color
         @Composable @ReadOnlyComposable
-        get() = extended.backgroundSettingItem
+        get() = extended.bgElevated
 
     val divider: Color
         @Composable @ReadOnlyComposable

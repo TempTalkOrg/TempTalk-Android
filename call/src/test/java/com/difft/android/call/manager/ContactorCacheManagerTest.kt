@@ -1,15 +1,11 @@
 package com.difft.android.call.manager
 
-import com.difft.android.base.application.ScopeApplication
-import com.difft.android.base.utils.ApplicationHelper
+import android.content.Context
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,14 +28,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.Optional
-import kotlin.coroutines.CoroutineContext
 
 /**
  * Unit tests for [ContactorCacheManager.getParticipantDisplayInfo].
  *
- * Coverage from `tmp/bug-anr-multiparticipant/design-report.md` §Test Strategy:
+ * Test coverage:
  *  - Branch coverage: FromContactor (DB hit), FromNameOrUid (DB miss).
- *  - Regression assertion: the new IO-only path must NOT call `getAvatarByContactor`
+ *  - Regression assertion: the IO-only path must NOT call `getAvatarByContactor`
  *    or `createAvatarByNameOrUid` from inside the manager.
  *  - Dispatcher proof: the body must execute off the Main dispatcher.
  *  - Path B regression: repeat invocations must not invoke avatar-construction APIs.
@@ -48,18 +43,8 @@ import kotlin.coroutines.CoroutineContext
  * `Context` argument. If a future refactor re-introduces a `Context` parameter, every
  * call site here becomes a compile error — that's intentional.
  *
- * Setup notes:
- *  - [ContactorCacheManager] reads `ApplicationHelper.instance` during its lazy
- *    `application` field init. We initialize that with a stub [ScopeApplication] in
- *    `@Before` so the lazy resolves cleanly.
- *  - The class-level `callToChatController: LCallToChatController by lazy { EntryPointAccessors
- *    .fromApplication(ApplicationHelper.instance).callToChatController }` lookup is
- *    intercepted by mocking the static `EntryPointAccessors.fromApplication` so the
- *    production lazy receives our [LCallToChatController] mock — no Hilt graph needed.
- *
- * We use Robolectric so that any incidental Android framework class touched by the lazy
- * init path resolves cleanly (e.g., `ApplicationHelper.instance` indirectly accessing
- * Application APIs).
+ * We use Robolectric so that any incidental Android framework class touched by
+ * the init path resolves cleanly.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -68,40 +53,22 @@ class ContactorCacheManagerTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
     private val callToChatController: LCallToChatController = mockk(relaxed = true)
+    private val mockContext: Context = mockk(relaxed = true)
 
     private lateinit var subject: ContactorCacheManager
-
-    /** Tiny stub ScopeApplication to satisfy ApplicationHelper.instance lateinit. */
-    private class StubApplication : ScopeApplication() {
-        override val coroutineContext: CoroutineContext = Dispatchers.Unconfined
-    }
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        // Initialize ApplicationHelper.instance — ContactorCacheManager's class-level
-        // `application = ApplicationHelper.instance` references it.
-        ApplicationHelper.init(StubApplication())
-
-        // ContactorCacheManager.callToChatController is `by lazy { EntryPointAccessors.fromApplication ... }`.
-        // We intercept the static accessor so the lazy resolves to our mock without a Hilt graph.
-        mockkStatic(dagger.hilt.android.EntryPointAccessors::class)
-        val entryPoint = mockk<ContactorCacheManager.EntryPoint>(relaxed = true)
-        every { entryPoint.callToChatController } returns callToChatController
-        every {
-            dagger.hilt.android.EntryPointAccessors.fromApplication(
-                any(),
-                ContactorCacheManager.EntryPoint::class.java
-            )
-        } returns entryPoint
-
-        subject = ContactorCacheManager()
+        subject = ContactorCacheManager(
+            lazyCallToChatController = dagger.Lazy { callToChatController },
+            context = mockContext,
+        )
     }
 
     @After
     fun tearDown() {
-        unmockkStatic(dagger.hilt.android.EntryPointAccessors::class)
         Dispatchers.resetMain()
     }
 

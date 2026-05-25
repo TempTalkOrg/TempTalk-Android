@@ -132,6 +132,11 @@ fun checkThread() {
     }
 }
 
+// Strips query params to prevent presigned credentials from leaking into persistent log files.
+fun String.sanitizeUrl(): String {
+    return replace(Regex("""\?[^\s"')\]}>]+"""), "?[REDACTED]")
+}
+
 fun Context.restartApp(): Nothing {
     val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
         addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)

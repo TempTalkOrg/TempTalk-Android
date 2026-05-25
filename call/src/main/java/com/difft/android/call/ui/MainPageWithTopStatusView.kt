@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +63,7 @@ import dagger.hilt.android.EntryPointAccessors
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.util.StringUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -173,6 +176,7 @@ fun MainPageWithTopStatusView(
                         if(!isInPipMode){
                             Box(
                                 modifier = Modifier
+                                    .testTag("call_topbar_zoom_out")
                                     .constrainAs(windowZoomOut) {
                                         start.linkTo(parent.start, margin = controlPadding)
                                     }
@@ -209,6 +213,7 @@ fun MainPageWithTopStatusView(
                                 if(isUserSharingScreen && screenSharingUser?.identity?.value != null){
                                     screenShareUserName?.let { name ->
                                         Text(
+                                            modifier = Modifier.testTag("call_topbar_call_duration"),
                                             text = "${StringUtil.truncateWithEllipsis(name, 14)}${ResUtils.getString(R.string.call_screen_sharing_title)} $callDuration",
                                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                             color = colorResource(id = com.difft.android.base.R.color.t_white),
@@ -218,6 +223,7 @@ fun MainPageWithTopStatusView(
                                     }
                                 }else if(!isOneVOneCall) {
                                     Text(
+                                        modifier = Modifier.testTag("call_topbar_room_name"),
                                         text = StringUtil.truncateWithEllipsis(viewModel.getCallRoomName(), 25),
                                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                         color = colorResource(id = com.difft.android.base.R.color.t_white),
@@ -230,6 +236,7 @@ fun MainPageWithTopStatusView(
                                         verticalAlignment = Alignment.CenterVertically,
                                     ){
                                         Text(
+                                            modifier = Modifier.testTag("call_topbar_call_duration"),
                                             text = callDuration,
                                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                                             color = colorResource(id = com.difft.android.base.R.color.t_white),
@@ -257,6 +264,7 @@ fun MainPageWithTopStatusView(
                             }else {
                                 if (callType == CallType.ONE_ON_ONE.type && callStatus == CallStatus.CALLING) {
                                     Text(
+                                        modifier = Modifier.testTag("call_topbar_status_text"),
                                         text = ResUtils.getString(R.string.call_status_calling),
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontSize = 14.sp,
@@ -291,7 +299,9 @@ fun MainPageWithTopStatusView(
                                             )
 
                                             Text(
-                                                modifier = Modifier.padding(start = 4.dp),
+                                                modifier = Modifier
+                                                    .testTag("call_topbar_status_text")
+                                                    .padding(start = 4.dp),
                                                 text = status,
                                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                                 color = colorResource(id = com.difft.android.base.R.color.t_white),
@@ -307,10 +317,11 @@ fun MainPageWithTopStatusView(
                 }
             }
 
+            val criticalAlertScope = rememberCoroutineScope()
             if(viewModel.is1v1ShowCriticalAlertEnable(callStatus)) {
                 CallCriticalAlertView(
                     clicked = {
-                        viewModel.handleCriticalAlertNew()
+                        criticalAlertScope.launch { viewModel.handleCriticalAlertNew() }
                     }
                 )
             }

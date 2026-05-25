@@ -1,7 +1,6 @@
 package com.difft.android.chat.common
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.ChativeHttpClient
@@ -98,7 +97,7 @@ class ConversationManagerImpl @Inject constructor(
 
         val serverKeys: List<PublicKeyInfo>? = try {
             chatHttpClient.httpService
-                .getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(uids))
+                .getPublicKeys((globalServices.userManager.getUserData()?.microToken ?: ""), GetPublicKeysReq(uids))
                 .data
                 ?.keys
         } catch (e: Exception) {
@@ -143,7 +142,7 @@ class ConversationManagerImpl @Inject constructor(
         if (ids.isNullOrEmpty()) return null
         return try {
             chatHttpClient.httpService
-                .getPublicKeys(SecureSharedPrefsUtil.getToken(), GetPublicKeysReq(ids))
+                .getPublicKeys((globalServices.userManager.getUserData()?.microToken ?: ""), GetPublicKeysReq(ids))
                 .data
                 ?.keys
         } catch (e: Exception) {

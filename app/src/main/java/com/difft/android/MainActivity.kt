@@ -18,7 +18,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.LinkDataEntity
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
@@ -117,13 +116,13 @@ class MainActivity : BaseActivity() {
     )
 
     private fun verifyLocalToken(): Boolean {
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (userManager.getUserData()?.baseAuth ?: "")
         if (TextUtils.isEmpty(basicAuth)) {
             return false
         }
 
         val account = userManager.getUserData()?.account
-        val token = SecureSharedPrefsUtil.getToken()
+        val token = (userManager.getUserData()?.microToken ?: "")
 
         // Inconsistent state: basicAuth present but account/token missing (partial logout,
         // migration edge). Treat as unauthenticated — this is a security gate (issue #758).

@@ -2,7 +2,6 @@ package com.difft.android.login.repo
 
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.login.data.CodeResponse
 import com.difft.android.login.data.EmailVerifyData
 import com.difft.android.login.data.GenerateNonceCodeResponse
@@ -67,7 +66,7 @@ class LoginRepo @Inject constructor() {
 
     suspend fun setProfile(): BaseResponse<Any> {
         return httpService.fetchSetProfile(
-            SecureSharedPrefsUtil.getBasicAuth(),
+            (userManager.getUserData()?.baseAuth ?: ""),
             ProfileRequestBody(
                 meetingVersion = LCallConstants.CALL_VERSION,
                 msgEncVersion = 2, // 1: Encryption Disabled, 2: Encryption Enabled

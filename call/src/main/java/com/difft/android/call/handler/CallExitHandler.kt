@@ -3,6 +3,7 @@ package com.difft.android.call.handler
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.appScope
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.LCallViewModel
@@ -11,6 +12,7 @@ import com.difft.android.call.data.CallExitParams
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.state.OnGoingCallStateManager
+import kotlinx.coroutines.launch
 
 /**
  * 统一管理通话退出逻辑
@@ -96,19 +98,18 @@ class CallExitHandler(
     private fun handleCallingExit() {
         L.d { "[Call] CallExitHandler sendCancelCallMessage" }
         onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
-            callToChatController.cancelCall(
-                callerId = callIntent.callerId,
-                callRole = callRole,
-                type = callType,
-                roomId = roomId,
-                conversationId = conversationId
-            ) {
-                // 取消回调（结束后清理资源）
+            appScope.launch {
+                callToChatController.cancelCall(
+                    callerId = callIntent.callerId,
+                    callRole = callRole,
+                    type = callType,
+                    roomId = roomId,
+                    conversationId = conversationId
+                )
                 L.i { "[Call] CallExitHandler: Cancel call message sent, ending call" }
                 onEndCall()
             }
         } ?: run {
-            // 如果没有 roomId，直接结束
             L.w { "[Call] CallExitHandler: No roomId available, ending call directly" }
             onEndCall()
         }
@@ -131,28 +132,25 @@ class CallExitHandler(
         callDataManager.removeCallData(roomId)
         L.i { "[Call] CallExitHandler send hangUpCall CallMessage roomId:$roomId" }
 
-        // 发送 RTM 结束通话消息
         viewModel.rtm.sendEndCall(onComplete = {
-            // 验证参数
             if (roomId.isEmpty() || conversationId.isNullOrEmpty()) {
                 L.w { "[Call] CallExitHandler: Invalid params, ending call directly" }
                 onEndCall()
                 return@sendEndCall
             }
 
-            // 发送挂断消息到聊天
-            callToChatController.hangUpCall(
-                callerId = params.callerId,
-                callRole = callRole,
-                type = params.callType.ifEmpty { callType },
-                roomId = roomId,
-                conversationId = conversationId,
-                callUidList = viewModel.getCurrentCallUidList(),
-                onComplete = {
-                    L.i { "[Call] CallExitHandler: Hang up call message sent, ending call" }
-                    onEndCall()
-                }
-            )
+            appScope.launch {
+                callToChatController.hangUpCall(
+                    callerId = params.callerId,
+                    callRole = callRole,
+                    type = params.callType.ifEmpty { callType },
+                    roomId = roomId,
+                    conversationId = conversationId,
+                    callUidList = viewModel.getCurrentCallUidList(),
+                )
+                L.i { "[Call] CallExitHandler: Hang up call message sent, ending call" }
+                onEndCall()
+            }
         })
     }
 }

@@ -36,7 +36,6 @@ import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSo
 import org.whispersystems.signalservice.internal.websocket.webSocketMessage
 import java.io.IOException
 import java.net.UnknownHostException
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
@@ -90,7 +89,8 @@ class WebSocketConnection @AssistedInject constructor(
         clientBuilder.build()
     }
 
-    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = ConcurrentHashMap()
+    // Guarded by synchronized(this) at every access site.
+    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = HashMap()
 
     val name: String = "[ws][chat:" + System.identityHashCode(this) + "]"
 
@@ -208,7 +208,9 @@ class WebSocketConnection @AssistedInject constructor(
 
         val deferred = CompletableDeferred<WebsocketResponse>()
 
-        outgoingRequests[request.requestId] = OutgoingRequest(deferred)
+        synchronized(this) {
+            outgoingRequests[request.requestId] = OutgoingRequest(deferred)
+        }
 
         try {
             if (currentWebsocket?.send(ByteString.of(*message.toByteArray())) != true) {
@@ -219,7 +221,9 @@ class WebSocketConnection @AssistedInject constructor(
                 deferred.await()
             }
         } finally {
-            outgoingRequests.remove(request.requestId)
+            synchronized(this) {
+                outgoingRequests.remove(request.requestId)
+            }
         }
     }
 
@@ -292,7 +296,10 @@ class WebSocketConnection @AssistedInject constructor(
             if (message.type.number == WebSocketMessage.Type.REQUEST_VALUE) {
                 incomingRequests.add(message.request)
             } else if (message.type.number == WebSocketMessage.Type.RESPONSE_VALUE) {
-                outgoingRequests.remove(message.response.requestId)?.onSuccess(
+                val pending = synchronized(this) {
+                    outgoingRequests.remove(message.response.requestId)
+                }
+                pending?.onSuccess(
                     WebsocketResponse(
                         message.response.status,
                         String(message.response.body.toByteArray()),
@@ -354,21 +361,24 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     private fun cleanupAfterShutdown() {
-        // Handle outgoing requests
-        // Create a copy of the keys to avoid ConcurrentModificationException
-        val requestIds = outgoingRequests.keys.toList()
-        for (requestId in requestIds) {
-            try {
-                outgoingRequests.remove(requestId)?.onError(IOException("$name Closed unexpectedly"))
-            } catch (e: Exception) {
-                L.e(e) { "[WebSocketConnection] $name Error while cleaning up request $requestId" }
-            }
-        }
-
+        // Snapshot + clear first, then iterate the snapshot to fire onError.
+        // Decouples the iteration from the map so the map is in a clean state
+        // even if onError throws, and matches the onMessage pattern of
+        // extract-under-lock + invoke-callback-on-a-local-reference.
+        val pending = outgoingRequests.entries.toList()
+        outgoingRequests.clear()
         currentWebsocket = null // Allow garbage collection
         currentWebsocketListener?.invalidate()
         currentWebsocketListener = null
         L.i { "$name WebSocket connection cleaned up and set to null." }
+        val error = IOException("$name Closed unexpectedly")
+        for ((requestId, request) in pending) {
+            try {
+                request.onError(error)
+            } catch (e: Exception) {
+                L.e(e) { "[WebSocketConnection] $name Error while cleaning up request $requestId" }
+            }
+        }
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {

@@ -11,7 +11,6 @@ import com.difft.android.base.utils.checkThread
 import com.difft.android.base.utils.globalServices
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
-import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.core.Table
@@ -441,7 +440,7 @@ fun MessageModel.speechToTextData(): SpeechToTextData? {
 fun MessageModel.screenShot(): ScreenShot? {
     return screenShotJson?.takeIf { it.isNotEmpty() }?.let {
         runCatching {
-            Gson().fromJson(it, ScreenShot::class.java)
+            globalServices.gson.fromJson(it, ScreenShot::class.java)
         }.onFailure { e ->
             L.e { "parse screenShot error: ${e.stackTraceToString()}" }
         }.getOrNull()
@@ -689,7 +688,7 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         readTime = calculatedReadTime
         this.quoteDatabaseId = quoteDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
-        this.screenShotJson = message.screenShot?.let { Gson().toJson(it) }
+        this.screenShotJson = message.screenShot?.let { globalServices.gson.toJson(it) }
     }
     return messageModel
 }
@@ -899,7 +898,7 @@ fun MessageModel.previewContent(): String {
                 senderName + messageText
             }
         } else if (isNotifyMessage()) {
-            Gson().fromJson(messageText, JsonObject::class.java)?.get("showContent")?.asString.orEmpty()
+            globalServices.gson.fromJson(messageText, JsonObject::class.java)?.get("showContent")?.asString.orEmpty()
         } else {
             ""
         }

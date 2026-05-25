@@ -222,6 +222,7 @@
                     android:background="@android:color/transparent"
                     android:gravity="center_vertical"
                     android:hint="@string/chat_message_input_hint"
+                    android:imeOptions="flagNoExtractUi"
                     android:maxLines="5"
                     android:minHeight="44dp"
                     android:minLines="1"

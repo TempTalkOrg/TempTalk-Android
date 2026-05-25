@@ -19,7 +19,8 @@ import javax.inject.Singleton
 
 @Singleton
 class NewMessageEncryptor @Inject constructor(
-    private val encryptionDataManager: EncryptionDataManager
+    private val encryptionDataManager: EncryptionDataManager,
+    private val gson: Gson,
 ) : INewMessageContentEncryptor {
     companion object {
         const val DJB_TYPE: Byte = 0x05;
@@ -166,7 +167,7 @@ class NewMessageEncryptor @Inject constructor(
         try {
             val publicKey = (Base64.decode(hisPublicKey).map { it.toUByte() }.removeKeyType())
             val decodedCipherMessage = String(cipherMessage, Charsets.UTF_8)
-            val rtmEncryptedMessage = Gson().fromJson(decodedCipherMessage, RtmEncryptedMessage::class.java)
+            val rtmEncryptedMessage = gson.fromJson(decodedCipherMessage, RtmEncryptedMessage::class.java)
             val encryptedTextUBytes = android.util.Base64.decode(rtmEncryptedMessage.payload, android.util.Base64.NO_WRAP).map { it.toUByte() }
             val signatureUBytes = android.util.Base64.decode(rtmEncryptedMessage.signature, android.util.Base64.NO_WRAP).map { it.toUByte() }
             val mAesKey = aesKey.copyOfRange(0, 32).map { it.toUByte() }

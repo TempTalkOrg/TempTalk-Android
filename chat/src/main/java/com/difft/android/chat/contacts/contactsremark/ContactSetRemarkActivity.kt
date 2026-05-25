@@ -1,5 +1,7 @@
 package com.difft.android.chat.contacts.contactsremark
 
+import com.difft.android.base.utils.globalServices
+
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -9,7 +11,6 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -168,7 +169,7 @@ class ContactSetRemarkActivity : BaseActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(
                             conversation = contactId,
                             remark = encryptedRemark
@@ -231,7 +232,7 @@ class ContactSetRemarkActivity : BaseActivity() {
                 }
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(
                             conversation = contactId,
                             remarkAvatar = encrypted
@@ -368,7 +369,7 @@ class ContactSetRemarkActivity : BaseActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(
                             conversation = contactId,
                             remarkAvatar = ""

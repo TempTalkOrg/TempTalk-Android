@@ -161,15 +161,21 @@ class MessageActionCoordinator(
             // Setup selection menu callbacks
             popup.setSelectionMenuCallbacks(object : MessageActionPopup.SelectionMenuCallbacks {
                 override fun onCopy() {
-                    val selectedText = textSelectionManager?.getSelectedText() ?: ""
+                    // Pass null (not "") when nothing is actually selected so the listener's
+                    // null-check correctly distinguishes "full-message copy" vs "partial
+                    // copy". Selection menu mode normally always has a selection, but
+                    // textSelectionManager can be in a transient detached state; treat that
+                    // as null instead of silently copying an empty string and toasting "Copied".
+                    val selectedText = textSelectionManager?.getSelectedText()?.takeIf { it.isNotEmpty() }
                     currentMessage?.let { msg ->
                         actionListener?.onCopy(msg, selectedText)
                     }
                     dismiss()
                 }
-                
+
                 override fun onForward() {
-                    val selectedText = textSelectionManager?.getSelectedText() ?: ""
+                    // Same null-vs-empty discipline as onCopy above.
+                    val selectedText = textSelectionManager?.getSelectedText()?.takeIf { it.isNotEmpty() }
                     currentMessage?.let { msg ->
                         actionListener?.onForward(msg, selectedText)
                     }

@@ -502,7 +502,6 @@ class GroupInfoActivity : BaseActivity() {
 
         if (isEncryptedGroup) {
             // Flag gates new encryption actions only; encrypted groups always show their status.
-            binding.dividerEncryptionTop.visibility = View.VISIBLE
             binding.llEncryptionRow.visibility = View.VISIBLE
             binding.ivEncryptionLock.visibility = View.VISIBLE
             binding.ivEncryptionLock.setColorFilter(getColor(com.difft.android.base.R.color.t_primary))
@@ -516,7 +515,6 @@ class GroupInfoActivity : BaseActivity() {
             // Plain group: upgrade entry shown only when flag is on and user is owner/admin.
             val canShowUpgrade = globalConfigsManager.isGroupEncryptionEnabled() && role <= GROUP_ROLE_ADMIN
             if (canShowUpgrade) {
-                binding.dividerEncryptionTop.visibility = View.VISIBLE
                 binding.llEncryptionRow.visibility = View.VISIBLE
                 binding.ivEncryptionLock.visibility = View.GONE
                 binding.tvEncryptionLabel.text = getString(R.string.group_upgrade_to_encrypted)
@@ -526,7 +524,6 @@ class GroupInfoActivity : BaseActivity() {
                     showUpgradeToEncryptedSheet()
                 }
             } else {
-                binding.dividerEncryptionTop.visibility = View.GONE
                 binding.llEncryptionRow.visibility = View.GONE
             }
         }

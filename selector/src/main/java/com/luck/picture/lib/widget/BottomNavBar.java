@@ -56,7 +56,7 @@ public class BottomNavBar extends RelativeLayout implements View.OnClickListener
         originalCheckbox = findViewById(R.id.cb_original);
         tvPreview.setOnClickListener(this);
         tvImageEditor.setVisibility(GONE);
-        setBackgroundColor(ContextCompat.getColor(getContext(), com.difft.android.base.R.color.bg1));
+        setBackgroundColor(ContextCompat.getColor(getContext(), com.difft.android.base.R.color.bg));
         originalCheckbox.setChecked(config.isCheckOriginalImage);
         originalCheckbox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override

@@ -3,7 +3,6 @@ package com.difft.android.network.config
 import com.auth0.android.jwt.JWT
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +24,7 @@ class WsTokenManager @Inject constructor(
     private suspend fun refreshToken(): String = withContext(Dispatchers.IO) {
         try {
             val response = chativeHttpClient.httpService.fetchAuthToken(
-                SecureSharedPrefsUtil.getBasicAuth()
+                (userManager.getUserData()?.baseAuth ?: "")
             )
             val newToken = response.data?.token ?: ""
             if (newToken.isNotEmpty()) {
@@ -59,7 +58,7 @@ class WsTokenManager @Inject constructor(
     private var isRefreshing = false
 
     suspend fun refreshTokenIfNeeded() = withContext(Dispatchers.IO) {
-        val auth = SecureSharedPrefsUtil.getBasicAuth()
+        val auth = (userManager.getUserData()?.baseAuth ?: "")
         if (auth.isEmpty()) return@withContext
         tokenRefreshMutex.withLock {
             if (!isRefreshing) {
@@ -83,7 +82,7 @@ class WsTokenManager @Inject constructor(
      * @return New token if refresh succeeded, empty string otherwise
      */
     suspend fun forceRefreshToken(): String = withContext(Dispatchers.IO) {
-        val auth = SecureSharedPrefsUtil.getBasicAuth()
+        val auth = (userManager.getUserData()?.baseAuth ?: "")
         if (auth.isEmpty()) return@withContext ""
         tokenRefreshMutex.withLock {
             try {
@@ -96,7 +95,7 @@ class WsTokenManager @Inject constructor(
     }
 
     private fun isTokenExpired(): Boolean {
-        val currentToken = SecureSharedPrefsUtil.getToken()
+        val currentToken = (userManager.getUserData()?.microToken ?: "")
         if (currentToken.isEmpty()) return true
         val result = kotlin.runCatching {
             val jwt = JWT(currentToken)

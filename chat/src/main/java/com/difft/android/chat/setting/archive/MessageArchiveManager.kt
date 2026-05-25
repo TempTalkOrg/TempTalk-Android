@@ -3,7 +3,6 @@ package com.difft.android.chat.setting.archive
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.R
@@ -20,6 +19,7 @@ import com.difft.android.network.requests.ConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
@@ -43,6 +43,8 @@ import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class MessageArchiveManager @Inject constructor(
     private val dbRoomStore: DBRoomStore,
@@ -52,7 +54,8 @@ class MessageArchiveManager @Inject constructor(
     private val chatHttpClient: ChativeHttpClient,
     private val dbMessageStore: DBMessageStore,
     private val localMessageCreator: dagger.Lazy<LocalMessageCreator>,
-    private val conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>
+    private val conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>,
+    private val gson: Gson,
 ) {
     companion object {
         private const val FOREGROUND_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
@@ -295,7 +298,7 @@ class MessageArchiveManager @Inject constructor(
     private fun isArchiveExpiredSystemMessage(message: MessageModel): Boolean {
         if (message.type != 2) return false
         return try {
-            val json = globalServices.gson.fromJson(message.messageText, JsonObject::class.java)
+            val json = gson.fromJson(message.messageText, JsonObject::class.java)
             val data = json?.get("data")?.asJsonObject
             val actionType = data?.get("actionType")?.asInt
             actionType == TTNotifyMessage.NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED
@@ -357,7 +360,7 @@ class MessageArchiveManager @Inject constructor(
     } else {
         val response = chatHttpClient.httpService
             .fetchShareConversationConfig(
-                SecureSharedPrefsUtil.getToken(),
+                (globalServices.userManager.getUserData()?.microToken ?: ""),
                 GetConversationShareRequestBody(
                     listOf(conversationParams(forWhat.id)),
                     false
@@ -396,7 +399,7 @@ class MessageArchiveManager @Inject constructor(
         } else {
             val response = chatHttpClient.httpService
                 .updateConversationConfig(
-                    SecureSharedPrefsUtil.getToken(),
+                    (globalServices.userManager.getUserData()?.microToken ?: ""),
                     conversationParams(forWhat.id),
                     ConversationShareRequestBody(messageExpiry)
                 )
@@ -472,7 +475,7 @@ class MessageArchiveManager @Inject constructor(
             L.i { "[MessageArchiveManager] checkIdentityKeyReset maxResetTime: $maxResetTime" }
 
             val checkIdentityKeyResetResponse = chatHttpClient.httpService.getPublicKeys(
-                SecureSharedPrefsUtil.getToken(),
+                (globalServices.userManager.getUserData()?.microToken ?: ""),
                 GetPublicKeysReq(beginTimestamp = maxResetTime)
             )
             if (checkIdentityKeyResetResponse.isSuccess()) {

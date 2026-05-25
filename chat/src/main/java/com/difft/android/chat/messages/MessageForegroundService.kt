@@ -6,6 +6,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
@@ -20,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -63,6 +65,21 @@ class MessageForegroundService : Service() {
         postForegroundNotification()
 
         serviceScope.launch {
+            // F-H1 safety: if startForeground above failed via FGSNAE, the helper
+            // already called stopSelf(). onDestroy() will run and trigger
+            // serviceScope.cancel() at some point, but until then this launch body
+            // may proceed to invoke the @Synchronized non-suspend
+            // WebSocketManager.start() (which does NOT consult coroutine isActive,
+            // runs synchronously to completion on Dispatchers.IO, sets
+            // isStarted=true). To avoid starting WebSocket on a Service that is
+            // already on its way to onDestroy, check isActive first.
+            //
+            // This is the FIRST line of the launch body; control flow of
+            // onStartCommand itself is unchanged.
+            if (!isActive) {
+                L.w { "[MessageForegroundService] launch body skipped — service already stopping" }
+                return@launch
+            }
             try {
                 val entryPoint = EntryPointAccessors.fromApplication(
                     applicationContext, ServiceEntryPoint::class.java
@@ -85,7 +102,7 @@ class MessageForegroundService : Service() {
     }
 
     private fun postForegroundNotification() {
-        startForeground(FOREGROUND_ID, createNotification())
+        ForegroundServiceStarter.startForegroundSafely(this, FOREGROUND_ID, createNotification())
     }
 
     private fun createNotification(): Notification {

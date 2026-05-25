@@ -27,7 +27,6 @@ import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.network.ChativeHttpClient
@@ -665,7 +664,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(conversationId, confidentialMode = mode)
                     )
                 }

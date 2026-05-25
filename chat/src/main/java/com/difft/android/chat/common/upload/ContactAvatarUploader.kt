@@ -1,10 +1,11 @@
 package com.difft.android.chat.common.upload
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.Base64
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.chat.util.Util
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
@@ -41,7 +42,7 @@ class ContactAvatarUploader @Inject constructor(
 ) {
     suspend fun uploadAvatar(filePath: String): UploadedAvatarMeta = withContext(Dispatchers.IO) {
         val response = httpClient.httpService
-            .fetchAvatarAttachmentInfo(SecureSharedPrefsUtil.getBasicAuth())
+            .fetchAvatarAttachmentInfo((globalServices.userManager.getUserData()?.baseAuth ?: ""))
         if (response.status != 0) {
             L.w { "[ContactAvatarUploader] fetchAvatarAttachmentInfo failed: status=${response.status}, reason=${response.reason}" }
             throw NetworkException(response.status, response.reason ?: "")

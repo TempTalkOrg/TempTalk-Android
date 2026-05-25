@@ -126,6 +126,7 @@ fun generateMessageTwo(
         TextChatMessage().apply {
             this.id = record.id
             this.authorId = authorId
+            this.forWhat = forWhat
             this.isMine = isFromMySelf
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
@@ -160,6 +161,7 @@ fun generateMessageTwo(
         ConfidentialPlaceholderChatMessage().apply {
             this.id = record.id
             this.authorId = authorId
+            this.forWhat = forWhat
             this.isMine = isFromMySelf
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
@@ -172,6 +174,7 @@ fun generateMessageTwo(
         NotifyChatMessage().apply {
             this.id = record.id
             this.authorId = author.id
+            this.forWhat = forWhat
             this.isMine = isFromMySelf
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
@@ -179,7 +182,7 @@ fun generateMessageTwo(
             this.notifySequenceId = record.notifySequenceId
             this.readMaxSId = record.sequenceId
             this.notifyMessage =
-                Gson().fromJson(record.messageText, TTNotifyMessage::class.java)
+                globalServices.gson.fromJson(record.messageText, TTNotifyMessage::class.java)
         }
     } else {
         L.e { "generateMessage message can't find type! ${record.timeStamp}  type:${record.type}" }
@@ -285,7 +288,7 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
             }
 
             is NotifyMessage -> {
-                val notifyMessage = Gson().fromJson(record.notifyContent, TTNotifyMessage::class.java)
+                val notifyMessage = globalServices.gson.fromJson(record.notifyContent, TTNotifyMessage::class.java)
                 notifyMessage?.showContent ?: ""
             }
 

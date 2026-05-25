@@ -100,4 +100,5 @@
     <string name="database_recovery_progress">正在恢复数据库，请稍候… %d%%</string>
     <string name="database_recovery_failed">数据恢复失败，请重新登录</string>
     <string name="database_recovery_retry_tip">数据库恢复失败，应用将重启重试 (%d/3)</string>
+    <string name="dual_pane_divider_drag_hint">拖动以调整面板宽度</string>
 </resources>

@@ -57,6 +57,7 @@ message Envelope {
     MSG_ENC_CALL = 12;
     MSG_GROUP_KEY = 13;
     MSG_FORWARD_NOTICE = 14;
+    MSG_ACTIVITY_NOTICE = 15;
   }
 
   optional Type   type = 1;
@@ -80,14 +81,62 @@ message Envelope {
 }
 
 message Content {
-  optional DataMessage          dataMessage = 1;
-  optional SyncMessage          syncMessage = 2;
-  optional NullMessage          nullMessage = 4;
-  optional ReceiptMessage       receiptMessage = 5;
-  optional NotifyMessage        notifyMessage = 7;
-  optional CallMessage          callMessage = 8;
-  optional GroupKeyMessage      groupKeyMessage = 9;
-  optional ForwardNoticeMessage forwardNotice = 10;
+  optional DataMessage           dataMessage    = 1;
+  optional SyncMessage           syncMessage    = 2;
+  optional NullMessage           nullMessage    = 4;
+  optional ReceiptMessage        receiptMessage = 5;
+  optional NotifyMessage         notifyMessage  = 7;
+  optional CallMessage           callMessage    = 8;
+  optional GroupKeyMessage       groupKeyMessage = 9;
+  optional ForwardNoticeMessage  forwardNotice  = 10;
+  // Generic source-side activity notice. Carries COPY notice in this iteration;
+  // future activity types (PASTE, SCREENSHOT, EXPORT, ...) add new oneof cases.
+  // ForwardNoticeMessage above stays as legacy channel for forward notices.
+  optional MessageActivityNotice activityNotice = 11;
+}
+
+// Generic source-side activity notice container.
+//
+// Design intent: long-term carrier for "an activity was initiated against
+// messages in the source conversation" notifications.
+//   This iteration:  COPY
+//   Future:          PASTE, SCREENSHOT, EXPORT, ...
+//
+// Top-level fields are kept minimal — only universally-applicable fields go
+// at this level. Per-type fields live in oneof typeData; the oneof case itself
+// is the type discriminator (no separate `type` field is needed).
+//
+// Receiver compatibility rules (all platforms must honor):
+//   - TYPEDATA_NOT_SET or unrecognized oneof case → drop with warn log
+//   - Each oneof case MUST be handled exhaustively (no default-render fallback)
+//   - For group conversations: verify envelope.source is a member of
+//     conversation.groupId (cross-conversation injection guard, see PR #683)
+//   - Sender MUST always set exactly one typeData case
+message MessageActivityNotice {
+  // Shared by CopyData / ForwardNoticeMessage. Describes how the source selection
+  // relates to combined-forward (a.k.a. "chat history") messages, per PRD §5.3.
+  enum CombinedForwardMode {
+    UNKNOWN                   = 0; // No combined-forward involvement (or sender pre-PRD-v5)
+    CONTAINS_COMBINED_FORWARD = 1; // Main-conversation selection: mixed (regular + CF bubbles)
+    ALL_COMBINED_FORWARD      = 2; // Main-conversation selection: all bubbles are CF
+    SUB_COMBINED_FORWARD      = 3; // Operation target is a sub-message INSIDE a CF (detail view)
+  }
+
+  optional ConversationId conversation = 1;   // Source conversation (group: groupId required; 1v1: optional, fallback to envelope.source)
+
+  oneof typeData {
+    CopyData copyData = 2;
+    // Future:
+    // ForwardData    forwardData    = 3;
+    // PasteData      pasteData      = 4;
+    // ScreenshotData screenshotData = 5;
+  }
+}
+
+message CopyData {
+  repeated string                                    sourceAuthorIds     = 1; // Authors of copied source messages, first-seen order; receiver dedupes + truncates
+  optional uint32                                    messageCount        = 2; // Number of copied messages (single/partial copy = 1, multi-select = N)
+  optional MessageActivityNotice.CombinedForwardMode combinedForwardMode = 3;
 }
 
 message ForwardNoticeMessage {
@@ -98,11 +147,12 @@ message ForwardNoticeMessage {
     COMBINED      = 3;
     SAVE_TO_NOTES = 4;
   }
-  optional ForwardScene   scene           = 1;
-  repeated string         sourceAuthorIds = 2; // deduped, first-seen order, unbounded
-  optional uint32         messageCount    = 3; // top-level count; nested forwards count as 1
+  optional ForwardScene                              scene               = 1;
+  repeated string                                    sourceAuthorIds     = 2; // deduped, first-seen order, unbounded
+  optional uint32                                    messageCount        = 3; // top-level count; nested forwards count as 1
   // Source conversation. Sender fills from its own view (groupId / peer uid).
-  optional ConversationId conversation    = 4;
+  optional ConversationId                            conversation        = 4;
+  optional MessageActivityNotice.CombinedForwardMode combinedForwardMode = 5;
 }
 
 message GroupKeyMessage {
@@ -679,8 +729,10 @@ message SyncMessage {
   repeated Task                 tasks = 10;
   optional MarkAsUnread         markAsUnread = 11;
   optional ConversationArchive  conversationArchive = 12;
-  optional uint64               serverTimestamp = 16;
-  optional ForwardNoticeMessage forwardNoticeSync = 18;
+  optional uint64                serverTimestamp = 16;
+  optional ForwardNoticeMessage  forwardNoticeSync = 18;
+  // Self-sync mirror of Content.activityNotice; same payload semantics.
+  optional MessageActivityNotice activityNoticeSync = 19;
 }
 
 message AttachmentPointer {

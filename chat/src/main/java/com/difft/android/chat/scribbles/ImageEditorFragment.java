@@ -64,7 +64,6 @@ import com.difft.android.chat.util.MediaUtil;
 import com.difft.android.chat.util.ParcelUtil;
 import com.difft.android.chat.util.SaveAttachmentUtil;
 import com.difft.android.base.utils.FileUtil;
-import com.difft.android.chat.util.TextSecurePreferences;
 import com.difft.android.chat.util.ThrottledDebouncer;
 import com.difft.android.chat.util.Util;
 import com.difft.android.chat.util.ViewUtil;
@@ -370,7 +369,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
         TextEntryDialogFragment.Companion.show(
                 getChildFragmentManager(),
                 textElement,
-                TextSecurePreferences.isIncognitoKeyboardEnabled(requireContext()),
+                false,
                 selectAll,
                 imageEditorHud.getColorIndex()
         );

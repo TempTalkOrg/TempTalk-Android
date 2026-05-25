@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,18 +43,23 @@ import androidx.compose.ui.unit.sp
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.globalServices
+import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.BarrageMessageConfig
+import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.ui.barrage.BarrageMessageView
 import com.difft.android.call.ui.screenshare.ScreenSharingView
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -80,6 +86,25 @@ fun MultiParticipantCallPage(
 
     val coroutineScope = rememberCoroutineScope()
 
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
+    }
+    val contactorCacheManager = entryPoint.contactorCacheManager
+    val displayInfoMap by contactorCacheManager.participantDisplayMap.collectAsState()
+
+    LaunchedEffect(participants) {
+        val uidsToLoad = participants.mapNotNull { p ->
+            val uid = when (p) {
+                is LocalParticipant -> globalServices.myId
+                else -> p.identity?.value ?: ""
+            }
+            uid.takeIf { it.isNotEmpty() && it !in displayInfoMap }
+        }
+        uidsToLoad.forEach { uid ->
+            launch { contactorCacheManager.loadParticipantDisplay(uid) }
+        }
+    }
+
     val configuration = LocalConfiguration.current
     val isWideScreen = configuration.screenWidthDp >= 600 ||
         configuration.screenWidthDp > configuration.screenHeightDp
@@ -92,7 +117,8 @@ fun MultiParticipantCallPage(
                 room = room,
                 muteOtherEnabled = muteOtherEnabled,
                 topInset = topInset,
-                coroutineScope = coroutineScope
+                coroutineScope = coroutineScope,
+                displayInfoMap = displayInfoMap
             )
         } else {
             CompositionLocalProvider(
@@ -102,11 +128,13 @@ fun MultiParticipantCallPage(
                     columns = GridCells.Fixed(2),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(
-                        start = 16.dp,
-                        top = topInset + 16.dp,
-                        end = 16.dp,
-                        bottom = 4.dp),
+                    modifier = Modifier
+                        .testTag("call_render_multi_grid")
+                        .padding(
+                            start = 16.dp,
+                            top = topInset + 16.dp,
+                            end = 16.dp,
+                            bottom = 4.dp),
                 ) {
                     items(
                         count = participants.size,
@@ -123,6 +151,8 @@ fun MultiParticipantCallPage(
                             participant = participant,
                             modifier = Modifier.fillMaxHeight().aspectRatio(1f),
                             uid = uid,
+                            userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
+                            participantIndex = index,
                             muteOtherEnabled = muteOtherEnabled,
                             onClickMute = { viewModel.toggleMute(participant) },
                             coroutineScope = coroutineScope
@@ -235,7 +265,8 @@ private fun WideScreenParticipantLayout(
     room: Room,
     muteOtherEnabled: Boolean,
     topInset: Dp,
-    coroutineScope: CoroutineScope
+    coroutineScope: CoroutineScope,
+    displayInfoMap: Map<String, CallUserDisplayInfo>
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val maxPerRow = calculateMaxPerRow(screenWidthDp)
@@ -297,6 +328,8 @@ private fun WideScreenParticipantLayout(
                                 participant = participant,
                                 modifier = Modifier.fillMaxSize(),
                                 uid = uid,
+                                userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
+                                participantIndex = participants.indexOf(participant),
                                 muteOtherEnabled = muteOtherEnabled,
                                 onClickMute = { viewModel.toggleMute(participant) },
                                 coroutineScope = coroutineScope

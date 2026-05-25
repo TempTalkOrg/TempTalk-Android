@@ -1,5 +1,7 @@
 package com.difft.android.chat.common
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
@@ -7,7 +9,6 @@ import android.widget.ImageView
 import com.bumptech.glide.Glide
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -82,7 +83,7 @@ object GroupAvatarUtil {
             val downloadUrlResponse = EntryPointAccessors.fromApplication<EntryPoint>(context)
                 .chatHttpClient()
                 .httpService
-                .getDownloadUrl(SecureSharedPrefsUtil.getBasicAuth(), groupAvatarData.serverId ?: "")
+                .getDownloadUrl((globalServices.userManager.getUserData()?.baseAuth ?: ""), groupAvatarData.serverId ?: "")
 
             val location = downloadUrlResponse.location
             if (location.isNullOrEmpty()) {

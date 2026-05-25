@@ -1,5 +1,7 @@
 package com.difft.android.base.utils
 
+import com.difft.android.base.utils.globalServices
+
 import android.app.Activity
 import android.app.Dialog
 import android.view.Window

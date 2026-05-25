@@ -34,7 +34,7 @@ data class DifftExtendedColors(
 
     // Background hierarchy
     val background: Color,
-    val backgroundSetting: Color,    // bg.setting (page bg for settings-style screens)
+    val bg: Color,    // bg — default page background (settings idiom)
     val backgroundSecondary: Color,  // bg2 (true second elevation, e.g. cards floating above bg1)
     val backgroundTertiary: Color,
     val backgroundQuaternary: Color,  // bg4
@@ -45,7 +45,7 @@ data class DifftExtendedColors(
     val backgroundPopup: Color,
     val backgroundTooltip: Color,
     val backgroundBlue: Color,
-    val backgroundSettingItem: Color,  // Corresponds to bg.setting.item
+    val bgElevated: Color,  // bg.elevated — default elevated/card background
     val backgroundElevate: Color,
 
     // UI elements
@@ -85,7 +85,7 @@ fun createLightColorScheme(): ColorScheme = lightColorScheme(
 
     secondary = ColorTokens.Light.BackgroundTertiary,
     onSecondary = ColorTokens.Light.TextPrimary,
-    secondaryContainer = ColorTokens.Light.BackgroundSetting,
+    secondaryContainer = ColorTokens.Light.Bg,
     onSecondaryContainer = ColorTokens.Light.TextSecondary,
 
     tertiary = ColorTokens.Light.Surface,
@@ -130,7 +130,7 @@ fun createDarkColorScheme(): ColorScheme = darkColorScheme(
 
     secondary = ColorTokens.Dark.BackgroundTertiary,
     onSecondary = ColorTokens.Dark.TextPrimary,
-    secondaryContainer = ColorTokens.Dark.BackgroundSetting,
+    secondaryContainer = ColorTokens.Dark.Bg,
     onSecondaryContainer = ColorTokens.Dark.TextSecondary,
 
     tertiary = ColorTokens.Dark.Surface,
@@ -184,7 +184,7 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     textInfo = ColorTokens.Info,
 
     background = ColorTokens.Light.Background,
-    backgroundSetting = ColorTokens.Light.BackgroundSetting,
+    bg = ColorTokens.Light.Bg,
     backgroundSecondary = ColorTokens.Light.BackgroundSecondary,
     backgroundTertiary = ColorTokens.Light.BackgroundTertiary,
     backgroundQuaternary = ColorTokens.Light.BackgroundQuaternary,
@@ -195,7 +195,7 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundPopup = ColorTokens.Light.BackgroundPopup,
     backgroundTooltip = ColorTokens.Light.Tooltip,
     backgroundBlue = ColorTokens.Light.BackgroundBlue,
-    backgroundSettingItem = ColorTokens.Light.BackgroundSettingItem,
+    bgElevated = ColorTokens.Light.BgElevated,
     backgroundElevate = ColorTokens.Light.BackgroundElevate,
 
     divider = ColorTokens.Light.Divider,
@@ -239,7 +239,7 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     textInfo = ColorTokens.InfoLight,
 
     background = ColorTokens.Dark.Background,
-    backgroundSetting = ColorTokens.Dark.BackgroundSetting,
+    bg = ColorTokens.Dark.Bg,
     backgroundSecondary = ColorTokens.Dark.BackgroundSecondary,
     backgroundTertiary = ColorTokens.Dark.BackgroundTertiary,
     backgroundQuaternary = ColorTokens.Dark.BackgroundQuaternary,
@@ -250,7 +250,7 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundPopup = ColorTokens.Dark.BackgroundPopup,
     backgroundTooltip = ColorTokens.Dark.Tooltip,
     backgroundBlue = ColorTokens.Dark.BackgroundBlue,
-    backgroundSettingItem = ColorTokens.Dark.BackgroundSettingItem,
+    bgElevated = ColorTokens.Dark.BgElevated,
     backgroundElevate = ColorTokens.Dark.BackgroundElevate,
 
     divider = ColorTokens.Dark.Divider,

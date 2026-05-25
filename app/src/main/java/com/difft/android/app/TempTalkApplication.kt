@@ -2,6 +2,7 @@ package com.difft.android.app
 
 import android.app.Activity
 import android.app.NotificationManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
@@ -11,8 +12,14 @@ import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import com.difft.android.base.log.LogHelper
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.PendingLastUseTime
+import com.difft.android.base.storage.StoragePreloader
+import com.difft.android.base.storage.di.AppStateDataStore
+import com.difft.android.base.storage.user.StorageBoundUserManagerImpl
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
@@ -51,6 +58,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.signal.libsignal.protocol.logging.SignalProtocolLogger
@@ -72,6 +81,17 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     @Inject
     lateinit var environmentHelper: EnvironmentHelper
+
+    @Inject
+    lateinit var storagePreloader: StoragePreloader
+
+    @Inject
+    lateinit var pendingLastUseTime: PendingLastUseTime
+
+    // @field: is required so Hilt sees the qualifier on the Java field, not the Kotlin property.
+    @Inject
+    @field:AppStateDataStore
+    lateinit var appStateDataStore: DataStore<Preferences>
 
     @Inject
     lateinit var globalConfigsManager: dagger.Lazy<GlobalConfigsManager>
@@ -123,6 +143,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 ApplicationDependencies.init(this, ApplicationDependencyProvider(this))
                 AppForegroundObserver.begin()
             }
+            .addBlocking("init Storage", this::initStorageLayer)
             .addBlocking("init UserData", this::initUserData)
             .addBlocking("init theme", this::initAppTheme)
             .addBlocking("lifecycle-observer") {
@@ -131,6 +152,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
             .addBlocking("installCrashFilter", this::installCrashFilter)
+            .addNonBlocking {
+                // Refresh the Application's Configuration with the user locale so legacy
+                // callers that read `application.resources` directly see the right locale.
+                LanguageUtils.getLanguage(this@TempTalkApplication)
+                LanguageUtils.reapplyLocaleToAppResources(this@TempTalkApplication)
+            }
             .addNonBlocking(this::cleanupLegacySqlCipherArtifacts)
             .addNonBlocking(this::sweepStaleSendingMessages)
             .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
@@ -152,6 +179,16 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Cover the case where the system reclaims memory before onActivityStopped fires.
+        if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            appScope.launch {
+                pendingLastUseTime.flush(appStateDataStore)
+            }
+        }
     }
 
     override fun attachBaseContext(context: Context) {
@@ -187,13 +224,37 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     /**
-     * Initialize user data cache (inMemoryUserData) from EncryptedSharedPreferences.
-     * This prevents ANR when multiple threads try to access SecureSharedPrefsUtil concurrently.
-     * Uses timeout (2s) to prevent ANR on extremely slow devices - falls back to lazy init if timeout.
+     * Warms up the three DataStores (`secure_user`, `secure_config`, `app_state`) so
+     * subsequent reads hit memory. Also primes the [PendingLastUseTime] holder so the
+     * very first screen-lock check reads the persisted value. Bounded at 2 s.
+     */
+    private fun initStorageLayer() {
+        val job = async(Dispatchers.IO) {
+            storagePreloader.preload()
+            pendingLastUseTime.loadInitial(appStateDataStore)
+        }
+        // Startup-only 2s bounded block; design承重墙 per #722. Without warm caches
+        // here, downstream `userManager.getUserData()` etc. would all need
+        // dispatcher wrappers at dozens of call sites.
+        @Suppress("BanRunBlockingOutsideTests")
+        val ok = runBlocking { withTimeoutOrNull(2000) { job.await() } }
+        if (ok == null) L.w { "[Startup] initStorageLayer timed out at 2s — first-use may hit cold cache" }
+    }
+
+    /**
+     * Composes the in-memory [UserData] snapshot from `secure_user.pb` + `app_state.preferences_pb`
+     * via [StorageBoundUserManagerImpl.warmUp]. Falls back to [UserManager.getUserData] lazy-load
+     * if the impl type doesn't match (should not happen in production). Bounded at 2 s.
      */
     private fun initUserData() {
-        val job = async(Dispatchers.IO) { userManager.getUserData() }
-        runBlocking { withTimeoutOrNull(2000) { job.await() } }
+        val job = async(Dispatchers.IO) {
+            (userManager as? StorageBoundUserManagerImpl)?.warmUp()
+                ?: userManager.getUserData()
+        }
+        // Startup-only 2s bounded block; design承重墙 per #722.
+        @Suppress("BanRunBlockingOutsideTests")
+        val ok = runBlocking { withTimeoutOrNull(2000) { job.await() } }
+        if (ok == null) L.w { "[Startup] initUserData timed out at 2s — snapshot may be empty until next access" }
     }
 
     private fun initAppTheme() {
@@ -220,21 +281,37 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         globalConfigsManager.get().getAndSaveGlobalConfigs(this)
     }
 
+    // Serializes onForeground/onBackground bodies so the IO-pool dispatch order matches
+    // the upstream main-thread invocation order from AppForegroundObserver.
+    private val fgBgMutex = Mutex()
+
+    // Body runs on appScope (IO). Do not touch UI directly here; wrap in withContext(Main).
+    // Deferred from main to avoid first-time Hilt Lazy<>.get() resolution + L.i flush blocking
+    // ANRWatchDog (issue 433594181bc9db4301347d9a9da209c6).
     override fun onForeground() {
-        recordLastUseTime()
-        scheduleGrayConfigUpdateCheck()
-        LCallManager.restoreIncomingCallScreenIfActive()
-        LCallManager.onAppForegroundedForCallServiceUrls()
-        globalConfigsManager.get().onAppStateChanged(isForeground = true)
-        messageArchiveManager.get().onAppStateChanged(isForeground = true)
-        coordinator.get().startPeriodicTest(isForeground = true)
+        appScope.launch {
+            fgBgMutex.withLock {
+                recordLastUseTime()
+                scheduleGrayConfigUpdateCheck()
+                LCallManager.restoreIncomingCallScreenIfActive()
+                LCallManager.onAppForegroundedForCallServiceUrls()
+                globalConfigsManager.get().onAppStateChanged(isForeground = true)
+                messageArchiveManager.get().onAppStateChanged(isForeground = true)
+                coordinator.get().startPeriodicTest(isForeground = true)
+            }
+        }
     }
 
+    // Mirror of onForeground: body runs on appScope (IO). Same constraints apply.
     override fun onBackground() {
-        recordLastUseTimeJob?.cancel()
-        globalConfigsManager.get().onAppStateChanged(isForeground = false)
-        messageArchiveManager.get().onAppStateChanged(isForeground = false)
-        coordinator.get().startPeriodicTest(isForeground = false)
+        appScope.launch {
+            fgBgMutex.withLock {
+                recordLastUseTimeJob?.cancel()
+                globalConfigsManager.get().onAppStateChanged(isForeground = false)
+                messageArchiveManager.get().onAppStateChanged(isForeground = false)
+                coordinator.get().startPeriodicTest(isForeground = false)
+            }
+        }
     }
 
     /**
@@ -318,8 +395,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                 // 从前台进入后台：计数从 1 变为 0
                 if (startedActivityCount == 0) {
-                    L.d { "[ScreenLock] App entered background" }
                     onAppBackground()
+                    appScope.launch {
+                        pendingLastUseTime.flush(appStateDataStore)
+                    }
                 }
             }
 
@@ -333,6 +412,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
 
+    @Volatile
     private var recordLastUseTimeJob: kotlinx.coroutines.Job? = null
 
     private fun recordLastUseTime() {
@@ -342,9 +422,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             while (true) {
                 try {
                     if (PasscodeUtil.needRecordLastUseTime) {
-                        userManager.update {
-                            this.lastUseTime = System.currentTimeMillis()
-                        }
+                        pendingLastUseTime.record(System.currentTimeMillis())
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -464,8 +542,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 4. 超时检查
+        val lastUseTime = pendingLastUseTime.current()
         val isTimeout = userData.passcodeTimeout == 0 ||
-                System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
+                System.currentTimeMillis() - lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
 
         if (!isTimeout) {
             L.d { "[ScreenLock] Skip: not timeout yet" }

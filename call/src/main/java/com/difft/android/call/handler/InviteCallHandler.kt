@@ -373,29 +373,23 @@ class InviteCallHandler(
         return currentCallType == CallType.ONE_ON_ONE.type || currentCallType == CallType.INSTANT.type
     }
 
-    /**
-     * 发起邀请
-     */
-    suspend fun inviteMembers(callback: (InviteRequestState, List<String>) -> Unit) {
+    suspend fun inviteMembers(): Pair<InviteRequestState, List<String>> {
         val memberIds = selectedMembers.value.map { it.uid }
         if (memberIds.isEmpty()) {
             L.w { "[Call] InviteCallHandler No members to invite" }
-            callback.invoke(InviteRequestState.FAILED, memberIds)
-            return
+            return InviteRequestState.FAILED to memberIds
         }
 
-        viewModel.getRoomId()?.let { roomId ->
-            callToChatController.inviteCall(
-                roomId = roomId,
-                roomName = getRoomNameForInvite(),
-                callType = getCallTypeForInvite(),
-                mKey = viewModel.getE2eeKey(),
-                inviteMembers = ArrayList(memberIds),
-                conversationId = callIntent.conversationId,
-                callback = { it ->
-                    callback.invoke(it, memberIds)
-                }
-            )
-        }
+        val roomId = viewModel.getRoomId() ?: return InviteRequestState.FAILED to memberIds
+
+        val state = callToChatController.inviteCall(
+            roomId = roomId,
+            roomName = getRoomNameForInvite(),
+            callType = getCallTypeForInvite(),
+            mKey = viewModel.getE2eeKey(),
+            inviteMembers = ArrayList(memberIds),
+            conversationId = callIntent.conversationId,
+        )
+        return state to memberIds
     }
 }

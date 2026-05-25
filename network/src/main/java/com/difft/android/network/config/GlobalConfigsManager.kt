@@ -1,19 +1,14 @@
 package com.difft.android.network.config
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.core.content.edit
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.SecureConfigStore
 import com.difft.android.base.user.ActiveConversation
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.IGlobalConfigsManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.network.ChativeHttpClient
@@ -29,8 +24,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -47,14 +44,14 @@ class GlobalConfigsManager @Inject constructor(
     private val userManager: UserManager,
     @param:ChativeHttpClientModule.Chat
     private val chatHttpClient: Lazy<ChativeHttpClient>,
+    private val secureConfigStore: SecureConfigStore,
+    private val gson: Gson,
 ) : IGlobalConfigsManager {
 
     companion object {
         private const val FOREGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
         private const val BACKGROUND_REFRESH_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
         private const val DEFAULT_CONFIG_FILE_NAME = "default_global_config.json"
-        private const val PREFS_FILE_NAME = "secure_global_config"
-        private const val PREFS_KEY_CONFIG = "config"
     }
 
     @Volatile
@@ -68,21 +65,6 @@ class GlobalConfigsManager @Inject constructor(
 
     private val isEncryptedConfigEnabled = BuildConfig.CONFIG_PSK.isNotEmpty().also { enabled ->
         if (!enabled) L.w { "[GlobalConfigsManager] CONFIG_PSK not set — running in plaintext config mode" }
-    }
-
-    private val configPrefs: SharedPreferences by lazy {
-        val start = System.currentTimeMillis()
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_FILE_NAME,
-            MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        ).also {
-            L.i { "[GlobalConfigsManager] EncryptedSharedPreferences init took ${System.currentTimeMillis() - start}ms" }
-        }
     }
 
     private val globalConfigUrls: List<String> by lazy {
@@ -136,7 +118,7 @@ class GlobalConfigsManager @Inject constructor(
         periodicRefreshJob = appScope.launch(Dispatchers.IO) {
             L.i { "[GlobalConfigsManager] Starting refresh job" }
             try {
-                inMemoryGlobalConfig = initialConfig
+                inMemoryGlobalConfig = loadInitialConfig()
             } catch (e: Exception) {
                 L.e { "[GlobalConfigsManager] Failed to init config cache: ${e.message}" }
             }
@@ -196,8 +178,7 @@ class GlobalConfigsManager @Inject constructor(
                 if (config.code == 0) {
                     L.i { "[GlobalConfigsManager] get global configs success: $url" }
                     inMemoryGlobalConfig = config
-                    saveConfigToPrefs(config)
-                    removeLegacyConfig()
+                    saveConfigToStore(config)
                     config.data?.emojiReaction?.let { emojis ->
                         updateMostUseEmojis(emojis)
                     }
@@ -219,49 +200,69 @@ class GlobalConfigsManager @Inject constructor(
     private fun decryptGlobalConfig(encrypted: EncryptedGlobalConfigResponse): NewGlobalConfig {
         val decryptedJson = GlobalConfigCrypto.decryptGlobalConfig(encrypted)
         L.i { "[GlobalConfigsManager] Decrypted config, keyId=${encrypted.keyId}" }
-        val innerData = Gson().fromJson(decryptedJson, Data::class.java)
+        val innerData = gson.fromJson(decryptedJson, Data::class.java)
         return NewGlobalConfig(code = encrypted.code, data = innerData)
     }
 
-    private fun removeLegacyConfig() {
+    /**
+     * Persists [config] to the encrypted `secure_config.pb` DataStore via
+     * [SecureConfigStore]. Caller is expected to already be on an IO coroutine
+     * (this is invoked from [fetchGlobalConfigsWithRetry] which runs inside
+     * [periodicRefreshJob] on [Dispatchers.IO]); the [SecureConfigStore.saveConfig]
+     * call is `suspend` and routes through DataStore's own actor on IO.
+     */
+    private suspend fun saveConfigToStore(config: NewGlobalConfig) {
         try {
-            if (SharedPrefsUtil.getString(SharedPrefsUtil.SP_NEW_CONFIG) != null) {
-                SharedPrefsUtil.remove(SharedPrefsUtil.SP_NEW_CONFIG)
-                L.i { "[GlobalConfigsManager] Removed legacy config from SharedPrefsUtil" }
-            }
+            val configJson = gson.toJson(config)
+            secureConfigStore.saveConfig(configJson)
         } catch (e: Exception) {
-            L.e { "[GlobalConfigsManager] Failed to remove legacy config: ${e.message}" }
-        }
-    }
-
-    private fun saveConfigToPrefs(config: NewGlobalConfig) {
-        try {
-            val configJson = Gson().toJson(config)
-            configPrefs.edit { putString(PREFS_KEY_CONFIG, configJson) }
-        } catch (e: Exception) {
-            L.e { "[GlobalConfigsManager] save config to prefs error: ${e.stackTraceToString()}" }
+            L.e { "[GlobalConfigsManager] save config to store error: ${e.stackTraceToString()}" }
         }
     }
 
     override fun getNewGlobalConfigs(): NewGlobalConfig? {
-        return inMemoryGlobalConfig ?: initialConfig.also { inMemoryGlobalConfig = it }
+        return inMemoryGlobalConfig ?: loadInitialConfigBlocking().also { inMemoryGlobalConfig = it }
     }
 
-    private val initialConfig: NewGlobalConfig? by lazy {
+    /**
+     * Synchronous bridge for [getNewGlobalConfigs] — the public API is non-suspend
+     * and is called from a wide variety of legacy call sites (76+ across the
+     * codebase) that cannot be retrofitted to coroutines without large-scale
+     * refactoring. The DataStore is pre-warmed by `StoragePreloader` during
+     * application startup (issue #725 Task 2), so `.first()` returns from the
+     * in-memory cache immediately and this bridge does NOT block on disk I/O.
+     *
+     * Falls back to the bundled default config JSON on read failure, mirroring
+     * the original [EncryptedSharedPreferences] behavior.
+     */
+    // DataStore pre-warmed by StoragePreloader (#725); .first() returns from
+    // memory cache without blocking on disk I/O. Sync bridge for 76+ legacy
+    // non-suspend caller sites.
+    @Suppress("BanRunBlockingOutsideTests")
+    private fun loadInitialConfigBlocking(): NewGlobalConfig? =
+        runBlocking(Dispatchers.IO) { loadInitialConfig() }
+
+    /**
+     * Suspend variant used inside coroutines. Reads from [SecureConfigStore],
+     * decodes the cached JSON, and falls back to the bundled assets default
+     * if the store is empty or the decode fails.
+     */
+    private suspend fun loadInitialConfig(): NewGlobalConfig? {
         try {
-            configPrefs.getString(PREFS_KEY_CONFIG, null)?.let { json ->
-                return@lazy Gson().fromJson(json, NewGlobalConfig::class.java).also {
-                    L.i { "[GlobalConfigsManager] Loaded config from encrypted prefs" }
+            val cached = secureConfigStore.configFlow.first()
+            if (cached.isNotEmpty()) {
+                return gson.fromJson(cached, NewGlobalConfig::class.java).also {
+                    L.i { "[GlobalConfigsManager] Loaded config from secure_config.pb" }
                 }
             }
         } catch (e: Exception) {
-            L.e { "[GlobalConfigsManager] load from encrypted prefs error: ${e.stackTraceToString()}" }
+            L.e { "[GlobalConfigsManager] load from secure_config.pb error: ${e.stackTraceToString()}" }
         }
 
         // Fallback to assets
-        try {
+        return try {
             val json = context.assets.open(DEFAULT_CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
-            Gson().fromJson(json, NewGlobalConfig::class.java).also {
+            gson.fromJson(json, NewGlobalConfig::class.java).also {
                 L.i { "[GlobalConfigsManager] Loaded default config from assets" }
             }
         } catch (e: Exception) {
@@ -318,7 +319,7 @@ class GlobalConfigsManager @Inject constructor(
             try {
                 val contact = chatHttpClient.get().httpService
                     .fetchContactors(
-                        baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
+                        baseAuth = (userManager.getUserData()?.baseAuth ?: ""),
                         body = ContactsRequestBody(listOf(globalServices.myId))
                     )
                     .data?.contacts?.firstOrNull()

@@ -4,12 +4,14 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.os.Handler
-import android.os.Looper
 import android.util.Rational
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.Lifecycle
 import com.difft.android.base.log.lumberjack.L
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * 管理画中画（Picture-in-Picture）模式
@@ -18,13 +20,14 @@ import com.difft.android.base.log.lumberjack.L
 class PictureInPictureManager(
     private val activity: Activity,
     private val lifecycle: Lifecycle,
+    private val scope: CoroutineScope,
     private val onPipModeChanged: (Boolean) -> Unit,
     private val onPipClosed: (() -> Unit)?
 ) {
     private lateinit var pipBuilderParams: PictureInPictureParams.Builder
     private var isInitialized = false
     private var isPipParamsSet = false
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pipParamsJob: Job? = null
 
     /**
      * 初始化 PIP 参数
@@ -49,8 +52,7 @@ class PictureInPictureManager(
             pipBuilderParams.setAutoEnterEnabled(false)
         }
 
-        // Post 到主线程队列末尾，避免阻塞 Activity 启动关键路径
-        mainHandler.post { tryToSetPictureInPictureParams() }
+        pipParamsJob = scope.launch(Dispatchers.Main) { tryToSetPictureInPictureParams() }
 
         isInitialized = true
         L.i { "[Call] PictureInPictureManager initialized" }
@@ -151,7 +153,8 @@ class PictureInPictureManager(
     fun release() {
         isInitialized = false
         isPipParamsSet = false
-        mainHandler.removeCallbacksAndMessages(null)
+        pipParamsJob?.cancel()
+        pipParamsJob = null
         L.i { "[Call] PictureInPictureManager released" }
     }
 }

@@ -111,6 +111,18 @@ interface PushForwardNoticeSendJobFactory {
 }
 
 @AssistedFactory
+interface PushActivityNoticeSendJobFactory {
+    fun create(
+        @Assisted
+        parameters: Job.Parameters?,
+        @Assisted
+        target: difft.android.messageserialization.For,
+        @Assisted
+        noticeData: difft.android.messageserialization.model.MessageActivityNoticeData,
+    ): com.difft.android.chat.jobs.PushActivityNoticeSendJob
+}
+
+@AssistedFactory
 interface ChatNormalPaginationControllerFactory {
     fun create(
         forWhat: For,

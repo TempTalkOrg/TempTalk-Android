@@ -1,7 +1,10 @@
 package com.difft.android.chat.common
 
+import com.difft.android.base.utils.globalServices
+
+import com.difft.android.base.user.UserData
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.GlobalHiltEntryPoint
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
@@ -16,10 +19,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.slot
-import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -57,17 +58,21 @@ class ConversationManagerImplTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        // Mock top-level globalServices for `globalServices.myId` access.
+        // Mock top-level globalServices for `globalServices.myId` access and
+        // `globalServices.userManager.getUserData()?.microToken` (post-issue-#725
+        // replacement of the deleted SecureSharedPrefsUtil.getToken()).
+        val mockUserManager = mockk<UserManager>(relaxed = true).also {
+            val userData = UserData().apply { microToken = "test-token" }
+            every { it.getUserData() } returns userData
+        }
         val mockGlobal = mockk<GlobalHiltEntryPoint>(relaxed = true).also {
             every { it.myId } returns "selfUid"
+            every { it.userManager } returns mockUserManager
         }
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         every { com.difft.android.base.utils.globalServices } returns mockGlobal
 
         every { chatHttpClient.httpService } returns httpService
-
-        mockkObject(SecureSharedPrefsUtil)
-        every { SecureSharedPrefsUtil.getToken() } returns "test-token"
 
         manager = ConversationManagerImpl(
             chatHttpClient,
@@ -79,7 +84,6 @@ class ConversationManagerImplTest {
 
     @After
     fun tearDown() {
-        unmockkObject(SecureSharedPrefsUtil)
         unmockkStatic("com.difft.android.base.utils.ExtensionsKt")
         Dispatchers.resetMain()
         clearMocks(chatHttpClient, httpService, publicKeyInfoStore, groupUtil, wcdb)

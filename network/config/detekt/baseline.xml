@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LargeClass:NewSignalServiceMessageSender.kt:NewSignalServiceMessageSender</ID>
+    <ID>LongMethod:CallMessageCreator.kt:CallMessageCreator$suspend fun createCallMessage: CallEncryptOutcome</ID>
+    <ID>LongMethod:NewSignalServiceMessageSender.kt:NewSignalServiceMessageSender$private suspend fun createNewOutgoingPushMessage: NewOutgoingPushMessage</ID>
+    <ID>LongMethod:NewSignalServiceMessageSender.kt:NewSignalServiceMessageSender$private suspend fun sendMessage: SendMessageResult</ID>
+  </CurrentIssues>
+</SmellBaseline>

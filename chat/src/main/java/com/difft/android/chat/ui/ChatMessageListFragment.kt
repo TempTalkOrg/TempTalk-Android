@@ -96,6 +96,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.TranslateTargetLanguage
@@ -655,7 +656,7 @@ class ChatMessageListFragment : Fragment() {
                 if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
                     it.translateData = translateData
-                    chatMessageAdapter.notifyItemChanged(chatMessageAdapter.currentList.indexOf(it))
+                    notifyItemChangedAndAnchorBottom(chatMessageAdapter.currentList.indexOf(it))
                 }
             }
         }
@@ -665,7 +666,7 @@ class ChatMessageListFragment : Fragment() {
                 if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
                     it.speechToTextData = speechToTextData
-                    chatMessageAdapter.notifyItemChanged(chatMessageAdapter.currentList.indexOf(it))
+                    notifyItemChangedAndAnchorBottom(chatMessageAdapter.currentList.indexOf(it))
                 }
             }
         }
@@ -804,7 +805,6 @@ class ChatMessageListFragment : Fragment() {
 
         val list = state.chatMessages
         val scrollAction = state.scrollAction
-        val previousListSize = chatMessageAdapter.currentList.size
         val isAtBottomBeforeUpdateList = isAtBottom(binding.recyclerViewMessage.layoutManager as LinearLayoutManager)
 
         chatMessageAdapter.submitList(list) {
@@ -826,15 +826,18 @@ class ChatMessageListFragment : Fragment() {
                 is ScrollAction.ToBottom -> {
                     scrollTo(list.size - 1)
                 }
-                // 2. 没有 scrollAction，走自动滚动逻辑
+                // 2. No scrollAction: handle auto-scroll
                 null -> {
                     if (isAtBottomBeforeUpdateList) {
-                        // 在底部时：有新消息才需要滚动，其他情况（删除/更新）保持现状
-                        if (list.size > previousListSize) {
-                            scrollTo(list.size - 1)
+                        // Bypass scrollTo(): its lastScrollPos cache blocks re-anchoring when position/count are unchanged.
+                        if (list.isNotEmpty()) {
+                            binding.recyclerViewMessage.noSmoothScrollToBottom()
+                            binding.recyclerViewMessage.post {
+                                if (!isAdded || view == null || !this::binding.isInitialized) return@post
+                                sendAndUpdateMessageRead()
+                            }
                         }
                     } else {
-                        // 不在底部时，才需要更新悬浮按钮
                         viewLifecycleOwner.lifecycleScope.launch {
                             updateBottomFloatingButton()
                         }
@@ -1376,11 +1379,17 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onCopy(message: TextChatMessage, selectedText: String?) {
-            if (selectedText != null) {
+            // PRD §4: copy notice emitted only after clipboard write succeeds.
+            if (!selectedText.isNullOrEmpty()) {
                 _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                 ToastUtil.show(getString(R.string.chat_message_action_copied))
+                chatViewModel.sendCopyNotice(listOf(message))
             } else {
-                messageActionHelper.copyMessageContent(message)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    if (messageActionHelper.copyMessageContent(message)) {
+                        chatViewModel.sendCopyNotice(listOf(message))
+                    }
+                }
             }
         }
 
@@ -1399,8 +1408,17 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onForward(message: TextChatMessage, selectedText: String?) {
             if (selectedText != null) {
-                // Forward selected text as new message
-                selectChatsUtils.showChatSelectAndSendDialog(requireActivity(), selectedText)
+                // Partial-text forward — pass source context for SINGLE forward notice.
+                // PRD §5.5: text selection inside a CF bubble is not allowed in main conv, so
+                // this path is always main-conv → UNKNOWN. CF-detail partial select goes through
+                // ChatForwardMessageFragment.onForward, which explicitly passes SUB_COMBINED_FORWARD.
+                selectChatsUtils.showChatSelectAndSendDialog(
+                    requireActivity(),
+                    selectedText,
+                    sourceConversation = chatViewModel.forWhat,
+                    sourceAuthorIds = listOf(message.authorId),
+                    combinedForwardMode = CombinedForwardMode.UNKNOWN,
+                )
             } else {
                 chatViewModel.forwardMessage(message, false)
             }
@@ -1833,6 +1851,16 @@ class ChatMessageListFragment : Fragment() {
         if (isAtTop(linearLayoutManager)) {
             L.d { "[message] isAtTop" }
             loadPreviousPage()
+        }
+    }
+
+    private fun notifyItemChangedAndAnchorBottom(position: Int) {
+        if (position < 0) return
+        val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
+        val wasAtBottom = layoutManager?.let { isAtBottom(it) } == true
+        chatMessageAdapter.notifyItemChanged(position)
+        if (wasAtBottom) {
+            binding.recyclerViewMessage.noSmoothScrollToBottom()
         }
     }
 

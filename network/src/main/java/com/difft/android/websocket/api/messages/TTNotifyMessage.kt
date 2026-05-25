@@ -58,6 +58,7 @@ data class TTNotifyMessage(
         const val NOTIFY_ACTION_TYPE_RESET_IDENTITY_KEY = 10011 //重置identity key（本地创建）
         const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012 //Earlier messages expired（本地创建）
         const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020 // System notice emitted after a forward completes (Android-local convention, not cross-platform)
+        const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021 // System notice emitted after a copy completes (Android-local convention, not cross-platform)
     }
 }
 

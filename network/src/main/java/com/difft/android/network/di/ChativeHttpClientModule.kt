@@ -1,8 +1,9 @@
 package com.difft.android.network.di
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import com.difft.android.base.utils.EnvironmentHelper
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
 import dagger.Module
@@ -43,7 +44,7 @@ object ChativeHttpClientModule {
 
     @Provides
     fun provideAuthProvider(): ChativeHttpClient.AuthProvider = object : ChativeHttpClient.AuthProvider {
-        override fun provideAuth(): String = SecureSharedPrefsUtil.getBasicAuth()
+        override fun provideAuth(): String = (globalServices.userManager.getUserData()?.baseAuth ?: "")
     }
 
     @Default

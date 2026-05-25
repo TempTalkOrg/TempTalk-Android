@@ -215,7 +215,7 @@ fun DialogTestScreen() {
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding()
-            .background(colorResource(id = com.difft.android.base.R.color.bg_setting))
+            .background(colorResource(id = com.difft.android.base.R.color.bg))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -688,7 +688,7 @@ fun DialogTestPreview() {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(colorResource(id = com.difft.android.base.R.color.bg_setting))
+            .background(colorResource(id = com.difft.android.base.R.color.bg))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {

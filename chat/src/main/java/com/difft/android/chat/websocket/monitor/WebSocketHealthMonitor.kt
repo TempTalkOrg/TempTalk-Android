@@ -1,9 +1,10 @@
 package com.difft.android.chat.websocket.monitor
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.UrlManager
 import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
@@ -328,7 +329,7 @@ class WebSocketHealthMonitor
     }
 
     private fun didNotLogin(): Boolean {
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
         return TextUtils.isEmpty(basicAuth)
     }
 

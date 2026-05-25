@@ -11,7 +11,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.setting.repo.SettingRepo
@@ -33,7 +32,11 @@ class UpdateManager @Inject constructor(
         context.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    settingRepo.checkUpdate(SecureSharedPrefsUtil.getToken(), PackageUtil.getAppVersionName() ?: "", BuildConfig.APP_CHANNEL)
+                    settingRepo.checkUpdate(
+                        userManager.getUserData()?.microToken ?: "",
+                        PackageUtil.getAppVersionName() ?: "",
+                        BuildConfig.APP_CHANNEL
+                    )
                 }
                 if (isFromSetting) {
                     ComposeDialogManager.dismissWait()

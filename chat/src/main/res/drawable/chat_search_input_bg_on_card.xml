@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Search input background for search fields placed inside a bg.elevated card
+    (e.g. GroupInfoActivity Card A). Uses @color/bg (= same as page bg) so the
+    field reads as "inset" relative to the elevated card surface.
+
+    Do NOT use this drawable on layouts whose root background is @color/bg
+    (page bg) — it would collide with the host. For that case use
+    @drawable/chat_fragment_search_input_bg_search_input which uses bg2.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <padding
+        android:bottom="8dp"
+        android:left="12dp"
+        android:right="12dp"
+        android:top="8dp" />
+    <corners android:radius="8dp" />
+    <solid android:color="@color/bg" />
+</shape>

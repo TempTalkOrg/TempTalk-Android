@@ -20,6 +20,7 @@ import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.chat.ui.messageaction.TextSelectionManager
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
 import com.difft.android.chat.util.Util
@@ -36,10 +37,21 @@ class TextPreviewActivity : BaseActivity() {
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
 
+    @Inject
+    lateinit var activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
+
     private val binding: ActivityTextPreviewBinding by viewbind()
     private var fullText: String = ""
     private var mentions: List<Mention>? = null
     private var forwardContext: ForwardContext? = null
+
+    // Source-message context for emitting copy/forward notices to the originating conversation.
+    private var sourceAuthorId: String? = null
+    private var sourceConversation: difft.android.messageserialization.For? = null
+
+    // PRD v1.0 §5.3 combined-forward mode of the source message. UNKNOWN for main-conv messages
+    // (Phase 4); Phase 5 will set SUB_COMBINED_FORWARD when launched from a CF detail view.
+    private var sourceCombinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN
     
     // Custom text selection
     private var textSelectionManager: TextSelectionManager? = null
@@ -74,6 +86,18 @@ class TextPreviewActivity : BaseActivity() {
         mentions = intent.getSerializableExtra(EXTRA_MENTIONS) as? ArrayList<Mention>
         @Suppress("DEPRECATION")
         forwardContext = intent.getSerializableExtra(EXTRA_FORWARD_CONTEXT) as? ForwardContext
+
+        sourceAuthorId = intent.getStringExtra(EXTRA_SOURCE_AUTHOR_ID)
+        val convId = intent.getStringExtra(EXTRA_SOURCE_CONVERSATION_ID)
+        sourceConversation = convId?.let {
+            when (intent.getIntExtra(EXTRA_SOURCE_CONVERSATION_TYPE, 0)) {
+                1 -> difft.android.messageserialization.For.Group(it)
+                else -> difft.android.messageserialization.For.Account(it)
+            }
+        }
+        sourceCombinedForwardMode = intent.getStringExtra(EXTRA_SOURCE_COMBINED_FORWARD_MODE)
+            ?.let { runCatching { CombinedForwardMode.valueOf(it) }.getOrNull() }
+            ?: CombinedForwardMode.UNKNOWN
 
         setupTextView()
         setupOverlay()
@@ -590,27 +614,56 @@ class TextPreviewActivity : BaseActivity() {
     
     private fun copySelectedText() {
         val text = textSelectionManager?.getSelectedText() ?: return
+        if (text.isEmpty()) {
+            dismissSelection()
+            return
+        }
         Util.copyToClipboard(this, text)
+        // PRD §4.1: emit copy notice on successful clipboard write (count=1).
+        // PRD §5.3: mode is the source message's mode (UNKNOWN in Phase 4 main-conv,
+        // SUB_COMBINED_FORWARD in Phase 5 CF-detail launches).
+        val author = sourceAuthorId
+        val conv = sourceConversation
+        if (!author.isNullOrEmpty() && conv != null) {
+            activityNoticeDispatcher.dispatchCopyNotice(
+                sourceConversation = conv,
+                sourceAuthorIds = listOf(author),
+                messageCount = 1,
+                combinedForwardMode = sourceCombinedForwardMode,
+            )
+        }
         dismissSelection()
     }
-    
+
     private fun forwardSelectedText() {
         val text = textSelectionManager?.getSelectedText() ?: return
         val isFullSelect = textSelectionManager?.isFullSelection() == true
-        
-        // If select all and has forward context, forward as original message
+        // Both full-select and partial-text paths emit FORWARD_NOTICE (PRD §5).
+        // Mode mirrors the source message's mode (Phase 5 sets SUB_COMBINED_FORWARD when
+        // launched from CF detail; default UNKNOWN for main-conv launches).
+        val authorIds = sourceAuthorId?.let { listOf(it) }
+
         if (isFullSelect && forwardContext != null) {
             selectChatsUtils.showChatSelectAndSendDialog(
                 this,
                 text,
                 null,
                 null,
-                listOf(forwardContext!!)
+                listOf(forwardContext!!),
+                sourceConversation = sourceConversation,
+                sourceAuthorIds = authorIds,
+                combinedForwardMode = sourceCombinedForwardMode,
             )
         } else {
-            selectChatsUtils.showChatSelectAndSendDialog(this, text)
+            selectChatsUtils.showChatSelectAndSendDialog(
+                this,
+                text,
+                sourceConversation = sourceConversation,
+                sourceAuthorIds = authorIds,
+                combinedForwardMode = sourceCombinedForwardMode,
+            )
         }
-        
+
         dismissSelection()
     }
     
@@ -635,18 +688,41 @@ class TextPreviewActivity : BaseActivity() {
         private const val EXTRA_TEXT = "extra_text"
         private const val EXTRA_MENTIONS = "extra_mentions"
         private const val EXTRA_FORWARD_CONTEXT = "extra_forward_context"
+        private const val EXTRA_SOURCE_AUTHOR_ID = "extra_source_author_id"
+        private const val EXTRA_SOURCE_CONVERSATION_ID = "extra_source_conversation_id"
+        private const val EXTRA_SOURCE_CONVERSATION_TYPE = "extra_source_conversation_type"
+        // Wire as enum.name String — CombinedForwardMode is not Parcelable.
+        private const val EXTRA_SOURCE_COMBINED_FORWARD_MODE = "extra_source_combined_forward_mode"
         private const val SHORT_TEXT_THRESHOLD = 200
 
+        /** @param sourceMessage Optional source message; when null, no copy/forward notice fires. */
         fun start(
             context: Context,
             text: String,
             mentions: List<Mention>? = null,
-            forwardContext: ForwardContext? = null
+            forwardContext: ForwardContext? = null,
+            sourceMessage: com.difft.android.chat.message.TextChatMessage? = null,
         ) {
             val intent = Intent(context, TextPreviewActivity::class.java).apply {
                 putExtra(EXTRA_TEXT, text)
                 mentions?.let { putExtra(EXTRA_MENTIONS, ArrayList(it)) }
                 forwardContext?.let { putExtra(EXTRA_FORWARD_CONTEXT, it) }
+                sourceMessage?.let { msg ->
+                    val conv = msg.forWhat
+                    if (conv != null) {
+                        // PRD §5 / Phase 5: sourceAuthorOverride is set on inner CF sub-messages
+                        // so the outer CF-sender is reported as the notice author. Phase 4
+                        // main-conv messages have override=null → fall back to authorId.
+                        putExtra(EXTRA_SOURCE_AUTHOR_ID, msg.sourceAuthorOverride ?: msg.authorId)
+                        putExtra(EXTRA_SOURCE_CONVERSATION_ID, conv.id)
+                        putExtra(EXTRA_SOURCE_CONVERSATION_TYPE, conv.typeValue)
+                        // sourceMode null on main-conv messages → UNKNOWN over the wire.
+                        putExtra(
+                            EXTRA_SOURCE_COMBINED_FORWARD_MODE,
+                            (msg.sourceMode ?: CombinedForwardMode.UNKNOWN).name,
+                        )
+                    }
+                }
             }
             context.startActivity(intent)
         }

@@ -32,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class DBRoomStore @Inject constructor(
     private val messageNotificationUtil: IMessageNotificationUtil

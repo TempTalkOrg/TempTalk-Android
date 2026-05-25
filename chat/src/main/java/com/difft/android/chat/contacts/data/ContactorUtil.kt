@@ -9,7 +9,6 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.sideBar.CharacterParser
@@ -27,7 +26,6 @@ import com.difft.android.network.responses.AddContactorResponse
 import com.difft.android.network.responses.AvatarResponse
 import com.difft.android.network.responses.ContactResponse
 import com.difft.android.network.responses.ContactsDataResponse
-import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -184,7 +182,7 @@ object ContactorUtil {
 
 
     suspend fun fetchContactors(ids: List<String>, context: Context): List<ContactorModel> =
-        fetchContactors(context, ids, SecureSharedPrefsUtil.getBasicAuth())
+        fetchContactors(context, ids, (globalServices.userManager.getUserData()?.baseAuth ?: ""))
 
     private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> = withContext(Dispatchers.IO) {
         try {
@@ -312,7 +310,7 @@ object ContactorUtil {
                 .collectLatest { forceRefresh ->
                     try {
                         val httpService = application.getEntryPoint().getHttpClient().httpService
-                        val contactsResponse = httpService.fetchAllContactors(baseAuth = SecureSharedPrefsUtil.getBasicAuth())
+                        val contactsResponse = httpService.fetchAllContactors(baseAuth = (globalServices.userManager.getUserData()?.baseAuth ?: ""))
 
                         val contacts = contactsResponse.data?.contacts?.toMutableList() ?: mutableListOf()
                         val directoryVersion = contactsResponse.data?.directoryVersion ?: 0
@@ -340,7 +338,7 @@ object ContactorUtil {
                         if (contacts.none { it.number == officialBotId }) {
                             try {
                                 val response = httpService.fetchContactors(
-                                    baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
+                                    baseAuth = (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                                     body = ContactsRequestBody(listOf(officialBotId))
                                 )
 
@@ -401,11 +399,10 @@ object ContactorUtil {
 
     fun updateContactRequestStatus(contactID: String, isDelete: Boolean = false) {
         try {
-            val gson = Gson()
             val type = object : TypeToken<MutableSet<String>>() {}.type
             val userManager = EntryPointAccessors.fromApplication<EntryPoint>(application).getUserManager()
             val set: MutableSet<String> = userManager.getUserData()?.contactRequestStatus?.let {
-                gson.fromJson(it, type)
+                globalServices.gson.fromJson(it, type)
             } ?: mutableSetOf()
             if (isDelete) {
                 set.remove(contactID)
@@ -413,7 +410,7 @@ object ContactorUtil {
                 set.add(contactID)
             }
             userManager.update {
-                this.contactRequestStatus = gson.toJson(set, type)
+                this.contactRequestStatus = globalServices.gson.toJson(set, type)
             }
         } catch (e: Exception) {
             L.w(e) { "[ContactorUtil] processContactorFlow error:" }
@@ -421,11 +418,10 @@ object ContactorUtil {
     }
 
     fun hasContactRequest(contactID: String): Boolean {
-        val gson = Gson()
         val type = object : TypeToken<MutableSet<String>>() {}.type
         val userManager = EntryPointAccessors.fromApplication<EntryPoint>(application).getUserManager()
         val set: MutableSet<String> = userManager.getUserData()?.contactRequestStatus?.let {
-            gson.fromJson(it, type)
+            globalServices.gson.fromJson(it, type)
         } ?: mutableSetOf()
         return set.contains(contactID)
     }
@@ -603,7 +599,7 @@ object FriendSourceType {
 
 fun String?.getContactAvatarData(): AvatarResponse? {
     return try {
-        Gson().fromJson(this, AvatarResponse::class.java)
+        globalServices.gson.fromJson(this, AvatarResponse::class.java)
     } catch (e: Exception) {
         L.e(e) { "[ContactorUtil] parse avatar data fail: $this ===" }
         null

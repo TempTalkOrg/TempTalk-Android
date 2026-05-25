@@ -1,6 +1,7 @@
 package com.difft.android.call.ui.barrage
 
 import com.difft.android.base.user.CallConfig
+import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.BarrageMessage
 import com.difft.android.call.data.BubbleMessageType
 import com.difft.android.call.data.EmojiBubbleMessage
@@ -32,6 +33,28 @@ sealed interface BarrageRenderable {
 object CallBarrageFormatter {
 
     private const val DISPLAY_NAME_MAX_LENGTH = 10
+
+    /**
+     * Formats and dispatches a barrage/bubble message to the appropriate
+     * [CallUiController] sink in one step. Returns silently if the message
+     * is empty or the identity is null.
+     */
+    suspend fun formatAndDispatch(
+        identityValue: String?,
+        message: String,
+        type: Int?,
+        callConfig: CallConfig,
+        contactorCacheManager: ContactorCacheManager,
+        uiController: CallUiController,
+    ) {
+        if (identityValue == null || message.isEmpty()) return
+        when (val rendered = format(identityValue, message, type, callConfig, contactorCacheManager)) {
+            is BarrageRenderable.Default -> uiController.setBarrageMessage(rendered.message)
+            is BarrageRenderable.Emoji -> uiController.setEmojiBubbleMessage(rendered.message)
+            is BarrageRenderable.Text -> uiController.setTextBubbleMessage(rendered.message)
+            null -> Unit
+        }
+    }
 
     suspend fun format(
         identityValue: String,

@@ -1,9 +1,11 @@
 package com.difft.android.chat.jobs
 
+import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.sanitizeUrl
+
 import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.wcdb
 import com.difft.android.chat.fileshare.DownloadReq
 import com.difft.android.chat.fileshare.FileShareRepo
@@ -107,7 +109,7 @@ class DownloadAttachmentJob private constructor(
 
         try {
             val fileShareRepo = EntryPointAccessors.fromApplication<EntryPoint>(context).fileShareRepo
-            val response = fileShareRepo.download(DownloadReq(SecureSharedPrefsUtil.getToken(), authorizedId, fileHash, "")).execute()
+            val response = fileShareRepo.download(DownloadReq((globalServices.userManager.getUserData()?.microToken ?: ""), authorizedId, fileHash, "")).execute()
 
             if (!response.isSuccessful) {
                 throw Exception("[DownloadAttachmentJob] download attachment fail: ${response.message()}")
@@ -154,19 +156,19 @@ class DownloadAttachmentJob private constructor(
 
             for ((index, url) in urlsToTry.withIndex()) {
                 try {
-                    L.i { "[DownloadAttachmentJob] Attempting download with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                    L.i { "[DownloadAttachmentJob] Attempting download with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
 
                     val downLoadResponse = fileShareRepo.downloadFromOSS(url).execute()
 
                     if (!downLoadResponse.isSuccessful) {
-                        L.w { "[DownloadAttachmentJob] Download failed with URL ${index + 1}/${urlsToTry.size}: ${downLoadResponse.message}, messageId: $messageId, url: $url" }
+                        L.w { "[DownloadAttachmentJob] Download failed with URL ${index + 1}/${urlsToTry.size}: ${downLoadResponse.message}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
                         lastDownloadException = Exception("Download from OSS failed: ${downLoadResponse.message}")
                         continue
                     }
 
                     val downLoadResponseBody = downLoadResponse.body
                     if (downLoadResponseBody == null) {
-                        L.w { "[DownloadAttachmentJob] Download response body is null with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                        L.w { "[DownloadAttachmentJob] Download response body is null with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
                         lastDownloadException = Exception("Download response body is null")
                         continue
                     }
@@ -199,12 +201,12 @@ class DownloadAttachmentJob private constructor(
                         }
                     }
 
-                    L.i { "[DownloadAttachmentJob] Download successful with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                    L.i { "[DownloadAttachmentJob] Download successful with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
                     downloadSuccess = true
                     break
 
                 } catch (e: Exception) {
-                    L.w { "[DownloadAttachmentJob] Download exception with URL ${index + 1}/${urlsToTry.size}: ${e.message}, messageId: $messageId, url: $url" }
+                    L.e { "[DownloadAttachmentJob] Download exception ${e::class.simpleName} ${index + 1}/${urlsToTry.size} messageId=$messageId url=${url.sanitizeUrl()}\n${e.stackTraceToString().sanitizeUrl()}" }
                     lastDownloadException = e
                     // 清理可能的部分下载文件
                     if (encryptFile.exists()) {

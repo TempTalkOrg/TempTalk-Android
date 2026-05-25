@@ -80,7 +80,7 @@ class VoicePlaybackSpeedSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 MainContent()
             }
         }
@@ -120,7 +120,7 @@ class VoicePlaybackSpeedSettingsActivity : BaseActivity() {
         val bgItem = remember {
             Color(
                 ContextCompat.getColor(
-                    context, com.difft.android.base.R.color.bg_setting_item
+                    context, com.difft.android.base.R.color.bg_elevated
                 )
             )
         }
@@ -189,7 +189,7 @@ class VoicePlaybackSpeedSettingsActivity : BaseActivity() {
                                     Color(
                                         ContextCompat.getColor(
                                             context,
-                                            com.difft.android.base.R.color.bg_setting
+                                            com.difft.android.base.R.color.bg
                                         )
                                     )
                                 )

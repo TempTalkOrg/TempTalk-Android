@@ -3,6 +3,7 @@ package com.difft.android.network
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.base.utils.application
+import com.difft.android.base.utils.globalServices
 import com.difft.android.network.config.WsTokenManager
 import com.google.gson.Gson
 import dagger.hilt.InstallIn
@@ -63,6 +64,10 @@ class HttpClientInterceptor : Interceptor {
 
     private var lastException: Exception? = null
 
+    // OkHttp `Interceptor.intercept` is a synchronous API; bridging to the
+    // coroutine-based token refresh requires `runBlocking`. Runs on OkHttp's
+    // dispatcher worker thread — never on the main thread.
+    @Suppress("BanRunBlockingOutsideTests")
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
         var response: Response? = null
@@ -198,6 +203,9 @@ class HttpClientInterceptor : Interceptor {
         return true
     }
 
+    // Same OkHttp sync-API rationale as `intercept`: backup-host retry path
+    // still runs on OkHttp dispatcher worker thread, never on Main.
+    @Suppress("BanRunBlockingOutsideTests")
     private fun changeHostAndReSendRequest(request: Request, chain: Interceptor.Chain): Response? {
         val originalUrl = request.url
         val originalHost = originalUrl.host
@@ -261,6 +269,12 @@ class HttpClientInterceptor : Interceptor {
         return null
     }
 
+    // ==================== Firebase Recording Methods ====================
+
+    /**
+     * Unified method to record exception to Firebase Crashlytics.
+     * All recording methods should go through this for consistency.
+     */
     private fun recordToFirebase(e: Throwable) {
         L.w { "[Network] $e" }
     }
@@ -434,7 +448,7 @@ class HttpClientInterceptor : Interceptor {
             reason = null,
             data = null
         )
-        val errorJson = Gson().toJson(errorResponse)
+        val errorJson = globalServices.gson.toJson(errorResponse)
         val errorMediaType = "application/json".toMediaTypeOrNull()
         val errorResponseBody = errorJson.toResponseBody(errorMediaType)
 

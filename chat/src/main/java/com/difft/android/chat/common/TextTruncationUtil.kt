@@ -57,7 +57,7 @@ object TextTruncationUtil {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 // 双击：打开文本预览页面（此时才构建 ForwardContext）
                 val forwardContext = sourceMessage?.buildForwardData()?.second
-                TextPreviewActivity.start(textView.context, fullText, mentions, forwardContext)
+                TextPreviewActivity.start(textView.context, fullText, mentions, forwardContext, sourceMessage)
                 return true
             }
 
@@ -248,7 +248,7 @@ object TextTruncationUtil {
     ) {
         // 此时才构建 ForwardContext
         val forwardContext = sourceMessage?.buildForwardData()?.second
-        TextPreviewActivity.start(view.context, fullText, mentions, forwardContext)
+        TextPreviewActivity.start(view.context, fullText, mentions, forwardContext, sourceMessage)
     }
 
     /**

@@ -15,19 +15,17 @@ import java.util.ArrayList
 import java.util.Optional
 
 interface LCallToChatController {
-    fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, isNeedAppLock: Boolean, onComplete: (Boolean) -> Unit)
+    suspend fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, isNeedAppLock: Boolean): Boolean
 
-    fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit)
+    suspend fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?)
 
-    fun cancelCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, onComplete: () -> Unit)
+    suspend fun cancelCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?)
 
-    fun hangUpCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, callUidList: List<String>, onComplete: () -> Unit)
+    suspend fun hangUpCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?, callUidList: List<String>)
 
     fun syncJoinedMessage(receiverId: String, callRole: CallRole?, callerId: String, type: String, roomId: String, conversationId: String?, mKey: ByteArray?)
 
     suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel>
-
-    fun getDisplayName(context: Context, id: String): String?
 
     fun getAvatarByContactor(context:Context, contactor: ContactorModel): ConstraintLayout
 
@@ -88,7 +86,7 @@ interface LCallToChatController {
 
     fun cancelCriticalAlertNotification(conversationId: String? = null)
 
-    fun inviteCall(roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?, callback: (InviteRequestState) -> Unit = {})
+    suspend fun inviteCall(roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?): InviteRequestState
 
     fun isBotId(id: String): Boolean
 

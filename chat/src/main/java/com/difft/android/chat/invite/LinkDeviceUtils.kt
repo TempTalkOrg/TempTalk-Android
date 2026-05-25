@@ -12,7 +12,6 @@ import com.difft.android.chat.R
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 import org.signal.libsignal.protocol.ecc.ECPublicKey
-import com.difft.android.chat.util.TextSecurePreferences
 import com.difft.android.chat.cryptonew.EncryptionDataManager
 import com.difft.android.network.signal.DeviceRepository
 import javax.inject.Inject
@@ -51,7 +50,6 @@ class LinkDeviceUtils @Inject constructor(
                                 verificationCode,
                                 id
                             )
-                            TextSecurePreferences.setMultiDevice(activity, true)
                             if (needFinish) {
                                 activity.finish()
                             }
@@ -59,7 +57,6 @@ class LinkDeviceUtils @Inject constructor(
                             throw e
                         } catch (e: Exception) {
                             L.w { "[LinkDeviceUtils] addDevice error: ${e.stackTraceToString()}" }
-                            TextSecurePreferences.setMultiDevice(activity, false)
                             e.message?.let { ToastUtil.showLong(it) }
                             if (needFinish) {
                                 activity.finish()

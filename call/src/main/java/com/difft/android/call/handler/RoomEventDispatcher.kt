@@ -1,6 +1,7 @@
 package com.difft.android.call.handler
 
 import android.os.SystemClock
+import com.difft.android.call.BuildConfig
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils.getString
@@ -121,11 +122,23 @@ internal class RoomEventDispatcher(
     fun startCollectingParticipants() {
         scope.launch {
             room::remoteParticipants.flow.map { remoteParticipants ->
-                (listOf<Participant>(room.localParticipant) +
+                val realParticipants = listOf<Participant>(room.localParticipant) +
                     remoteParticipants
                         .keys
                         .sortedBy { it.value }
-                        .mapNotNull { remoteParticipants[it] })
+                        .mapNotNull { remoteParticipants[it] }
+
+                if (BuildConfig.DEBUG && DEBUG_FAKE_PARTICIPANTS) {
+                    realParticipants + (1..20).map { i ->
+                        Participant(
+                            Participant.Sid("fake-sid-$i"),
+                            Participant.Identity("fake-user-$i"),
+                            Dispatchers.Unconfined,
+                        )
+                    }
+                } else {
+                    realParticipants
+                }
             }.collectLatest { updatedParticipants ->
                 participantManager.setParticipants(updatedParticipants)
                 participantManager.resortParticipants()
@@ -379,4 +392,12 @@ internal class RoomEventDispatcher(
 
     private fun calculateCountDownDuration(expiredTimeMs: Long, currentTimeMs: Long): Long =
         if (expiredTimeMs < currentTimeMs) 0 else (expiredTimeMs - currentTimeMs) / 1000
+
+    companion object {
+        /**
+         * 设置为 true 可注入 20 个假参会人，用于测试竖屏多人通话列表滚动。
+         * 测试完毕后务必改回 false。
+         */
+        private const val DEBUG_FAKE_PARTICIPANTS = false
+    }
 }

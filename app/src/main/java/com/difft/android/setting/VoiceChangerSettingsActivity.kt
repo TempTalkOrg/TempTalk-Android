@@ -70,7 +70,7 @@ class VoiceChangerSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 MainContent()
             }
         }
@@ -113,7 +113,7 @@ class VoiceChangerSettingsActivity : BaseActivity() {
         val context = LocalContext.current
         // Resolve all palette entries once per composition instead of once per list item.
         val bgItem = remember {
-            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.bg_setting_item))
+            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.bg_elevated))
         }
         val labelTextColor = remember {
             Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary))
@@ -122,7 +122,7 @@ class VoiceChangerSettingsActivity : BaseActivity() {
             Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_secondary))
         }
         val dividerColor = remember {
-            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.bg_setting))
+            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.bg))
         }
 
         LazyColumn(modifier = Modifier.padding(16.dp)) {

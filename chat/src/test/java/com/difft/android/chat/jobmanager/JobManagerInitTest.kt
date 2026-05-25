@@ -2,14 +2,10 @@ package com.difft.android.chat.jobmanager
 
 import android.app.Application
 import com.difft.android.chat.jobmanager.persistence.JobStorage
-import com.difft.android.chat.util.TextSecurePreferences
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import org.junit.After
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,15 +20,8 @@ class JobManagerInitTest {
     private val application = mockk<Application>(relaxed = true)
     private val jobStorage = mockk<JobStorage>(relaxed = true)
 
-    @Before
-    fun setUp() {
-        mockkStatic(TextSecurePreferences::class)
-        every { TextSecurePreferences.setJobManagerVersion(any(), any()) } returns Unit
-    }
-
     @After
     fun tearDown() {
-        unmockkStatic(TextSecurePreferences::class)
         clearMocks(application, jobStorage)
     }
 

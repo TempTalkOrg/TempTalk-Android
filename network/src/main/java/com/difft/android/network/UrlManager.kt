@@ -52,7 +52,7 @@ private class ChativeDevelopmentUrlProtocol : UrlProtocol {
 class UrlManager @Inject constructor(
     val environmentHelper: EnvironmentHelper,
     private val globalConfigsManager: Lazy<GlobalConfigsManager>,
-    private val coordinator: DomainSpeedTestCoordinator
+    private val coordinator: Lazy<DomainSpeedTestCoordinator>
 ) {
 
     private val protocol: UrlProtocol = when {
@@ -75,21 +75,21 @@ class UrlManager @Inject constructor(
      * Returns the best host (speed test -> persisted -> GlobalConfig -> hardcoded default).
      */
     private fun getBestHost(): String {
-        return coordinator.getBestHostSync() ?: protocol.defaultHost
+        return coordinator.get().getBestHostSync() ?: protocol.defaultHost
     }
 
     /**
      * Marks a host as unavailable for this session.
      */
     fun recordFailedHost(hostName: String) {
-        coordinator.markHostUnavailable(hostName)
+        coordinator.get().markHostUnavailable(hostName)
     }
 
     /**
      * Returns all hosts ranked by latency for retry fallback.
      */
     fun getAllHostsRanked(): List<String> {
-        return coordinator.getAllHostsRanked()
+        return coordinator.get().getAllHostsRanked()
     }
 
     val default: String
@@ -137,7 +137,7 @@ class UrlManager @Inject constructor(
      */
     fun switchToNextChatWebsocketHost() {
         val failedHost = lastConnectedWsHost ?: return
-        coordinator.markHostUnavailable(failedHost)
+        coordinator.get().markHostUnavailable(failedHost)
         L.i { "[Net] UrlManager switchToNextChatWebsocketHost: marked unavailable host=$failedHost" }
     }
 

@@ -41,8 +41,8 @@
     <color name="bg.blue" tools:ignore="ResourceName">#003366</color>
     <color name="bg.sky" tools:ignore="ResourceName">#003366</color>
 
-    <color name="bg.setting" tools:ignore="ResourceName">#181A20</color>
-    <color name="bg.setting.item" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bg" tools:ignore="ResourceName">#181A20</color>
+    <color name="bg.elevated" tools:ignore="ResourceName">#1E2329</color>
     <color name="bgpage_primary" tools:ignore="ResourceName">#0B0E11</color>
     <color name="bg5" tools:ignore="ResourceName">#181A20</color>
     <color name="border" tools:ignore="ResourceName">#2B3139</color>

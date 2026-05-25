@@ -2,6 +2,7 @@ package com.difft.android
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -27,12 +28,16 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
+import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.DualPaneRatioUtil
+import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
+import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.base.widget.ComposeDialog
@@ -66,6 +71,7 @@ import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.databinding.ActivityIndexBinding
 import com.difft.android.login.repo.LoginRepo
 import com.difft.android.me.MeFragment
+import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.config.UserAgentManager
@@ -74,6 +80,7 @@ import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
 import com.difft.android.setting.UpdateManager
+import com.google.gson.Gson
 import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.CancellationException
@@ -93,6 +100,7 @@ import com.difft.android.chat.messages.PendingMessageProcessor
 import com.difft.android.chat.util.AppIconBadgeManager
 import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.websocket.WebSocketManager
+import com.difft.android.views.DraggableDividerView
 import java.io.File
 import javax.inject.Inject
 import kotlin.system.exitProcess
@@ -150,6 +158,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     lateinit var appIconBadgeManager: AppIconBadgeManager
 
     @Inject
+    lateinit var environmentHelper: EnvironmentHelper
+
+    @Inject
     lateinit var failedMessageProcessor: FailedMessageProcessor
 
     @Inject
@@ -170,6 +181,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     @Inject
     lateinit var pushUtil: PushUtil
 
+    @Inject
+    lateinit var gson: Gson
+
     @SuppressLint("ClickableViewAccessibility")
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -182,14 +196,23 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         // Load and emit text size early to avoid ANR in UI components
         TextSizeUtil.loadAndEmitTextSize()
+        DualPaneRatioUtil.loadAndEmit()
 
         TextSizeUtil.textSizeState
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .onEach { textSize ->
                 val isLarger = textSize == TextSizeUtil.TEXT_SIZE_LAGER
                 indicators.forEach { it.updateSize(isLarger) }
+                applyListPaneWidth(isLarger)
             }
             .launchIn(lifecycleScope)
+
+        DualPaneRatioUtil.ratioState
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach { applyListPaneWidth(TextSizeUtil.isLarger) }
+            .launchIn(lifecycleScope)
+
+        setupDualPaneDivider()
 
         binding.viewpager.apply {
             offscreenPageLimit = 1
@@ -225,6 +248,10 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                     selectIndicator(position)
                     // Handle detail pane visibility when tab changes in dual-pane mode
                     handleTabChangeForDualPane(position)
+                    // Sync root background to the active tab so edge-to-edge system
+                    // bars match the page underneath (recent/contacts = bg1 flat;
+                    // me = bg settings-idiom).
+                    applyRootBackgroundForTab(position)
                 }
             }.also {
                 // 初始化时手动触发一次，因为 OnPageChangeCallback 默认不会触发第一页
@@ -329,7 +356,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                 } else {
                     displayBadge(R.drawable.chat_missing_number_bg_muted, unreadMuteMessageCount)
                 }
-                SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, unreadNotMuteMessageCount)
+                userManager.update { unreadMsgNum = unreadNotMuteMessageCount }
                 appIconBadgeManager.updateAppIconBadgeNum(unreadNotMuteMessageCount)
             }
             .launchIn(lifecycleScope)
@@ -380,10 +407,38 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             }
     }
 
+    private fun applyRootBackgroundForTab(position: Int) {
+        // Recent (0) and Contacts (1) tabs are flat-surface immersive lists → bg1
+        // Me (2) tab is settings-idiom (gray page + elevated cards) → bg
+        // In edge-to-edge mode the activity root drives the status/nav bar color
+        // since no opaque system-bar background is set.
+        val bgRes = if (position == 2) {
+            com.difft.android.base.R.color.bg
+        } else {
+            com.difft.android.base.R.color.bg1
+        }
+        binding.root.setBackgroundResource(bgRes)
+    }
+
     private fun checkUpdate() {
+        if (environmentHelper.isInsiderChannel()) return
         lifecycleScope.launch {
             delay(2000)
             updateManager.checkUpdate(this@IndexActivity, false)
+        }
+    }
+
+    private var insiderUpdateChecked = false
+
+    private fun checkInsiderUpdate() {
+        if (!environmentHelper.isInsiderChannel()) return
+        val lastCheckUpdateTime = userManager.getUserData()?.lastCheckUpdateTime ?: 0
+        if (!insiderUpdateChecked || (System.currentTimeMillis() - lastCheckUpdateTime > 30 * 60 * 1000)) {
+            lifecycleScope.launch {
+                delay(2000)
+                updateManager.checkUpdate(this@IndexActivity, false)
+            }
+            insiderUpdateChecked = true
         }
     }
 
@@ -419,6 +474,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         super.onResume()
         // 刷新截屏状态（从后台恢复时需要重新检查屏幕锁）
 //        ScreenShotUtil.refreshWithPagePolicy(this, binding.viewpager.currentItem != 0)
+        checkInsiderUpdate()
         checkNotificationFullScreenPermission()
         checkNotificationPermission()
     }
@@ -619,8 +675,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         // Priority 2: Push data
         else if (!TextUtils.isEmpty(pushData)) {
             try {
-                val pushCustomContent = com.google.gson.Gson().fromJson(
-                    pushData, 
+                val pushCustomContent = gson.fromJson(
+                    pushData,
                     com.difft.android.chat.data.PushCustomContent::class.java
                 )
                 linkDataEntity = LinkDataEntity(
@@ -960,7 +1016,141 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             // Show empty state initially
             findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
             findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
+
+            // Apply list pane width based on current text size (avoid flicker on cold start)
+            applyListPaneWidth(TextSizeUtil.isLarger)
         }
+    }
+
+    /**
+     * Adjust the list pane width.
+     *
+     * Priority order:
+     *   1. User-dragged ratio ([DualPaneRatioUtil.hasUserOverride]) — apply saved ratio to current
+     *      available width, clamped to per-pane minimums.
+     *   2. Larger text mode — 50/50 split so contact / group names have room at the bigger font.
+     *   3. Default — fixed [LIST_PANE_DEFAULT_WIDTH_DP] list pane (Material 3 two-pane recommendation).
+     *
+     * All branches clamp to [MIN_LIST_PANE_WIDTH_DP] / [MIN_DETAIL_PANE_WIDTH_DP] so neither pane
+     * collapses below usable size; in particular, detail pane must stay ≥ 360dp to fit the
+     * 270dp-wide voice / contact / attach message bubbles plus margins.
+     *
+     * Uses [WindowSizeClassUtil.getWindowWidthPx] (Jetpack WindowMetrics) instead of
+     * [android.content.res.Configuration.screenWidthDp]: on foldables during fold/rotate
+     * transitions, Configuration can report device-level dimensions while the actual window
+     * is smaller. Conversion uses the Activity's own density to avoid the
+     * Application-vs-Activity density mismatch that affects [com.difft.android.base.utils.dp]
+     * on multi-display foldables — see anti-pattern #48.
+     */
+    private fun applyListPaneWidth(isLarger: Boolean) {
+        if (!isDualPaneMode) return
+        val listPane = findViewById<View>(com.difft.android.R.id.list_pane) ?: return
+
+        val density = resources.displayMetrics.density
+        val available = availablePaneSpacePx()
+        val listMinPx = (MIN_LIST_PANE_WIDTH_DP * density).toInt()
+        val detailMinPx = (MIN_DETAIL_PANE_WIDTH_DP * density).toInt()
+        // Hard upper bound: keep detail pane at least detailMinPx.
+        val listMaxPx = (available - detailMinPx).coerceAtLeast(listMinPx)
+
+        val rawTarget = when {
+            DualPaneRatioUtil.hasUserOverride ->
+                (available * DualPaneRatioUtil.currentRatio).toInt()
+            isLarger ->
+                available / 2
+            else ->
+                (LIST_PANE_DEFAULT_WIDTH_DP * density).toInt()
+        }
+        val targetWidth = rawTarget.coerceIn(listMinPx, listMaxPx)
+
+        if (listPane.layoutParams.width != targetWidth) {
+            listPane.layoutParams = listPane.layoutParams.apply { width = targetWidth }
+        }
+    }
+
+    /**
+     * Wire up the draggable divider once dual-pane mode is active.
+     * - ACTION_MOVE: adjust [listPane] width live, clamped to per-pane minimums.
+     * - ACTION_UP: persist the resulting ratio (so subsequent rotate / fold / large-font toggle
+     *   preserve the user's preference) and trigger a one-shot rebind on the detail pane's
+     *   message RecyclerView so existing bubble widths refresh from the new RecyclerView size.
+     */
+    private fun setupDualPaneDivider() {
+        if (!isDualPaneMode) return
+        val divider = findViewById<DraggableDividerView>(com.difft.android.R.id.divider_pane) ?: return
+        val listPane = findViewById<View>(com.difft.android.R.id.list_pane) ?: return
+
+        divider.onDrag = { delta, isEnd ->
+            val density = resources.displayMetrics.density
+            val available = availablePaneSpacePx()
+            val listMinPx = (MIN_LIST_PANE_WIDTH_DP * density).toInt()
+            val detailMinPx = (MIN_DETAIL_PANE_WIDTH_DP * density).toInt()
+            val listMaxPx = (available - detailMinPx).coerceAtLeast(listMinPx)
+
+            val currentWidth = listPane.layoutParams.width
+            val newWidth = (currentWidth + delta).coerceIn(listMinPx, listMaxPx)
+
+            if (newWidth != currentWidth) {
+                listPane.layoutParams = listPane.layoutParams.apply { width = newWidth }
+            }
+
+            if (isEnd && available > 0) {
+                DualPaneRatioUtil.updateRatio(newWidth.toFloat() / available)
+                refreshDetailPaneMessageBubbles()
+            }
+        }
+    }
+
+    /**
+     * Tell the active ChatFragment's message RecyclerView to rebind its visible items.
+     * This refreshes containerWidth-dependent calculations after the detail pane resizes.
+     *
+     * MVP: uses notifyDataSetChanged on visible items. Heavier than payload-based refresh
+     * but acceptable for the once-per-drag-end frequency.
+     */
+    private fun refreshDetailPaneMessageBubbles() {
+        val detailPane = findViewById<View>(com.difft.android.R.id.detail_pane) ?: return
+        // Walk descendants to find any RecyclerView. ChatFragment hosts its message list as one.
+        findFirstRecyclerView(detailPane)?.adapter?.notifyDataSetChanged()
+    }
+
+    private fun findFirstRecyclerView(root: View): androidx.recyclerview.widget.RecyclerView? {
+        if (root is androidx.recyclerview.widget.RecyclerView) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                findFirstRecyclerView(root.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun availablePaneSpacePx(): Int {
+        val density = resources.displayMetrics.density
+        val railPx = (NAVIGATION_RAIL_WIDTH_DP * density).toInt()
+        val dividersPx = (DUAL_PANE_DIVIDERS_WIDTH_DP * density).toInt()
+        return (WindowSizeClassUtil.getWindowWidthPx(this) - railPx - dividersPx).coerceAtLeast(0)
+    }
+
+    private companion object {
+        // Default list pane width per Material 3 two-pane guidance (applied when no user
+        // override and not in large text mode). Mirrors the hardcoded value in
+        // layout-w840dp-h480dp/activity_index.xml.
+        const val LIST_PANE_DEFAULT_WIDTH_DP = 360
+
+        // NavigationRail width. Mirrors layout-w840dp-h480dp/activity_index.xml.
+        const val NAVIGATION_RAIL_WIDTH_DP = 96
+
+        // Total layout width consumed by dividers between rail / list / detail.
+        // Only divider_rail (0.5dp ≈ 1dp) actually takes space — divider_pane is a
+        // floating overlay (negative marginStart, declared last for z-order) and does
+        // NOT consume horizontal layout space.
+        const val DUAL_PANE_DIVIDERS_WIDTH_DP = 1
+
+        // Minimum widths (per-pane) honored across user drag, large-font auto-split, and
+        // window-resize clamping. 280dp keeps the conversation list legible; 360dp keeps the
+        // detail pane wide enough for the 270dp voice / contact / attach message bubbles.
+        const val MIN_LIST_PANE_WIDTH_DP = 280
+        const val MIN_DETAIL_PANE_WIDTH_DP = 360
     }
 
     /**

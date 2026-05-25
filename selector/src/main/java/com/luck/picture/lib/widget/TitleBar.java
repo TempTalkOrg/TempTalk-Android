@@ -77,7 +77,12 @@ public class TitleBar extends RelativeLayout implements View.OnClickListener {
         rlAlbumBg.setOnClickListener(this);
         titleBarLayout.setOnClickListener(this);
         viewAlbumClickArea.setOnClickListener(this);
-        setBackgroundColor(ContextCompat.getColor(getContext(), com.difft.android.base.R.color.bg1));
+        // Default to the project page bg so the title bar matches the status bar /
+        // windowBackground in both light and dark modes. Required for PreviewTitleBar
+        // which floats over a (usually black) image and must paint its own surface so
+        // text/icons stay readable. Explicit override still possible via
+        // TitleBarStyle.titleBackgroundColor in setTitleBarStyle().
+        setBackgroundColor(ContextCompat.getColor(getContext(), com.difft.android.base.R.color.bg));
         handleLayoutUI();
         if (TextUtils.isEmpty(config.defaultAlbumName)) {
             setTitle(config.chooseMode == SelectMimeType.ofAudio() ? getContext().getString(R.string.ps_all_audio) : getContext().getString(R.string.ps_camera_roll));

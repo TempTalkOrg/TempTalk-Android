@@ -60,7 +60,7 @@ class WCDB @Inject constructor(
         fun createDatabase(): Database {
             return Database(path).also { database ->
                 if (!BuildConfig.DEBUG) {
-                    database.setCipherKey(WCDBSecretKeyHelper.getOrCreateDBSecretKey(context))
+                    database.setCipherKey(WCDBKeyManager.getOrCreateKey(context))
                 }
                 database.enableAutoBackup(true)
 
@@ -83,6 +83,12 @@ class WCDB @Inject constructor(
 
         try {
             createDatabase()
+        } catch (e: WCDBKeyUnavailableException) {
+            // Cipher key unavailable is operationally equivalent to a corrupted database —
+            // route through the same recovery flow.
+            L.e { "[WCDB] key unavailable: ${e.stackTraceToString()}" }
+            recoveryPreferences.setRecoveryNeeded()
+            restartApp()
         } catch (e: WCDBCorruptOrIOException) {
             // Report the corruption to FirebaseCrashlytics
             val exception = RuntimeException("[WCDB] Database corruption detected. Code: ${e.code}, Path: $path", e)
@@ -296,12 +302,27 @@ class WCDB @Inject constructor(
     }
 
     /**
-     * 重启应用
+     * 重启应用 — relaunch the launch intent then kill the current process.
+     *
+     * Intent flags (issue #725 §9.5): on API ≥ 24, calling `startActivity` from a
+     * non-Activity Context (e.g. `Application`) with `FLAG_ACTIVITY_CLEAR_TASK`
+     * alone throws `AndroidRuntimeException`. The fix is to OR in
+     * `FLAG_ACTIVITY_NEW_TASK` so the system creates a fresh task for the
+     * relaunched activity. The immediate `Process.killProcess` previously masked
+     * the user-visible failure — the relaunch silently failed.
+     *
+     * Wrapped in try/catch so a still-failing `startActivity` (e.g. background
+     * launch restrictions on API 30+) still proceeds to the kill — the user
+     * cold-restarting the app is preferable to leaving a half-killed process.
      */
     private fun restartApp(): Nothing {
         context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            context.startActivity(this)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                context.startActivity(this)
+            } catch (e: Exception) {
+                L.e { "[WCDB] restartApp startActivity failed: ${e.stackTraceToString()}" }
+            }
         }
         Process.killProcess(Process.myPid())
         exitProcess(0)

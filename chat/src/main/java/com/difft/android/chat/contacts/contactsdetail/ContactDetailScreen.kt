@@ -123,7 +123,7 @@ fun ContactDetailScreen(
                     Modifier.fillMaxSize()
                 }
             )
-            .background(DifftTheme.colors.backgroundSetting)
+            .background(DifftTheme.colors.bg)
     ) {
         // Top bar (fixed)
         TopBar(
@@ -537,7 +537,7 @@ private fun ActionButton(
         modifier = modifier
             .height(72.dp)
             .clip(RoundedCornerShape(DifftTheme.spacing.inlineSmall))
-            .background(DifftTheme.colors.backgroundSettingItem)
+            .background(DifftTheme.colors.bgElevated)
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -576,7 +576,7 @@ private fun ContactInfoSection(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-            .background(DifftTheme.colors.backgroundSettingItem)
+            .background(DifftTheme.colors.bgElevated)
             .padding(DifftTheme.spacing.insetLarge)
     ) {
         Text(

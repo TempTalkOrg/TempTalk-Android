@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import com.difft.android.base.call.Args
 import com.difft.android.base.call.CallActionType
+import com.difft.android.base.call.CallEncryptOutcome
 import com.difft.android.base.call.CallEncryptResult
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
@@ -20,7 +21,6 @@ import com.difft.android.base.user.defaultBarrageTexts
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
@@ -96,9 +96,9 @@ class LChatToCallControllerImpl @Inject constructor(
                 LCallManager.checkQuicFeatureGrayStatus()
 
                 val mySelfName = contactorCacheManager.getDisplayName(mySelfId)
-                val token = SecureSharedPrefsUtil.getToken()
+                val token = (globalServices.userManager.getUserData()?.microToken ?: "")
 
-                val callEncryptResult = callMessageCreator.createCallMessage(
+                when (val outcome = callMessageCreator.createCallMessage(
                     forWhat = forWhat,
                     callType = resolveCallType(forWhat),
                     callRole = CallRole.CALLER,
@@ -111,13 +111,20 @@ class LChatToCallControllerImpl @Inject constructor(
                     mKey = messageEncryptor.generateKey(),
                     createCallMsg = callConfig.createCallMsg,
                     createdAt = System.currentTimeMillis()
-                )
-
-                val result = startCallInternal(activity, forWhat, callEncryptResult, token, chatRoomName)
-                if (!result) {
-                    withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
+                )) {
+                    is CallEncryptOutcome.Success -> {
+                        val result = startCallInternal(activity, forWhat, outcome.result, token, chatRoomName)
+                        if (!result) {
+                            withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
+                        }
+                        onComplete(result, null)
+                    }
+                    is CallEncryptOutcome.Failed -> {
+                        L.e { "[Call] startCall encryption failed: ${outcome.reason}" }
+                        withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
+                        onComplete(false, ResUtils.getString(R.string.call_start_failed_tip))
+                    }
                 }
-                onComplete(result, null)
             } catch (e: Exception) {
                 L.e { "[Call] startCall failed: ${e.message}" }
                 withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }

@@ -64,7 +64,7 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 MainContent()
             }
         }
@@ -128,14 +128,14 @@ class NotificationContentDisplaySettingsActivity : BaseActivity() {
                 val bgItem = remember {
                     Color(
                         ContextCompat.getColor(
-                            context, R.color.bg_setting_item
+                            context, R.color.bg_elevated
                         )
                     )
                 }
                 val dividerColor = remember {
                     Color(
                         ContextCompat.getColor(
-                            context, R.color.bg_setting
+                            context, R.color.bg
                         )
                     )
                 }

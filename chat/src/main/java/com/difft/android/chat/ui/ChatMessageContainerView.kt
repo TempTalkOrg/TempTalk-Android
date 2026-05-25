@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import com.difft.android.base.utils.windowWidthPx
 import com.difft.android.chat.R
 
 class ChatMessageContainerView @JvmOverloads constructor(
@@ -220,9 +221,11 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 }
             }
 
-            // Use containerWidth if set, otherwise fallback to displayMetrics
-            val displayWidth = resources.displayMetrics.widthPixels
-            val availableWidth = if (containerWidth > 0) containerWidth else displayWidth
+            // Use containerWidth if set, otherwise fallback to current Activity window bounds.
+            // displayMetrics.widthPixels gives the device display, not the current app window —
+            // on foldables in dual-pane / multi-window this overshoots. windowWidthPx() returns
+            // the actual window width (see PR #580 for the same fix pattern).
+            val availableWidth = if (containerWidth > 0) containerWidth else windowWidthPx()
 
             // Get our own margins
             val ourParams = layoutParams as? MarginLayoutParams
@@ -240,7 +243,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
 
         // Fallback calculation if parent info is not available
-        val screenWidth = if (containerWidth > 0) containerWidth else resources.displayMetrics.widthPixels
+        val screenWidth = if (containerWidth > 0) containerWidth else windowWidthPx()
         // Account for typical margins: 40dp on one side + 8-12dp on the other
         val marginsDp = 60
         val marginsPixels = (marginsDp * resources.displayMetrics.density).toInt()

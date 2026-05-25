@@ -10,14 +10,75 @@ plugins {
     alias(libs.plugins.protobuf.plugin) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.roborazzi) apply false
+    alias(libs.plugins.detekt) apply false
+}
+
+// Detekt — apply to all subprojects EXCEPT :detekt-rules itself.
+// :detekt-rules ships the custom rules and does not need to scan itself.
+subprojects {
+    if (name == "detekt-rules") return@subprojects
+    apply(plugin = "dev.detekt")
+
+    extensions.configure<dev.detekt.gradle.extensions.DetektExtension> {
+        config.setFrom(rootProject.files("config/detekt/detekt.yml"))
+        // Per-module baseline — Detekt's multi-module Gradle plugin can't
+        // share a single baseline file (each :module:detektBaseline overwrites
+        // the same file). Per-module baselines keep regen idempotent and
+        // surface violations cleanly in their owning module.
+        baseline = file("config/detekt/baseline.xml")
+        buildUponDefaultConfig = true
+        autoCorrect = false
+        parallel = true
+        basePath.set(rootProject.layout.projectDirectory)
+        // Skip generated sources (Hilt, KSP, navigation safeargs, etc.) and build dirs.
+        // Custom source set picks main + test kotlin/java only.
+        source.setFrom(
+            files(
+                "src/main/kotlin",
+                "src/main/java",
+                "src/test/kotlin",
+                "src/test/java",
+            )
+        )
+    }
+
+    dependencies {
+        add("detektPlugins", project(":detekt-rules"))
+    }
+
+    // SARIF report enables GitHub Code Scanning annotations on PRs.
+    tasks.withType<dev.detekt.gradle.Detekt>().configureEach {
+        reports {
+            sarif.required.set(true)
+            html.required.set(true)
+            checkstyle.required.set(false)
+            markdown.required.set(false)
+        }
+        jvmTarget.set(libs.versions.jvmTarget.get())
+        // Exclude generated and build outputs explicitly (defense in depth).
+        exclude("**/build/**", "**/generated/**", "**/resources/**")
+    }
+    tasks.withType<dev.detekt.gradle.DetektCreateBaselineTask>().configureEach {
+        jvmTarget.set(libs.versions.jvmTarget.get())
+    }
 }
 
 allprojects {
     configurations.all {
+        // Detekt 2.0.0-alpha.3 was compiled against Kotlin 2.3.21 stdlib; its
+        // classpath needs matching stdlib at runtime. The general 2.3.0 force
+        // below would break Detekt with "compiled with 2.3.21 but running with 2.3.0".
+        // Scope the Detekt configurations to 2.3.21 and let everything else pin to 2.3.0.
+        val isDetektConfig = name.startsWith("detekt") || name.contains("Detekt")
         resolutionStrategy.eachDependency {
             if (requested.group == "org.jetbrains.kotlin") {
-                useVersion("2.3.0")
-                because("Force Kotlin version to 2.3.0 for Coroutines 1.9.0 compatibility")
+                if (isDetektConfig) {
+                    useVersion("2.3.21")
+                    because("Detekt 2.0.0-alpha.3 was compiled against Kotlin 2.3.21")
+                } else {
+                    useVersion("2.3.0")
+                    because("Force Kotlin version to 2.3.0 for Coroutines 1.9.0 compatibility")
+                }
             }
             if (requested.group == "io.netty") {
                 useVersion("4.1.133.Final")

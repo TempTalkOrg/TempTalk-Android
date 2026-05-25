@@ -7,6 +7,9 @@ import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.state.OnGoingCallStateManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import util.ScreenLockUtil
 
 class ScreenUnlockBroadcastReceiver(
@@ -14,6 +17,7 @@ class ScreenUnlockBroadcastReceiver(
     private val onGoingCallStateManager: OnGoingCallStateManager
 ) {
     private var isRegistered = false
+    private var registeredContext: Context? = null
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -38,7 +42,10 @@ class ScreenUnlockBroadcastReceiver(
 
     /**
      * 注册广播接收器
-     * @param context 上下文
+     *
+     * 使用 applicationContext 注册，确保 register/unregister 使用相同的
+     * Context identity（LoadedApk 以 Context 为 key 存储 ReceiverDispatcher），
+     * 同时避免持有 Activity 引用。
      */
     fun register(context: Context) {
         if (isRegistered) {
@@ -50,13 +57,15 @@ class ScreenUnlockBroadcastReceiver(
             addAction(Intent.ACTION_USER_PRESENT)
         }
 
+        val appContext = context.applicationContext
         try {
             ContextCompat.registerReceiver(
-                context,
+                appContext,
                 broadcastReceiver,
                 filter,
                 ContextCompat.RECEIVER_EXPORTED
             )
+            registeredContext = appContext
             isRegistered = true
             L.i { "[Call] ScreenUnlockBroadcastReceiver registered" }
         } catch (e: Exception) {
@@ -66,21 +75,31 @@ class ScreenUnlockBroadcastReceiver(
 
     /**
      * 注销广播接收器
-     * @param context 上下文
+     *
+     * unregisterReceiver 底层执行 Binder IPC（→ AMS），当 system_server
+     * 负载高时可能阻塞数百毫秒导致 ANR，因此将其移至 IO 线程异步执行。
+     * onDestroy 场景下不需要等待注销完成——Activity 已不在前台，receiver
+     * 不会再被触发。
      */
     fun unregister(context: Context) {
         if (!isRegistered) {
             return
         }
+        isRegistered = false
 
-        try {
-            context.unregisterReceiver(broadcastReceiver)
-            L.i { "[Call] ScreenUnlockBroadcastReceiver unregister" }
-        } catch (e: Exception) {
-            L.e { "[Call] ScreenUnlockBroadcastReceiver failed to unregister: ${e.message}" }
-        } finally {
-            // 无论成功或失败，都重置注册状态
-            isRegistered = false
+        val ctx = registeredContext ?: context.applicationContext
+        registeredContext = null
+        val receiver = broadcastReceiver
+        // GlobalScope is deliberate: called from onDestroy where no lifecycle scope
+        // survives; this is a fire-and-forget Binder IPC cleanup.
+        @Suppress("GlobalCoroutineUsage", "OPT_IN_USAGE")
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                ctx.unregisterReceiver(receiver)
+                L.i { "[Call] ScreenUnlockBroadcastReceiver unregister" }
+            } catch (e: Exception) {
+                L.e { "[Call] ScreenUnlockBroadcastReceiver failed to unregister: ${e.stackTraceToString()}" }
+            }
         }
     }
 

@@ -1,12 +1,16 @@
 package com.difft.android.call.manager
 
+import com.difft.android.base.utils.globalServices
+
 import android.app.Activity
 import androidx.compose.ui.platform.ComposeView
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import com.difft.android.base.call.CallFeedbackRequestBody
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.storage.AppStateKeys
+import com.difft.android.base.storage.di.AppStateDataStore
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.repo.LCallHttpService
@@ -14,12 +18,12 @@ import com.difft.android.call.ui.feedback.CallRatingFeedbackView
 import com.difft.android.call.util.CallComposeUiUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,30 +32,39 @@ import javax.inject.Singleton
  * 负责管理通话反馈相关的逻辑
  */
 @Singleton
-class CallFeedbackManager @Inject constructor() {
-    
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        @ChativeHttpClientModule.Call
-        fun callHttpClient(): ChativeHttpClient
-    }
-    
+class CallFeedbackManager @Inject constructor(
+    @ChativeHttpClientModule.Call private val callHttpClient: dagger.Lazy<ChativeHttpClient>,
+    @param:AppStateDataStore private val appStateStore: DataStore<Preferences>,
+    private val userManager: com.difft.android.base.user.UserManager,
+) {
     private val callService by lazy {
-        val callHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callHttpClient()
-        callHttpClient.getService(LCallHttpService::class.java)
+        callHttpClient.get().getService(LCallHttpService::class.java)
     }
-    
+
     // 存储反馈信息
     private var callFeedbackInfo: FeedbackCallInfo? = null
-    
+
     // ==================== 反馈触发逻辑相关常量 ====================
     private companion object {
         private const val RESET_INTERVAL_MS = 24 * 60 * 60 * 1000L // 24 hours in milliseconds
-        private const val KEY_CALL_LAST_FEEDBACK_RESET_TIME = "call_last_feedback_reset_time"
-        private const val KEY_CALL_FEEDBACK_RANDOM_THRESHOLD = "call_feedback_random_threshold"
-        private const val KEY_CALL_FEEDBACK_HAS_TRIGGERED = "call_feedback_has_triggered"
-        private const val KEY_CALL_COUNT = "call_count"
+    }
+
+    /** Bounded synchronous read; pre-warmed DataStore typically returns in sub-ms, 1 s cap guards cold start. */
+    @Suppress("BanRunBlockingOutsideTests")
+    private fun <T> readBlocking(read: suspend (Preferences) -> T?, default: T): T =
+        runBlocking(Dispatchers.IO) {
+            withTimeoutOrNull(1_000) { read(appStateStore.data.first()) } ?: default
+        }
+
+    @Suppress("BanRunBlockingOutsideTests")
+    private fun writeBlocking(edit: suspend (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
+        runBlocking(Dispatchers.IO) {
+            runCatching {
+                withTimeoutOrNull(1_000) { appStateStore.edit(edit) }
+            }.onFailure {
+                L.w { "[Call] CallFeedbackManager write failed: ${it.message}" }
+            }
+        }
     }
     
     /**
@@ -73,7 +86,7 @@ class CallFeedbackManager @Inject constructor() {
      * @param params 反馈请求参数
      */
     private suspend fun submitCallFeedbackInternal(params: CallFeedbackRequestBody) {
-        val token = SecureSharedPrefsUtil.getToken()
+        val token = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (token.isNullOrEmpty()) {
             L.e { "[Call] CallFeedbackManager submitCallFeedback failed: missing authentication token" }
             return
@@ -168,21 +181,31 @@ class CallFeedbackManager @Inject constructor() {
      */
     @Synchronized
     private fun ensure24HourReset() {
-        val lastReset = SharedPrefsUtil.getLong(KEY_CALL_LAST_FEEDBACK_RESET_TIME)
+        val snapshot = userManager.getUserData()
+        val lastReset = snapshot?.callLastFeedbackResetTime ?: 0L
         val now = System.currentTimeMillis()
 
         if (now - lastReset >= RESET_INTERVAL_MS || lastReset == 0L) {
             val newThreshold = (1..5).random()
-            SharedPrefsUtil.putLong(KEY_CALL_LAST_FEEDBACK_RESET_TIME, now)
-            SharedPrefsUtil.putInt(KEY_CALL_FEEDBACK_RANDOM_THRESHOLD, newThreshold)
-            SharedPrefsUtil.putBoolean(KEY_CALL_FEEDBACK_HAS_TRIGGERED, false)
-            SharedPrefsUtil.putInt(KEY_CALL_COUNT, 0)
+            // commit = true so hasTriggered=false is durably persisted BEFORE
+            // CALL_COUNT is reset to 0. If we crash between the two writes with
+            // the userManager write still in flight, the next session would see
+            // hasTriggered=true on disk + CALL_COUNT=0, suppressing feedback for
+            // the entire next 24-hour window. Same crash-consistency reasoning
+            // as shouldTriggerFeedback() below.
+            userManager.update(commit = true) {
+                callLastFeedbackResetTime = now
+                callFeedbackRandomThreshold = newThreshold
+                callFeedbackHasTriggered = false
+            }
+            // CALL_COUNT remains in appStateStore (no UserData mapping).
+            writeBlocking { prefs -> prefs[AppStateKeys.CALL_COUNT] = 0 }
         }
     }
 
     /**
      * Called at the end of each call, automatically increments the call count and checks if feedback should be triggered
-     * 
+     *
      * @param isForce 是否强制触发反馈
      * @return 是否应该触发反馈
      */
@@ -190,19 +213,25 @@ class CallFeedbackManager @Inject constructor() {
     fun shouldTriggerFeedback(isForce: Boolean): Boolean {
         ensure24HourReset()
 
-        val hasTriggered = SharedPrefsUtil.getBoolean(KEY_CALL_FEEDBACK_HAS_TRIGGERED, false)
+        val snapshot = userManager.getUserData()
+        val hasTriggered = snapshot?.callFeedbackHasTriggered ?: false
         if (hasTriggered) return false
 
-        val currentCount = SharedPrefsUtil.getInt(KEY_CALL_COUNT, 0) + 1
-        val threshold = SharedPrefsUtil.getInt(KEY_CALL_FEEDBACK_RANDOM_THRESHOLD, 3)
-
-        SharedPrefsUtil.putInt(KEY_CALL_COUNT, currentCount)
+        val currentCount = readBlocking({ it[AppStateKeys.CALL_COUNT] }, 0) + 1
+        val threshold = snapshot?.callFeedbackRandomThreshold ?: 3
 
         if ((currentCount >= threshold) || isForce) {
-            SharedPrefsUtil.putBoolean(KEY_CALL_FEEDBACK_HAS_TRIGGERED, true)
+            // Persist hasTriggered=true synchronously BEFORE advancing CALL_COUNT so a
+            // crash between the two writes leaves hasTriggered durably set — the next
+            // session sees hasTriggered=true and won't re-show the feedback dialog.
+            // Develop wrote both keys in one atomic SP edit; this preserves that
+            // crash-consistency guarantee now that they live in different DataStores.
+            userManager.update(commit = true) { callFeedbackHasTriggered = true }
+            writeBlocking { prefs -> prefs[AppStateKeys.CALL_COUNT] = currentCount }
             return true
         }
 
+        writeBlocking { prefs -> prefs[AppStateKeys.CALL_COUNT] = currentCount }
         return false
     }
 }

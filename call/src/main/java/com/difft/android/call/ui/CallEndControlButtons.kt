@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,7 @@ import com.difft.android.call.R
 fun OneOnOneHangupButton(onHangup: () -> Unit) {
     Row(
         modifier = Modifier
+            .testTag("call_btn_hangup")
             .width(50.dp)
             .height(48.dp)
             .clickable(
@@ -86,6 +88,7 @@ fun GroupCallLeaveButton(
         Box(
             contentAlignment = Alignment.CenterEnd,
             modifier = Modifier
+                .testTag("call_btn_end_choices")
                 .align(Alignment.CenterEnd)
                 .width(54.dp)
                 .height(48.dp)
@@ -115,6 +118,7 @@ fun GroupCallLeaveButton(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
+                .testTag("call_btn_leave")
                 .align(Alignment.CenterStart)
                 .size(48.dp)
                 .background(

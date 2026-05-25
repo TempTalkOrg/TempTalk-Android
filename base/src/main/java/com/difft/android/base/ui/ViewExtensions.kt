@@ -2,6 +2,7 @@ package com.difft.android.base.ui
 
 import android.content.Context
 import android.util.DisplayMetrics
+import androidx.core.view.doOnNextLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
@@ -14,8 +15,8 @@ fun RecyclerView.noSmoothScrollToBottom() {
 // Scroll to the last position without animation
     recyclerView.scrollToPosition(lastPosition)
 
-// Post a Runnable to adjust the scroll after the layout pass
-    recyclerView.post {
+// doOnNextLayout (not post) so the offset uses post-layout dimensions.
+    recyclerView.doOnNextLayout {
         // Ensure the LayoutManager is a LinearLayoutManager
         val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
 

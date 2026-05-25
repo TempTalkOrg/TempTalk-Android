@@ -33,6 +33,7 @@ import androidx.core.app.Person
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
@@ -81,6 +82,7 @@ open class ForegroundService : Service() {
         entryPoint.onGoingCallStateManager()
     }
 
+    @Volatile
     private var isForegroundStarted = false
 
     @Volatile
@@ -120,7 +122,7 @@ open class ForegroundService : Service() {
         }
     }
 
-    private fun updateNotification(useCallStyle: Boolean) {
+    private fun buildOngoingCallNotification(useCallStyle: Boolean): Notification {
 
         val activityIntent = CallIntent.Builder(this, LCallActivity::class.java)
             .withAction(CallIntent.Action.BACK_TO_CALL)
@@ -169,41 +171,38 @@ open class ForegroundService : Service() {
             )
         }
 
-        val notification = builder.build()
-        // Update the notification without restarting the foreground service
-        val notificationManager =
-            getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(DEFAULT_NOTIFICATION_ID, notification)
+        return builder.build()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
-        if(!isForegroundStarted) {
-            L.i { "[Call] ForegroundService +++ start Foreground Service +++" }
-            isForegroundStarted = true
-            val notification: Notification = buildForegroundNotification()
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    startForeground(DEFAULT_NOTIFICATION_ID, notification, getServiceType())
-                } else {
-                    startForeground(DEFAULT_NOTIFICATION_ID, notification)
-                }
-            } catch (e: Exception) {
-                L.e { "[Call] ForegroundService Failed to start foreground service: ${e.message}" }
-                stopSelf() // Stop the service if starting foreground fails, or handle as needed
+        // Every startForegroundService() must be matched by startForeground() within ~5s,
+        // even on follow-up onStartCommand when already foreground. Pick the notification
+        // matching the intent so the displayed style doesn't flicker before the action
+        // handler runs on serviceExecutor.
+        val notification: Notification = if (intent?.action == ACTION_UPDATE_NOTIFICATION) {
+            val useCallStyle = intent.getBooleanExtra(EXTRA_USE_CALL_STYLE, false)
+            buildOngoingCallNotification(useCallStyle)
+        } else {
+            buildForegroundNotification()
+        }
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getServiceType() else 0
+        if (ForegroundServiceStarter.startForegroundSafely(this, DEFAULT_NOTIFICATION_ID, notification, type)) {
+            if (!isForegroundStarted) {
+                L.i { "[Call] ForegroundService +++ start Foreground Service +++" }
+                isForegroundStarted = true
             }
+        } else {
+            isForegroundStarted = false
+            return START_NOT_STICKY
         }
 
         if (intent != null && intent.action != null) {
             serviceExecutor.execute {
                 when (intent.action) {
                     ACTION_UPDATE_NOTIFICATION -> {
+                        // Notification already published synchronously above.
                         L.i { "[Call] ForegroundService +++ Updating Notification +++" }
-                        if(onGoingCallStateManager.isInCalling()){
-                            val useCallStyle =
-                                intent.getBooleanExtra(EXTRA_USE_CALL_STYLE, false)
-                            updateNotification(useCallStyle)
-                        }
                     }
                     ACTION_UPDATE_SERVICE_TYPE -> {
                         L.i { "[Call] ForegroundService +++ Updating Service Type +++" }
@@ -324,14 +323,16 @@ open class ForegroundService : Service() {
     @RequiresApi(30)
     private fun updateServiceType() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isForegroundStarted) {
-            try {
-                val newServiceType = getServiceType()
-                val notification = buildForegroundNotification()
-                // Re-call startForeground with updated service type
-                startForeground(DEFAULT_NOTIFICATION_ID, notification, newServiceType)
+            val newServiceType = getServiceType()
+            val notification = buildForegroundNotification()
+            if (ForegroundServiceStarter.startForegroundSafely(
+                    this, DEFAULT_NOTIFICATION_ID, notification, newServiceType
+                )
+            ) {
                 L.i { "[Call] ForegroundService service type updated successfully" }
-            } catch (e: Exception) {
-                L.e { "[Call] ForegroundService Failed to update service type: ${e.message}" }
+            } else {
+                // Helper already called stopSelf(); collapse our local state to match.
+                isForegroundStarted = false
             }
         }
     }

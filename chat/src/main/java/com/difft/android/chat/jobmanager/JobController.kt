@@ -111,6 +111,13 @@ internal class JobController(
         jobStorage.getJobsInQueue(queue).forEach { cancelJob(it.id) }
     }
 
+    /**
+     * Snapshot of pending+running jobs in [queue], sorted by createTime ascending.
+     * Must be invoked on managementDispatcher; public entry is [JobManager.findJobsInQueue].
+     */
+    @WorkerThread
+    internal fun findJobsInQueue(queue: String): List<JobSpec> = jobStorage.getJobsInQueue(queue)
+
     @WorkerThread
     fun onRetry(job: Job, backoffInterval: Long) {
         require(backoffInterval > 0) { "Invalid backoff interval! $backoffInterval" }

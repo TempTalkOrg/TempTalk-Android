@@ -1,7 +1,7 @@
 package com.difft.android.network.speedtest
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Lazy
@@ -31,11 +31,11 @@ import javax.inject.Singleton
 @Singleton
 class DomainSpeedTestCoordinator @Inject constructor(
     private val globalConfigsManager: Lazy<GlobalConfigsManager>,
-    private val speedTester: DomainSpeedTester
+    private val speedTester: DomainSpeedTester,
+    private val userManager: UserManager,
 ) {
     companion object {
         private const val TAG = "SpeedTest"
-        private const val SP_KEY_BEST_HOST = "sp_speed_test_success_host"
         private const val SERVICE_TYPE_CHAT = "chat"
 
         private const val THROTTLE_MS = 30_000L
@@ -50,6 +50,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
     private val isTestRunning = AtomicBoolean(false)
     private val wsConsecutiveFailures = AtomicInteger(0)
 
+    @Volatile
     private var periodicJob: Job? = null
 
     fun initialize() {
@@ -72,8 +73,9 @@ class DomainSpeedTestCoordinator @Inject constructor(
             return snapshotResult.host
         }
 
-        // Level 2: persisted best host from last speed test
-        val persisted = SharedPrefsUtil.getString(SP_KEY_BEST_HOST)
+        // Level 2: persisted best host from last speed test.
+        // Synchronous lookup via UserManager's in-memory snapshot — no I/O.
+        val persisted = userManager.getUserData()?.bestHost
         if (!persisted.isNullOrBlank() && persisted !in invalidatedHostsThisSession) {
             L.i { "[$TAG] getBestHostSync: using persisted host=$persisted" }
             return persisted
@@ -162,6 +164,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
      * Starts or stops periodic speed tests based on app foreground state.
      * Foreground: test every 30 minutes. Background: stop testing.
      */
+    @Synchronized
     fun startPeriodicTest(isForeground: Boolean) {
         periodicJob?.cancel()
         if (!isForeground) {
@@ -181,6 +184,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
     /**
      * Resets all in-memory state. Called on logout before app restart.
      */
+    @Synchronized
     fun resetSession() {
         periodicJob?.cancel()
         snapshot.set(emptyList())
@@ -214,7 +218,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
 
             val best = results.firstOrNull { it.isAvailable }
             if (best != null) {
-                SharedPrefsUtil.putString(SP_KEY_BEST_HOST, best.host)
+                userManager.update { bestHost = best.host }
             }
             L.i { "[$TAG] speed test completed, best=${best?.host} (${best?.latencyMs}ms), all=$results" }
         } finally {

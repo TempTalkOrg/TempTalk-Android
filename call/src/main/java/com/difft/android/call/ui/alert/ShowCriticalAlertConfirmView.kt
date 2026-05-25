@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import com.difft.android.call.ui.HideNavigationBarEffect
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -116,6 +117,7 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                 onDismiss()
             },
         ) {
+            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

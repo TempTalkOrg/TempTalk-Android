@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
 }
@@ -137,7 +138,18 @@ dependencies {
     api(libs.logback.android)
 
     // 安全
+    // Retained for the legacy EncryptedSharedPreferences reader path used by storage
+    // migration lambdas (issue #725 v(N+1) → v(N+4) retention window).
     api(libs.security.crypto)
+
+    // Storage layer (issue #725): DataStore + Tink AEAD + kotlinx-serialization protobuf.
+    // Exported as api(...) so :app, :network, :call, :chat, :database can inject the
+    // storage qualifiers (`@SecureUserDataStore`, `@SecureConfigDataStore`, `@AppStateDataStore`)
+    // without per-module dependency declarations.
+    api(libs.datastore)
+    api(libs.datastore.preferences)
+    api(libs.tink.android)
+    api(libs.kotlinx.serialization.protobuf)
 
     // 刷新布局
     api(libs.bundles.smart.refresh)

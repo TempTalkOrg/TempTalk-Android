@@ -27,7 +27,7 @@ object ColorTokens {
     object Light {
         // Background hierarchy
         val Background = Color(0xFFFFFFFF)           // bg1
-        val BackgroundSetting = Color(0xFFFAFAFA)    // bg.setting (page bg for settings-style screens)
+        val Bg = Color(0xFFFAFAFA)    // bg — default page background (settings idiom)
         val BackgroundSecondary = Color(0xFFFAFAFA)  // bg2 (matches XML values/colors.xml bg2)
         val BackgroundPopup = Color(0xFFFFFFFF)      // bg.popup (matches XML values/colors.xml bg.popup)
         val BackgroundModal = Color(0xFFFFFFFF)      // bg.modal (matches XML values/colors.xml bg.modal)
@@ -37,7 +37,7 @@ object ColorTokens {
         val BackgroundBottomSheet = Color(0xFFFFFFFF) // Light: pure white (for bottom sheets)
         val BackgroundDisabled = Color(0xFFEAECEF)
         val BackgroundBlue = Color(0xFFEBF7FF)
-        val BackgroundSettingItem = Color(0xFFFFFFFF) // bg.setting.item
+        val BgElevated = Color(0xFFFFFFFF) // bg.elevated — default elevated/card background
         val BackgroundElevate = Color(0xFF0B0E11)
 
         // Surface colors
@@ -71,7 +71,7 @@ object ColorTokens {
     object Dark {
         // Background hierarchy
         val Background = Color(0xFF181A20)           // bg1
-        val BackgroundSetting = Color(0xFF181A20)    // bg.setting (page bg for settings-style screens, = bg1 in dark mode)
+        val Bg = Color(0xFF181A20)    // bg — default page background (= bg1 value in dark mode)
         val BackgroundSecondary = Color(0xFF1E2329)  // bg2 (matches XML values-night/colors.xml bg2)
         val BackgroundPopup = Color(0xFF1E2329)      // bg.popup (matches XML values-night/colors.xml bg.popup)
         val BackgroundModal = Color(0xFF2B3139)      // bg.modal (matches XML values-night/colors.xml bg.modal)
@@ -81,7 +81,7 @@ object ColorTokens {
         val BackgroundBottomSheet = Color(0xFF1E2329) // Dark: bg2 (same as bg.popup, for bottom sheets)
         val BackgroundDisabled = Color(0xFF474D57)
         val BackgroundBlue = Color(0xFF003366)
-        val BackgroundSettingItem = Color(0xFF1E2329) // bg.setting.item (bg2)
+        val BgElevated = Color(0xFF1E2329) // bg.elevated (= bg2 value in dark mode)
 
         val BackgroundElevate = Color(0xFF0B0E11)
 

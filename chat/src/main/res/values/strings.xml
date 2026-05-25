@@ -89,6 +89,9 @@
     <string name="chat_message_attachment">[Attachment]</string>
     <string name="chat_message_image">[Image]</string>
     <string name="chat_message_video">[Video]</string>
+    <!-- Generic fallback placeholder used in multi-select copy output for any
+         message type not explicitly handled in MessageCopyTextFormatter. -->
+    <string name="chat_message_short_for_generic">[Message]</string>
     <string name="chat_message_audio">[Audio]</string>
     <string name="chat_message_confidential_message">[Message]</string>
     <string name="chat_message_contact_card">[Contact Card]</string>
@@ -591,8 +594,9 @@
     <string name="chat_archive_messages_expired">Earlier messages are no longer available</string>
     <!-- Forward notice (system message shown after a forward completes).
          Terminal punctuation is appended by ForwardNoticeRenderer: the plurals text
-         itself has none, so the renderer can choose "." for a fully rendered list, or
-         nothing when the list ends in "..." (ellipsis already closes the sentence). -->
+         itself has none, so the renderer always appends the locale terminator.
+         %3$s is the locale-formatted author list (no "from " prefix); the plurals
+         template owns the "from" / "来自" preamble. PRD v1.0 §5.4.2. -->
     <plurals name="chat_forward_notice">
         <item quantity="one">\"%1$s\" forwarded a message from %3$s</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s</item>
@@ -603,5 +607,59 @@
         <item quantity="one">\"%1$s\" forwarded a message</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages</item>
     </plurals>
+    <!-- Combined-forward (chat history) variants — PRD v1.0 §5.4.2.
+         "chat history" naming chosen to match the bubble's user-facing label.
+         Used when the source selection is fully a CF (ALL_COMBINED_FORWARD), or
+         a single-bubble forward where that bubble IS a CF (CONTAINS_COMBINED_FORWARD,
+         count == 1). -->
+    <plurals name="chat_forward_notice_chat_history">
+        <item quantity="one">\"%1$s\" forwarded a chat history from %3$s</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d chat histories from %3$s</item>
+    </plurals>
+    <plurals name="chat_forward_notice_chat_history_self_only">
+        <item quantity="one">\"%1$s\" forwarded a chat history</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d chat histories</item>
+    </plurals>
+    <!-- Mixed variant — CONTAINS_COMBINED_FORWARD with count > 1: a selection that
+         contains BOTH regular messages and at least one CF bubble. -->
+    <plurals name="chat_forward_notice_plural_mixed">
+        <item quantity="one">\"%1$s\" forwarded a message (including chat history) from %3$s</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages (including chat history) from %3$s</item>
+    </plurals>
+    <plurals name="chat_forward_notice_plural_mixed_self_only">
+        <item quantity="one">\"%1$s\" forwarded a message (including chat history)</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages (including chat history)</item>
+    </plurals>
+    <!-- SUB_COMBINED_FORWARD — operation against a sub-message INSIDE a CF detail view. -->
+    <plurals name="chat_forward_notice_from_chat_history">
+        <item quantity="one">\"%1$s\" forwarded a message from %3$s\'s chat history</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s\'s chat history</item>
+    </plurals>
+    <plurals name="chat_forward_notice_from_chat_history_self_only">
+        <item quantity="one">\"%1$s\" forwarded a message from a chat history</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages from a chat history</item>
+    </plurals>
     <string name="chat_forward_notice_sentence_terminator">.</string>
+
+    <!-- Copy notice (system message shown after the user copies messages to clipboard).
+         Same conventions as chat_forward_notice. PRD v1.0 §5.4.1. -->
+    <plurals name="chat_copy_notice">
+        <item quantity="one">\"%1$s\" copied a message from %3$s</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages from %3$s</item>
+    </plurals>
+    <plurals name="chat_copy_notice_self_only">
+        <item quantity="one">\"%1$s\" copied a message</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages</item>
+    </plurals>
+    <!-- SUB_COMBINED_FORWARD — copy from inside a CF detail view. Main-conv copy
+         (UNKNOWN/CONTAINS/ALL) shares the base chat_copy_notice plural per PRD §5.4.1. -->
+    <plurals name="chat_copy_notice_from_chat_history">
+        <item quantity="one">\"%1$s\" copied a message from %3$s\'s chat history</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages from %3$s\'s chat history</item>
+    </plurals>
+    <plurals name="chat_copy_notice_from_chat_history_self_only">
+        <item quantity="one">\"%1$s\" copied a message from a chat history</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages from a chat history</item>
+    </plurals>
+    <string name="chat_copy_notice_sentence_terminator">.</string>
 </resources>

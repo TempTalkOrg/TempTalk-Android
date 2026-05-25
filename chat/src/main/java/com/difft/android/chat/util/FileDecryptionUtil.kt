@@ -5,7 +5,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.IOException
+import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
 import javax.crypto.Mac
@@ -18,7 +20,41 @@ object FileDecryptionUtil {
     private const val MAC_SIZE = 32
 
     /**
+     * 验证文件的 HMAC 完整性（先验证再解密）
+     * @return true 如果 MAC 验证通过
+     */
+    private fun verifyMac(encryptedFile: File, fileKey: ByteArray): Boolean {
+        val fileLength = encryptedFile.length()
+        if (fileLength < IV_SIZE + MAC_SIZE + 1) return false
+
+        val buffer = ByteArray(BUFFER_SIZE)
+        val mac = Mac.getInstance("HmacSHA256")
+        val macKeySpec = SecretKeySpec(fileKey, 32, 32, "HmacSHA256")
+        mac.init(macKeySpec)
+
+        val dataLength = fileLength - MAC_SIZE
+        val storedMac = ByteArray(MAC_SIZE)
+
+        FileInputStream(encryptedFile).use { input ->
+            var totalRead = 0L
+            while (totalRead < dataLength) {
+                val remaining = (dataLength - totalRead).coerceAtMost(BUFFER_SIZE.toLong()).toInt()
+                val bytesRead = input.read(buffer, 0, remaining)
+                if (bytesRead == -1) break
+                mac.update(buffer, 0, bytesRead)
+                totalRead += bytesRead
+            }
+            val storedMacBytesRead = input.read(storedMac)
+            if (storedMacBytesRead != MAC_SIZE) throw IOException("Incomplete MAC read: expected $MAC_SIZE bytes, got $storedMacBytesRead")
+        }
+
+        val computedMac = mac.doFinal()
+        return MessageDigest.isEqual(computedMac, storedMac)
+    }
+
+    /**
      * 解密加密文件并保存到目标文件
+     * 安全流程：先验证 HMAC，通过后再进行 AES-CBC 解密
      * @param encryptedFile 加密的源文件
      * @param targetFile 解密后的目标文件
      * @param fileKey 加密密钥（64字节 - 32字节用于AES，32字节用于HMAC）
@@ -27,99 +63,50 @@ object FileDecryptionUtil {
         if (!encryptedFile.exists()) {
             throw IOException("encrypted File is not exist: ${encryptedFile.absolutePath}")
         }
-        if (fileKey == null || fileKey.isEmpty()) {
-            throw IllegalArgumentException("fileKey is null or empty")
+        if (fileKey == null || fileKey.size < 64) {
+            throw IllegalArgumentException("fileKey must be 64 bytes (got ${fileKey?.size ?: 0})")
         }
+
+        if (!verifyMac(encryptedFile, fileKey)) {
+            L.w { "[FileDecryptionUtil] MAC验证失败，文件可能已被篡改" }
+            throw SecurityException("MAC验证失败，文件可能已被篡改")
+        }
+        L.i { "[FileDecryptionUtil] MAC验证成功，开始解密" }
 
         val buffer = ByteArray(BUFFER_SIZE)
-        val encryptInputStream = FileInputStream(encryptedFile)
-        try {
+        FileInputStream(encryptedFile).use { encryptInputStream ->
             val iv = ByteArray(IV_SIZE)
-            encryptInputStream.read(iv)
+            val ivBytesRead = encryptInputStream.read(iv)
+            if (ivBytesRead != IV_SIZE) throw IOException("Incomplete IV read: expected $IV_SIZE bytes, got $ivBytesRead")
 
-            // 初始化解密器
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             val aesKeySpec = SecretKeySpec(fileKey, 0, 32, "AES")
-            val ivParameterSpec = IvParameterSpec(iv)
-            cipher.init(Cipher.DECRYPT_MODE, aesKeySpec, ivParameterSpec)
+            cipher.init(Cipher.DECRYPT_MODE, aesKeySpec, IvParameterSpec(iv))
 
-            // 创建 Mac
-            val mac = Mac.getInstance("HmacSHA256")
-            val macKeySpec = SecretKeySpec(fileKey, 32, 32, "HmacSHA256")
-            mac.init(macKeySpec)
-
-            val realOutputStream = FileOutputStream(targetFile)
-
-            // 创建解密输入流
-            val cipherInputStream = CipherInputStream(encryptInputStream, cipher)
-
-            try {
-                var totalBytesRead1: Long = 0
-                val remainingBytes = encryptedFile.length() - MAC_SIZE - IV_SIZE
-                var bytesRead = 0
-
-                while (remainingBytes - totalBytesRead1 > 512) {
-                    bytesRead = cipherInputStream.read(buffer)
-                    if (bytesRead == -1) break
-                    realOutputStream.write(buffer, 0, bytesRead)
-                    totalBytesRead1 += bytesRead
-                }
-
-                val skipBytes = encryptInputStream.available() - MAC_SIZE
-                var totalBytesRead2 = 0L
-                while (totalBytesRead2 < skipBytes) {
-                    bytesRead = encryptInputStream.read(buffer)
-                    if (bytesRead == -1) break
-                    val bytesToRead2 = buffer.size.toLong().coerceAtMost(skipBytes - totalBytesRead2)
-                    val bytes = cipher.doFinal(buffer, 0, bytesToRead2.toInt())
-                    realOutputStream.write(bytes)
-                    totalBytesRead2 += bytesToRead2
-                }
-            } finally {
-                encryptInputStream.close()
-                cipherInputStream.close()
-                realOutputStream.close()
-            }
-
-            // 计算MAC
-            val encryptInputStream3 = FileInputStream(encryptedFile)
-            encryptInputStream3.use {
-                val skipBytes3 = encryptedFile.length() - MAC_SIZE
-                var totalBytesRead3 = 0L
-                var bytesRead = 0
-                while (totalBytesRead3 < skipBytes3) {
-                    bytesRead = it.read(buffer)
-                    if (bytesRead == -1) break
-                    val bytesToRead3 = buffer.size.toLong().coerceAtMost(skipBytes3 - totalBytesRead3)
-                    mac.update(buffer, 0, bytesToRead3.toInt())
-                    totalBytesRead3 += bytesToRead3
+            val ciphertextLength = encryptedFile.length() - IV_SIZE - MAC_SIZE
+            val boundedStream = BoundedInputStream(encryptInputStream, ciphertextLength)
+            CipherInputStream(boundedStream, cipher).use { cipherInputStream ->
+                try {
+                    FileOutputStream(targetFile).use { outputStream ->
+                        while (true) {
+                            val bytesRead = cipherInputStream.read(buffer)
+                            if (bytesRead == -1) break
+                            outputStream.write(buffer, 0, bytesRead)
+                        }
+                    }
+                } catch (e: Exception) {
+                    targetFile.delete()
+                    throw e
                 }
             }
-
-            // 读取并验证 Mac
-            val macDigest = mac.doFinal()
-
-            val encryptInputStream2 = FileInputStream(encryptedFile)
-            encryptInputStream2.use {
-                it.skip(encryptedFile.length() - MAC_SIZE)
-                val macFromStream = ByteArray(macDigest.size)
-                it.read(macFromStream)
-
-                if (!macDigest.contentEquals(macFromStream)) {
-                    L.w { "[FileDecryptionUtil] MAC验证失败，文件可能已被篡改" }
-                    throw Exception("MAC验证失败，文件可能已被篡改")
-                } else {
-                    L.i { "[FileDecryptionUtil] MAC验证成功，文件是完整的" }
-                    L.d { "[FileDecryptionUtil] 解密后文件大小: ${targetFile.length()}" }
-                }
-            }
-        } finally {
-            encryptInputStream.close()
         }
+
+        L.i { "[FileDecryptionUtil] 解密完成，文件大小: ${targetFile.length()}" }
     }
 
     /**
      * 解密加密文件并返回 ByteArray（不写磁盘）
+     * 安全流程：先验证 HMAC，通过后再进行 AES-CBC 解密
      * @param encryptedFile 加密的源文件
      * @param fileKey 加密密钥（64字节 - 32字节用于AES，32字节用于HMAC）
      */
@@ -127,86 +114,62 @@ object FileDecryptionUtil {
         if (!encryptedFile.exists()) {
             throw IOException("encrypted File is not exist: ${encryptedFile.absolutePath}")
         }
-        if (fileKey == null || fileKey.isEmpty()) {
-            throw IllegalArgumentException("fileKey is null or empty")
+        if (fileKey == null || fileKey.size < 64) {
+            throw IllegalArgumentException("fileKey must be 64 bytes (got ${fileKey?.size ?: 0})")
+        }
+
+        if (!verifyMac(encryptedFile, fileKey)) {
+            L.w { "[FileDecryptionUtil] MAC验证失败，文件可能已被篡改" }
+            throw SecurityException("MAC验证失败，文件可能已被篡改")
         }
 
         val buffer = ByteArray(BUFFER_SIZE)
-        val encryptInputStream = FileInputStream(encryptedFile)
         val outputStream = ByteArrayOutputStream()
-        try {
+
+        FileInputStream(encryptedFile).use { encryptInputStream ->
             val iv = ByteArray(IV_SIZE)
-            encryptInputStream.read(iv)
+            val ivBytesRead = encryptInputStream.read(iv)
+            if (ivBytesRead != IV_SIZE) throw IOException("Incomplete IV read: expected $IV_SIZE bytes, got $ivBytesRead")
 
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             val aesKeySpec = SecretKeySpec(fileKey, 0, 32, "AES")
-            val ivParameterSpec = IvParameterSpec(iv)
-            cipher.init(Cipher.DECRYPT_MODE, aesKeySpec, ivParameterSpec)
+            cipher.init(Cipher.DECRYPT_MODE, aesKeySpec, IvParameterSpec(iv))
 
-            val mac = Mac.getInstance("HmacSHA256")
-            val macKeySpec = SecretKeySpec(fileKey, 32, 32, "HmacSHA256")
-            mac.init(macKeySpec)
-
-            val cipherInputStream = CipherInputStream(encryptInputStream, cipher)
-
-            try {
-                var totalBytesRead1: Long = 0
-                val remainingBytes = encryptedFile.length() - MAC_SIZE - IV_SIZE
-                var bytesRead: Int
-
-                while (remainingBytes - totalBytesRead1 > 512) {
-                    bytesRead = cipherInputStream.read(buffer)
+            val ciphertextLength = encryptedFile.length() - IV_SIZE - MAC_SIZE
+            val boundedStream = BoundedInputStream(encryptInputStream, ciphertextLength)
+            CipherInputStream(boundedStream, cipher).use { cipherInputStream ->
+                while (true) {
+                    val bytesRead = cipherInputStream.read(buffer)
                     if (bytesRead == -1) break
                     outputStream.write(buffer, 0, bytesRead)
-                    totalBytesRead1 += bytesRead
-                }
-
-                val skipBytes = encryptInputStream.available() - MAC_SIZE
-                var totalBytesRead2 = 0L
-                while (totalBytesRead2 < skipBytes) {
-                    bytesRead = encryptInputStream.read(buffer)
-                    if (bytesRead == -1) break
-                    val bytesToRead2 = buffer.size.toLong().coerceAtMost(skipBytes - totalBytesRead2)
-                    val bytes = cipher.doFinal(buffer, 0, bytesToRead2.toInt())
-                    outputStream.write(bytes)
-                    totalBytesRead2 += bytesToRead2
-                }
-            } finally {
-                encryptInputStream.close()
-                cipherInputStream.close()
-            }
-
-            // 计算MAC
-            val encryptInputStream3 = FileInputStream(encryptedFile)
-            encryptInputStream3.use {
-                val skipBytes3 = encryptedFile.length() - MAC_SIZE
-                var totalBytesRead3 = 0L
-                var bytesRead: Int
-                while (totalBytesRead3 < skipBytes3) {
-                    bytesRead = it.read(buffer)
-                    if (bytesRead == -1) break
-                    val bytesToRead3 = buffer.size.toLong().coerceAtMost(skipBytes3 - totalBytesRead3)
-                    mac.update(buffer, 0, bytesToRead3.toInt())
-                    totalBytesRead3 += bytesToRead3
                 }
             }
-
-            // 读取并验证 Mac
-            val macDigest = mac.doFinal()
-            val encryptInputStream2 = FileInputStream(encryptedFile)
-            encryptInputStream2.use {
-                it.skip(encryptedFile.length() - MAC_SIZE)
-                val macFromStream = ByteArray(macDigest.size)
-                it.read(macFromStream)
-                if (!macDigest.contentEquals(macFromStream)) {
-                    L.w { "[FileDecryptionUtil] MAC验证失败，文件可能已被篡改" }
-                    throw Exception("MAC验证失败，文件可能已被篡改")
-                }
-            }
-        } finally {
-            encryptInputStream.close()
         }
 
         return outputStream.toByteArray()
+    }
+
+    /**
+     * 限制从底层流读取的最大字节数，防止 CipherInputStream 读入 MAC 尾部区域
+     */
+    private class BoundedInputStream(
+        private val source: InputStream,
+        private var remaining: Long
+    ) : InputStream() {
+
+        override fun read(): Int {
+            if (remaining <= 0L) return -1
+            val b = source.read()
+            if (b >= 0) remaining--
+            return b
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (remaining <= 0L) return -1
+            val toRead = minOf(len.toLong(), remaining).toInt()
+            val n = source.read(b, off, toRead)
+            if (n > 0) remaining -= n
+            return n
+        }
     }
 } 

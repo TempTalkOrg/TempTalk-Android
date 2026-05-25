@@ -16,7 +16,6 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -391,11 +390,10 @@ class ContactDetailFragment : Fragment() {
                     val callData = callDataManager.getCallDataByConversationId(contactId)
                     if (callData != null) {
                         L.i { "[call] ContactDetailFragment join call, roomId:${callData.roomId}." }
-                        LCallManager.joinCall(requireActivity(), callData) { status ->
-                            if (!status) {
-                                L.e { "[Call] ContactDetailFragment join call failed." }
-                                ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
-                            }
+                        val status = LCallManager.joinCall(requireActivity(), callData)
+                        if (!status) {
+                            L.e { "[Call] ContactDetailFragment join call failed." }
+                            ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
                         }
                         return@launch
                     }
@@ -534,7 +532,7 @@ class ContactDetailFragment : Fragment() {
             try {
                 val response = ContactorUtil.fetchAddFriendRequest(
                     requireContext(),
-                    SecureSharedPrefsUtil.getToken(),
+                    (userManager.getUserData()?.microToken ?: ""),
                     contactId,
                     sourceType,
                     source

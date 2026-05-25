@@ -105,11 +105,10 @@ object LCallManager {
      *
      * @param context context
      * @param callData call data containing room ID, call type, caller ID, etc.
-     * @param onComplete completion callback — `true` for success, `false` for failure
+     * @return `true` if the call was joined successfully, `false` otherwise
      */
-    fun joinCall(context: Context, callData: CallData, onComplete: (Boolean) -> Unit) {
-
-        if(inComingCallStateManager.isActivityShowing()) {
+    suspend fun joinCall(context: Context, callData: CallData): Boolean {
+        if (inComingCallStateManager.isActivityShowing()) {
             try {
                 callToChatController?.getIncomingCallRoomId()?.let { roomId ->
                     stopIncomingCallService(roomId, "stop incoming call")
@@ -119,26 +118,24 @@ object LCallManager {
             }
         }
 
-        callData.let {
-            val id = it.roomId
-            val callType = CallType.fromString(it.type.toString()) ?: CallType.ONE_ON_ONE
-            val callerId = it.caller.uid
-            val conversationId = it.conversation
-            val callName = it.callName
-            if (id.isNotEmpty() && !callerId.isNullOrEmpty()) {
-                callToChatController.joinCall(
-                    context = context,
-                    roomId = id,
-                    roomName = callName,
-                    callerId = callerId,
-                    callType = callType,
-                    conversationId = conversationId,
-                    isNeedAppLock = false
-                ) { status ->
-                    onComplete(status)
-                }
-            }
+        val id = callData.roomId
+        val callType = CallType.fromString(callData.type.toString()) ?: CallType.ONE_ON_ONE
+        val callerId = callData.caller.uid
+        val conversationId = callData.conversation
+        val callName = callData.callName
+
+        if (id.isNotEmpty() && !callerId.isNullOrEmpty()) {
+            return callToChatController.joinCall(
+                context = context,
+                roomId = id,
+                roomName = callName,
+                callerId = callerId,
+                callType = callType,
+                conversationId = conversationId,
+                isNeedAppLock = false
+            )
         }
+        return false
     }
 
     /**

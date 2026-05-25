@@ -44,7 +44,7 @@ fun AboutPageView(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colorResource(id = com.difft.android.base.R.color.bg_setting))
+            .background(colorResource(id = com.difft.android.base.R.color.bg))
     ) {
 
         TitleBar(
@@ -104,7 +104,7 @@ fun ClickableSettingsItem(title: String, click: () -> Unit) {
             .height(52.dp)
             .clickable { click() }
             .background(
-                colorResource(id = com.difft.android.base.R.color.bg_setting_item),
+                colorResource(id = com.difft.android.base.R.color.bg_elevated),
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(start = 16.dp, end = 8.dp),
@@ -145,7 +145,7 @@ fun SettingsScreen(
 
         Column(
             modifier = Modifier.background(
-                colorResource(id = com.difft.android.base.R.color.bg_setting_item),
+                colorResource(id = com.difft.android.base.R.color.bg_elevated),
                 shape = RoundedCornerShape(8.dp)
             )
         ) {
@@ -154,7 +154,7 @@ fun SettingsScreen(
                 value = appVersion + (if (isInsider) " (Insider)" else "")
             )
             HorizontalDivider(
-                color = colorResource(id = com.difft.android.base.R.color.bg_setting),
+                color = colorResource(id = com.difft.android.base.R.color.bg),
                 thickness = 1.dp
             )
             SettingItem(
@@ -162,7 +162,7 @@ fun SettingsScreen(
                 value = buildVersion
             )
             HorizontalDivider(
-                color = colorResource(id = com.difft.android.base.R.color.bg_setting),
+                color = colorResource(id = com.difft.android.base.R.color.bg),
                 thickness = 1.dp
             )
             SettingItem(
@@ -175,7 +175,7 @@ fun SettingsScreen(
 
         Column(
             modifier = Modifier.background(
-                colorResource(id = com.difft.android.base.R.color.bg_setting_item),
+                colorResource(id = com.difft.android.base.R.color.bg_elevated),
                 shape = RoundedCornerShape(8.dp)
             )
         ) {
@@ -184,7 +184,7 @@ fun SettingsScreen(
                 click = onCheckForUpdateClick
             )
             HorizontalDivider(
-                color = colorResource(id = com.difft.android.base.R.color.bg_setting),
+                color = colorResource(id = com.difft.android.base.R.color.bg),
                 thickness = 1.dp
             )
             ClickableSettingsItem(
@@ -198,7 +198,7 @@ fun SettingsScreen(
 
             Column(
                 modifier = Modifier.background(
-                    colorResource(id = com.difft.android.base.R.color.bg_setting_item),
+                    colorResource(id = com.difft.android.base.R.color.bg_elevated),
                     shape = RoundedCornerShape(8.dp)
                 )
             ) {

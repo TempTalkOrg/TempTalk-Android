@@ -50,15 +50,13 @@ import com.difft.android.call.LCallEngine
 import com.difft.android.call.R
 import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.ServerNode
-import com.difft.android.call.viewModelByFactory
+import androidx.activity.viewModels
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class LCallServerNodeActivity : BaseActivity() {
 
-    private val viewModel: LCallServerNodeModel by viewModelByFactory {
-        LCallServerNodeModel(application = application)
-    }
+    private val viewModel: LCallServerNodeModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

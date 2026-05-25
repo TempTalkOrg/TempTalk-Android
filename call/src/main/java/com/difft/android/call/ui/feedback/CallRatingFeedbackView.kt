@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.colorResource
 import com.difft.android.base.call.CallFeedbackRequestBody
 import com.difft.android.call.data.FeedbackCallInfo
+import com.difft.android.call.ui.HideNavigationBarEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +45,7 @@ fun CallRatingFeedbackView(
                 onDismiss()
             },
         ) {
+            HideNavigationBarEffect()
             when (viewState) {
                 is FeedbackViewState.Rating -> {
                     onDisplay()

@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -344,6 +345,7 @@ fun SingleParticipantItem(
 
     Box(
         modifier = modifier.fillMaxSize()
+            .testTag("call_render_single")
             .clip(shape = RoundedCornerShape(8.dp))
             .background(Color.Transparent),
         contentAlignment = Alignment.Center

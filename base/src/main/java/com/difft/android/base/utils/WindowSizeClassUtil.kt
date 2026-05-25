@@ -1,6 +1,7 @@
 package com.difft.android.base.utils
 
 import android.app.Activity
+import android.view.View
 import androidx.window.layout.WindowMetricsCalculator
 
 /**
@@ -91,3 +92,21 @@ object WindowSizeClassUtil {
         return metrics.bounds.height()
     }
 }
+
+/**
+ * Get current window width in px via the View's host Activity.
+ * Falls back to local displayMetrics if the View's context is not an Activity (rare,
+ * e.g. an isolated test or a wrapped non-Activity context). Use this from Views
+ * that need to know the current app window size on foldables / multi-window.
+ */
+fun View.windowWidthPx(): Int =
+    (context as? Activity)?.let { WindowSizeClassUtil.getWindowWidthPx(it) }
+        ?: resources.displayMetrics.widthPixels
+
+/**
+ * Get current window height in px via the View's host Activity.
+ * Same fallback semantics as [windowWidthPx].
+ */
+fun View.windowHeightPx(): Int =
+    (context as? Activity)?.let { WindowSizeClassUtil.getWindowHeightPx(it) }
+        ?: resources.displayMetrics.heightPixels

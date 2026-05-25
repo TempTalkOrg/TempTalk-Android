@@ -1,7 +1,6 @@
 package com.difft.android.chat.setting
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
@@ -46,6 +45,8 @@ data class ConversationSettingUpdate(
     val saveToPhotos: Int? = null
 )
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class ConversationSettingsManager @Inject constructor(
     @param:ChativeHttpClientModule.Chat
@@ -152,7 +153,7 @@ class ConversationSettingsManager @Inject constructor(
         }
 
         val response = httpClient.httpService.fetchGetConversationSet(
-            SecureSharedPrefsUtil.getBasicAuth(),
+            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
             GetConversationSetRequestBody(conversationIds)
         )
 

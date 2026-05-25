@@ -370,9 +370,15 @@ object AudioMessageManager {
 
     fun decryptIfNeeded(attachmentPath: String, message: TextChatMessage) {
         val encryptedFile = File("$attachmentPath.encrypt")
-        // 如果加密文件存在，且原文件不存在，才需要解密
         if (encryptedFile.exists() && !File(attachmentPath).exists()) {
-            FileDecryptionUtil.decryptFile(encryptedFile, File(attachmentPath), message.attachment?.key)
+            val targetFile = File(attachmentPath)
+            try {
+                FileDecryptionUtil.decryptFile(encryptedFile, targetFile, message.attachment?.key)
+            } catch (e: Exception) {
+                L.e { "[AudioMessageManager] decryptIfNeeded failed path=$attachmentPath: ${e.stackTraceToString()}" }
+                targetFile.delete()
+                throw e
+            }
         }
     }
 }

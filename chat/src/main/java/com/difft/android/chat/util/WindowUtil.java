@@ -17,11 +17,12 @@ public final class WindowUtil {
   }
 
   public static void initializeScreenshotSecurity(@NonNull Context context, @NonNull Window window) {
-    if (TextSecurePreferences.isScreenSecurityEnabled(context)) {
-      window.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-    } else {
-      window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-    }
+    // §15 Open Decision #2 — PRODUCT DECISION REQUIRED before PR-1 merges.
+    // The legacy `pref_screen_security` had no writer in the codebase, so this
+    // call always resolved to `false` at runtime. Inlined as literal `false`
+    // (always clear FLAG_SECURE) pending product confirmation that the
+    // screenshot-security UX is intentionally absent.
+    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
   }
 
   public static void setLightNavigationBarFromTheme(@NonNull Activity activity) {

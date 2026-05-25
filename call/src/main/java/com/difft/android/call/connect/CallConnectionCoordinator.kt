@@ -1,11 +1,12 @@
 package com.difft.android.call.connect
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import androidx.core.net.toUri
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils.getString
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallEngine
@@ -88,7 +89,7 @@ internal class CallConnectionCoordinator(
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
-        val appToken = SecureSharedPrefsUtil.getToken()
+        val appToken = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (appToken.isEmpty()) {
             L.e { "[Call] CallConnectionCoordinator app token is null" }
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
@@ -202,7 +203,7 @@ internal class CallConnectionCoordinator(
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
-        val appToken = SecureSharedPrefsUtil.getToken()
+        val appToken = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (appToken.isEmpty()) {
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false

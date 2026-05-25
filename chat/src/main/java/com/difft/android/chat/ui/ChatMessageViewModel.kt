@@ -35,12 +35,16 @@ import com.difft.android.chat.speech2text.SpeechToTextManager
 import com.difft.android.chat.translate.TranslateManager
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.BaseResponse
 
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.difft.android.chat.message.NoticeAggregator
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.ForwardNoticeData
@@ -91,6 +95,8 @@ import com.difft.android.chat.jobs.create
 import util.TimeFormatter
 import javax.inject.Inject
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @HiltViewModel(assistedFactory = ChatMessageViewModelFactory::class)
 class ChatMessageViewModel @AssistedInject constructor(
     @Assisted
@@ -104,6 +110,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val translateManager: dagger.Lazy<TranslateManager>,
     private val speechToTextManager: dagger.Lazy<SpeechToTextManager>,
     private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
+    private val activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val callDataManager: CallDataManager
 ) : ViewModel(),
@@ -231,6 +238,11 @@ class ChatMessageViewModel @AssistedInject constructor(
                 _chatMessageListUIState.value = it
             }.launchIn(viewModelScope)
 
+        // PRD §5 recall cleanup: rely on the wcdb query in onCopyClick to drop
+        // deleted/recalled ids — not on chatMessagesStateFlow, which only carries
+        // a paginated window (max 60 messages) and would mis-evict ids scrolled
+        // out of view.
+
         viewModelScope.launch(Dispatchers.IO) {
             initLoadMessage(jumpMessageTimeStamp)
             // Initial load of read info
@@ -347,7 +359,8 @@ class ChatMessageViewModel @AssistedInject constructor(
             val callData = callDataManager.getCallDataByConversationId(forWhat.id)
             if (callData != null) {
                 L.i { "[call] Joining existing call with roomId:${callData.roomId}" }
-                LCallManager.joinCall(activity.applicationContext, callData) { status ->
+                viewModelScope.launch {
+                    val status = LCallManager.joinCall(activity.applicationContext, callData)
                     if (!status) {
                         L.e { "[Call] startCall join call failed." }
                         ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
@@ -963,15 +976,17 @@ class ChatMessageViewModel @AssistedInject constructor(
         // Multi-select → Forward (one-by-one): each selected message is forwarded as its
         // own message; Scene.ONE_BY_ONE is displayed as "saved/forwarded N messages" style
         // in the notice renderer.
-        // One author entry per user-selected message (outer message, not nested).
-        // Pass the raw list — sendForwardNotice dedups for the authors display list
-        // but uses size as the message count.
+        // PRD §5.3.4: priority-sort authors (CF sender → count desc → ts desc → authorId asc);
+        // messageCount stays separate (= selected message count, treats CF bubble as 1).
+        val oneByOneMode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
         forwardMultiMessage.value = ForwardContextData(
             "",
             forwardContexts,
             ForwardNoticeData.Scene.ONE_BY_ONE,
             forWhat,
-            sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+            sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages),
+            messageCount = loadedMessages.size,
+            combinedForwardMode = oneByOneMode,
         )
         resetSelectMessageState()
     }
@@ -994,13 +1009,17 @@ class ChatMessageViewModel @AssistedInject constructor(
         }, forWhat is For.Group)
         // Multi-select → Combine & Forward: selected messages are bundled into ONE
         // forwarded container; Scene.COMBINED drives "forwarded N messages (combined)" text.
+        // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
+        val combineMode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
         forwardMultiMessage.value =
             ForwardContextData(
                 "",
                 listOfNotNull(forwardContext),
                 ForwardNoticeData.Scene.COMBINED,
                 forWhat,
-                sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages),
+                messageCount = loadedMessages.size,
+                combinedForwardMode = combineMode,
             )
         resetSelectMessageState()
     }
@@ -1013,18 +1032,112 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
     }
 
+    /**
+     * Multi-select → Copy: format the selected messages and write to the clipboard
+     * inside the ViewModel coroutine (uses [application] context), THEN enqueue the
+     * copy notice. PRD §4.1 requires the trace notice be emitted only after a
+     * successful copy — writing the clipboard inline (rather than via a SharedFlow
+     * + Fragment collector) eliminates the race where the Fragment could be detached
+     * before the collector fires, leaving the clipboard empty while the notice goes
+     * out to peers.
+     *
+     * Order: messages are sorted by display position in the conversation (PRD §3.6),
+     * not by the user's selection order.
+     *
+     * Author names: passed through the message contacts cache with the remark-free
+     * accessor — PRD §3.3 mandates the author's own name in clipboard text (the
+     * trace system message uses remark-name; see Phase 4).
+     */
+    fun onCopyClick() = viewModelScope.launch(Dispatchers.IO) {
+        val selectedIds = selectMessagesState.value.selectedMessageIds
+        if (selectedIds.isEmpty()) return@launch
+        val loadedMessages = wcdb.message
+            .getAllObjects(DBMessageModel.id.`in`(*selectedIds.toTypedArray()))
+            .map { it.convertToTextMessage() }
+            .sortedBy { it.systemShowTimestamp }
+        if (loadedMessages.isEmpty()) return@launch
+
+        // Pre-warm name resolver for all authors + shared-contact uids in one batch
+        val authorIds = loadedMessages.map { it.fromWho.id }.toSet()
+        contactorCache.loadContactors(authorIds)
+
+        val formatted = com.difft.android.chat.message.MessageCopyTextFormatter.format(
+            messages = loadedMessages,
+            nameResolver = { uid ->
+                contactorCache.getContactor(uid)?.getDisplayNameWithoutRemarkForUI()
+                    ?: uid.formatBase58Id()
+            },
+            context = com.difft.android.base.utils.application,
+            language = java.util.Locale.getDefault().language,
+        )
+        if (formatted.isBlank()) return@launch
+
+        // Clipboard write + toast on main thread (Toast.show requires main looper).
+        // Inline write guarantees PRD §4.1: notice is enqueued ONLY after the
+        // clipboard write succeeds in this coroutine — no lifecycle-cancellable
+        // collector indirection between the format and the notice.
+        kotlinx.coroutines.withContext(Dispatchers.Main) {
+            com.difft.android.chat.util.Util.copyToClipboard(
+                com.difft.android.base.utils.application,
+                formatted,
+            )
+        }
+
+        // PRD §4: emit copy notice into the source conversation. Android's multi-select
+        // is single-source, so all selected messages share forWhat as the source.
+        // PRD §5.3: derive mode + sorted authors via NoticeAggregator (isSubContext=false —
+        // multi-select copy is always main-conv).
+        val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
+        val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages)
+        activityNoticeDispatcher.dispatchCopyNotice(
+            sourceConversation = forWhat,
+            sourceAuthorIds = sortedAuthorIds,
+            messageCount = loadedMessages.size,
+            combinedForwardMode = mode,
+        )
+
+        resetSelectMessageState()
+    }
+
+    /**
+     * Entry point for emitting a copy notice from the single-message paths
+     * (single long-press copy / partial text-selection copy / derived-content copy).
+     * Caller invokes this only AFTER the clipboard write actually succeeded (PRD §4.1).
+     *
+     * PRD §5.3: this single-message path is invoked from main-conv surfaces; mode defaults to
+     * UNKNOWN. Caller may override via [combinedForwardMode] when the source message originated
+     * from a CF detail view (Phase 5 wiring through transient `sourceMode`).
+     */
+    fun sendCopyNotice(
+        sourceMessages: List<TextChatMessage>,
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+    ) {
+        if (sourceMessages.isEmpty()) return
+        activityNoticeDispatcher.dispatchCopyNotice(
+            sourceConversation = forWhat,
+            sourceAuthorIds = sourceMessages.map { it.authorId },
+            messageCount = sourceMessages.size,
+            combinedForwardMode = combinedForwardMode,
+        )
+    }
+
     fun onSaveSelectedMessages() = viewModelScope.launch(Dispatchers.IO) {
         val loadedMessages = wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray())).map { it.convertToTextMessage() }
+        // PRD §5.3: derive mode from main-conv selection (isSubContext=false).
+        val saveMode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
         if (loadedMessages.size == 1 && loadedMessages.firstOrNull()?.sharedContact != null) {
             val sharedContactId = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
             val sharedContactName = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.name?.displayName
+            // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
             saveMultiMessageToNote.value =
                 ForwardContextData(
                     "",
                     listOf(ForwardContext(emptyList(), false, sharedContactId, sharedContactName)),
                     ForwardNoticeData.Scene.SAVE_TO_NOTES,
                     forWhat,
-                    sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages),
+                    messageCount = loadedMessages.size,
+                    combinedForwardMode = saveMode,
                 )
         } else {
             val forwardContext = ForwardContext(loadedMessages.map {
@@ -1041,13 +1154,16 @@ class ChatMessageViewModel @AssistedInject constructor(
                     it.systemShowTimestamp
                 )
             }, forWhat is For.Group)
+            // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
             saveMultiMessageToNote.value =
                 ForwardContextData(
                     "",
                     listOfNotNull(forwardContext),
                     ForwardNoticeData.Scene.SAVE_TO_NOTES,
                     forWhat,
-                    sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages),
+                    messageCount = loadedMessages.size,
+                    combinedForwardMode = saveMode,
                 )
         }
         resetSelectMessageState()
@@ -1073,11 +1189,16 @@ data class ForwardContextData(
     val forwardContexts: List<ForwardContext>,
     val scene: ForwardNoticeData.Scene,
     val sourceConversation: For,   // Source conversation (where the forwarded messages originally lived). forwardNotice will be posted here.
-    // Authors of the user-selected messages, NOT de-duplicated and preserving selection order.
-    // One entry per selected message: a plain message contributes its author; a combined-forward
-    // message contributes only the outer author (the uploader), NOT the inner/nested authors.
-    // sendForwardNotice uses this list as the authoritative source for count and authors,
-    // bypassing the ambiguity that arises when a combined-forward message's nested `forwards`
-    // would otherwise be flat-mapped into multiple entries.
-    val sourceAuthorIds: List<String>
+    // Authors of the user-selected messages. PRD §5.3.4: deduped and priority-sorted via
+    // NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages — CF senders first,
+    // then by contributed count desc, then latest timestamp desc, then authorId asc.
+    // For notice count semantics, use [messageCount] (NOT sourceAuthorIds.size).
+    val sourceAuthorIds: List<String>,
+    // PRD §5.3: explicit selected-message count (one per user-selected outer message;
+    // a combined-forward bubble counts as 1). Decoupled from sourceAuthorIds.size so
+    // the author list can be deduped+sorted independently.
+    val messageCount: Int,
+    // PRD v1.0 §5.3 combined-forward mode derived from the selected messages by the ViewModel
+    // (single source of truth; UI fragment just plumbs through to SelectChatsUtils).
+    val combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
 )

@@ -46,7 +46,6 @@ import com.difft.android.base.ui.TitleBar
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.PrivateConfigsRequestBody
@@ -82,7 +81,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 MainContent()
             }
         }
@@ -115,7 +114,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                         ComposeDialogManager.showWait(this@GroupGlobalNotificationSettingsActivity, "")
                         val response = withContext(Dispatchers.IO) {
                             httpClient.httpService.fetchSetProfile(
-                                baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
+                                baseAuth = (userManager.getUserData()?.baseAuth ?: ""),
                                 profileRequestBody = profileRequestBody
                             )
                         }
@@ -173,14 +172,14 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                 val bgItem = remember {
                     Color(
                         ContextCompat.getColor(
-                            context, R.color.bg_setting_item
+                            context, R.color.bg_elevated
                         )
                     )
                 }
                 val dividerColor = remember {
                     Color(
                         ContextCompat.getColor(
-                            context, R.color.bg_setting
+                            context, R.color.bg
                         )
                     )
                 }

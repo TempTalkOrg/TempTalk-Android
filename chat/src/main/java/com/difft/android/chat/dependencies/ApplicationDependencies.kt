@@ -111,5 +111,12 @@ object ApplicationDependencies {
     interface DependenciesEntryPoint {
         val messageStore: MessageStore
         val environmentHelper: EnvironmentHelper
+        val activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
+    }
+
+    @JvmStatic
+    fun getActivityNoticeDispatcher(): com.difft.android.chat.message.ActivityNoticeDispatcher {
+        val entryPoint = EntryPointAccessors.fromApplication(_application, DependenciesEntryPoint::class.java)
+        return entryPoint.activityNoticeDispatcher
     }
 }

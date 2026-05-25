@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.utils.globalServices
 import com.difft.android.messageserialization.db.store.DBRoomStore
@@ -157,7 +156,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService
                         .fetchConversationSet(
-                            SecureSharedPrefsUtil.getBasicAuth(),
+                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             ConversationSetRequestBody(
                                 conversation = conversation,
                                 remark = remark,
@@ -230,7 +229,7 @@ class ChatSettingViewModel @AssistedInject constructor(
             try {
                 val response = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchGetConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         GetConversationSetRequestBody(listOf(conversationId))
                     )
                 }

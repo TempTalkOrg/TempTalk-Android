@@ -76,11 +76,15 @@ data class Stale(
 )
 
 data class CallEncryptResult(
-    var cipherMessages: List<CipherMessage>? = null,
-    var encInfos: List<EncInfo>? = null,
-    var publicKey: String? = null
+    val cipherMessages: List<CipherMessage>? = null,
+    val encInfos: List<EncInfo>? = null,
+    val publicKey: String? = null
 )
-val EMPTY_CALL_ENCRYPT_RESULT = CallEncryptResult()
+
+sealed class CallEncryptOutcome {
+    data class Success(val result: CallEncryptResult) : CallEncryptOutcome()
+    data class Failed(val reason: String) : CallEncryptOutcome()
+}
 
 data class ControlMessageRequestBody(
     val roomId: String?,

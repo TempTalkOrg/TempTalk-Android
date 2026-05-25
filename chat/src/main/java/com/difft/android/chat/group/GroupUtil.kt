@@ -9,7 +9,6 @@ import difft.android.messageserialization.MessageStore
 import com.difft.android.network.group.GroupAvatarData
 import com.difft.android.network.group.GroupAvatarResponse
 import com.difft.android.network.group.GroupRepo
-import com.google.gson.Gson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -36,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class GroupUtil @Inject constructor(
     private val groupRepo: GroupRepo,
@@ -326,9 +327,9 @@ fun GroupModel.getDisplayAvatarData(): GroupAvatarData? {
 
 fun String.getAvatarData(): GroupAvatarData? {
     return try {
-        Gson().fromJson(this, GroupAvatarResponse::class.java)?.data?.let {
+        globalServices.gson.fromJson(this, GroupAvatarResponse::class.java)?.data?.let {
             val avatarData = String(Base64.decode(it))
-            Gson().fromJson(avatarData, GroupAvatarData::class.java)
+            globalServices.gson.fromJson(avatarData, GroupAvatarData::class.java)
         }
     } catch (e: Exception) {
         L.e(e) { "[group] parse avatar data fail: $this ===" }

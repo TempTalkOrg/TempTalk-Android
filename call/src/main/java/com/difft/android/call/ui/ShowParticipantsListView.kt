@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -54,19 +55,19 @@ import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils.getString
+import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.MUTE_ACTION_INDEX
-import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
+import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
-import kotlinx.coroutines.launch
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -83,6 +84,12 @@ fun ShowParticipantsListView(
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
 
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
+    }
+    val contactorCacheManager = entryPoint.contactorCacheManager
+    val displayInfoMap by contactorCacheManager.participantDisplayMap.collectAsState()
+
     val configuration = LocalConfiguration.current
     val isWideScreen = configuration.screenWidthDp >= 600 ||
         configuration.screenWidthDp > configuration.screenHeightDp
@@ -96,6 +103,7 @@ fun ShowParticipantsListView(
         ){
             Box(
                 modifier = Modifier
+                    .testTag("call_participants_panel")
                     .fillMaxHeight()
                     .width(216.dp)
                     .background(colorResource(id = com.difft.android.base.R.color.bg3_night)),
@@ -126,6 +134,7 @@ fun ShowParticipantsListView(
                                     viewModel.callUiController.setShowUsersEnabled(false)
                                 },
                                 modifier = Modifier
+                                    .testTag("call_participants_btn_add")
                                     .constrainAs(userPlus) {
                                         start.linkTo(parent.start, margin = 10.dp)
                                         width = Dimension.fillToConstraints
@@ -143,10 +152,12 @@ fun ShowParticipantsListView(
                             }
 
                             Text(
-                                modifier = Modifier.constrainAs(textView) {
-                                    centerHorizontallyTo(parent)
-                                    centerVerticallyTo(parent)
-                                },
+                                modifier = Modifier
+                                    .testTag("call_participants_title")
+                                    .constrainAs(textView) {
+                                        centerHorizontallyTo(parent)
+                                        centerVerticallyTo(parent)
+                                    },
                                 text = "${getString(R.string.call_attendees)} (${participants.size})",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
                                 color = colorResource(id = com.difft.android.base.R.color.t_white),
@@ -156,6 +167,7 @@ fun ShowParticipantsListView(
                             Surface(
                                 onClick = { viewModel.callUiController.setShowUsersEnabled(false) },
                                 modifier = Modifier
+                                    .testTag("call_participants_btn_close")
                                     .constrainAs(closeView) {
                                         end.linkTo(parent.end, margin = 10.dp)
                                         width = Dimension.fillToConstraints
@@ -194,8 +206,14 @@ fun ShowParticipantsListView(
                             { index ->
                                 val participant = participants[index]
 
+                                val uid = when (participant) {
+                                    is LocalParticipant -> globalServices.myId
+                                    else -> participant.identity?.value ?: ""
+                                }
                                 SmallParticipantViewItem(
                                     participant = participant,
+                                    participantIndex = index,
+                                    userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
                                     muteOtherEnabled = muteOtherEnabled,
                                     speakingEnabled = speakingEnabled,
                                     onClickMute = {
@@ -218,6 +236,8 @@ fun ShowParticipantsListView(
 @Composable
 fun SmallParticipantViewItem(
     participant: Participant,
+    participantIndex: Int,
+    userDisplayInfo: CallUserDisplayInfo,
     muteOtherEnabled: Boolean,
     speakingEnabled: Boolean = true,
     onClickMute: () -> Unit
@@ -230,12 +250,7 @@ fun SmallParticipantViewItem(
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
     }
-    val contactorCacheManager = entryPoint.contactorCacheManager
     val callToChatController = entryPoint.callToChatController
-
-    var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
-
-    val participantId = participant.identity?.value
 
     val audioTrackMap by participant::audioTrackPublications.flow.collectAsState(initial = emptyList())
     val audioPubs by remember { derivedStateOf { audioTrackMap.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
@@ -248,28 +263,9 @@ fun SmallParticipantViewItem(
     val screenSharePub by remember { derivedStateOf { videoPubs.firstOrNull { pub -> pub.source == Track.Source.SCREEN_SHARE } } }
     val isScreenSharing by remember { derivedStateOf { screenSharePub != null } }
 
-    LaunchedEffect(participantId) {
-        participantId?.let { id ->
-            userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(id)
-        }
-    }
-
-    // monitor audio muted state
     LaunchedEffect(audioPub) {
         val pub = audioPub ?: return@LaunchedEffect
         pub::muted.flow.collect { muted -> audioMuted = muted }
-    }
-
-    LaunchedEffect(participantId) {
-        LCallManager.getContactsUpdateListener().collect { updatedIds ->
-            if (updatedIds.contains(IdUtil.getUidByIdentity(participantId))) {
-                launch {
-                    participantId?.let {
-                        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(participantId)
-                    }
-                }
-            }
-        }
     }
 
     fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
@@ -279,6 +275,7 @@ fun SmallParticipantViewItem(
 
     Box(
         modifier = Modifier
+            .testTag("call_participants_item_$participantIndex")
             .fillMaxWidth()
             .height(34.dp)
             .pointerInput(Unit) {
