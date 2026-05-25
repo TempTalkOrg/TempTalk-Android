@@ -2,7 +2,7 @@
 
 TempTalk Android is a modern instant messaging application built with Android native development, using Kotlin and Jetpack Compose UI framework.
 
-<a href="https://www.temptalk.app/" target="_blank"><img src="https://github.com/user-attachments/assets/a6005000-9f4a-4a68-a7d0-90e5c7cbb76d" width="16" height="16" alt="TempTalk Logo" /></a> **Official Website**: [https://www.temptalk.app/](https://www.temptalk.app/)
+<a href="https://www.temptalk.app/" target="_blank"><img src="https://github.com/user-attachments/assets/a6005000-9f4a-4a68-a7d0-90e5c7cbb76d" width="16" height="16" alt="TempTalk Logo" /></a> **Official Website**: [https://www.yelling.pro/](https://www.yelling.pro/)
 
 ## Features
 
