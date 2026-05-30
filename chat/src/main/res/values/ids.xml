@@ -2,4 +2,5 @@
 <resources>
     <!-- Tag ID to store message id for checking if view has been recycled -->
     <item name="tag_truncation_message_id" type="id"/>
+    <item name="tag_youtube_initialized" type="id"/>
 </resources>
