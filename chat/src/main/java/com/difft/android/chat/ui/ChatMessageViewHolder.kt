@@ -1,5 +1,7 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.chat.util.YouTubeUtil
+import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -112,6 +114,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         highlightItemIds: ArrayList<Long>? = null,
         contactorCache: MessageContactsCacheUtil,
         shouldSaveToPhotos: Boolean = false
+
     )
 
     /**
@@ -247,6 +250,14 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             // Reset voice speed button to hidden by default
             tvVoiceSpeed.visibility = View.GONE
+
+            // Reset Media and Status views for recycling
+            itemView.findViewById<View>(R.id.youtube_container)?.visibility = View.GONE
+            itemView.findViewById<View>(R.id.youtube_player_view)?.visibility = View.GONE
+            itemView.findViewById<View>(R.id.iv_thumbnail)?.visibility = View.GONE
+            clTranslate.visibility = View.GONE
+            clSpeechToText.visibility = View.GONE
+            forwardInfoZone.visibility = View.GONE
         }
 
         /**
@@ -312,7 +323,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             contactorCache: MessageContactsCacheUtil,
             shouldSaveToPhotos: Boolean
         ) {
-            // 强制类型检查
             val cb = callbacks as? MessageCallbacks.MessageInteraction
                 ?: throw IllegalArgumentException("Message ViewHolder requires MessageInteraction callbacks")
 
@@ -320,44 +330,99 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             if (message !is TextChatMessage) return
 
-            // Set container width for precise layout calculation in dual-pane mode
-            (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
+            // --- YOUTUBE LOGIK START ---
+            val youtubeId = YouTubeUtil.extractVideoId(message.message.toString())
+            val youtubeContainer = itemView.findViewById<View>(R.id.youtube_container)
+            val playerView = itemView.findViewById<com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView>(R.id.youtube_player_view)
+            val thumbnailView = itemView.findViewById<ImageView>(R.id.iv_thumbnail)
+            val pipButton = itemView.findViewById<ImageView>(R.id.iv_pip)
 
-            // Check if this message is currently playing audio and show speed button
-            bindVoiceSpeedButton(message)
+            if (youtubeId != null && playerView != null && thumbnailView != null) {
+                // Video-Modus aktiv
+                contentFrame.visibility = View.GONE
+                youtubeContainer?.visibility = View.GONE
+                playerView.visibility = View.GONE
+                thumbnailView.visibility = View.VISIBLE
 
-            // ========== 公共逻辑（80%） ==========
+                // Thumbnail laden mit Glide
+                com.bumptech.glide.Glide.with(itemView.context)
+                    .load("https://img.youtube.com/vi/$youtubeId/0.jpg")
+                    .into(thumbnailView)
 
-            // 点击事件
-            bindClickEvents(message, cb.onItemClick, cb.onItemLongClick)
+                thumbnailView.setOnClickListener {
+                    thumbnailView.visibility = View.GONE
+                    youtubeContainer?.visibility = View.VISIBLE
+                    playerView.visibility = View.VISIBLE
+                    
+                    val isInitialized = playerView.getTag(R.id.tag_youtube_initialized) as? Boolean ?: false
+                    
+                    if (!isInitialized) {
+                        playerView.initialize(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
+                            override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
+                                playerView.setTag(R.id.tag_youtube_initialized, true)
+                                youTubePlayer.loadVideo(youtubeId, 0f)
+                            }
+                        })
+                    } else {
+                        playerView.getYouTubePlayerWhenReady(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.YouTubePlayerCallback {
+                            override fun onYouTubePlayer(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
+                                youTubePlayer.loadVideo(youtubeId, 0f)
+                            }
+                        })
+                    }
+                }
 
-            // 时间相关
-            bindTimeViews(message)
+                pipButton?.setOnClickListener {
+                    val activity = itemView.context as? Activity ?: return@setOnClickListener
+                    // Stop inline player
+                    playerView.getYouTubePlayerWhenReady(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.YouTubePlayerCallback {
+                        override fun onYouTubePlayer(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
+                            youTubePlayer.pause()
+                        }
+                    })
+                    // Hide inline and show floating
+                    youtubeContainer?.visibility = View.GONE
+                    thumbnailView.visibility = View.VISIBLE
+                    
+                    com.difft.android.chat.util.FloatingYouTubeManager.showFloatingPlayer(activity, youtubeId)
+                }
 
-            // Quote 引用
-            bindQuoteView(message, cb.onQuoteClicked, contactorCache)
+                // Standard Text-Logik (Klick auf den Link, Zeitstempel, etc.)
+                (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
+                bindVoiceSpeedButton(message)
+                bindClickEvents(message, cb.onItemClick, cb.onItemLongClick)
+                bindTimeViews(message)
+                bindQuoteView(message, cb.onQuoteClicked, contactorCache)
+                bindForwardView(message, contactorCache, shouldSaveToPhotos)
+                bindReactionView(message, cb.onReactionClick, cb.onReactionLongClick, contactorCache)
+                bindTranslateView(message)
+                bindSpeechToTextView(message)
+                bindCheckboxView(message, cb.onSelectPinnedMessage)
+            } else {
+                // Normaler Text-Modus
+                contentFrame.visibility = View.VISIBLE
+                youtubeContainer?.visibility = View.GONE
+                playerView?.visibility = View.GONE
+                thumbnailView?.visibility = View.GONE
 
-            // Forward 转发
-            bindForwardView(message, contactorCache, shouldSaveToPhotos)
-
-            // Reaction、Translate、SpeechToText
-            bindReactionView(message, cb.onReactionClick, cb.onReactionLongClick, contactorCache)
-            bindTranslateView(message)
-            bindSpeechToTextView(message)
-
-            // Checkbox 选择
-            bindCheckboxView(message, cb.onSelectPinnedMessage)
-
-            // ========== 差异逻辑（20%） ==========
+                // Restliche Logik nur ausführen, wenn kein Video (oder Standard-Layout)
+                (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
+                bindVoiceSpeedButton(message)
+                bindClickEvents(message, cb.onItemClick, cb.onItemLongClick)
+                bindTimeViews(message)
+                bindQuoteView(message, cb.onQuoteClicked, contactorCache)
+                bindForwardView(message, contactorCache, shouldSaveToPhotos)
+                bindReactionView(message, cb.onReactionClick, cb.onReactionLongClick, contactorCache)
+                bindTranslateView(message)
+                bindSpeechToTextView(message)
+                bindCheckboxView(message, cb.onSelectPinnedMessage)
+            }
+            // --- YOUTUBE LOGIK ENDE ---
 
             if (isMine) {
-                // Mine 特有：发送和已读状态
                 bindSendAndReadStatus(message.sendStatus, message.readStatus, message.readContactNumber)
             } else {
-                // Others 特有：头像和昵称
                 bindAvatarAndName(message, cb.onAvatarClicked, cb.onAvatarLongClicked, contactorCache)
-
-                // Others 特有：消息高亮
                 bindHighlightEffect(message, highlightItemIds)
             }
         }

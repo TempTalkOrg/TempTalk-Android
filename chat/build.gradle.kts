@@ -67,7 +67,8 @@ dependencies {
     implementation(project(":image-editor"))
     implementation(project(":selector"))
     implementation(project(":call"))
-
+    //Youtube
+    implementation(libs.youtube.player)
     // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
