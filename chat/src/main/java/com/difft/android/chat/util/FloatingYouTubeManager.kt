@@ -8,6 +8,7 @@ import android.widget.ImageView
 import com.difft.android.chat.R
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 
 object FloatingYouTubeManager {
@@ -50,11 +51,16 @@ object FloatingYouTubeManager {
 
         windowManager?.addView(floatingView, params)
         
+        val options = IFramePlayerOptions.Builder()
+            .controls(1)
+            .origin("https://${activity.packageName}")
+            .build()
+
         playerView?.initialize(object : AbstractYouTubePlayerListener() {
             override fun onReady(youTubePlayer: YouTubePlayer) {
                 youTubePlayer.loadVideo(videoId, startTime)
             }
-        })
+        }, options)
 
         // Dragging logic
         floatingView?.setOnTouchListener(object : View.OnTouchListener {

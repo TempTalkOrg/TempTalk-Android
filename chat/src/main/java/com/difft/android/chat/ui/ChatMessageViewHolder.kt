@@ -1,6 +1,7 @@
 package com.difft.android.chat.ui
 
 import com.difft.android.chat.util.YouTubeUtil
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
@@ -357,12 +358,16 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     val isInitialized = playerView.getTag(R.id.tag_youtube_initialized) as? Boolean ?: false
                     
                     if (!isInitialized) {
+                        val options = IFramePlayerOptions.Builder()
+                            .controls(1)
+                            .origin("https://${itemView.context.packageName}")
+                            .build()
                         playerView.initialize(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
                             override fun onReady(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
                                 playerView.setTag(R.id.tag_youtube_initialized, true)
                                 youTubePlayer.loadVideo(youtubeId, 0f)
                             }
-                        })
+                        }, options)
                     } else {
                         playerView.getYouTubePlayerWhenReady(object : com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.YouTubePlayerCallback {
                             override fun onYouTubePlayer(youTubePlayer: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer) {
