@@ -60,9 +60,6 @@ class TestActivity : BaseActivity() {
                     onBackupDatabase = {
                         wcdb.testBackupManually()
                     },
-                    onSendRecoveryEvent = {
-                        wcdb.testRecoveryEvent()
-                    },
                     onDialogTest = {
                         DialogTestActivity.startActivity(this@TestActivity)
                     }

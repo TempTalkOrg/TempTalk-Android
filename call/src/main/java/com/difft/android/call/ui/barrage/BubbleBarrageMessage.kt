@@ -27,12 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.BubbleMessageType
@@ -66,7 +66,7 @@ fun BubbleBarrageMessage(
             .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
             .width(widthDp.dp)
             .wrapContentHeight()
-            .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 8.dp))
+            .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 8.dp))
             .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Top),
         horizontalAlignment = Alignment.Start,
@@ -99,7 +99,7 @@ fun BubbleBarrageMessage(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(color = colorResource(id = com.difft.android.base.R.color.gray_700))
+                .background(color = DifftTheme.colors.backgroundTertiary)
         )
 
         TextPresetsFlow(
@@ -143,7 +143,7 @@ fun TextItem(
             .shadow(elevation = 6.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
             .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
             .height(LCallUiConstants.SIMPLE_BARRAGE_ITEM_HEIGHT.dp)
-            .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(size = 4.dp))
+            .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 4.dp))
             .padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -161,7 +161,7 @@ fun TextItem(
                     lineHeight = 20.sp,
                     fontFamily = FontFamily.Default,
                     fontWeight = FontWeight.Normal,
-                    color = colorResource(id = com.difft.android.base.R.color.t_primary_night)
+                    color = DifftTheme.colors.textPrimary
                 )
             )
         }

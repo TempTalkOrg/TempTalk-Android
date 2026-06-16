@@ -222,6 +222,9 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
             .catch { L.w { "[ChatFragment] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
+        binding.vVoiceRecorder.onRecordingDismissed = {
+            binding.vVoiceRecordBg.visibility = View.GONE
+        }
         binding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
                 is RecordingState.Started -> {
@@ -229,12 +232,11 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                     binding.vVoiceRecordBg.visibility = View.VISIBLE
                 }
 
-                is RecordingState.Stopped -> {
-                    binding.vVoiceRecordBg.visibility = View.GONE
-                    val file = java.io.File(state.filePath)
+                is RecordingState.StoppedWithCandidates -> {
+                    val file = java.io.File(state.pickedFilePath)
                     if (file.exists() && file.length() > 0) {
                         L.i { "[VoiceRecorder] Recording stopped. size=${file.length()}" }
-                        chatViewModel.sendVoiceMessage(state.filePath)
+                        chatViewModel.sendVoiceMessage(state.pickedFilePath)
                     } else {
                         L.w { "[VoiceRecorder] Stopped emitted with invalid file." }
                         ToastUtil.showLong(R.string.chat_voice_record_failed)
@@ -245,12 +247,10 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                 is RecordingState.TooShort -> {
                     L.i { "[VoiceRecorder] Recording too short" }
                     ToastUtil.showLong(R.string.chat_voice_recording_too_short)
-                    binding.vVoiceRecordBg.visibility = View.GONE
                 }
 
                 is RecordingState.Cancelled -> {
                     L.i { "[VoiceRecorder] Recording cancelled" }
-                    binding.vVoiceRecordBg.visibility = View.GONE
                 }
 
                 is RecordingState.RecordPermissionRequired -> {
@@ -260,12 +260,10 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
                 is RecordingState.TooLarge -> {
                     L.i { "[VoiceRecorder] Recording file too large" }
                     ToastUtil.showLong(R.string.chat_voice_max_size_limit)
-                    binding.vVoiceRecordBg.visibility = View.GONE
                 }
 
                 is RecordingState.RecordFailed -> {
                     L.w { "[VoiceRecorder] Recording failed: reason=${state.reason}" }
-                    binding.vVoiceRecordBg.visibility = View.GONE
                     val msgRes = when (state.reason) {
                         RecordingState.Reason.AUDIO_FOCUS_DENIED -> R.string.chat_voice_focus_denied_hint
                         RecordingState.Reason.RECORDER_INIT_FAILED -> R.string.chat_voice_record_failed

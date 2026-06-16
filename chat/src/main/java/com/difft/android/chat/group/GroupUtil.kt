@@ -51,7 +51,7 @@ class GroupUtil @Inject constructor(
 
     fun emitSingleGroupUpdate(group: GroupModel) {
         _singleGroupsUpdate.tryEmit(group)
-        RoomChangeTracker.trackRoom(group.gid, RoomChangeType.GROUP)
+        RoomChangeTracker.trackRoom(group.gid ?: "", RoomChangeType.GROUP)
     }
 
     /**
@@ -145,7 +145,7 @@ class GroupUtil @Inject constructor(
                 if (syncMembers) {
                     groups.map {
                         async {
-                            fetchAndSaveSingleGroupInfo(it.gid)
+                            fetchAndSaveSingleGroupInfo(it.gid ?: "")
                         }
                     }.awaitAll()
                 }
@@ -153,7 +153,7 @@ class GroupUtil @Inject constructor(
                 userManager.update {
                     this.syncedGroupAndMembers = true
                 }
-                emitGetGroupsStatusUpdate(true, groups.map { it.gid })
+                emitGetGroupsStatusUpdate(true, groups.mapNotNull { it.gid })
                 L.i { "[GroupUtil] syncAllGroupAndAllGroupMembers success" + groups.size }
             }
         } catch (e: CancellationException) {
@@ -270,7 +270,7 @@ class GroupUtil @Inject constructor(
      */
     internal fun decryptGroupFieldsIfNeeded(group: GroupModel) {
         if (group.groupCryptoMode == null || group.groupCryptoMode == 0) return
-        val rGroupBytes = groupCryptoRepo.getRGroupBytes(group.gid)
+        val rGroupBytes = groupCryptoRepo.getRGroupBytes(group.gid ?: "")
         if (rGroupBytes == null) {
             L.i { "[GE] No key for encrypted group ${group.gid}, showing placeholder" }
             return

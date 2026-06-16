@@ -19,6 +19,7 @@ import org.whispersystems.signalservice.internal.push.DataMessageKt.forwardConte
 import org.whispersystems.signalservice.internal.push.DataMessageKt.group
 import org.whispersystems.signalservice.internal.push.DataMessageKt.mention
 import org.whispersystems.signalservice.internal.push.DataMessageKt.quote
+import org.whispersystems.signalservice.internal.push.DataMessageKt.QuoteKt.quotedAttachment
 import org.whispersystems.signalservice.internal.push.DataMessageKt.reaction
 import org.whispersystems.signalservice.internal.push.DataMessageKt.recall
 import org.whispersystems.signalservice.internal.push.DataMessageKt.screenShot
@@ -43,6 +44,17 @@ class DataMessageCreator @Inject constructor(
                 id = it.id
                 author = it.author
                 text = it.text
+                it.attachments?.forEach { qa ->
+                    // Emit only the type entry (contentType/fileName/flags), NOT a thumbnail pointer.
+                    // iOS/Mac/TT receivers reverse-look-up the local original message by
+                    // timestamp+thread+author and derive the preview from it; the entry alone is
+                    // enough to trigger that. No CDN upload / inline bytes are sent.
+                    attachments.add(quotedAttachment {
+                        contentType = qa.contentType
+                        fileName = qa.fileName
+                        flags = qa.flags
+                    })
+                }
             }
         }
 
@@ -155,8 +167,8 @@ class DataMessageCreator @Inject constructor(
         val signalServiceAttachment: AttachmentPointer? = attachment?.let {
             attachmentPointer {
                 cdnNumber = 0
-                id = attachment.authorityId
-                contentType = attachment.contentType
+                id = attachment.authorityId!!
+                contentType = attachment.contentType!!
                 key = ByteString.copyFrom(attachment.key)
                 size = attachment.size
                 width = attachment.width

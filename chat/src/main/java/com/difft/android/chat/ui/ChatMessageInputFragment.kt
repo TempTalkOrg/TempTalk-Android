@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.core.text.getSpans
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.viewModels
@@ -32,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.bumptech.glide.Glide
 import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
@@ -103,6 +105,7 @@ import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
 import difft.android.messageserialization.model.Quote
+import difft.android.messageserialization.model.QuotedAttachment
 import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.ReadPosition
 import difft.android.messageserialization.model.RealSource
@@ -142,7 +145,10 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.create
 import com.difft.android.chat.mediasend.MediaSendActivityResult
 import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
+import com.difft.android.chat.message.getRelevantAttachment
 import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.util.QuoteThumbnailBinder
+import com.difft.android.chat.util.isHostActivityAlive
 import com.difft.android.chat.util.ServiceUtil
 import com.difft.android.chat.util.ViewUtil
 import com.difft.android.chat.util.visible
@@ -311,7 +317,10 @@ class ChatMessageInputFragment : Fragment() {
                 val message = it as? TextChatMessage ?: return@collect
                 val text = createQuoteContent(message)
 
-                quote = Quote(it.timeStamp, it.authorId, text, null)
+                // Synchronous assignment: the quote (with its type-entry attachments, NO bytes) is
+                // built and persisted in one pass. The preview is rendered from the replied message's
+                // own local attachment, so no async generation is needed.
+                quote = Quote(it.timeStamp, it.authorId, text, buildQuotedAttachments(message))
                 binding.quoteZone.visibility = View.VISIBLE
 
                 // 显示时：如果是引用自己的消息，显示 "你"；否则从缓存获取作者名称
@@ -326,6 +335,7 @@ class ChatMessageInputFragment : Fragment() {
                 binding.edittextInput.requestFocus()
                 ServiceUtil.getInputMethodManager(activity)
                     .showSoftInput(binding.edittextInput, InputMethodManager.SHOW_IMPLICIT)
+                bindQuoteThumbnailPreview(message)
                 currentDraft = currentDraft.copy(quote = quote)
                 draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
             }
@@ -343,8 +353,16 @@ class ChatMessageInputFragment : Fragment() {
                     if (!isAdded || view == null) return@collect
                     if (messages.isNotEmpty()) {
                         val message = messages.first()
-                        val sharedContactList = message.sharedContacts()
                         if (message.type == 0 || message.type == 1) {
+                            // sharedContacts() + forwardContext() each issue WCDB reads — resolve
+                            // off the main thread. Branch on the resolved forwardContext, not the
+                            // raw FK id: a non-null forwardContextDatabaseId can resolve to null
+                            // (orphaned id / WCDB-KSP NULL→0, #901), which would otherwise forward
+                            // the bare "chat history" placeholder instead of the message.
+                            val (sharedContactList, resolvedForwardContext) = withContext(Dispatchers.IO) {
+                                message.sharedContacts() to message.forwardContext()
+                            }
+                            if (!isAdded || view == null) return@collect
                             val content: String?
                             if (sharedContactList.isNotEmpty()) {
                                 content = ResUtils.getString(R.string.chat_contact_card)
@@ -352,11 +370,12 @@ class ChatMessageInputFragment : Fragment() {
                                 val sharedContactId = sharedContactList.getOrNull(0)?.phone?.getOrNull(0)?.value
                                 val sharedContactName = sharedContactList.getOrNull(0)?.name?.displayName
                                 forwardContext = ForwardContext(emptyList(), false, sharedContactId, sharedContactName)
-                            } else if (message.forwardContextDatabaseId != null) {
+                            } else if (resolvedForwardContext != null) {
                                 content = ResUtils.getString(R.string.chat_history)
-                                forwardContext = message.forwardContext()
-                                forwardContext?.forwards?.forEach { forward ->
-                                    changeAttachmentStatus(forward)
+                                forwardContext = resolvedForwardContext.apply {
+                                    forwards?.forEach { forward ->
+                                        changeAttachmentStatus(forward)
+                                    }
                                 }
                             } else {
                                 content = if (messageToForward.isAttachmentMessage()) {
@@ -502,9 +521,6 @@ class ChatMessageInputFragment : Fragment() {
                         onForwardClick = {
                             chatViewModel.onForwardClick()
                         },
-                        onCombineClick = {
-                            chatViewModel.onCombineClick()
-                        },
                         onCopyClick = {
                             chatViewModel.onCopyClick()
                         },
@@ -552,7 +568,7 @@ class ChatMessageInputFragment : Fragment() {
 
         chatViewModel.listClick
             .onEach {
-                if (binding.llChatActions.visibility == View.VISIBLE) {
+                if (binding.llChatActions.isVisible) {
                     // Tap list while panel open → close panel (same as "×" button)
                     hidePanel {
                         (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
@@ -573,7 +589,20 @@ class ChatMessageInputFragment : Fragment() {
                 // MimeTypeMap.getMimeTypeFromExtension("m4a") returns "audio/mpeg" on some vendor
                 // ROMs, which breaks cross-platform receiver rendering (decoded as MP3 / shown as
                 // generic file).
-                prepareSendAttachmentPush(path.toUri(), MediaUtil.AUDIO_MP4, isAudioMessage = true)
+                //
+                // Override the wire-format filename to a neutral "<timestamp>.m4a" (the format
+                // the old MediaRecorder path used) instead of letting it default to the local
+                // basename. The dual-candidate recorder names local files
+                // `voice-<recipe.id>-<timestamp>.m4a` (e.g. `voice-denoised+higher-...m4a`)
+                // for internal lookup, but that internal naming should not leak into the
+                // recipient-visible attachment metadata.
+                val neutralFileName = "${System.currentTimeMillis()}.m4a"
+                prepareSendAttachmentPush(
+                    attachmentUri = path.toUri(),
+                    mimeType = MediaUtil.AUDIO_MP4,
+                    originalFileName = neutralFileName,
+                    isAudioMessage = true,
+                )
             }
             .catch { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } }
             .launchIn(viewLifecycleOwner.lifecycleScope)
@@ -658,6 +687,8 @@ class ChatMessageInputFragment : Fragment() {
 
     private fun initView() {
         binding.quoteDelete.setOnClickListener {
+            clearQuoteThumbnail()               // clear Glide load + hide the thumbnail ImageView
+
             // Remove from memory
             quote = null
 
@@ -673,6 +704,10 @@ class ChatMessageInputFragment : Fragment() {
         // 设置文件粘贴监听器
         binding.edittextInput.setOnFilePasteListener { uri, mimeType ->
             handleFilePaste(uri, mimeType)
+        }
+
+        binding.edittextInput.setOnStickerCommitListener { info, mimeType ->
+            handleStickerCommit(info, mimeType)
         }
 
         binding.edittextInput.doOnTextChanged { text, start, before, count ->
@@ -820,7 +855,7 @@ class ChatMessageInputFragment : Fragment() {
         binding.buttonMoreActions.setOnClickListener {
             val root = parentFragment?.view as? InsetAwareConstraintLayout
 
-            if (binding.llChatActions.visibility == View.VISIBLE) {
+            if (binding.llChatActions.isVisible) {
                 // Panel already behind keyboard — just hide keyboard to reveal it
                 ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
             } else {
@@ -1115,6 +1150,7 @@ class ChatMessageInputFragment : Fragment() {
 
                     // Show the quoted text
                     binding.quoteText.text = quote.text
+                    bindQuoteThumbnailPreview(quote)
                 } else {
                     binding.quoteZone.visibility = View.GONE
                 }
@@ -1314,7 +1350,9 @@ class ChatMessageInputFragment : Fragment() {
             if (forwardContext?.forwards?.size == 1) {
                 val forward = forwardContext.forwards?.firstOrNull()
                 if (!forward?.attachments.isNullOrEmpty()) {
-                    getString(R.string.chat_message_attachment)
+                    // Type-specific label (image/video/audio) for a forwarded media message,
+                    // matching the normal-attachment branch above instead of a generic "[Attachment]".
+                    getString(MediaUtil.quoteTypeLabelRes(forward?.attachments?.firstOrNull()?.contentType))
                 } else {
                     forward?.text
                 }
@@ -1327,6 +1365,142 @@ class ChatMessageInputFragment : Fragment() {
             message.message.toString()
         }
         return text ?: ""
+    }
+
+    /**
+     * Builds the [QuotedAttachment] list (a single type-entry: contentType/fileName/flags, NO
+     * thumbnail bytes) for a reply to a media message. Returns null for a text-only message (no
+     * attachment). Forward-aware: for a single-forward reply, the relevant attachment is the
+     * forwarded one. The preview is rendered from the replied message's own local file; the wire
+     * carries only the entry so the recipient reverse-looks-up its own local original.
+     */
+    internal fun buildQuotedAttachments(message: TextChatMessage): List<QuotedAttachment>? {
+        val attachment = message.getRelevantAttachment() ?: return null
+        return listOf(
+            QuotedAttachment(
+                contentType = attachment.contentType,
+                fileName = attachment.fileName ?: "",
+                thumbnail = null,
+                flags = attachment.flags
+            )
+        )
+    }
+
+    /**
+     * Local file path of the replied message's media, forward-aware.
+     * - Normal attachment: `getMessageAttachmentFilePath(message.id) + fileName`.
+     * - Single-forward: the forwarded file lives under the attachment's `authorityId` directory
+     *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment:1774.
+     * Returns null if the resolved file does not exist on disk.
+     */
+    private fun quoteLocalAttachmentPath(message: TextChatMessage, attachment: Attachment): String? {
+        val forwards = message.forwardContext?.forwards
+        val dirId = if (forwards?.size == 1) attachment.authorityId.toString() else message.id
+        val fileName = attachment.fileName ?: return null
+        val path = FileUtil.getMessageAttachmentFilePath(dirId) + fileName
+        return path.takeIf { File(it).exists() }
+    }
+
+    /** Clears the Glide load and hides the quote thumbnail ImageView (does NOT touch quoteZone). */
+    private fun clearQuoteThumbnail() {
+        // Guard against a dead host: on rapid back-press during send (resetData → finishing Activity)
+        // Glide.with can throw IllegalArgumentException. Mirrors clearQuoteThumbnail(ImageView) in
+        // ChatMessageViewHolder.
+        if (binding.quoteThumbnail.isHostActivityAlive()) {
+            Glide.with(binding.quoteThumbnail).clear(binding.quoteThumbnail)
+        }
+        binding.quoteThumbnail.visibility = View.GONE
+    }
+
+    /**
+     * Binds the compose-bar quote preview from the live replied message (Mac full-type semantics):
+     * audio → mic icon, image/video with a local original on disk → rounded Glide load, image/video
+     * without a local file → GONE (text-only), genuine file → [R.drawable.ic_file], text-only → GONE.
+     */
+    private fun bindQuoteThumbnailPreview(message: TextChatMessage) {
+        val attachment = message.getRelevantAttachment()
+        if (attachment == null) {
+            clearQuoteThumbnail()
+            return
+        }
+        val isAudio = attachment.flags == 1 || MediaUtil.isAudioType(attachment.contentType)
+        if (isAudio) {
+            binding.quoteThumbnail.visibility = View.VISIBLE
+            QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.chat_ic_quote_mic)
+            return
+        }
+        when {
+            MediaUtil.isImageOrVideoType(attachment.contentType) -> {
+                // Stay GONE until the off-main-thread file check confirms a local original —
+                // quoteLocalAttachmentPath does File.exists(), which must not run on the main thread.
+                clearQuoteThumbnail()
+                loadComposeQuoteThumbnailAsync(message.timeStamp) {
+                    quoteLocalAttachmentPath(message, attachment)
+                }
+            }
+            else -> {
+                // Genuine file (pdf/doc/zip/etc.) → file icon.
+                binding.quoteThumbnail.visibility = View.VISIBLE
+                QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.ic_file)
+            }
+        }
+    }
+
+    /**
+     * Resolves a compose-bar quote-thumbnail path off the main thread and applies it only if the
+     * compose quote is still the same one ([expectedQuoteId]) when the lookup returns. Guards both
+     * view teardown (`!isAdded`) AND the quote being dismissed/replaced mid-lookup (the field
+     * [quote] is nulled on delete/reset and reassigned on a new reply) — without that check a stale
+     * lookup could re-show a thumbnail the user already dismissed.
+     */
+    private fun loadComposeQuoteThumbnailAsync(expectedQuoteId: Long, resolve: suspend () -> String?) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val path = withContext(Dispatchers.IO) { resolve() }
+            if (!isAdded || view == null) return@launch
+            if (quote?.id != expectedQuoteId) return@launch // quote dismissed or replaced while resolving
+            if (path == null) {
+                clearQuoteThumbnail()
+                return@launch
+            }
+            binding.quoteThumbnail.visibility = View.VISIBLE
+            QuoteThumbnailBinder.loadRoundedThumbnail(binding.quoteThumbnail, File(path))
+        }
+    }
+
+    /**
+     * Draft-restore variant: there is no live [TextChatMessage] in scope, only the deserialized
+     * [Quote]. Renders by type — audio → mic, genuine file → [R.drawable.ic_file], null → GONE.
+     * For image/video the restored [QuotedAttachment] carries no local path, so the original message
+     * is reverse-looked-up locally (by [Quote.id] = original timestamp + the current room) on
+     * [Dispatchers.IO]; its on-disk thumbnail is shown if found, else text-only. Mirrors the list
+     * renderer's [findOriginalAttachmentPath].
+     */
+    private fun bindQuoteThumbnailPreview(quote: Quote?) {
+        val qa = quote?.attachments?.firstOrNull()
+        if (qa == null) {
+            clearQuoteThumbnail()
+            return
+        }
+        val isAudio = qa.flags == 1 || MediaUtil.isAudioType(qa.contentType)
+        when {
+            isAudio -> {
+                binding.quoteThumbnail.visibility = View.VISIBLE
+                QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.chat_ic_quote_mic)
+            }
+            MediaUtil.isImageOrVideoType(qa.contentType) -> {
+                // No inline bytes on restore → reverse-look-up the local original off the main thread.
+                // Stay GONE until/unless the lookup finds a file (avoids a flash of misleading icon).
+                clearQuoteThumbnail()
+                val forWhat = chatViewModel.forWhat
+                loadComposeQuoteThumbnailAsync(quote.id) {
+                    findOriginalAttachmentPath(quote.id, forWhat.id, forWhat.typeValue)
+                }
+            }
+            else -> {
+                binding.quoteThumbnail.visibility = View.VISIBLE
+                QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.ic_file)
+            }
+        }
     }
 
     private val contactsAtAdapter: ContactsAtAdapter by lazy {
@@ -2041,6 +2215,8 @@ class ChatMessageInputFragment : Fragment() {
 
 
     private fun resetData(clearInputBoundState: Boolean = true) {
+        clearQuoteThumbnail()               // clear thumbnail ImageView (does NOT hide quoteZone itself)
+
         quote = null
         forwardContext = null
         recall = null
@@ -2391,6 +2567,54 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    // IME stickers/GIFs (Gboard, Sogou, etc.) send directly — they are emoji-like, so they skip the
+    // image editor preview (which also can't keep animated WebP/GIF moving) and post the raw file as-is.
+    private fun handleStickerCommit(info: InputContentInfoCompat, mimeType: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            // try/finally guarantees the temporary IME read grant is released on every exit path.
+            try {
+                if (!isGroup && !isFriend) {
+                    ToastUtil.show(R.string.contact_non_friend_text_only)
+                    return@launch
+                }
+                // Same muted-member gate every other send path uses.
+                if (!checkCanSpeak()) return@launch
+                // We only advertise image/* to the IME; ignore anything else a keyboard might commit.
+                if (!MediaUtil.isImageType(mimeType)) {
+                    L.w { "[ChatMessageInputFragment] sticker commit ignored, non-image mimeType=$mimeType" }
+                    return@launch
+                }
+
+                val fileSize = withContext(Dispatchers.IO) { FileUtil.getFileSize(info.contentUri) }
+                if (!isAdded || view == null) return@launch
+                if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                    return@launch
+                }
+
+                val copyResult = withContext(Dispatchers.IO) {
+                    runCatching { FileUtil.copyUriToFile(info.contentUri) }
+                        .onFailure { L.e { "[ChatMessageInputFragment] sticker copyUriToFile failed: ${it.stackTraceToString()}" } }
+                        .getOrNull()
+                }
+
+                if (copyResult == null) {
+                    ToastUtil.showLong(R.string.unsupported_file_type)
+                    return@launch
+                }
+
+                if (!isAdded || view == null) return@launch
+
+                // The committed file name comes from an untrusted IME content provider; drop it if unsafe
+                // (the temp file is UUID-named) so it can't influence the destination attachment path.
+                val safeFileName = copyResult.originalFileName?.takeIf { FileUtil.isFileNameValid(it) }
+                prepareSendAttachmentPush(copyResult.tempFile.toUri(), mimeType, safeFileName)
+            } finally {
+                runCatching { info.releasePermission() }
+            }
+        }
+    }
+
     /**
      * Send a screenshot notification message.
      * Called when a screenshot is detected.
@@ -2474,7 +2698,7 @@ class ChatMessageInputFragment : Fragment() {
         keyboardStateListener = object : InsetAwareConstraintLayout.KeyboardStateListener {
             override fun onKeyboardShown() {
                 if (!isAdded || view == null) return
-                val panelVisible = binding.llChatActions.visibility == View.VISIBLE
+                val panelVisible = binding.llChatActions.isVisible
                 if (!panelVisible) {
                     hidePanel(animated = false)
                 }
@@ -2488,7 +2712,7 @@ class ChatMessageInputFragment : Fragment() {
             }
             override fun onKeyboardAnimationEnded(isKeyboardVisible: Boolean) {
                 if (!isAdded || view == null) return
-                val panelVisible = binding.llChatActions.visibility == View.VISIBLE
+                val panelVisible = binding.llChatActions.isVisible
                 if (isKeyboardVisible && panelVisible) {
                     hidePanel(animated = false)
                     insetLayout.releaseKeyboardPaddingFreeze()

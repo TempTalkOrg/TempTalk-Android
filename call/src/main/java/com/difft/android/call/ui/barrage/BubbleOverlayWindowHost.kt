@@ -19,6 +19,7 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.LCallViewModel
 
 /**
@@ -82,7 +83,9 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
                 ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycleOwner)
             )
             setContent {
-                BubbleOverlayLayer(viewModel = viewModel)
+                DifftTheme(darkTheme = true) {
+                    BubbleOverlayLayer(viewModel = viewModel)
+                }
             }
         }
 

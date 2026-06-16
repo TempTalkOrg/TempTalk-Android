@@ -51,6 +51,7 @@
                 android:textColor="@color/t.warning"
                 android:textSize="10sp"
                 android:visibility="gone"
+                tools:ignore="SmallSp"
                 tools:visibility="visible" />
 
             <ImageView
@@ -58,6 +59,7 @@
                 android:layout_width="16dp"
                 android:layout_height="16dp"
                 android:layout_marginStart="4dp"
+                android:importantForAccessibility="no"
                 android:scaleType="fitXY"
                 android:src="@drawable/ic_going_yes_circle"
                 android:visibility="gone"
@@ -81,6 +83,7 @@
         android:id="@+id/btn_to_remove_attendance"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:importantForAccessibility="no"
         android:src="@drawable/ic_remove"
         android:visibility="gone"
         tools:visibility="visible" />

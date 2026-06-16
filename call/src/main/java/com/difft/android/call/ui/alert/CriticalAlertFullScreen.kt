@@ -31,7 +31,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -43,7 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.R
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 
 
@@ -176,7 +175,7 @@ fun CriticalAlertFullScreen(
                         lineHeight = 20.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
-                        color = colorResource(R.color.t_primary_night),
+                        color = DifftTheme.colors.textPrimary,
                         textAlign = TextAlign.Center,
                     )
                 )
@@ -191,7 +190,7 @@ fun CriticalAlertFullScreen(
                         lineHeight = 16.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
-                        color = colorResource(R.color.t_secondary_night),
+                        color = DifftTheme.colors.textSecondary,
                         textAlign = TextAlign.Center,
                     )
                 )

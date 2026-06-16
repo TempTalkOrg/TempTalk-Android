@@ -5,4 +5,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
 
+    <!-- Required by ScreenshotDetector (registerScreenCaptureCallback) on Android 14+ (API 34).
+         Declared here so the permission travels with the API for all consumer modules. -->
+    <uses-permission
+        android:name="android.permission.DETECT_SCREEN_CAPTURE"
+        android:minSdkVersion="34" />
+
 </manifest>

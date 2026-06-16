@@ -491,7 +491,7 @@ class MessageArchiveManager @Inject constructor(
                     wcdb.resetIdentityKey.insertOrReplaceObjects(resetIdentityKeyModels)
                     wcdb.resetIdentityKey.getAllObjects(DBResetIdentityKeyModel.status.eq(0))
                         .map { resetIdentityKeyModel ->
-                            archiveMessagesByResetIdentityKey(resetIdentityKeyModel.uid, resetIdentityKeyModel.resetTime)
+                            archiveMessagesByResetIdentityKey(resetIdentityKeyModel.uid!!, resetIdentityKeyModel.resetTime!!)
                         }
                 }
             } else {
@@ -506,7 +506,7 @@ class MessageArchiveManager @Inject constructor(
         if (operator == globalServices.myId) { // Self reset: create notify messages for all 1v1 conversations
             wcdb.room.getAllObjects(DBRoomModel.roomId.notEq(globalServices.myId).and(DBRoomModel.roomType.eq(0)))
                 .map { room ->
-                    localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry)
+                    localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry ?: 0L)
                 }.let { messages ->
                     L.i { "[MessageArchiveManager] create reset identity key notify message for self, rooms size:${messages.size}" }
                     dbMessageStore.putWhenNonExist(*messages.toTypedArray())
@@ -514,7 +514,7 @@ class MessageArchiveManager @Inject constructor(
         } else { // Other user reset: create notify message for the 1v1 conversation if it exists
             wcdb.room.getFirstObject(DBRoomModel.roomId.eq(operator))?.let {
                 L.i { "[MessageArchiveManager] create reset identity key message -> operator:${operator}  resetIdentityKeyTime:${resetIdentityKeyTime}" }
-                localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry).let { message ->
+                localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry ?: 0L).let { message ->
                     dbMessageStore.putWhenNonExist(message)
                 }
             } ?: run {

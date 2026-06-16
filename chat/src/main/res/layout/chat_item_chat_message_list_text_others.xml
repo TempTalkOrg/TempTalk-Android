@@ -130,6 +130,17 @@
                     tools:text="LV FLV FLV FLV FLV LV FLV FLV FLV FLV LV FLV FLV FLV FLV LV FLV FLV FLV FLV " />
             </LinearLayout>
 
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/quoteThumbnail"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:importantForAccessibility="no"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                tools:src="@tools:sample/avatars"
+                tools:visibility="visible" />
+
         </LinearLayout>
 
         <!-- 单条转发消息的信息头（时间+来源） -->
@@ -301,6 +312,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
+            android:importantForAccessibility="no"
             android:minWidth="13dp"
             android:minHeight="13dp"
             android:src="@drawable/chat_message_action_voice2text_server_tip"

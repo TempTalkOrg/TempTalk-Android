@@ -5,8 +5,6 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
-import android.os.Build
-import androidx.annotation.RequiresApi
 import com.difft.android.base.log.lumberjack.L
 import java.io.File
 import java.nio.ByteBuffer
@@ -19,7 +17,6 @@ import java.nio.ByteBuffer
  *
  * Since it doesn't re-encode, the video/audio quality remains unchanged.
  */
-@RequiresApi(Build.VERSION_CODES.O)
 object VideoRemuxer {
 
     private const val TAG = "VideoRemuxer"

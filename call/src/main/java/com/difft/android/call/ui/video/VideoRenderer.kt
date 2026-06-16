@@ -42,7 +42,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.colorResource
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -52,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.receiver.FrameStatusListener
 import com.difft.android.call.R
@@ -395,7 +395,7 @@ fun VideoRenderer(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(colorResource(id = com.difft.android.base.R.color.bg1_night)),
+                    .background(DifftTheme.colors.background),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -422,7 +422,7 @@ fun VideoRenderer(
                             lineHeight = 20.sp,
                             fontFamily = FontFamily.Default,
                             fontWeight = FontWeight(400),
-                            color = colorResource(id = com.difft.android.base.R.color.t_third),
+                            color = DifftTheme.colors.textTertiary,
                         )
                     )
                 }

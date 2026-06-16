@@ -18,6 +18,7 @@ import com.difft.android.base.widget.sideBar.SectionDecoration
 import com.difft.android.base.widget.sideBar.SideBar
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.recent.DualPaneSelectionListener
@@ -31,7 +32,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
+import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.models.ContactorModel
+import org.difft.app.database.models.DBGroupMemberContactorModel
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -41,7 +44,6 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
     lateinit var wcdb: WCDB
 
     val binding: ChatFragmentContactsAllBinding by viewbind()
-
 
     val mAdapter: ContactorsAdapter by lazy {
         object : ContactorsAdapter(globalServices.myId) {
@@ -129,27 +131,70 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
     }
 
     private suspend fun loadContacts() {
+        // Merge friend source (contactor) + weak-pending source, de-dup by id.
+        // Weak uids come from the weak table; their DISPLAY info resolves through the value chain
+        // (groupMember-first, snapshot last) instead of reading the snapshot directly, so a stale
+        // snapshot avatar never shadows the live (avatar-less) value the detail screen shows. This
+        // keeps the list and the detail screen consistent.
+        // Capture the context OUTSIDE the IO block. Calling requireContext() inside withContext(IO)
+        // throws IllegalStateException if the fragment detaches while the IO work is in flight.
+        val ctx = requireContext()
+        val pendingRepo = ctx.getEntryPoint().getPendingRemovalContactRepository()
         val contacts = withContext(Dispatchers.IO) {
-            wcdb.contactor.allObjects
-                .sortedByPinyin()
+            val friends = wcdb.contactor.allObjects
+            val weakExpire = pendingRepo.getAllExpireAt()       // uid -> expireAt (countdown subtitle)
+            val weakUids = weakExpire.keys.toList()
+
+            // Proactively pull the live value for weak uids that have NO groupMember row yet (only a
+            // snapshot). One network round-trip lands an avatar-less stub into groupMember (active
+            // account) so the snapshot avatar stops shadowing the live value the detail screen shows.
+            //
+            // Convergence — NOT via any contactsUpdate emission (ContactorUtil.fetchContactors never
+            // emits contactsUpdate); convergence is via groupMember persistence, not re-trigger:
+            //   - Active account: fetchContactors writes a groupMember stub, so the uid lands in
+            //     knownInGroupMember next time → it drops out of missing → no further fetch.
+            //   - Account gone: fetchContactors returns empty and writes no stub, so the uid stays in
+            //     missing. The list page may re-issue the fetch on a later contactsUpdate (throttled
+            //     2s). This is an accepted boundary — the set is small and the user does not notice.
+            //     We deliberately do NOT record a "gone" set: that would let a transient network
+            //     blip mark a still-active uid as gone, freezing its stale snapshot avatar for the
+            //     rest of the Fragment lifecycle with no self-heal. Leaving it in missing means a
+            //     recovered network simply resolves the live value on the next pass.
+            if (weakUids.isNotEmpty()) {
+                val friendIds = friends.map { it.id }.toSet()
+                val knownInGroupMember = wcdb.groupMemberContactor
+                    .getAllObjects(DBGroupMemberContactorModel.id.`in`(weakUids))
+                    .map { it.id }.toSet()
+                val missing = weakUids.filter { it !in knownInGroupMember && it !in friendIds }
+                if (missing.isNotEmpty()) {
+                    ContactorUtil.fetchContactors(missing, ctx)
+                }
+            }
+
+            val weakContacts = if (weakUids.isEmpty()) emptyList()
+            else wcdb.getContactorsFromAllTable(weakUids)        // groupMember-first, snapshot last
+            val merged = (friends + weakContacts).distinctBy { it.id }.sortedByPinyin()
+            // Carry each contactor's expireAt on the list item so a weak-state change (e.g. friend
+            // restored: expireAt has -> null) is part of DiffUtil contents and rebinds the row.
+            merged.map { ContactListItem(it, weakExpire[it.id]) }
         }
         mAdapter.submitList(contacts)
         addLettersDecoration(contacts)
     }
 
     private var decoration: SectionDecoration? = null
-    private fun addLettersDecoration(it: List<ContactorModel>) {
+    private fun addLettersDecoration(it: List<ContactListItem>) {
         decoration?.let {
             binding.recyclerviewContacts.removeItemDecoration(it)
         }
 
         decoration = SectionDecoration(requireContext(), object : SectionDecoration.DecorationCallback {
             override fun getGroupId(position: Int): Long {
-                return if (position >= 0 && position < it.size) it[position].getDisplayNameForUI().getSortLetter().hashCode().toLong() else -1
+                return if (position >= 0 && position < it.size) it[position].contactor.getDisplayNameForUI().getSortLetter().hashCode().toLong() else -1
             }
 
             override fun getGroupFirstLine(position: Int): String {
-                return if (position >= 0 && position < it.size) it[position].getDisplayNameForUI().getSortLetter() else "#"
+                return if (position >= 0 && position < it.size) it[position].contactor.getDisplayNameForUI().getSortLetter() else "#"
             }
         })
 

@@ -8,9 +8,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 
 
 @Composable
@@ -18,7 +18,7 @@ fun ShowItemOnClickView(config: List<String>, expanded: Boolean, setExpanded:(Bo
 
     DropdownMenu(
         modifier = Modifier
-            .background(colorResource(id = com.difft.android.base.R.color.bg_popup_night)),
+            .background(DifftTheme.colors.backgroundPopup),
         expanded = expanded,
         onDismissRequest = { setExpanded(false) },
     ) {
@@ -27,7 +27,7 @@ fun ShowItemOnClickView(config: List<String>, expanded: Boolean, setExpanded:(Bo
                 modifier = Modifier
                     .size(width = 100.dp, height = 30.dp)
                     .background(
-                        colorResource(id = com.difft.android.base.R.color.bg_popup_night)
+                        DifftTheme.colors.backgroundPopup
                     ),
                 text = {
                     Text(text = item, fontSize = 12.sp, color = Color.White)

@@ -22,16 +22,11 @@ class CallServiceManager(
      */
     fun startOngoingCallService() {
         L.i { "[Call] CallServiceManager startOngoingCallService" }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceIntent = Intent(context, ForegroundService::class.java)
-            try {
-                callToChatController.startForegroundService(context, serviceIntent)
-            } catch (e: Exception) {
-                L.e { "[Call] CallServiceManager Failed to start foreground service: ${e.message}" }
-            }
-        } else {
-            val serviceIntent = Intent(context, ForegroundService::class.java)
-            context.startService(serviceIntent)
+        val serviceIntent = Intent(context, ForegroundService::class.java)
+        try {
+            callToChatController.startForegroundService(context, serviceIntent)
+        } catch (e: Exception) {
+            L.e { "[Call] CallServiceManager Failed to start foreground service: ${e.message}" }
         }
     }
 

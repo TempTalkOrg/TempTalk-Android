@@ -25,7 +25,6 @@ import android.view.inputmethod.InputMethodManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 
 import org.jetbrains.annotations.NotNull;
@@ -87,12 +86,10 @@ public class ServiceUtil {
     return (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
   }
 
-  @RequiresApi(26)
   public static JobScheduler getJobScheduler(Context context) {
     return (JobScheduler) context.getSystemService(JobScheduler.class);
   }
 
-  @RequiresApi(22)
   public static @Nullable SubscriptionManager getSubscriptionManager(@NonNull Context context) {
     return (SubscriptionManager) context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
   }

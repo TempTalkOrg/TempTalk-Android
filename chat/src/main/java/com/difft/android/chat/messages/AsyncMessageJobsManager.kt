@@ -113,7 +113,7 @@ class AsyncMessageJobsManager @Inject constructor(
         // Check local database first - batch query for better performance
         val existingGroupsInDb = wcdb.group.getAllObjects(
             DBGroupModel.gid.`in`(*groupsNotInCache.toTypedArray())
-        ).map { it.gid }.toSet()
+        ).mapNotNull { it.gid }.toSet()
 
         // Add existing ones to cache directly
         if (existingGroupsInDb.isNotEmpty()) {

@@ -76,7 +76,7 @@ object NoticeAggregator {
     )
 
     // ----- TextMessage overloads -----
-    // Multi-select dispatch sites (ChatMessageViewModel.onCopyClick / onCombineClick /
+    // Multi-select dispatch sites (ChatMessageViewModel.onCopyClick / onForwardClick /
     // onSaveSelectedMessages, ChatMessageInputFragment single-forward) hold
     // List<TextMessage> from `convertToTextMessage()` rather than List<ChatMessage>.
     // Avoid forcing callers to wrap into ChatMessage just to feed the aggregator.

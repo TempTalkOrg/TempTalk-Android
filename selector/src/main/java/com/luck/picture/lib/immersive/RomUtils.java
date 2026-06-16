@@ -10,6 +10,7 @@ import com.luck.picture.lib.utils.ValueOf;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -116,7 +117,8 @@ public class RomUtils {
 
     //Android Api 23以上
     private static boolean isAndroid5OrAbove() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP;
+        // minSdk 26 >= LOLLIPOP (21): always true.
+        return true;
     }
 
 
@@ -166,7 +168,7 @@ public class RomUtils {
         try {
             String manufacturer = Build.MANUFACTURER;
             if (!TextUtils.isEmpty(manufacturer)) {
-                return manufacturer.toLowerCase();
+                return manufacturer.toLowerCase(Locale.ROOT);
             }
         } catch (Throwable ignore) {
             L.w(ignore, () -> "[RomUtils] getManufacturer failed");
@@ -178,7 +180,7 @@ public class RomUtils {
         try {
             String brand = Build.BRAND;
             if (!TextUtils.isEmpty(brand)) {
-                return brand.toLowerCase();
+                return brand.toLowerCase(Locale.ROOT);
             }
         } catch (Throwable ignore) {
             L.w(ignore, () -> "[RomUtils] getBrand failed");

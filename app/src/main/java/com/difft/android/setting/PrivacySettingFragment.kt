@@ -11,6 +11,7 @@ import com.difft.android.R
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
 import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivityPrivacySettingBinding
@@ -57,6 +58,9 @@ class PrivacySettingFragment : Fragment() {
     @Inject
     lateinit var encryptionDataManager: EncryptionDataManager
 
+    @Inject
+    lateinit var proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -76,6 +80,13 @@ class PrivacySettingFragment : Fragment() {
     private fun initView() {
         binding.clScreenLock.setOnClickListener {
             ScreenLockSettingActivity.startActivity(requireActivity())
+        }
+
+        // Proxy entry is only available in insider builds
+        binding.llUseProxy.visibility =
+            if (globalServices.environmentHelper.isInsiderChannel()) View.VISIBLE else View.GONE
+        binding.clUseProxy.setOnClickListener {
+            ProxySettingsActivity.startActivity(requireActivity())
         }
 
         binding.clRenewIdentityKey.visibility = View.VISIBLE
@@ -114,6 +125,17 @@ class PrivacySettingFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateProxyStatus()
+    }
+
+    private fun updateProxyStatus() {
+        _binding?.tvProxyStatus?.setText(
+            if (proxyConfigProvider.isEnabled) R.string.proxy_status_on else R.string.proxy_status_off
+        )
+    }
+
     private fun renewIdentityKey() {
         ComposeDialogManager.showWait(requireContext(), "")
         val registrationId = KeyHelper.generateRegistrationId(false)
@@ -147,7 +169,7 @@ class PrivacySettingFragment : Fragment() {
 
                     // 更新UI显示新的身份密钥创建时间
                     ResUtils.getString(R.string.settings_new_key_time_format).let {
-                        val timeFormat = SimpleDateFormat(it)
+                        val timeFormat = SimpleDateFormat(it, Locale.ENGLISH)
                         val date = Date(currentTimeMillis)
                         timeFormat.format(date).let {
                             val timeTips = getString(R.string.settings_new_key_time_info, it)

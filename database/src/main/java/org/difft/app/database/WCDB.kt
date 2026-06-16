@@ -1,11 +1,8 @@
 package org.difft.app.database
 
 import android.content.Context
-import android.content.Intent
-import android.os.Process
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.database.BuildConfig
-import com.tencent.wcdb.base.WCDBCorruptOrIOException
 import com.tencent.wcdb.core.Database
 import com.tencent.wcdb.core.Table
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -25,6 +22,7 @@ import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBNotificationCacheModel
 import org.difft.app.database.models.DBPendingMessageModelNew
+import org.difft.app.database.models.DBPendingRemovalContactModel
 import org.difft.app.database.models.DBPublicKeyInfoModel
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
@@ -35,196 +33,294 @@ import org.difft.app.database.models.DBSharedContactModel
 import org.difft.app.database.models.DBSharedContactPhoneModel
 import org.difft.app.database.models.DBSpeechToTextModel
 import org.difft.app.database.models.DBTranslateModel
+import java.io.File
 import java.io.RandomAccessFile
+import java.util.concurrent.atomic.AtomicBoolean
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 import com.tencent.wcdb.base.WCDBException
-import kotlin.system.exitProcess
+
+/** Result of a database health probe — see [WCDB.probeHealthy]. */
+enum class DbHealth { HEALTHY, CORRUPT }
 
 @Singleton
 class WCDB @Inject constructor(
     @param:ApplicationContext private val context: Context,
     @param:Named("application") private val applicationScope: CoroutineScope,
-    private val recoveryPreferences: DatabaseRecoveryPreferences
 ) {
 
     companion object {
         const val DATABASE_NAME = "tt_wcdb_database.db"
     }
 
+    /**
+     * Process-level corruption flag. Set by [probeHealthy] when the DB is unreadable,
+     * or by [markCorrupted] just before MainActivity's recovery closes the handle.
+     *
+     * DB-touching early/headless consumers should fast-skip their read when this is
+     * `true` to avoid racing MainActivity's recovery (`retrieve`/`close`/delete). The
+     * flag resets implicitly on the next process start after recovery's `restartApp()`.
+     */
+    @Volatile
+    var dbCorrupted: Boolean = false
+        private set
+
+    /**
+     * Explicit setter for the pre-close path in MainActivity.resetDatabaseAndResync():
+     * flip the flag BEFORE `db.close()` so any straggler background consumer fast-skips
+     * a closed handle (RACE-2). [probeHealthy] also sets it internally on detection.
+     */
+    fun markCorrupted() {
+        dbCorrupted = true
+    }
+
+    /**
+     * Telemetry: `true` once [probeHealthy] has confirmed the DB readable this process.
+     * Lets [reportCorruptionOnce] classify a later corruption as genuinely *mid-session*
+     * (corruption appeared AFTER a healthy probe) vs *startup_open* (corrupt at first open).
+     */
+    @Volatile
+    private var healthyProbePassed = false
+
+    /**
+     * One-shot guard — the WCDB corruption notification can fire repeatedly AND
+     * [reportCorruptionOnce] is called from two threads (IO probe + WCDB notification
+     * callback). AtomicBoolean.compareAndSet makes the check-then-set atomic so only one
+     * corruption log line is emitted per process.
+     */
+    private val corruptionReported = AtomicBoolean(false)
+
+    /**
+     * Observability for DB corruption. Logs exactly once per process so we can measure
+     * real-world corruption frequency and, crucially, the mid-session vs startup-open
+     * split. No sensitive data — only sizes / backup presence / phase.
+     */
+    private fun reportCorruptionOnce(source: String) {
+        if (!corruptionReported.compareAndSet(false, true)) return
+        val dbFile = context.getDatabasePath(DATABASE_NAME)
+        val phase = if (healthyProbePassed) "mid_session" else "startup_open"
+        val firstMaterial = File("${dbFile.absolutePath}-first.material").exists()
+        val lastMaterial = File("${dbFile.absolutePath}-last.material").exists()
+        L.e {
+            "[WCDB][DBRecovery] corruption detected source=$source phase=$phase " +
+                "dbSizeBytes=${dbFile.length()} firstMaterial=$firstMaterial lastMaterial=$lastMaterial"
+        }
+    }
+
+    /**
+     * Process-lifetime one-shot cache of the cipher-key resolution outcome (success →
+     * cached key, failure → cached exception). `by lazy` does NOT cache a *failed*
+     * initializer, so without this every re-touch of [db] after a key failure would
+     * re-hit the Keystore — a retry storm on a permanently-dead Keystore (ARCH-CRIT-1).
+     */
+    @Volatile
+    private var cipherKeyResult: Result<ByteArray>? = null
+
+    private fun resolveCipherKeyOnce(): ByteArray {
+        cipherKeyResult?.let { return it.getOrThrow() }
+        val r = runCatching { WCDBKeyManager.getOrCreateKey(context) } // hits Keystore at most ONCE per process
+        cipherKeyResult = r
+        return r.getOrThrow()
+    }
+
+    /**
+     * The single DB handle. Open-only responsibility: construct + cipher + autoBackup.
+     *
+     * The first real open is heavy (cipher/PBKDF + header I/O) — first touch must be
+     * OFF the main thread; it is owned by MainActivity.checkDatabaseIntegrity() on IO.
+     * Any startup/headless DB touch launched onto a no-CEH scope must `runCatching`
+     * the access and check [dbCorrupted] first (see ContactRemarkCache.preload).
+     *
+     * No PRAGMA probe, no corruption callback, no restart here — corruption is detected
+     * later by [probeHealthy] (called by the MainActivity gate and the early
+     * "probe db health" startup task).
+     */
     val db: Database by lazy {
         val path = context.getDatabasePath(DATABASE_NAME).absolutePath
-
-        fun createDatabase(): Database {
-            return Database(path).also { database ->
-                if (!BuildConfig.DEBUG) {
-                    database.setCipherKey(WCDBKeyManager.getOrCreateKey(context))
-                }
-                database.enableAutoBackup(true)
-
-                database.setNotificationWhenCorrupted { db ->
-                    if (db.checkIfIsAlreadyCorrupted()) {
-                        val exception = RuntimeException("[WCDB] Database corruption detected in notification callback. Path: $path")
-                        L.e { "[WCDB] Database corruption detected in notification callback. Path: $path e:${exception.stackTraceToString()}" }
-
-                        // 直接记录恢复标记并重启应用
-                        recoveryPreferences.setRecoveryNeeded()
-                        restartApp()
-                    }
-                }
-
-                // Force a trivial SQL so the handle really opens and we can detect corruption immediately
-                // "PRAGMA journal_mode" is lightweight and will throw Code 26 if header/cipher mismatch.
-                database.execute("PRAGMA journal_mode")
+        Database(path).apply {
+            if (!BuildConfig.DEBUG) {
+                setCipherKey(resolveCipherKeyOnce()) // may throw cached WCDBKeyUnavailableException
+            }
+            enableAutoBackup(true)
+            // Runtime corruption detection (e.g. a write from a headless FCM/WS wake
+            // corrupts the DB after the MainActivity probe already passed). WCDB invokes
+            // this asynchronously on its own thread AFTER confirming corruption via
+            // PRAGMA integrity_check. We ONLY flip the @Volatile flag — no restart, no
+            // persisted flag, no DB touch. Consumers fast-skip; the next foreground
+            // MainActivity launch drives the real recovery via probeHealthy().
+            setNotificationWhenCorrupted {
+                reportCorruptionOnce("notification_callback")
+                markCorrupted()
             }
         }
+    }
 
-        try {
-            createDatabase()
-        } catch (e: WCDBKeyUnavailableException) {
-            // Cipher key unavailable is operationally equivalent to a corrupted database —
-            // route through the same recovery flow.
-            L.e { "[WCDB] key unavailable: ${e.stackTraceToString()}" }
-            recoveryPreferences.setRecoveryNeeded()
-            restartApp()
-        } catch (e: WCDBCorruptOrIOException) {
-            // Report the corruption to FirebaseCrashlytics
-            val exception = RuntimeException("[WCDB] Database corruption detected. Code: ${e.code}, Path: $path", e)
-            L.e { "[WCDB] Database corruption detected. Code: ${e.code}, Path: $path e:${exception.stackTraceToString()}" }
-
-            if (e.code == WCDBException.Code.Corrupt || e.code == WCDBException.Code.NotADatabase) {
-                recoveryPreferences.setRecoveryNeeded()
-                restartApp()
+    /**
+     * Forces the lazy open and runs a lightweight `PRAGMA journal_mode` to detect
+     * corruption / wrong cipher. Single owner of the probe logic — called by both the
+     * MainActivity recovery gate and the early "probe db health" startup task.
+     *
+     * Short-circuits when [dbCorrupted] is already set (RACE-3) so a known-corrupt DB
+     * is never re-probed (avoids redundant open attempts on a doomed handle and racing
+     * recovery). Sets [dbCorrupted] on any corruption / key-unavailable / unexpected
+     * error so consumers fast-skip.
+     */
+    fun probeHealthy(): DbHealth {
+        if (dbCorrupted) return DbHealth.CORRUPT
+        return try {
+            db.execute("PRAGMA journal_mode") // forces lazy open + detects corruption / wrong cipher
+            healthyProbePassed = true // telemetry: confirms readable → later corruption counts as mid-session
+            DbHealth.HEALTHY
+        } catch (e: WCDBException) {
+            val corruption = e.code == WCDBException.Code.Corrupt || e.code == WCDBException.Code.NotADatabase
+            L.e { "[WCDB][DBRecovery] probe failed code=${e.code} corrupt=$corruption msg=${e.message}" }
+            if (corruption) {
+                reportCorruptionOnce("probe")
+                dbCorrupted = true
+                DbHealth.CORRUPT
             } else {
-                throw e
+                DbHealth.HEALTHY // Busy etc. = transient, proceed
             }
+        } catch (e: WCDBKeyUnavailableException) {
+            L.e { "[WCDB][DBRecovery] cipher key unavailable: ${e.stackTraceToString()}" }
+            dbCorrupted = true
+            DbHealth.CORRUPT // cipher gone ≡ unreadable → recovery
+        } catch (e: Throwable) {
+            L.e { "[WCDB][DBRecovery] probe unexpected error: ${e.stackTraceToString()}" }
+            dbCorrupted = true
+            DbHealth.CORRUPT // fail safe → recovery (can still delete+resync)
         }
     }
 
     val attachment by lazy {
-        db.createTable("attachment", DBAttachmentModel.INSTANCE)
-        db.getTable("attachment", DBAttachmentModel.INSTANCE)
+        db.createTable("attachment", DBAttachmentModel)
+        db.getTable("attachment", DBAttachmentModel)
     }
     val contactor by lazy {
-        db.createTable("contactor", DBContactorModel.INSTANCE)
-        db.getTable("contactor", DBContactorModel.INSTANCE)
+        db.createTable("contactor", DBContactorModel)
+        db.getTable("contactor", DBContactorModel)
     }
 
     val forwardContext by lazy {
-        db.createTable("forward_context", DBForwardContextModel.INSTANCE)
-        db.getTable("forward_context", DBForwardContextModel.INSTANCE)
+        db.createTable("forward_context", DBForwardContextModel)
+        db.getTable("forward_context", DBForwardContextModel)
     }
 
     val forward by lazy {
-        db.createTable("forward", DBForwardModel.INSTANCE)
-        db.getTable("forward", DBForwardModel.INSTANCE)
+        db.createTable("forward", DBForwardModel)
+        db.getTable("forward", DBForwardModel)
     }
 
     val groupMemberContactor by lazy {
-        db.createTable("group_member_contactor", DBGroupMemberContactorModel.INSTANCE)
-        db.getTable("group_member_contactor", DBGroupMemberContactorModel.INSTANCE)
+        db.createTable("group_member_contactor", DBGroupMemberContactorModel)
+        db.getTable("group_member_contactor", DBGroupMemberContactorModel)
     }
 
     val group by lazy {
-        db.createTable("groups", DBGroupModel.INSTANCE)
-        db.getTable("groups", DBGroupModel.INSTANCE)
+        db.createTable("groups", DBGroupModel)
+        db.getTable("groups", DBGroupModel)
     }
 
     val mention by lazy {
-        db.createTable("mention", DBMentionModel.INSTANCE)
-        db.getTable("mention", DBMentionModel.INSTANCE)
+        db.createTable("mention", DBMentionModel)
+        db.getTable("mention", DBMentionModel)
     }
 
     val message by lazy {
-        db.createTable("message", DBMessageModel.INSTANCE)
-        db.getTable("message", DBMessageModel.INSTANCE)
+        db.createTable("message", DBMessageModel)
+        db.getTable("message", DBMessageModel)
     }
 
     val pendingMessageNew by lazy {
-        db.createTable("pending_message_new", DBPendingMessageModelNew.INSTANCE)
-        db.getTable("pending_message_new", DBPendingMessageModelNew.INSTANCE)
+        db.createTable("pending_message_new", DBPendingMessageModelNew)
+        db.getTable("pending_message_new", DBPendingMessageModelNew)
     }
 
     val quote by lazy {
-        db.createTable("quote", DBQuoteModel.INSTANCE)
-        db.getTable("quote", DBQuoteModel.INSTANCE)
+        db.createTable("quote", DBQuoteModel)
+        db.getTable("quote", DBQuoteModel)
     }
 
     val reaction by lazy {
-        db.createTable("reaction", DBReactionModel.INSTANCE)
-        db.getTable("reaction", DBReactionModel.INSTANCE)
+        db.createTable("reaction", DBReactionModel)
+        db.getTable("reaction", DBReactionModel)
     }
 
     val room by lazy {
-        db.createTable("room", DBRoomModel.INSTANCE)
-        db.getTable("room", DBRoomModel.INSTANCE)
+        db.createTable("room", DBRoomModel)
+        db.getTable("room", DBRoomModel)
     }
 
     val sharedContact by lazy {
-        db.createTable("shared_contact", DBSharedContactModel.INSTANCE)
-        db.getTable("shared_contact", DBSharedContactModel.INSTANCE)
+        db.createTable("shared_contact", DBSharedContactModel)
+        db.getTable("shared_contact", DBSharedContactModel)
     }
 
     val sharedContactPhone by lazy {
-        db.createTable("shared_contact_phone", DBSharedContactPhoneModel.INSTANCE)
-        db.getTable("shared_contact_phone", DBSharedContactPhoneModel.INSTANCE)
+        db.createTable("shared_contact_phone", DBSharedContactPhoneModel)
+        db.getTable("shared_contact_phone", DBSharedContactPhoneModel)
     }
 
     val translate by lazy {
-        db.createTable("translate", DBTranslateModel.INSTANCE)
-        db.getTable("translate", DBTranslateModel.INSTANCE)
+        db.createTable("translate", DBTranslateModel)
+        db.getTable("translate", DBTranslateModel)
     }
 
     val speechToText by lazy {
-        db.createTable("speech_to_Text", DBSpeechToTextModel.INSTANCE)
-        db.getTable("speech_to_Text", DBSpeechToTextModel.INSTANCE)
+        db.createTable("speech_to_Text", DBSpeechToTextModel)
+        db.getTable("speech_to_Text", DBSpeechToTextModel)
     }
 
     val draft by lazy {
-        db.createTable("draft", DBDraftModel.INSTANCE)
-        db.getTable("draft", DBDraftModel.INSTANCE)
+        db.createTable("draft", DBDraftModel)
+        db.getTable("draft", DBDraftModel)
     }
 
     val failedMessage by lazy {
-        db.createTable("failed_message", DBFailedMessageModel.INSTANCE)
-        db.getTable("failed_message", DBFailedMessageModel.INSTANCE)
+        db.createTable("failed_message", DBFailedMessageModel)
+        db.getTable("failed_message", DBFailedMessageModel)
     }
 
     val readInfo by lazy {
-        db.createTable("read_info", DBReadInfoModel.INSTANCE)
-        db.getTable("read_info", DBReadInfoModel.INSTANCE)
+        db.createTable("read_info", DBReadInfoModel)
+        db.getTable("read_info", DBReadInfoModel)
     }
 
     val resetIdentityKey by lazy {
-        db.createTable("reset_identity_key", DBResetIdentityKeyModel.INSTANCE)
-        db.getTable("reset_identity_key", DBResetIdentityKeyModel.INSTANCE)
+        db.createTable("reset_identity_key", DBResetIdentityKeyModel)
+        db.getTable("reset_identity_key", DBResetIdentityKeyModel)
     }
 
     val notificationCache by lazy {
-        db.createTable("notification_cache", DBNotificationCacheModel.INSTANCE)
-        db.getTable("notification_cache", DBNotificationCacheModel.INSTANCE)
+        db.createTable("notification_cache", DBNotificationCacheModel)
+        db.getTable("notification_cache", DBNotificationCacheModel)
     }
 
     val groupCryptoKeys by lazy {
-        db.createTable("group_crypto_keys", DBGroupCryptoKeysModel.INSTANCE)
-        db.getTable("group_crypto_keys", DBGroupCryptoKeysModel.INSTANCE)
+        db.createTable("group_crypto_keys", DBGroupCryptoKeysModel)
+        db.getTable("group_crypto_keys", DBGroupCryptoKeysModel)
     }
 
     val publicKeyInfo by lazy {
-        db.createTable("public_key_info", DBPublicKeyInfoModel.INSTANCE)
-        db.getTable("public_key_info", DBPublicKeyInfoModel.INSTANCE)
+        db.createTable("public_key_info", DBPublicKeyInfoModel)
+        db.getTable("public_key_info", DBPublicKeyInfoModel)
     }
 
     val jobSpec by lazy {
-        db.createTable("job_spec", DBJobSpecModel.INSTANCE)
-        db.getTable("job_spec", DBJobSpecModel.INSTANCE)
+        db.createTable("job_spec", DBJobSpecModel)
+        db.getTable("job_spec", DBJobSpecModel)
     }
 
     val jobConstraint by lazy {
-        db.createTable("job_constraint", DBJobConstraintModel.INSTANCE)
-        db.getTable("job_constraint", DBJobConstraintModel.INSTANCE)
+        db.createTable("job_constraint", DBJobConstraintModel)
+        db.getTable("job_constraint", DBJobConstraintModel)
+    }
+
+    val pendingRemovalContact by lazy {
+        db.createTable("pending_removal_contact", DBPendingRemovalContactModel)
+        db.getTable("pending_removal_contact", DBPendingRemovalContactModel)
     }
 
     // Map from lowercase tableName to the actual table
@@ -253,7 +349,8 @@ class WCDB @Inject constructor(
             groupCryptoKeys,
             publicKeyInfo,
             jobSpec,
-            jobConstraint
+            jobConstraint,
+            pendingRemovalContact
         ).associateBy { it.tableName.lowercase() }
     }
     fun deleteDatabaseFile() {
@@ -267,8 +364,12 @@ class WCDB @Inject constructor(
 
     /**
      * 模拟数据库损坏: 直接破坏数据库文件头部
+     *
+     * Debug-only: hard floor `if (!BuildConfig.DEBUG) return` so this destructive
+     * hook can never run in a release artifact even if its entry point ships.
      */
     fun testCorruptDatabase() {
+        if (!BuildConfig.DEBUG) return
         try {
             val dbFile = context.getDatabasePath(DATABASE_NAME)
             if (!dbFile.exists()) {
@@ -293,38 +394,7 @@ class WCDB @Inject constructor(
 
 
     fun testBackupManually() {
+        if (!BuildConfig.DEBUG) return
         db.backup()
-    }
-
-    fun testRecoveryEvent() {
-        recoveryPreferences.setRecoveryNeeded()
-        restartApp()
-    }
-
-    /**
-     * 重启应用 — relaunch the launch intent then kill the current process.
-     *
-     * Intent flags (issue #725 §9.5): on API ≥ 24, calling `startActivity` from a
-     * non-Activity Context (e.g. `Application`) with `FLAG_ACTIVITY_CLEAR_TASK`
-     * alone throws `AndroidRuntimeException`. The fix is to OR in
-     * `FLAG_ACTIVITY_NEW_TASK` so the system creates a fresh task for the
-     * relaunched activity. The immediate `Process.killProcess` previously masked
-     * the user-visible failure — the relaunch silently failed.
-     *
-     * Wrapped in try/catch so a still-failing `startActivity` (e.g. background
-     * launch restrictions on API 30+) still proceeds to the kill — the user
-     * cold-restarting the app is preferable to leaving a half-killed process.
-     */
-    private fun restartApp(): Nothing {
-        context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                context.startActivity(this)
-            } catch (e: Exception) {
-                L.e { "[WCDB] restartApp startActivity failed: ${e.stackTraceToString()}" }
-            }
-        }
-        Process.killProcess(Process.myPid())
-        exitProcess(0)
     }
 }

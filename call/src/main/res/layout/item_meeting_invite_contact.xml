@@ -68,6 +68,7 @@
                 android:layout_width="14dp"
                 android:layout_height="14dp"
                 android:layout_gravity="center"
+                android:importantForAccessibility="no"
                 android:src="@drawable/call_ic_selected"
                 android:tint="@android:color/white"
                 android:scaleType="fitCenter" />

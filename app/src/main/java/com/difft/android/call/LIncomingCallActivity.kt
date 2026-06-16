@@ -7,12 +7,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -53,6 +51,10 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class LIncomingCallActivity : BaseActivity() {
 
+    // Owns its own orientation logic in onCreate (locks portrait unless dual-pane);
+    // opt out of BaseActivity policy to avoid double-assignment on sw=600-839dp.
+    override fun shouldApplyOrientationPolicy(): Boolean = false
+
     @Inject lateinit var callToChatController: LCallToChatController
     @Inject lateinit var onGoingCallStateManager: OnGoingCallStateManager
     @Inject lateinit var inComingCallStateManager: InComingCallStateManager
@@ -77,10 +79,12 @@ class LIncomingCallActivity : BaseActivity() {
         IncomingCallPipController(this, binding) { hangUpTheCall("renderPipMode") }
     }
 
+    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
 
+        // Incoming call UI: lock to portrait on phones; tablets/foldables use unspecified.
         if (!WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
@@ -271,7 +275,6 @@ class LIncomingCallActivity : BaseActivity() {
         LCallManager.stopIncomingCallService(callIntent.roomId, tag)
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pipController.onPipModeChanged(isInPictureInPictureMode)

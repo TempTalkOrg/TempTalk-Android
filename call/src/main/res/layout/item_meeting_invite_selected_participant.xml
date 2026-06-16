@@ -43,8 +43,8 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            android:src="@drawable/tabler_invite_delete"
-            tools:ignore="ContentDescription" />
+            android:importantForAccessibility="no"
+            android:src="@drawable/tabler_invite_delete" />
     </FrameLayout>
 
     <androidx.appcompat.widget.AppCompatTextView

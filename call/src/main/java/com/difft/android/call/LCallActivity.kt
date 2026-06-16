@@ -10,7 +10,6 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
@@ -318,7 +317,6 @@ class LCallActivity : AppCompatActivity() {
         ViewUtil.hideNavigationBar(window)
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean, newConfig: Configuration
     ) {

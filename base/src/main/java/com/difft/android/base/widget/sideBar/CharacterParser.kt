@@ -33,7 +33,7 @@ object CharacterParser {
                 asc = 256 * hightByte + lowByte - 256 * 256
             }
         } catch (e: Exception) {
-            println("ERROR:ChineseSpelling.class-getChsAscii(String chs)$e")
+            L.e { "[CharacterParser] getChsAscii failed: ${e.stackTraceToString()}" }
         }
         return asc
     }

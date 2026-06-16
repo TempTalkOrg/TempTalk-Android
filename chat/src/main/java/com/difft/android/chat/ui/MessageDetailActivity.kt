@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -81,6 +82,8 @@ class MessageDetailActivity : BaseActivity() {
         super.onDestroy()
     }
 
+    // Numeric-only display (expires-in seconds); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private fun initView(message: MessageModel) {
         if (message.fromWho == globalServices.myId) {
             MessageDetailBitmapHolder.getBitmap()?.let {
@@ -123,7 +126,7 @@ class MessageDetailActivity : BaseActivity() {
 
             lifecycleScope.launch {
                 val sender = withContext(Dispatchers.IO) {
-                    wcdb.getContactorsFromAllTable(listOf(message.fromWho)).firstOrNull()
+                    wcdb.getContactorsFromAllTable(listOfNotNull(message.fromWho)).firstOrNull()
                 }
                 binding.tvSenderName.text = sender?.getDisplayNameForUI()
             }
@@ -168,12 +171,12 @@ class MessageDetailActivity : BaseActivity() {
             val receiverIds = if (message.roomType == 1) {
                 parseReceiverIds(message.receiverIds) ?: emptyList()
             } else {
-                listOf(message.roomId)
+                listOfNotNull(message.roomId)
             }
 
             var receivers = wcdb.getContactorsFromAllTable(receiverIds)
 
-            val readInfoList = wcdb.getReadInfoList(message.roomId).filter { it.readPosition >= message.systemShowTimestamp }
+            val readInfoList = wcdb.getReadInfoList(message.roomId ?: "").filter { it.readPosition >= message.systemShowTimestamp }
 
             // 普通群消息：如果 receiverIds 缺失但有 readInfoList，直接用 readInfoList 中的 uid 获取联系人（排除自己）
             if (message.roomType == 1 && message.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {

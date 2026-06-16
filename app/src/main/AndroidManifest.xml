@@ -28,6 +28,9 @@
         android:name="android.permission.READ_MEDIA_VIDEO"
         android:minSdkVersion="33" />
     <uses-permission
+        android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+        android:minSdkVersion="34" />
+    <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission
@@ -66,7 +69,6 @@
         android:name=".app.TempTalkApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -116,9 +118,7 @@
             android:name=".IndexActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden"
             android:exported="false"
-            android:launchMode="singleTask"
-            android:screenOrientation="portrait"
-            tools:ignore="LockedOrientationActivity" />
+            android:launchMode="singleTask" />
         <activity
             android:name=".setting.PrivacySettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -131,6 +131,11 @@
             android:name=".setting.BackgroundConnectionSettingsActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
+        <activity
+            android:name=".setting.ProxySettingsActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
             android:name=".setting.NotificationContentDisplaySettingsActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -203,9 +208,7 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:excludeFromRecents="true"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustResize"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".setting.SetPasscodeTimeoutActivity"
@@ -220,9 +223,7 @@
         <activity
             android:name=".setting.SetPatternActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            tools:ignore="LockedOrientationActivity" />
+            android:exported="false" />
 
 
         <activity
@@ -235,7 +236,8 @@
             android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:supportsPictureInPicture="true"
-            android:taskAffinity="com.difft.android.call.task" />
+            android:taskAffinity="com.difft.android.call.task"
+            tools:targetApi="27" />
 
         <activity
             android:name=".call.CriticalAlertActivity"
@@ -247,7 +249,8 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:screenOrientation="portrait"
-            tools:ignore="LockedOrientationActivity" />
+            tools:ignore="LockedOrientationActivity,DiscouragedApi"
+            tools:targetApi="27" />
 
         <activity
             android:name=".setting.TestActivity"
@@ -309,11 +312,13 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:exported="false"
             android:theme="@style/Theme.Chative.UCrop"
+            tools:ignore="MissingClass"
             tools:replace="android:exported,android:theme" />
         <activity
             android:name="com.yalantis.ucrop.UCropMultipleActivity"
             android:exported="false"
             android:theme="@style/Theme.Chative.UCrop"
+            tools:ignore="MissingClass"
             tools:replace="android:exported,android:theme" />
 
         <!--        <activity-->

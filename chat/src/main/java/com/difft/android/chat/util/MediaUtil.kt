@@ -227,7 +227,7 @@ object MediaUtil {
     //        return dimens;
     //    }
     fun isMms(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == "application/mms"
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == "application/mms"
     }
 
     @JvmStatic
@@ -262,36 +262,36 @@ object MediaUtil {
     }
 
     fun isVideo(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' }.startsWith("video/")
+        return !TextUtils.isEmpty(contentType) && contentType.trim().startsWith("video/")
     }
 
     fun isVcard(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == VCARD
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == VCARD
     }
 
     @JvmStatic
     fun isGif(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == "image/gif"
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == "image/gif"
     }
 
     @JvmStatic
     fun isJpegType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_JPEG
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_JPEG
     }
 
     @JvmStatic
     fun isHeicType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_HEIC
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_HEIC
     }
 
     @JvmStatic
     fun isHeifType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_HEIF
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_HEIF
     }
 
     @JvmStatic
     fun isAvifType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_AVIF
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_AVIF
     }
 
     fun isFile(attachment: Attachment): Boolean {
@@ -334,6 +334,20 @@ object MediaUtil {
 
     fun isImageOrVideoType(contentType: String?): Boolean {
         return isImageType(contentType) || isVideoType(contentType)
+    }
+
+    /**
+     * String-resource label for a media item with no text body (used by quote previews), keyed by
+     * contentType — image / video / audio, else generic attachment. Uses the same type checks as
+     * [isImageOrVideoType] so the label stays consistent with the thumbnail rendering, mirroring the
+     * conversation preview ([org.difft.app.database.previewContent]).
+     */
+    @androidx.annotation.StringRes
+    fun quoteTypeLabelRes(contentType: String?): Int = when {
+        isImageType(contentType) -> com.difft.android.chat.R.string.chat_message_image
+        isVideoType(contentType) -> com.difft.android.chat.R.string.chat_message_video
+        isAudioType(contentType) -> com.difft.android.chat.R.string.chat_message_audio
+        else -> com.difft.android.chat.R.string.chat_message_attachment
     }
 
     fun isStorySupportedType(contentType: String): Boolean {

@@ -1,7 +1,6 @@
 package com.difft.android.chat.jobmanager
 
 import android.content.Context
-import androidx.annotation.VisibleForTesting
 import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
 import java.util.UUID
@@ -99,13 +98,10 @@ abstract class Job(val parameters: Parameters) {
         private val backoffInterval: Long
     ) {
 
-        @VisibleForTesting
         fun isSuccess(): Boolean = resultType == ResultType.SUCCESS
 
-        @VisibleForTesting
         fun isRetry(): Boolean = resultType == ResultType.RETRY
 
-        @VisibleForTesting
         fun isFailure(): Boolean = resultType == ResultType.FAILURE
 
         fun getException(): RuntimeException? = runtimeException

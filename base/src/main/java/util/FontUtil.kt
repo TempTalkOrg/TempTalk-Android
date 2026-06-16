@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.get
 import kotlin.math.abs
 
 object FontUtil {
@@ -20,7 +22,7 @@ object FontUtil {
    */
   @JvmStatic
   fun canRenderEmojiAtFontSize(size: Float): Boolean {
-    val bitmap: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+    val bitmap: Bitmap = createBitmap(1, 1)
     val canvas = Canvas(bitmap)
     val paint = Paint()
 
@@ -34,6 +36,6 @@ object FontUtil {
     canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
     canvas.drawText(SAMPLE_EMOJI, 0.5f, 0.5f + halfHeight - descent, paint)
 
-    return bitmap.getPixel(0, 0) != 0
+    return bitmap[0, 0] != 0
   }
 }

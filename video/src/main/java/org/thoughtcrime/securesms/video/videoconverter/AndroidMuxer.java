@@ -5,7 +5,6 @@ import android.media.MediaFormat;
 import android.media.MediaMuxer;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 
 import org.thoughtcrime.securesms.video.interfaces.Muxer;
 
@@ -22,7 +21,6 @@ final class AndroidMuxer implements Muxer {
         muxer = new MediaMuxer(file.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
     }
 
-    @RequiresApi(26)
     AndroidMuxer(final @NonNull FileDescriptor fileDescriptor) throws IOException {
         muxer = new MediaMuxer(fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
     }

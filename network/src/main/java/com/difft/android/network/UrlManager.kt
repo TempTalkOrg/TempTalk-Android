@@ -1,6 +1,6 @@
 package com.difft.android.network
 
-import android.net.Uri
+import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.network.config.GlobalConfigsManager
@@ -173,7 +173,7 @@ class UrlManager @Inject constructor(
             "https://test.temptalk.app/",
             "https://yelling.pro/"
         ).mapNotNull { url ->
-            Uri.parse(url).host
+            url.toUri().host
         }
 
         return trustedHosts.any { trustHost ->

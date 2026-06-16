@@ -9,10 +9,14 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.getLifecycleOwner
+import com.difft.android.base.utils.getSafeContext
 import com.difft.android.base.utils.windowHeightPx
 import com.difft.android.base.utils.windowWidthPx
 import com.bumptech.glide.Glide
+import com.bumptech.glide.integration.webp.decoder.WebpDrawable
+import com.bumptech.glide.integration.webp.decoder.WebpDrawableTransformation
 import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.MultiTransformation
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
@@ -61,13 +65,19 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     fun setupImageView(message: TextChatMessage, shouldSaveToPhotos: Boolean = false, containerWidth: Int = 0) {
         currentShouldSaveToPhotos = shouldSaveToPhotos
         currentContainerWidth = containerWidth
+        val previousAttachmentId = currentAttachmentId
         currentAttachmentId = message.id
         currentMessage = message
 
-        // Reset all status views and clear stale image from previous ViewHolder binding
+        // Reset status views every bind. Only clear the bitmap when the bubble is being rebound
+        // to a DIFFERENT attachment (ViewHolder reuse during scroll) — same-attachment rebinds
+        // (status change, progress update, list-context refresh) keep the existing bitmap to
+        // avoid a visible blank-frame flash exposing the placeholder background.
         hideAllStatusViews()
-        Glide.with(context).clear(binding.imageView)
-        binding.imageView.setImageDrawable(null)
+        if (previousAttachmentId != null && previousAttachmentId != message.id) {
+            Glide.with(context.getSafeContext()).clear(binding.imageView)
+            binding.imageView.setImageDrawable(null)
+        }
 
         val attachment = message.attachment ?: return
 
@@ -338,6 +348,10 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        // Intentionally do NOT reset currentAttachmentId here. setupImageView relies on its
+        // surviving the detach so that, on the next bind of a recycled ViewHolder to a
+        // different message, previousAttachmentId differs from message.id and the stale
+        // bitmap from the previous bubble is cleared (scroll-recycle stale-image protection).
         progressJob?.cancel()
         progressJob = null
         loadImageJob?.cancel()
@@ -353,10 +367,15 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
                 file.lastModified() to file.length()
             }
 
-            Glide.with(context)
+            // Shared crop + corner spec so static/GIF bitmaps and animated WebP render identically.
+            val imageTransform = MultiTransformation(CenterCrop(), RoundedCorners(6.dp))
+
+            Glide.with(context.getSafeContext())
                 .load(attachmentPath)
                 .signature(ObjectKey(fileLastModified))
-                .transform(CenterCrop(), RoundedCorners(6.dp))
+                .transform(imageTransform)
+                // optionalTransform targets WebpDrawable; without it animated WebP loses corners/crop or freezes on first frame.
+                .optionalTransform(WebpDrawable::class.java, WebpDrawableTransformation(imageTransform))
                 .listener(object : RequestListener<Drawable> {
                     override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
                         L.e { "[MediaMsg] Load FAILED - path: $attachmentPath, contentType: $contentType, expectedSize: $expectedSize, actualFileSize: $actualFileSize, lastModified: $fileLastModified, error: ${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }

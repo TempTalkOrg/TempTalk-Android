@@ -3,13 +3,10 @@ package com.difft.android.base.widget
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.util.AttributeSet
@@ -22,6 +19,8 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.ImageViewCompat
@@ -130,13 +129,13 @@ class ChativePopupView @JvmOverloads constructor(
         }
 
     private fun tintDrawable(drawable: Drawable, color: Int): Drawable {
-        val bitmap = Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
 
         val tintFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
-        val tintedBitmap = BitmapDrawable(application.resources, bitmap)
+        val tintedBitmap = bitmap.toDrawable(application.resources)
         tintedBitmap.paint.colorFilter = tintFilter
 
         return tintedBitmap
@@ -242,7 +241,7 @@ object ChativePopupWindow {
         val popupWindow = PopupWindow(view, view.measuredWidth, view.measuredHeight)
         popupWindow.isOutsideTouchable = true
         popupWindow.isFocusable = true // Make the popup focusable to intercept outside clicks
-        popupWindow.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)) // Transparent background
+        popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable()) // Transparent background
 
         // Set a touch interceptor to handle outside clicks without propagating
         popupWindow.setTouchInterceptor { _, event ->
@@ -305,7 +304,7 @@ object ChativePopupWindow {
         // 创建并显示 PopupWindow
         val popupWindow = PopupWindow(popupView, popupWidth, popupHeight, true)
         popupWindow.isOutsideTouchable = true
-        popupWindow.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, adjustedX, adjustedY)
         return popupWindow
     }

@@ -9,7 +9,6 @@ import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.video.interfaces.MediaInput;
@@ -74,7 +73,6 @@ final class VideoTrackConverter {
 
     private Muxer mMuxer;
 
-    @RequiresApi(23)
     static @Nullable VideoTrackConverter create(
             final @NonNull MediaInput input,
             final long timeFrom,
@@ -93,7 +91,6 @@ final class VideoTrackConverter {
     }
 
 
-    @RequiresApi(23)
     private VideoTrackConverter(
             final @NonNull MediaExtractor videoExtractor,
             final int videoInputTrack,
@@ -192,9 +189,6 @@ final class VideoTrackConverter {
     }
 
     private boolean isHdr(MediaFormat inputVideoFormat) {
-        if (Build.VERSION.SDK_INT < 24) {
-            return false;
-        }
         try {
             final int colorInfo = inputVideoFormat.getInteger(MediaFormat.KEY_COLOR_TRANSFER);
             return colorInfo == MediaFormat.COLOR_TRANSFER_ST2084 || colorInfo == MediaFormat.COLOR_TRANSFER_HLG;

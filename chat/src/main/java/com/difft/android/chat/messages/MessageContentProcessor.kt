@@ -1,6 +1,7 @@
 package com.difft.android.chat.messages
 
 import android.content.Context
+import android.os.SystemClock
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
@@ -11,7 +12,9 @@ import com.difft.android.call.LCallManager
 import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
+import com.difft.android.base.utils.weakcontact.WeakContactClock
 import com.difft.android.chat.contacts.ContactsUpdater
+import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupUpdater
 import com.difft.android.chat.message.LocalMessageCreator
@@ -55,9 +58,11 @@ import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.delete
 import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.isGroupMember
+import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.wcdb
+import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.MessageNotificationUtil
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import javax.inject.Inject
@@ -87,6 +92,7 @@ class MessageContentProcessor @Inject constructor(
     private val localMessageCreator: LocalMessageCreator,
     private val groupCryptoRepo: com.difft.android.chat.crypto.GroupCryptoRepo,
     private val groupUtil: com.difft.android.chat.group.GroupUtil,
+    private val weakContactReconciler: WeakContactReconciler,
     private val gson: Gson,
 ) {
 
@@ -582,12 +588,25 @@ class MessageContentProcessor @Inject constructor(
         if (message.hasQuote()) {
             L.d { "[Message][${tag}] Found quote in handle text message" }
             val quoteMessage = message.quote
-            val quotedAttachments: List<QuotedAttachment> = ArrayList()
+            val quotedAttachments = quoteMessage.attachmentsList.map { protoQa ->
+                val thumbnailAttachment = if (protoQa.hasThumbnail()) {
+                    createQuoteThumbnailAttachment(protoQa.thumbnail)
+                } else null
+                QuotedAttachment(
+                    contentType = protoQa.contentType,
+                    fileName = protoQa.fileName,
+                    thumbnail = thumbnailAttachment,
+                    flags = protoQa.flags
+                )
+            }
             var text = quoteMessage.text
             if (TextUtils.isEmpty(quoteMessage.text)) {
-                text = context.getString(R.string.chat_message_attachment)
+                // No quote body (typical for media quotes from iOS/Mac) → show a precise type label
+                // (image/video/audio) instead of a generic "[Attachment]", matching the conversation
+                // preview (MessageModel.previewContent).
+                text = context.getString(MediaUtil.quoteTypeLabelRes(quotedAttachments.firstOrNull()?.contentType))
             }
-            quote = Quote(quoteMessage.id, quoteMessage.author, text, quotedAttachments)
+            quote = Quote(quoteMessage.id, quoteMessage.author, text, quotedAttachments.ifEmpty { null })
         }
         var forwardContext: ForwardContext? = null
         if (message.hasForwardContext()) {
@@ -863,6 +882,35 @@ class MessageContentProcessor @Inject constructor(
                 // 本地生成 critical alert 文本消息
                 createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice)
 
+            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_WEAK_CONTACT) {
+                val data = message.data
+                val uid = data?.uid
+                if (uid.isNullOrEmpty()) {
+                    L.w { "[Message][${tag}] weakContact missing uid, skip. changeType=${data?.changeType}" }
+                    return
+                }
+                if (data.serverTimestamp > 0L) {
+                    WeakContactClock.update(data.serverTimestamp, SystemClock.elapsedRealtime())
+                }
+                L.i { "[Message][${tag}] weakContact notify uid=$uid changeType=${data.changeType} reason=${data.reason} expireTime=${data.expireTime}" }
+                when (data.changeType) {
+                    0 -> {
+                        val snapshot = ContactorModel().also {
+                            it.id = uid
+                            it.name = data.name
+                            it.avatar = data.avatar
+                        }
+                        // Prefer the explicit deleteTime from the server; fall back to serverTimestamp
+                        // when notify=25 omits it (keeps parity with the deletedRecords API path).
+                        val deleteTime = data.deleteTime.takeIf { it > 0 } ?: data.serverTimestamp
+                        weakContactReconciler.enterWeak(uid, data.expireTime, data.reason, deleteTime, snapshot)
+                    }
+                    // ct=1 = real removal (expiry / immediate / cross-device); friend restore comes via directory action=0.
+                    1 -> weakContactReconciler.removeWeak(uid)
+
+                    else -> L.w { "[Message][${tag}] weakContact unknown changeType=${data.changeType} uid=$uid" }
+                }
+
             } else {
                 L.w { "[Message][${tag}] Unknown notifyType: ${message.notifyType}, timestamp: ${envelop.timestamp}" }
             }
@@ -933,6 +981,32 @@ class MessageContentProcessor @Inject constructor(
         attachmentPath,
         AttachmentStatus.LOADING.code
     )
+
+    /**
+     * Maps a quote's inline thumbnail [SignalServiceProtos.AttachmentPointer] to a domain
+     * [Attachment] for preview. The thumbnail travels inside the quote proto, so this carries
+     * no crypto material (key/digest = null) and no local file (path = null); status is SUCCESS
+     * because the inline bytes are immediately renderable. Empty/absent bytes collapse to
+     * thumbnail=null, size=0 so the renderer falls back to a type icon.
+     */
+    internal fun createQuoteThumbnailAttachment(pointer: SignalServiceProtos.AttachmentPointer): Attachment {
+        val thumbBytes = pointer.thumbnail?.toByteArray()?.takeIf { it.isNotEmpty() }
+        return Attachment(
+            id = "",
+            authorityId = 0L,
+            contentType = pointer.contentType,
+            key = null,
+            size = thumbBytes?.size ?: 0,
+            thumbnail = thumbBytes,
+            digest = null,
+            fileName = pointer.fileName.takeIf { pointer.hasFileName() },
+            flags = pointer.flags,
+            width = pointer.width,
+            height = pointer.height,
+            path = null,
+            status = AttachmentStatus.SUCCESS.code
+        )
+    }
 
     private fun updateDisappearingTime(forWhat: For, messageExpiry: Int, messageClearAnchor: Long) {
         messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor)

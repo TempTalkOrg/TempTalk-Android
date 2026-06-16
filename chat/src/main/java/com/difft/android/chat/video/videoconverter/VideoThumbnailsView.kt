@@ -10,7 +10,8 @@ import android.graphics.RectF
 import android.net.Uri
 import android.util.AttributeSet
 import android.view.View
-import androidx.annotation.RequiresApi
+import androidx.core.graphics.withClip
+import androidx.core.graphics.withRotation
 import com.difft.android.base.concurrent.AppExecutors
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.media.DecryptableUriMediaInput
@@ -34,7 +35,6 @@ import java.lang.ref.WeakReference
  * thread via [AppExecutors.mainHandler]. Subclasses must be declared `open` / non-final so
  * [afterDurationChange] remains overridable.
  */
-@RequiresApi(api = 23)
 abstract class VideoThumbnailsView : View {
 
     @JvmField protected var currentUri: Uri? = null
@@ -151,31 +151,27 @@ abstract class VideoThumbnailsView : View {
 
             tempRect.top = drawRect.top.toFloat()
             tempRect.bottom = drawRect.bottom.toFloat()
-            canvas.save()
-            canvas.clipPath(clippingPath)
+            canvas.withClip(clippingPath) {
+                for (i in current.indices) {
+                    tempRect.left = drawRect.left + i * thumbnailWidth
+                    tempRect.right = tempRect.left + thumbnailWidth
 
-            for (i in current.indices) {
-                tempRect.left = drawRect.left + i * thumbnailWidth
-                tempRect.right = tempRect.left + thumbnailWidth
-
-                val thumbnailBitmap = current[i] ?: continue
-                canvas.save()
-                canvas.rotate(180f, tempRect.centerX(), tempRect.centerY())
-                tempDrawRect.set(0, 0, thumbnailBitmap.width, thumbnailBitmap.height)
-                if (tempDrawRect.width() * thumbnailHeight > tempDrawRect.height() * thumbnailWidth) {
-                    val w = tempDrawRect.height() * thumbnailWidth / thumbnailHeight
-                    tempDrawRect.left = tempDrawRect.centerX() - (w / 2).toInt()
-                    tempDrawRect.right = tempDrawRect.left + w.toInt()
-                } else {
-                    val h = tempDrawRect.width() * thumbnailHeight / thumbnailWidth
-                    tempDrawRect.top = tempDrawRect.centerY() - (h / 2).toInt()
-                    tempDrawRect.bottom = tempDrawRect.top + h.toInt()
+                    val thumbnailBitmap = current[i] ?: continue
+                    withRotation(180f, tempRect.centerX(), tempRect.centerY()) {
+                        tempDrawRect.set(0, 0, thumbnailBitmap.width, thumbnailBitmap.height)
+                        if (tempDrawRect.width() * thumbnailHeight > tempDrawRect.height() * thumbnailWidth) {
+                            val w = tempDrawRect.height() * thumbnailWidth / thumbnailHeight
+                            tempDrawRect.left = tempDrawRect.centerX() - (w / 2).toInt()
+                            tempDrawRect.right = tempDrawRect.left + w.toInt()
+                        } else {
+                            val h = tempDrawRect.width() * thumbnailHeight / thumbnailWidth
+                            tempDrawRect.top = tempDrawRect.centerY() - (h / 2).toInt()
+                            tempDrawRect.bottom = tempDrawRect.top + h.toInt()
+                        }
+                        drawBitmap(thumbnailBitmap, tempDrawRect, tempRect, paint)
+                    }
                 }
-                canvas.drawBitmap(thumbnailBitmap, tempDrawRect, tempRect, paint)
-                canvas.restore()
             }
-
-            canvas.restore()
         }
     }
 

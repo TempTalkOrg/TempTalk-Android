@@ -1,5 +1,6 @@
 package com.difft.android.test.shadows
 
+import android.annotation.SuppressLint
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.Service
@@ -49,6 +50,8 @@ class ShadowThrowingService : ShadowService() {
          * Construct an FGSNAE. Public ctor on AOSP API 31+; fall back to
          * reflection if compile-time visibility is restricted (per F-R3-L1).
          */
+        // Test fixture exercised via @Config(sdk = [31]); never ships in APK.
+        @SuppressLint("NewApi")
         internal fun newFgsnae(message: String): ForegroundServiceStartNotAllowedException {
             return try {
                 ForegroundServiceStartNotAllowedException(message)

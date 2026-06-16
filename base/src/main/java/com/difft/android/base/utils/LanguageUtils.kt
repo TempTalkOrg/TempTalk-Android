@@ -240,7 +240,7 @@ object LanguageUtils {
             L.w { "[LanguageUtils] migration: commit to new file failed (legacy preserved)" }
             return
         }
-        legacyPrefs.edit().remove("SP_KEY_LANGUAGE").apply()
+        legacyPrefs.edit { remove("SP_KEY_LANGUAGE") }
         L.i { "[LanguageUtils] migration: moved language from sp_chative_account to language_prefs" }
     }
 

@@ -22,10 +22,10 @@ public class IntentUtils {
         Uri data;
         if (SdkVersionUtils.isQ()) {
             data = isParseUri ? Uri.parse(path) : Uri.fromFile(new File(path));
-        } else if (SdkVersionUtils.isMaxN()) {
-            data = isParseUri ? Uri.parse(path) : PictureFileProvider.getUriForFile(context, context.getPackageName() + ".luckProvider", new File(path));
         } else {
-            data = isParseUri ? Uri.parse(path) : Uri.fromFile(new File(path));
+            // isMaxN() (SDK_INT >= N/24) is always true at minSdk 26, so the final
+            // raw-Uri.fromFile else branch was dead; below is the API 26-28 path.
+            data = isParseUri ? Uri.parse(path) : PictureFileProvider.getUriForFile(context, context.getPackageName() + ".luckProvider", new File(path));
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -264,6 +265,8 @@ class SingleChatSettingActivity : BaseActivity() {
     /**
      * Handle the display and query of common groups between current user and contact
      */
+    // Numeric-only display (common-group count); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private fun handleCommonGroupsDisplay() {
         if (contactId == globalServices.myId || contactId.isBotId()) {
             mBinding.relGroupInCommon.visibility = View.GONE

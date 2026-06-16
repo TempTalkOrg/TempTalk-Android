@@ -103,6 +103,7 @@ class MessageContentProcessorForwardNoticeTest {
             localMessageCreator = localMessageCreator,
             groupCryptoRepo = mockk(relaxed = true),
             groupUtil = mockk(relaxed = true),
+            weakContactReconciler = mockk(relaxed = true),
             gson = Gson(),
         )
     }

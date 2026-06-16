@@ -290,7 +290,15 @@ class ContactorCacheManager @Inject constructor(
     fun clearContactorCache() {
         contactorCache.clear()
     }
-    
+
+    /**
+     * Precisely invalidate one user's cache entry (used by the weak-contact orchestration layer).
+     * contactorCache is a ConcurrentHashMap, so remove is thread-safe and a no-op for an absent uid.
+     */
+    fun invalidateUser(uid: String) {
+        contactorCache.remove(uid)
+    }
+
     /**
      * 将用户ID转换为Base58格式的用户名
      * 当无法获取显示名称时使用

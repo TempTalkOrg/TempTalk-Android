@@ -18,4 +18,175 @@
     <!-- Ignore some common warnings that might affect development efficiency -->
     <issue id="OptionalUsedAsFieldOrParameterType" severity="ignore" />
     <issue id="SameParameterValue" severity="ignore" />
-</lint> 
+
+    <!--
+        :lintchecks custom detectors — the logger implementation itself MUST
+        call android.util.Log / Timber directly (it is the source of those
+        wrappers; using L from L would be infinite recursion). The
+        printStackTrace(stream) overloads in BaseTree are the standard Java
+        idiom for stack-trace string extraction.
+
+        Scope is narrowly limited to the logger implementation files; all
+        other code MUST go through L.
+    -->
+    <issue id="LogNotL">
+        <ignore path="base/src/main/java/timber/log/" />
+        <ignore path="base/src/main/java/com/difft/android/base/log/lumberjack/" />
+    </issue>
+    <issue id="TimberDirectCall">
+        <ignore path="base/src/main/java/com/difft/android/base/log/lumberjack/" />
+    </issue>
+
+    <!--
+        ChativeHttpClient — the :network module hosts the wrapper itself plus
+        documented low-level clients (WebSocketConnection, SpeedTestModule)
+        that cannot reuse ChativeHttpClient due to circular DI dependencies.
+        Business modules outside :network MUST go through ChativeHttpClient.
+    -->
+    <issue id="ChativeHttpClientRequired">
+        <ignore path="network/" />
+    </issue>
+
+    <!--
+        ForegroundServiceStarter — the wrapper itself MUST call the raw
+        Service.startForeground. All other Service subclasses must go
+        through `ForegroundServiceStarter.startForegroundSafely(...)`.
+    -->
+    <issue id="ForegroundServiceStarterRequired">
+        <ignore path="base/src/main/java/com/difft/android/base/utils/ForegroundServiceStarter.kt" />
+    </issue>
+
+    <!--
+        Third-party lint detectors shipping with bundled libraries (e.g. Timber's
+        `WrongTimberUsageDetector`) sometimes use deprecated lint APIs that
+        produce a `LintError` meta-warning on AGP 8+. This is not a defect in
+        our code — it's a vendor-side issue we can't fix downstream.
+    -->
+    <issue id="LintError" severity="ignore" />
+
+    <!--
+        The L wrapper (base/log/lumberjack/L.kt) MUST call android.util.Log
+        directly inside the catch-block fallbacks for the very tree that backs
+        L — otherwise L's own failures would invoke L recursively. The wider
+        LogNotL detector already whitelists this path; the upstream Timber
+        `LogNotTimber` check needs the same scope exception.
+    -->
+    <issue id="LogNotTimber">
+        <ignore path="base/src/main/java/com/difft/android/base/log/lumberjack/" />
+    </issue>
+
+    <!--
+        GifUsage — speaking.gif is the legacy speaking-indicator animation
+        used in call/chat UI. Kept until migration to animated WebP / Lottie.
+        Tracker: #872 deps/build cleanup.
+    -->
+    <issue id="GifUsage" severity="ignore" />
+
+    <!--
+        Icon-density / vector-compat rules — project uses vector drawables
+        (VectorDrawableCompat) and AppCompat as primary icon strategy. The
+        few raster legacy icons don't warrant maintaining mdpi/hdpi/xhdpi
+        density variants.
+    -->
+    <issue id="IconDensities" severity="ignore" />
+    <issue id="IconMissingDensityFolder" severity="ignore" />
+    <issue id="IconLocation" severity="ignore" />
+    <issue id="IconXmlAndPng" severity="ignore" />
+    <issue id="IconDuplicatesConfig" severity="ignore" />
+    <issue id="UseCompatTextViewDrawableXml" severity="ignore" />
+    <issue id="UseCompatLoadingForColorStateLists" severity="ignore" />
+    <issue id="UseAppTint" severity="ignore" />
+    <issue id="VectorPath" severity="ignore" />
+
+    <!--
+        Per-locale resource override / app-bundle locale changes — we ship
+        all locales in the base APK; not splitting per-language.
+    -->
+    <issue id="AppBundleLocaleChanges" severity="ignore" />
+
+    <!--
+        Kapt → KSP migration is a long-running, separate workstream.
+        Tracker: #872 deps/build cleanup.
+    -->
+    <issue id="KaptUsageInsteadOfKsp" severity="ignore" />
+
+    <!--
+        Compose-Hilt @FieldSiteTargetOnQualifierAnnotation — Hilt's @AssistedInject
+        annotation processing emits @field:Qualifier internally; the warning is
+        for legacy Java field injection that we don't use.
+    -->
+    <issue id="FieldSiteTargetOnQualifierAnnotation" severity="ignore" />
+
+    <!--
+        GestureBackNavigation — predictive back gesture is not enabled
+        project-wide; activity-specific opt-in handled per-case.
+    -->
+    <issue id="GestureBackNavigation" severity="ignore" />
+
+    <!--
+        FrequentlyChangingValue — Compose State-snapshot hint; the flagged
+        case is intentional for animation drivers.
+    -->
+    <issue id="FrequentlyChangingValue" severity="ignore" />
+
+    <!--
+        MergeRootFrame — FrameLayout-could-be-merge optimization; the
+        flagged layouts are intentionally inflated as standalone roots.
+    -->
+    <issue id="MergeRootFrame" severity="ignore" />
+
+    <!--
+        InternalInsetResource — accessing Android internal "status_bar_height"
+        / "navigation_bar_height" identifiers; intentional for legacy inset
+        calculation paths (covered separately by @SuppressLint where needed).
+    -->
+    <issue id="InternalInsetResource" severity="ignore" />
+
+    <!--
+        PrivateResource — using @internal resource from a dependency;
+        flagged cases are intentional re-use of platform/library identifiers.
+    -->
+    <issue id="PrivateResource" severity="ignore" />
+
+    <!--
+        Dependency-freshness nags (default Warning, so they never gated CI under
+        warningsAsErrors=false). They're "a newer version is available" reminders,
+        not quality issues — but because we use lint baselines, updateLintBaseline
+        snapshots them and they drift on every upstream release, polluting unrelated
+        PR diffs. Dependency upgrades are tracked separately (#872) and done as
+        deliberate, regression-tested batches — not driven by lint. Disabled to stop
+        the baseline churn. (Signal leaves these at default Warning; we diverge only
+        because we baseline and Signal does not.)
+    -->
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+
+    <!--
+        ObsoleteSdkInt on mipmap-anydpi-v26 — lint advises "v26 is unnecessary at
+        minSdk 26, merge into mipmap-anydpi". That advice is WRONG for us: PR #887
+        proved the v26 qualifier is load-bearing for resource-resolution priority.
+        Without it the density WEBP rasters outrank the adaptive-icon XML and the
+        launcher renders a small centered icon on white. We keep v26 deliberately;
+        scope-ignore so this warning stops drifting back into the baseline on every
+        regen. Rule stays active everywhere else (real dead SDK_INT checks).
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="**/mipmap-anydpi-v26/**" />
+        <ignore path="**/mipmap-anydpi-v26" />
+    </issue>
+
+    <!--
+        Aligned16KB — the app ships on Google Play with all RELEASED ABIs
+        (arm64-v8a + armeabi-v7a) 16 KB-aligned. The only Aligned16KB warnings
+        come from x86 / x86_64 native libs in dependencies (e.g. JNA's
+        libjnidispatch.so), and x86 is NOT in our abiFilters — those .so files
+        are stripped at packaging and never reach a device. lint attributes the
+        warning to the dependency declaration (libs.versions.toml), not the .so
+        path, so a path-scoped <ignore> can't target "x86 only". Since every
+        warning is a guaranteed non-shipped-ABI false positive (and Google Play
+        itself enforces 16 KB compliance on the ABIs we DO ship), disable the
+        rule. Re-enable if abiFilters ever adds x86.
+    -->
+    <issue id="Aligned16KB" severity="ignore" />
+</lint>

@@ -3,6 +3,7 @@ package com.difft.android.chat.ui
 import android.content.Context
 import android.util.AttributeSet
 import android.view.ViewGroup
+import androidx.core.view.isNotEmpty
 import kotlin.math.max
 
 class FlowLayout @JvmOverloads constructor(
@@ -40,7 +41,7 @@ class FlowLayout @JvmOverloads constructor(
         
         // Reset tracking variables
         lastLineWidth = 0
-        lineCount = if (childCount > 0) 1 else 0  // Start with 1 line if we have children
+        lineCount = if (isNotEmpty()) 1 else 0  // Start with 1 line if we have children
 
 
         for (i in 0 until childCount) {

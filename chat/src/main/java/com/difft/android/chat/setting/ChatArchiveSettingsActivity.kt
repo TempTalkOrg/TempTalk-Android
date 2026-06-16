@@ -48,7 +48,6 @@ import difft.android.messageserialization.For
 import com.difft.android.base.widget.ComposeDialogManager
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -106,10 +105,9 @@ class ChatArchiveSettingsActivity : BaseActivity() {
     private fun MainContent() {
         val target = chatSettingViewModel.conversation // 直接使用构造方法传递的conversation
 
-        // 从 ViewModel 的 conversationSet 中获取 messageExpiry
-        val selectedOption = chatSettingViewModel.conversationSet
-            .map { it?.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime() }
-            .collectAsState(initial = messageArchiveManager.getDefaultMessageArchiveTime())
+        // 从 ViewModel 暴露的 messageExpiry StateFlow 收集，避免在 composition 中调用
+        // flow 操作符（lint: FlowOperatorInvokedInComposition）
+        val selectedOption = chatSettingViewModel.messageExpiry.collectAsState()
 
         Column(
             Modifier.fillMaxSize().systemBarsPadding()

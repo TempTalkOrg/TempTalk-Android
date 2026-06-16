@@ -4,7 +4,8 @@
     android:id="@+id/call_header_stub_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/bg1">
+    android:background="@color/bg1"
+    tools:ignore="Overdraw">
 
     <ViewStub
         android:id="@+id/call_header_stub"

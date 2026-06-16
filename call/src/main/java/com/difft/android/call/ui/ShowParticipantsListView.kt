@@ -1,5 +1,6 @@
 package com.difft.android.call.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
@@ -36,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -46,6 +46,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -53,6 +55,7 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.globalServices
@@ -70,6 +73,7 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShowParticipantsListView(
@@ -90,9 +94,20 @@ fun ShowParticipantsListView(
     val contactorCacheManager = entryPoint.contactorCacheManager
     val displayInfoMap by contactorCacheManager.participantDisplayMap.collectAsState()
 
+    val containerSize = LocalWindowInfo.current.containerSize
     val configuration = LocalConfiguration.current
-    val isWideScreen = configuration.screenWidthDp >= 600 ||
-        configuration.screenWidthDp > configuration.screenHeightDp
+    // Fall back to Configuration on the first composition, before the first layout pass populates
+    // containerSize. Otherwise width would be 0 and isWideScreen would be wrong for the first frame.
+    val widthDp = if (containerSize.width > 0) {
+        with(LocalDensity.current) { containerSize.width.toDp() }
+    } else {
+        configuration.screenWidthDp.dp
+    }
+    val isWideScreen = if (containerSize.width > 0 && containerSize.height > 0) {
+        widthDp >= 600.dp || containerSize.width > containerSize.height
+    } else {
+        widthDp >= 600.dp || configuration.screenWidthDp > configuration.screenHeightDp
+    }
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val panelTopPadding = if (!isUserSharingScreen && isWideScreen) statusBarTop + 16.dp else 24.dp
 
@@ -106,7 +121,7 @@ fun ShowParticipantsListView(
                     .testTag("call_participants_panel")
                     .fillMaxHeight()
                     .width(216.dp)
-                    .background(colorResource(id = com.difft.android.base.R.color.bg3_night)),
+                    .background(DifftTheme.colors.backgroundTertiary),
                 contentAlignment = Alignment.TopEnd
             ){
                 ConstraintLayout (
@@ -160,7 +175,7 @@ fun ShowParticipantsListView(
                                     },
                                 text = "${getString(R.string.call_attendees)} (${participants.size})",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                color = colorResource(id = com.difft.android.base.R.color.t_white),
+                                color = Color.White,
                                 maxLines = 1
                             )
 

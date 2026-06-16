@@ -1,7 +1,5 @@
 package com.luck.picture.lib.utils;
 
-import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -157,7 +155,6 @@ public class DensityUtil {
             // 导航栏显示存在bug："当用户隐藏导航栏时显示输入法的时候导航栏会跟随显示"，会导致隐藏输入法之后判断错误
             // 这个问题在 OneUI 2 & android 10 版本已修复
             if (RomUtils.isSamsung()
-                    && Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
                     && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 try {
                     return Settings.Global.getInt(activity.getContentResolver(), "navigationbar_hide_bar_enabled") == 0;
@@ -195,13 +192,10 @@ public class DensityUtil {
      * @param context
      * @return
      */
-    @TargetApi(14)
     public static int getNavigationBarWidth(Context context) {
         int result = 0;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-            if (isNavBarVisible(context)) {
-                return getInternalDimensionSize(context, "navigation_bar_width");
-            }
+        if (isNavBarVisible(context)) {
+            return getInternalDimensionSize(context, "navigation_bar_width");
         }
         return result;
     }
@@ -212,7 +206,6 @@ public class DensityUtil {
      * @param context
      * @return
      */
-    @TargetApi(14)
     public static int getNavigationBarHeight(Context context) {
         int result = 0;
         Resources res = context.getResources();
@@ -253,14 +246,9 @@ public class DensityUtil {
         return result;
     }
 
-    @SuppressLint("NewApi")
     private static float getSmallestWidthDp(Activity activity) {
         DisplayMetrics metrics = new DisplayMetrics();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            activity.getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
-        } else {
-            activity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        }
+        activity.getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
         float widthDp = metrics.widthPixels / metrics.density;
         float heightDp = metrics.heightPixels / metrics.density;
         return Math.min(widthDp, heightDp);

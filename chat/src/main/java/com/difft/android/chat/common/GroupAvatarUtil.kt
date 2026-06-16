@@ -9,6 +9,7 @@ import android.widget.ImageView
 import com.bumptech.glide.Glide
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
+import com.difft.android.base.utils.getSafeContext
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -167,7 +168,7 @@ object GroupAvatarUtil {
             if (!forceRefresh && cacheFile != null) {
                 withContext(Dispatchers.Main) {
                     imageView.visibility = android.view.View.VISIBLE
-                    Glide.with(context)
+                    Glide.with(context.getSafeContext())
                         .load(cacheFile)
                         .into(imageView)
                 }
@@ -184,7 +185,7 @@ object GroupAvatarUtil {
             val newCacheFile = getNewCacheFile(serverId)
             withContext(Dispatchers.Main) {
                 imageView.visibility = android.view.View.VISIBLE
-                Glide.with(context)
+                Glide.with(context.getSafeContext())
                     .load(newCacheFile)
                     .into(imageView)
             }
@@ -198,7 +199,7 @@ object GroupAvatarUtil {
                 val newCacheFile = getNewCacheFile(serverId)
                 withContext(Dispatchers.Main) {
                     imageView.visibility = android.view.View.VISIBLE
-                    Glide.with(context)
+                    Glide.with(context.getSafeContext())
                         .load(newCacheFile)
                         .into(imageView)
                 }

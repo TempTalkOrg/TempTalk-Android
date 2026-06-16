@@ -351,6 +351,10 @@ public final class ViewUtil {
                 y > viewY && y < viewY + view.getHeight();
     }
 
+    // Pre-API-30 fallback uses the framework's internal "status_bar_height" /
+    // "navigation_bar_height" dimen resource; getIdentifier() is necessary
+    // because these are platform resources, not app resources (R.* doesn't expose them).
+    @SuppressLint("DiscouragedApi")
     public static int getStatusBarHeight(@NonNull View view) {
         final WindowInsetsCompat rootWindowInsets = ViewCompat.getRootWindowInsets(view);
         if (Build.VERSION.SDK_INT > 29 && rootWindowInsets != null) {
@@ -365,6 +369,7 @@ public final class ViewUtil {
         }
     }
 
+    @SuppressLint("DiscouragedApi")
     public static int getNavigationBarHeight(@NonNull View view) {
         final WindowInsetsCompat rootWindowInsets = ViewCompat.getRootWindowInsets(view);
         if (Build.VERSION.SDK_INT > 29 && rootWindowInsets != null) {

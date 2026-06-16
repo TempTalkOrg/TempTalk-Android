@@ -5,7 +5,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.net.Uri
+import androidx.core.net.toUri
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.LCallConstants
@@ -260,7 +260,7 @@ class CriticalAlertManager @Inject constructor(
 
             try {
                 val ringtoneUri =
-                    Uri.parse("android.resource://${context.packageName}/${R.raw.critical_alert}")
+                    "android.resource://${context.packageName}/${R.raw.critical_alert}".toUri()
                 val ringtone = RingtoneManager.getRingtone(context, ringtoneUri)?.apply {
                     audioAttributes = AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)

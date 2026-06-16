@@ -9,8 +9,10 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStoreFile
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.storage.AppStateMigrations
 import com.difft.android.base.storage.EncryptedSerializer
+import com.difft.android.base.storage.UnavailableDataStore
 import com.difft.android.base.storage.StorageNames.APP_STATE_FILE
 import com.difft.android.base.storage.StorageNames.KEYSTORE_SECURE_CONFIG_URI
 import com.difft.android.base.storage.StorageNames.KEYSTORE_SECURE_USER_URI
@@ -40,6 +42,8 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.io.IOException
+import java.security.GeneralSecurityException
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -74,12 +78,13 @@ internal object StorageModule {
         @ApplicationContext context: Context,
         @Named("storage") scope: CoroutineScope,
     ): DataStore<UserAuthData> {
-        val aead = buildAead(
+        val aead = buildAeadOrNull(
             context,
             SECURE_USER_KEYSET_PREFS_FILE,
             SECURE_USER_KEYSET_PREFS_KEY,
             KEYSTORE_SECURE_USER_URI,
-        )
+            namespace = "secure_user",
+        ) ?: return UnavailableDataStore(UserAuthData.EMPTY)
         val encryptedSerializer = EncryptedSerializer(
             delegate = UserAuthDataSerializer,
             aead = aead,
@@ -102,12 +107,13 @@ internal object StorageModule {
         @ApplicationContext context: Context,
         @Named("storage") scope: CoroutineScope,
     ): DataStore<GlobalConfigData> {
-        val aead = buildAead(
+        val aead = buildAeadOrNull(
             context,
             SECURE_CONFIG_KEYSET_PREFS_FILE,
             SECURE_CONFIG_KEYSET_PREFS_KEY,
             KEYSTORE_SECURE_CONFIG_URI,
-        )
+            namespace = "secure_config",
+        ) ?: return UnavailableDataStore(GlobalConfigData.EMPTY)
         val encryptedSerializer = EncryptedSerializer(
             delegate = GlobalConfigDataSerializer,
             aead = aead,
@@ -136,6 +142,37 @@ internal object StorageModule {
             migrations = AppStateMigrations.build(context),
             produceFile = { context.preferencesDataStoreFile(APP_STATE_FILE) },
         )
+
+    /**
+     * Builds a Tink [Aead], or returns `null` (after logging + Crashlytics report) when the
+     * Android Keystore can't load the existing keyset (crash 8d61a948), so the caller falls
+     * back to [UnavailableDataStore] instead of crashing during Hilt injection.
+     *
+     * Catch scope is deliberately narrow — only [GeneralSecurityException] (InvalidKeyException,
+     * KeyStoreException, …) and [IOException] (keyset prefs read). Programming errors (NPE etc.)
+     * propagate so real bugs still surface. `internal` for direct catch-boundary unit tests.
+     */
+    internal fun buildAeadOrNull(
+        context: Context,
+        keysetPrefsFile: String,
+        keysetPrefsKey: String,
+        keystoreUri: String,
+        namespace: String,
+    ): Aead? =
+        try {
+            buildAead(context, keysetPrefsFile, keysetPrefsKey, keystoreUri)
+        } catch (e: GeneralSecurityException) {
+            reportKeystoreFailure(namespace, e)
+            null
+        } catch (e: IOException) {
+            reportKeystoreFailure(namespace, e)
+            null
+        }
+
+    /** Logs a Keystore-driven AEAD build failure. No sensitive data — `namespace` is a fixed enum string. */
+    private fun reportKeystoreFailure(namespace: String, e: Throwable) {
+        L.e { "[Storage] aead build failed namespace=$namespace ${e.stackTraceToString()}" }
+    }
 
     /**
      * Constructs a Tink [Aead] primitive bound to the per-namespace Keystore

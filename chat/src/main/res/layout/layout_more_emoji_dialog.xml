@@ -5,7 +5,8 @@
     android:layout_height="wrap_content"
     android:background="@color/bg.popup"
     android:orientation="vertical"
-    android:paddingHorizontal="12dp">
+    android:paddingHorizontal="12dp"
+    tools:ignore="Overdraw">
 
 
     <androidx.appcompat.widget.AppCompatTextView

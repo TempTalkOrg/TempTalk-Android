@@ -6,6 +6,9 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.websocket.api.util.TlsSocketFactory
 import com.difft.android.websocket.internal.util.Util
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
+import com.difft.android.network.proxy.ProxyConfigProvider
+import com.difft.android.network.proxy.ProxyTunnelDns
+import com.difft.android.network.proxy.ProxyTunnelSocketFactory
 import com.google.protobuf.InvalidProtocolBufferException
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -18,7 +21,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import okhttp3.ConnectionSpec
 import okhttp3.ConnectionSpec.Companion.RESTRICTED_TLS
-import okhttp3.Dns.Companion.SYSTEM
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -52,6 +54,7 @@ class WebSocketConnection @AssistedInject constructor(
     private val healthMonitor: HealthMonitor,
     @param:ApplicationContext
     private val context: Context,
+    private val proxyConfigProvider: ProxyConfigProvider,
 ) : WebSocketListener() {
 
     private val incomingRequests = LinkedBlockingQueue<WebSocketRequestMessage>()
@@ -69,7 +72,10 @@ class WebSocketConnection @AssistedInject constructor(
 
         val clientBuilder: OkHttpClient.Builder = OkHttpClient.Builder()
             .connectionSpecs(Util.immutableList(customConnectionSpec))
-            .dns(SYSTEM)
+            // Tunnels the WSS through the self-hosted proxy when enabled;
+            // falls back to system DNS + plain socket otherwise.
+            .dns(ProxyTunnelDns(proxyConfigProvider))
+            .socketFactory(ProxyTunnelSocketFactory(proxyConfigProvider))
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
@@ -188,6 +194,23 @@ class WebSocketConnection @AssistedInject constructor(
             currentWebsocketListener = null
             _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
         }
+    }
+
+    /**
+     * Forces OkHttp to drop all idle pooled sockets so the next `newWebSocket()` call
+     * builds a fresh TCP+TLS connection via [ProxyTunnelSocketFactory] / [ProxyTunnelDns].
+     *
+     * Defense-in-depth for the proxy-toggle reconnect path: even though [cancelConnection]
+     * closes the active socket, pooled idle entries (rare on a single-WS client but
+     * possible during handshake / before connect completes) could otherwise be reused
+     * by OkHttp's connection-pool fast-path, bypassing the updated proxy state.
+     *
+     * Cheap and idempotent — typically a no-op since this client has at most one
+     * connection at a time. Safe to call from any thread.
+     */
+    fun evictConnectionPool() {
+        L.i { "$name evictConnectionPool — flushing pooled idle sockets" }
+        okHttpClient.connectionPool.evictAll()
     }
 
     fun readRequest(): WebSocketRequestMessage {

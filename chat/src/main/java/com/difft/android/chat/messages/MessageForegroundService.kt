@@ -6,6 +6,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.net.toUri
 import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.log.lumberjack.L
@@ -23,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.difft.app.database.WCDBUpdateService
 
 /**
  * Background WebSocket connection foreground service.
@@ -55,6 +57,9 @@ class MessageForegroundService : Service() {
         L.i { "[MessageForegroundService] onCreate()" }
         postForegroundNotification()
         isRunning = true
+
+        // Bare call (NOT serviceScope.launch): collector anchors to WCDBUpdateService's process scope and must outlive this Service. Idempotent.
+        WCDBUpdateService.updatingRooms()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -122,7 +127,7 @@ class MessageForegroundService : Service() {
         val intent = packageManager.getLaunchIntentForPackage(packageName)!!.apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(LinkDataEntity.LINK_CATEGORY, LinkDataEntity.CATEGORY_BACKGROUND_CONNECTION_SETTINGS)
-            data = android.net.Uri.parse("app://notification/settings/${System.currentTimeMillis()}")
+            data = "app://notification/settings/${System.currentTimeMillis()}".toUri()
         }
         return PendingIntent.getActivity(
             this, FOREGROUND_ID, intent,

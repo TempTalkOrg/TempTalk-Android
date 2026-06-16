@@ -6,7 +6,8 @@
     android:id="@+id/activity_main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg1">
+    android:background="@color/bg1"
+    tools:ignore="Overdraw">
 
     <org.signal.imageeditor.core.ImageEditorView
         android:id="@+id/image_editor_view"

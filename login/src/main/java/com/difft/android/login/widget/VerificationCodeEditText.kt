@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.InputFilter
 import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatEditText
+import androidx.core.graphics.createBitmap
 import com.difft.android.login.R
 
 /**
@@ -94,6 +95,9 @@ class VerificationCodeEditText @JvmOverloads constructor(
 
     // GradientDrawable for box background with border
     private val boxDrawable = GradientDrawable()
+
+    // Reused per draw to avoid Rect allocation churn from canvas.clipBounds (cursor blinks at 2 Hz).
+    private val reusableClipBounds = Rect()
 
     // Cursor blink related
     private var cursorVisible = true
@@ -221,14 +225,23 @@ class VerificationCodeEditText @JvmOverloads constructor(
         val viewWidth = measuredWidth
         val viewHeight = measuredHeight
 
-        // Get the canvas clip bounds to know the actual visible area
-        val clipBounds = canvas.clipBounds
-        val visibleTop = clipBounds.top.toFloat()
-        val visibleHeight = (clipBounds.bottom - clipBounds.top).toFloat()
+        // Get the canvas clip bounds to know the actual visible area.
+        // getClipBounds(rect) returns false when the clip is empty — nothing visible,
+        // so skip the rest (matches the prior canvas.clipBounds → (0,0,0,0) → zero
+        // visible-height short-circuit; avoids allocating bitmaps for invisible draws).
+        if (!canvas.getClipBounds(reusableClipBounds)) return
+        val visibleTop = reusableClipBounds.top.toFloat()
+        val visibleHeight = (reusableClipBounds.bottom - reusableClipBounds.top).toFloat()
 
         // Calculate box dimensions to fit within visible area
         val boxWidth = (viewWidth - itemMargin * (boxCount - 1)) / boxCount
         val boxHeight = visibleHeight - borderWidth // Leave space for border
+
+        // Skip drawing when the visible area is too small to render a meaningful box
+        // (e.g. view is partially scrolled in / out — only a few px visible). Without
+        // this guard, drawableToBitmap below would call Bitmap.createBitmap with a
+        // non-positive height, throwing IllegalArgumentException.
+        if (boxWidth <= 0f || boxHeight <= 0f) return
 
         val currentTextLength = text?.length ?: 0
         val currentText = text?.toString() ?: ""
@@ -296,7 +309,7 @@ class VerificationCodeEditText @JvmOverloads constructor(
         } else {
             Bitmap.Config.RGB_565
         }
-        val bitmap = Bitmap.createBitmap(width, height, config)
+        val bitmap = createBitmap(width, height, config)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, width, height)
         drawable.draw(canvas)

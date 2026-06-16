@@ -11,11 +11,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.widget.ConstraintLayout
 import coil3.compose.AsyncImage
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.ui.LocalImageLoaderProvider
 
 private val avatarDiameter = 56.dp
@@ -56,7 +56,7 @@ private fun AvatarPlaceholder() {
         modifier = Modifier
             .size(avatarDiameter)
             .clip(CircleShape)
-            .background(colorResource(id = com.difft.android.base.R.color.bg2_night)),
+            .background(DifftTheme.colors.backgroundSecondary),
     )
 }
 

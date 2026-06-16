@@ -1,5 +1,6 @@
 package com.difft.android.call.ui.barrage
 
+import android.annotation.SuppressLint
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
@@ -20,13 +21,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.LocalWindowInfo
+import com.difft.android.base.ui.theme.DifftTheme
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.R
 import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.TextBubbleMessage
 import kotlin.math.roundToInt
@@ -52,6 +53,7 @@ private data class BubbleAnimParams(
  * **动画**：维护独立的 virtualElapsedMs，每帧推进量 ≤ 1.5 帧
  * （[MAX_FRAME_ADVANCE]），丢帧时虚拟时间不跳跃。
  */
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun BoxScope.BubbleView(
     emoji: String?,
@@ -64,17 +66,24 @@ fun BoxScope.BubbleView(
 ) {
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
+    val windowSize = LocalWindowInfo.current.containerSize
 
-    val params = remember(messageId) {
-        val screenHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
+    val params = remember(messageId, windowSize, density) {
+        val screenHeight = if (windowSize.height > 0) {
+            windowSize.height.toFloat()
+        } else {
+            with(density) { configuration.screenHeightDp.dp.toPx() }
+        }
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val bubblePadding = with(density) {
             if (isLandscape) 56.dp.toPx() else 120.dp.toPx()
         }
-        val screenWidth = with(density) {
-            val fullWidth = configuration.screenWidthDp.dp.toPx()
-            if (isLandscape) fullWidth / 2 else fullWidth
+        val fullWidth = if (windowSize.width > 0) {
+            windowSize.width.toFloat()
+        } else {
+            with(density) { configuration.screenWidthDp.dp.toPx() }
         }
+        val screenWidth = if (isLandscape) fullWidth / 2 else fullWidth
         val bubbleRiseHeight = screenHeight * 0.8f
         val speedFactor = if (!isLandscape) 0.6f else 0.5f
         val animationDuration = (durationMillis * speedFactor).toInt().coerceAtLeast(1000)
@@ -169,7 +178,7 @@ fun BoxScope.BubbleView(
         Text(
             modifier = bottomTextModifier
                 .background(
-                    color = colorResource(id = R.color.bg3_night),
+                    color = DifftTheme.colors.backgroundTertiary,
                     shape = RoundedCornerShape(4.dp),
                 )
                 .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -179,7 +188,7 @@ fun BoxScope.BubbleView(
                 lineHeight = 20.sp,
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight(400),
-                color = colorResource(id = R.color.t_primary_night),
+                color = DifftTheme.colors.textPrimary,
             ),
         )
     }

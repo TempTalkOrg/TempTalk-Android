@@ -71,6 +71,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
+        android:importantForAccessibility="no"
         android:src="@mipmap/chat_member_icon_tick"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"

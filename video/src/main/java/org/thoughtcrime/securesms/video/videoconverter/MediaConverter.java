@@ -24,7 +24,6 @@ import android.media.MediaFormat;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.StringDef;
 import androidx.annotation.WorkerThread;
 
@@ -85,7 +84,6 @@ public final class MediaConverter {
     }
 
     @SuppressWarnings("unused")
-    @RequiresApi(26)
     public void setOutput(final @NonNull FileDescriptor fileDescriptor) {
         mOutput = new FileDescriptorOutput(fileDescriptor);
     }
@@ -137,7 +135,6 @@ public final class MediaConverter {
     }
 
     @WorkerThread
-    @RequiresApi(23)
     public void convert() throws EncodingException, IOException {
         // Exception that may be thrown during release.
         Exception           exception           = null;
@@ -329,7 +326,6 @@ public final class MediaConverter {
         }
     }
 
-    @RequiresApi(26)
     private static class FileDescriptorOutput implements Output {
 
         final FileDescriptor fileDescriptor;

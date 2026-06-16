@@ -98,6 +98,7 @@ class LCallViewModel @AssistedInject constructor(
     private val callTlsProvider: CallTlsProvider,
     @ChativeHttpClientModule.Chat private val httpClient: dagger.Lazy<ChativeHttpClient>,
     private val userManager: UserManager,
+    private val proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider,
 ) : AndroidViewModel(application) {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -129,6 +130,7 @@ class LCallViewModel @AssistedInject constructor(
         audioHandler = audioHandler,
         audioProcessor = audioProcessor,
         e2eeEnable = e2eeEnable,
+        proxyConfigProvider = proxyConfigProvider,
         decryptCallMKey = { eKey, eMKey -> messageEncryptor.decryptCallKey(eKey, eMKey) }
     )
 

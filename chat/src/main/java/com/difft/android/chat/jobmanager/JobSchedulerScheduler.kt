@@ -7,17 +7,14 @@ import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
-import androidx.annotation.RequiresApi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.base.concurrent.AppExecutors
 
-@RequiresApi(26)
 class JobSchedulerScheduler(
     private val application: Application
 ) : Scheduler {
 
-    @RequiresApi(26)
     override fun schedule(delay: Long, constraints: List<Constraint>) {
         AppExecutors.Default.execute {
             val jobScheduler = application.getSystemService(JobScheduler::class.java)
@@ -47,7 +44,6 @@ class JobSchedulerScheduler(
     }
 
     @SuppressLint("SpecifyJobSchedulerIdRange")
-    @RequiresApi(api = 26)
     class SystemService : JobService() {
 
         override fun onStartJob(params: JobParameters): Boolean {

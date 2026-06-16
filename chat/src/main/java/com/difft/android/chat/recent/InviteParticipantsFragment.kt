@@ -1,5 +1,6 @@
 package com.difft.android.chat.recent
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -325,24 +326,7 @@ class InviteParticipantsFragment : Fragment() {
             setupClearButtonForTitleInput(text.toString())
         }
 
-        binding.instantMeetingTitleInput.setOnTouchListener { v, event ->
-            // Check if the touch event occurred on the end drawable
-            if (event.action == MotionEvent.ACTION_UP) {
-                val drawableRight =
-                    binding.instantMeetingTitleInput.compoundDrawables[2]
-                if (drawableRight != null) {
-                    val clearButtonStart =
-                        binding.instantMeetingTitleInput.right - drawableRight.bounds.width() - ViewUtil.dpToPx(
-                            16
-                        )
-                    if (event.rawX >= clearButtonStart) {
-                        binding.instantMeetingTitleInput.text.clear()  // Clear the editText content
-                        return@setOnTouchListener true
-                    }
-                }
-            }
-            return@setOnTouchListener false
-        }
+        installTitleInputClearButtonTouchHandler()
 
         binding.btnAddMember.setOnClickListener {
             val intent = Intent(
@@ -416,6 +400,29 @@ class InviteParticipantsFragment : Fragment() {
         }
 
         binding.labelMembers.setOnClickListener {}
+    }
+
+    // Intercepts taps on the title input's end-drawable "clear" button — sub-region
+    // of the EditText, not whole-view click; performClick() would mislead a11y.
+    @SuppressLint("ClickableViewAccessibility")
+    private fun installTitleInputClearButtonTouchHandler() {
+        binding.instantMeetingTitleInput.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                val drawableRight =
+                    binding.instantMeetingTitleInput.compoundDrawables[2]
+                if (drawableRight != null) {
+                    val clearButtonStart =
+                        binding.instantMeetingTitleInput.right - drawableRight.bounds.width() - ViewUtil.dpToPx(
+                            16
+                        )
+                    if (event.rawX >= clearButtonStart) {
+                        binding.instantMeetingTitleInput.text.clear()
+                        return@setOnTouchListener true
+                    }
+                }
+            }
+            return@setOnTouchListener false
+        }
     }
 
     private fun observeData() {

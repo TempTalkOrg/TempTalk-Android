@@ -53,10 +53,10 @@
         android:layout_marginStart="-24dp"
         android:background="@drawable/circle_tintable"
         android:clickable="false"
+        android:importantForAccessibility="no"
         android:padding="18dp"
         android:tint="@color/core_white"
         android:visibility="gone"
         app:srcCompat="@drawable/chat_ic_mic_24"
-        tools:ignore="ContentDescription"
         tools:visibility="visible" />
 </merge>

@@ -390,7 +390,7 @@ class PushTextSendJob @AssistedInject constructor(
             } else {
                 val group = groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false)
                 group?.members?.forEach { member ->
-                    recipientIds.add(member.id)
+                    member.id?.let { recipientIds.add(it) }
                 }
             }
 

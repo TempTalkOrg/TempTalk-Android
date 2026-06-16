@@ -1139,8 +1139,8 @@ public final class PictureThreadUtils {
             t.setDaemon(isDaemon);
             t.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
                 @Override
-                public void uncaughtException(Thread t, Throwable e) {
-                    System.out.println(e);
+                public void uncaughtException(Thread thread, Throwable e) {
+                    L.e(e, () -> "[PictureThreadUtils] uncaught exception in thread " + thread.getName());
                 }
             });
             t.setPriority(priority);

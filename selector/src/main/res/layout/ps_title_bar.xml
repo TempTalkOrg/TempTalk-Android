@@ -53,6 +53,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerVertical="true"
                 android:layout_toEndOf="@id/ps_tv_title"
+                android:importantForAccessibility="no"
                 android:scaleType="centerInside"
                 android:src="@drawable/ps_ic_default_arrow" />
         </RelativeLayout>
@@ -84,6 +85,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
+            android:importantForAccessibility="no"
             android:scaleType="centerInside"
             android:visibility="gone" />
 

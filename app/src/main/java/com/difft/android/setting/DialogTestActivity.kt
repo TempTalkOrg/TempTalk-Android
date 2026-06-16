@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -14,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -200,7 +200,7 @@ class DialogTestActivity : BaseActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DialogTestScreen() {
-    val context = LocalContext.current as DialogTestActivity
+    val activity = LocalActivity.current as? DialogTestActivity ?: return
 
     // === Composable function state ===
     var showMessageDialogComposable by remember { mutableStateOf(false) }
@@ -262,7 +262,7 @@ fun DialogTestScreen() {
 
                     // Message Dialog
                     Button(
-                        onClick = { context.showMessageDialogDirect() },
+                        onClick = { activity.showMessageDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Message Dialog (Direct)")
@@ -272,7 +272,7 @@ fun DialogTestScreen() {
 
                     // Wait Dialog
                     Button(
-                        onClick = { context.showWaitDialogDirect() },
+                        onClick = { activity.showWaitDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Wait Dialog (Direct)")
@@ -286,14 +286,14 @@ fun DialogTestScreen() {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { context.showBottomDialogDirect() },
+                            onClick = { activity.showBottomDialogDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Bottom Dialog", fontSize = 12.sp)
                         }
 
                         Button(
-                            onClick = { context.showBottomDialogWithViewDirect() },
+                            onClick = { activity.showBottomDialogWithViewDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Custom View", fontSize = 12.sp)
@@ -308,14 +308,14 @@ fun DialogTestScreen() {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { context.showFullScreenBottomDialogDirect() },
+                            onClick = { activity.showFullScreenBottomDialogDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Fullscreen", fontSize = 12.sp)
                         }
 
                         Button(
-                            onClick = { context.showFullScreenBottomDialogWithViewDirect() },
+                            onClick = { activity.showFullScreenBottomDialogWithViewDirect() },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Fullscreen View", fontSize = 12.sp)
@@ -326,7 +326,7 @@ fun DialogTestScreen() {
 
                     // Non-dismissible Dialog
                     Button(
-                        onClick = { context.showNonDismissibleDialogDirect() },
+                        onClick = { activity.showNonDismissibleDialogDirect() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Non-dismissible Dialog (Direct)")
@@ -458,7 +458,7 @@ fun DialogTestScreen() {
                         Button(
                             onClick = {
                                 ComposeDialogManager.showPopTip(
-                                    context,
+                                    activity,
                                     "Simple tip message"
                                 )
                             },
@@ -470,7 +470,7 @@ fun DialogTestScreen() {
                         Button(
                             onClick = {
                                 ComposeDialogManager.showTip(
-                                    context,
+                                    activity,
                                     "Success message",
                                     ComposeDialogManager.DialogType.SUCCESS
                                 )
@@ -490,7 +490,7 @@ fun DialogTestScreen() {
                         Button(
                             onClick = {
                                 ComposeDialogManager.showTip(
-                                    context,
+                                    activity,
                                     "Error message",
                                     ComposeDialogManager.DialogType.ERROR
                                 )
@@ -503,12 +503,12 @@ fun DialogTestScreen() {
                         Button(
                             onClick = {
                                 ComposeDialogManager.showTip(
-                                    context,
+                                    activity,
                                     "Warning message",
                                     ComposeDialogManager.DialogType.WARNING,
                                     actionText = "View",
                                     onAction = {
-                                        ComposeDialogManager.showTip(context, "Clicked View")
+                                        ComposeDialogManager.showTip(activity, "Clicked View")
                                     }
                                 )
                             },
@@ -533,15 +533,15 @@ fun DialogTestScreen() {
         cancelable = true,
         onConfirm = {
             showMessageDialogComposable = false
-            ComposeDialogManager.showTip(context, "User clicked OK")
+            ComposeDialogManager.showTip(activity, "User clicked OK")
         },
         onCancel = {
             showMessageDialogComposable = false
-            ComposeDialogManager.showTip(context, "User clicked Cancel")
+            ComposeDialogManager.showTip(activity, "User clicked Cancel")
         },
         onDismiss = {
             showMessageDialogComposable = false
-            ComposeDialogManager.showTip(context, "Dialog dismissed")
+            ComposeDialogManager.showTip(activity, "Dialog dismissed")
         }
     )
 
@@ -557,7 +557,7 @@ fun DialogTestScreen() {
         isVisible = showBottomDialogComposable,
         onDismiss = { 
             showBottomDialogComposable = false
-            ComposeDialogManager.showTip(context, "Bottom dialog dismissed")
+            ComposeDialogManager.showTip(activity, "Bottom dialog dismissed")
         }
     ) {
         Column(
@@ -603,7 +603,7 @@ fun DialogTestScreen() {
         isVisible = showBottomDialogViewComposable,
         onDismiss = { 
             showBottomDialogViewComposable = false
-            ComposeDialogManager.showTip(context, "Custom view bottom dialog dismissed")
+            ComposeDialogManager.showTip(activity, "Custom view bottom dialog dismissed")
         },
         layoutId = R.layout.test_custom_view_dialog
     ) { view ->
@@ -617,7 +617,7 @@ fun DialogTestScreen() {
         isVisible = showFullScreenDialogComposable,
         onDismiss = { 
             showFullScreenDialogComposable = false
-            ComposeDialogManager.showTip(context, "Fullscreen bottom dialog dismissed")
+            ComposeDialogManager.showTip(activity, "Fullscreen bottom dialog dismissed")
         }
     ) {
         Column(
@@ -653,7 +653,7 @@ fun DialogTestScreen() {
         isVisible = showFullScreenDialogViewComposable,
         onDismiss = { 
             showFullScreenDialogViewComposable = false
-            ComposeDialogManager.showTip(context, "Fullscreen custom view bottom dialog dismissed")
+            ComposeDialogManager.showTip(activity, "Fullscreen custom view bottom dialog dismissed")
         },
         layoutId = R.layout.test_custom_view_dialog
     ) { view ->
@@ -672,11 +672,11 @@ fun DialogTestScreen() {
         cancelable = false,
         onConfirm = { 
             showNonDismissibleDialogComposable = false
-            ComposeDialogManager.showTip(context, "User confirmed")
+            ComposeDialogManager.showTip(activity, "User confirmed")
         },
         onCancel = { 
             showNonDismissibleDialogComposable = false
-            ComposeDialogManager.showTip(context, "User cancelled")
+            ComposeDialogManager.showTip(activity, "User cancelled")
         }
     )
 }

@@ -17,10 +17,9 @@ import com.difft.android.base.utils.TextSizeUtil
  *  - 2 keyboard-height keys (Section C — historically split across `sp_chative_account`
  *    and `${packageName}_preferences`; `sp_chative_account` wins per design §4.3).
  *  - 1 migration bookkeeping marker (Section D, private to migration code).
- *  - 2 DB-recovery keys (Section E, migrated from `wcdb_recovery_data`).
  *
  * **Key-string preservation**: legacy key literals (`"SP_BYC_DOMAINS_TIME"`,
- * `"sp_speed_test_success_host"`, `"needRecoveryDatabase"`, etc.) are kept verbatim
+ * `"sp_speed_test_success_host"`, etc.) are kept verbatim
  * so `SharedPreferencesMigration` lambdas can move them across without rewriting.
  * Any rename here forfeits the legacy values — only rename in a follow-up cleanup
  * task with an explicit secondary migration.
@@ -94,14 +93,6 @@ object AppStateKeys {
     // in the chain). Once present, migrations 1–4 short-circuit on the next cold start.
     // `internal` because no consumer should be reading the marker outside migration code.
     internal val MIGRATION_VERSION = intPreferencesKey("__app_state_migration_version")
-
-    // ---------- Section E: DB-recovery flags (migrated from `wcdb_recovery_data`) ----------
-    //
-    // Key strings preserved verbatim — `DatabaseRecoveryPreferences` legacy SP used
-    // these same literals. Migration moves them; runtime callers go through the
-    // DataStore-backed `DatabaseRecoveryPreferences` rewrite (Task 5).
-    val NEED_RECOVERY_DATABASE = booleanPreferencesKey("needRecoveryDatabase")
-    val DATABASE_RECOVERY_FAILURE_COUNT = intPreferencesKey("databaseRecoveryFailureCount")
 }
 
 /**
@@ -159,8 +150,4 @@ object AppStateDefaults {
     // Section C defaults
     const val KEY_KEYBOARD_HEIGHT_PORTRAIT = 0
     const val KEY_KEYBOARD_HEIGHT_LANDSCAPE = 0
-
-    // Section E defaults
-    const val NEED_RECOVERY_DATABASE = false
-    const val DATABASE_RECOVERY_FAILURE_COUNT = 0
 }

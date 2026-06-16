@@ -36,8 +36,9 @@ class DraftRepository @Inject constructor(
             withContext(Dispatchers.IO) {
                 wcdb.draft.allObjects.mapNotNull { entity ->
                     try {
+                        val roomId = entity.roomId ?: return@mapNotNull null
                         val draft = gson.fromJson(entity.draftJson, Draft::class.java)
-                        entity.roomId to DraftWithTime(draft, entity.updatedAt)
+                        roomId to DraftWithTime(draft, entity.updatedAt)
                     } catch (e: Exception) {
                         L.e { "[DraftRepository] Error parsing draft: ${e.message}" }
                         null

@@ -253,7 +253,17 @@ internal class RoomEventDispatcher(
 
     private fun onConnected() {
         val rid = host.getCurrentRoomId() ?: return
-        L.i { "[Call] RoomEventDispatcher room event connected." }
+        // The SDK re-emits RoomEvent.Connected (not Reconnected) after an ICE-restart / soft
+        // resume, because a transient primary-PeerConnection DISCONNECTED clobbers the RESUMING
+        // state. On such a resume the existing mic track is preserved (full reconnect republishes
+        // it); only a first connect or an app-initiated server switch (disconnect + reconnect that
+        // tears the track down) leaves no mic publication. So gate the mic bring-up on the absence
+        // of a mic publication rather than on "is this the first connect": re-running it while a
+        // publication still exists would force-unmute a self-muted user (setMicrophoneEnabled(true)
+        // unmutes the published track, ignoring publishMuted) yet keep the UI showing muted, while
+        // a server switch still re-publishes the track as needed.
+        val hasMicPublication = room.localParticipant.getTrackPublication(Track.Source.MICROPHONE) != null
+        L.i { "[Call] RoomEventDispatcher room event connected. hasMicPublication=$hasMicPublication" }
         host.onFeedbackIdentityResolved(
             userSid = room.localParticipant.sid.value,
             userIdentity = room.localParticipant.identity?.value,
@@ -261,7 +271,7 @@ internal class RoomEventDispatcher(
         )
         callDataManager.updateCallingState(rid, isInCalling = true)
         if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
-            host.setMicEnabled(true)
+            if (!hasMicPublication) host.setMicEnabled(true)
             when {
                 room.remoteParticipants.size > 1 -> {
                     host.switchToInstantCall()
@@ -272,10 +282,12 @@ internal class RoomEventDispatcher(
             }
         } else {
             host.handleConnectedState()
-            room::ttCallResp.get()?.let { response ->
-                val autoPublishSilenceAudio = response.callOptions.autoPublishSilenceAudio
-                L.i { "[call] RoomEventDispatcher room event connected, autoPublishSilenceAudio=$autoPublishSilenceAudio" }
-                if (autoPublishSilenceAudio) host.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+            if (!hasMicPublication) {
+                room::ttCallResp.get()?.let { response ->
+                    val autoPublishSilenceAudio = response.callOptions.autoPublishSilenceAudio
+                    L.i { "[call] RoomEventDispatcher room event connected, autoPublishSilenceAudio=$autoPublishSilenceAudio" }
+                    if (autoPublishSilenceAudio) host.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+                }
             }
         }
         refreshRoomMetadata()

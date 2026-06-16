@@ -83,15 +83,15 @@ class MessageTestUtil @Inject constructor(
                 val testGroups = withContext(Dispatchers.IO) {
                     wcdb.group.allObjects.filter { it.name?.startsWith(testGroupNamePrefix) == true }
                 }
-                L.d { "[test] disband or leave testGroups:" + testGroups.joinToString { it.name } }
+                L.d { "[test] disband or leave testGroups:" + testGroups.joinToString { it.name ?: "" } }
 
                 withContext(Dispatchers.IO) {
                     testGroups.forEach { group ->
                         val role = group.members.find { member -> member.id == globalServices.myId }?.groupRole
                         val result = if (role == GROUP_ROLE_OWNER) {
-                            groupRepo.deleteGroup(group.gid)
+                            groupRepo.deleteGroup(group.gid ?: "")
                         } else {
-                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                            groupRepo.leaveGroup(group.gid ?: "", AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
                         }
                         if (result.status == 0) {
                             L.d { "[test] disband or leave Test Group success: ${group.name}" }
@@ -128,7 +128,7 @@ class MessageTestUtil @Inject constructor(
 
                 val content = generateTestMessage()
                 testGroups.forEach { group ->
-                    sendTextPush(group.gid, content, isConfidential)
+                    sendTextPush(group.gid ?: "", content, isConfidential)
                 }
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show("send success")
@@ -166,7 +166,7 @@ class MessageTestUtil @Inject constructor(
 
                 repeat(count) {
                     val content = generateTestMessage()
-                    sendTextPush(targetGroup.gid, content, isConfidential)
+                    sendTextPush(targetGroup.gid ?: "", content, isConfidential)
                 }
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show("send $count messages to ${targetGroup.name}")

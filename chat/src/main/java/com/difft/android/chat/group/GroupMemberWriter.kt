@@ -30,9 +30,12 @@ class GroupMemberWriter @Inject constructor() {
         }
         withContext(Dispatchers.IO) {
             try {
+                // signatureVerify is null/true two-state; WCDB-KSP reads a NULL column back as
+                // `false` (#901), which re-inserted as 0 would permanently exclude a pending
+                // member from the `signatureVerify IS NULL` re-verify query. Coerce false → null.
                 val oldVerifyMap: Map<String, Boolean?> = wcdb.groupMemberContactor
                     .getAllObjects(DBGroupMemberContactorModel.gid.eq(gid))
-                    .associate { (it.id ?: "") to it.signatureVerify }
+                    .associate { (it.id ?: "") to it.signatureVerify?.takeIf { v -> v } }
 
                 serverMembers.forEach { m ->
                     val uid = m.id ?: return@forEach

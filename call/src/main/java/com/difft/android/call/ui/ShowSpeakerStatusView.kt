@@ -19,7 +19,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -27,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.rememberAsyncImagePainter
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
@@ -71,7 +71,7 @@ fun ShowSpeakerStatusView(participant: Participant, userName: String?, speakingE
 
         val tintColor = when {
             audioMuted -> Color.Unspecified
-            else ->  colorResource(id = com.difft.android.base.R.color.t_info_night)
+            else ->  DifftTheme.colors.textInfo
         }
 
         Icon(
@@ -94,7 +94,7 @@ fun ShowSpeakerStatusView(participant: Participant, userName: String?, speakingE
                 lineHeight = 16.sp,
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight(400),
-                color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                color = DifftTheme.colors.textPrimary,
             )
         )
     }

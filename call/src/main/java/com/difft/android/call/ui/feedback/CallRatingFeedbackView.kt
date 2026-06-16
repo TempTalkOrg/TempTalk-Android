@@ -12,8 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.colorResource
 import com.difft.android.base.call.CallFeedbackRequestBody
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.data.FeedbackCallInfo
 import com.difft.android.call.ui.HideNavigationBarEffect
 
@@ -39,7 +39,7 @@ fun CallRatingFeedbackView(
                 .wrapContentHeight(),
             sheetState = sheetState,
             dragHandle = null,
-            containerColor = colorResource(id = com.difft.android.base.R.color.bg_popup),
+            containerColor = DifftTheme.colors.backgroundPopup,
             onDismissRequest = {
                 viewState = FeedbackViewState.Dismissed
                 onDismiss()

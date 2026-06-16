@@ -7,8 +7,8 @@ import com.difft.android.base.utils.TextSizeUtil
  * UserData layout mirrors the underlying storage layout (issue #725):
  *
  * ```
- * ┌─ secure_user.pb            Encrypted (Tink AEAD) — 15 auth/identity fields
- * │                            Field order matches UserAuthData @ProtoNumber tags 1..15.
+ * ┌─ secure_user.pb            Encrypted (Tink AEAD) — 17 auth/identity + proxy fields
+ * │                            Field order matches UserAuthData @ProtoNumber tags 1..15, 17..18 (16 is the migration marker).
  * └─ app_state.preferences_pb  Plain key-value — UX preferences + module-owned state
  *                              Grouped by domain (UX / lifecycle / lock / sync /
  *                              notification / message-service / image-editor / call / network).
@@ -22,8 +22,8 @@ import com.difft.android.base.utils.TextSizeUtil
  */
 data class UserData(
     // ═══════════════════════════════════════════════════════════════
-    // [secure_user.pb] Auth / identity — encrypted Tink AEAD
-    //   Field order matches UserAuthData @ProtoNumber tags 1..15
+    // [secure_user.pb] Auth / identity + self-hosted proxy — encrypted Tink AEAD
+    //   Field order matches UserAuthData @ProtoNumber tags 1..15, 17..18
     // ═══════════════════════════════════════════════════════════════
     var account: String? = null,
     var baseAuth: String? = null,
@@ -41,6 +41,8 @@ data class UserData(
     var aciIdentityOldPublicKey: String? = null, // 旧ACI身份公钥
     var aciIdentityOldPrivateKey: String? = null, // 旧ACI身份私钥
     var aciIdentityKeyGenTime: Long = 0, // ACI身份密钥生成时间
+    var proxyShareLink: String? = null, // self-hosted proxy share link (ytp://config?d=...). Contains TURN secret when set.
+    var proxyEnabled: Boolean = false,   // self-hosted proxy on/off toggle. Orthogonal to whether proxyShareLink parses successfully.
 
     // ═══════════════════════════════════════════════════════════════
     // [app_state.preferences_pb] Plain key-value, grouped by domain

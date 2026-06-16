@@ -21,6 +21,7 @@ import com.difft.android.network.responses.AuthToken
 import com.difft.android.network.responses.ContactsDataResponse
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.network.responses.CriticalAlertResponse
+import com.difft.android.network.responses.DeletedRecordDto
 import com.difft.android.network.responses.GetConversationSetResponseBody
 import com.difft.android.network.responses.GrayConfigData
 import com.difft.android.network.responses.PendingMessageResponse
@@ -77,6 +78,26 @@ interface HttpService {
 
     @DELETE("v3/friend/{uid}")
     suspend fun fetchDeleteContact(
+        @Path("uid") uid: String,
+        @Header("Authorization") token: String
+    ): BaseResponse<Any>
+
+    /**
+     * Fetch the weak-contact pending-removal set (bare array, unpaged, 15-day window).
+     * serverTimestamp comes from the outer BaseResponse.
+     * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
+     */
+    @GET("v3/friend/deletedRecords")
+    suspend fun fetchDeletedRecords(
+        @Header("Authorization") token: String
+    ): BaseResponse<List<DeletedRecordDto>>
+
+    /**
+     * Remove a weak contact immediately. Idempotent; on success the server pushes changeType=1 to sync other devices.
+     * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
+     */
+    @DELETE("v3/friend/deletedRecords/{uid}")
+    suspend fun deleteDeletedRecord(
         @Path("uid") uid: String,
         @Header("Authorization") token: String
     ): BaseResponse<Any>

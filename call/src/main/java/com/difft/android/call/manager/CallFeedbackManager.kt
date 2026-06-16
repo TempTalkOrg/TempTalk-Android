@@ -8,6 +8,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import com.difft.android.base.call.CallFeedbackRequestBody
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.storage.AppStateKeys
 import com.difft.android.base.storage.di.AppStateDataStore
@@ -117,18 +118,20 @@ class CallFeedbackManager @Inject constructor(
     fun showCallFeedbackView(activity: Activity, callInfo: FeedbackCallInfo) {
         val composeView = ComposeView(activity)
         composeView.setContent {
-            CallRatingFeedbackView(
-                callInfo = callInfo,
-                onDisplay = {
-                    clearCallFeedbackInfo()
-                },
-                onDismiss = {
-                    CallComposeUiUtil.removeComposeViewFromActivity(activity, composeView)
-                },
-                onSubmit = { data ->
-                    submitCallFeedback(data)
-                }
-            )
+            DifftTheme {
+                CallRatingFeedbackView(
+                    callInfo = callInfo,
+                    onDisplay = {
+                        clearCallFeedbackInfo()
+                    },
+                    onDismiss = {
+                        CallComposeUiUtil.removeComposeViewFromActivity(activity, composeView)
+                    },
+                    onSubmit = { data ->
+                        submitCallFeedback(data)
+                    }
+                )
+            }
         }
         try {
             CallComposeUiUtil.addComposeViewToActivity(activity, composeView)

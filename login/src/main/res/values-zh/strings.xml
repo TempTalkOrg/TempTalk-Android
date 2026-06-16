@@ -59,4 +59,5 @@
     <string name="register_intro_page1_body">任意一方撤回或退出，双方记录即刻消失，不可恢复。重要内容，请自行保留。</string>
     <string name="register_intro_page2_title">仅双方可见</string>
     <string name="register_intro_page2_body">端到端加密。除你和对方之外，任何人都无法查看聊天内容。</string>
+    <string name="login_use_proxy">使用代理</string>
 </resources>

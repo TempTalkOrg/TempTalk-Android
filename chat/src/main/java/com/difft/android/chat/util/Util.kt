@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.core.net.toUri
 import android.os.PersistableBundle
 import android.text.TextUtils
 import com.difft.android.base.widget.ToastUtil
@@ -147,7 +148,7 @@ object Util {
 
     @JvmStatic
     fun uri(uri: String?): Uri? =
-        uri?.let { Uri.parse(it) }
+        uri?.toUri()
 
     // endregion
 

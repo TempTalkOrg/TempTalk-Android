@@ -2,7 +2,6 @@ package com.difft.android.login.sms
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
 import com.difft.android.base.log.lumberjack.L
 
 /**
@@ -74,12 +73,10 @@ class ClipboardOtpHelper(
         if (!isListening) return
 
         // Check if clipboard content is newer than when we started listening
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val clipTimestamp = clipboardManager?.primaryClip?.description?.timestamp ?: 0
-            if (clipTimestamp < startTime) {
-                L.i { "[ClipboardOtp] Clipboard content is old, skipping" }
-                return
-            }
+        val clipTimestamp = clipboardManager?.primaryClip?.description?.timestamp ?: 0
+        if (clipTimestamp < startTime) {
+            L.i { "[ClipboardOtp] Clipboard content is old, skipping" }
+            return
         }
 
         val currentText = getCurrentClipboardText()

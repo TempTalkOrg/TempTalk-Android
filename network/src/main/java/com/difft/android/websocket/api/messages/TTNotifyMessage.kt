@@ -3,6 +3,7 @@ package com.difft.android.websocket.api.messages
 
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.google.gson.JsonElement
+import com.google.gson.annotations.SerializedName
 
 /**
  * Represents a decrypted Signal Service notify message.
@@ -33,6 +34,9 @@ data class TTNotifyMessage(
         const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 // critical alert
 
         const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2 = 22 // new critical alert
+
+        const val NOTIFY_MESSAGE_TYPE_WEAK_CONTACT = 25 // weak contact (delayed removal)
+        // reuses Data.changeType: 0=enter weak / 1=remove
 
         //本地创建 type
         const val NOTIFY_MESSAGE_TYPE_LOCAL = 10000
@@ -107,6 +111,16 @@ data class Data(
     val alertBody: String? = null,
     val showCriticalAlert: Boolean = false,
     val sourceDevice: Int = DEFAULT_DEVICE_ID,
+    // weak-contact (delayed-removal) notifyType=25 fields. changeType/serverTimestamp above are reused.
+    // Wire names anchored with @SerializedName so the Kotlin name is decoupled from the server contract.
+    // The server unified the identifier on `uid` and the expiry on `expireTime` (same wire names as
+    // the deletedRecords API [DeletedRecordDto]).
+    @SerializedName("uid") var uid: String? = null,            // target uid (top-level, distinct from members[].uid)
+    @SerializedName("name") var name: String? = null,          // server snapshot displayName
+    @SerializedName("avatar") var avatar: String? = null,      // Avatar2 JSON snapshot {"attachmentId":...}
+    @SerializedName("expireTime") var expireTime: Long = 0,    // absolute expiry, ms UTC (valid when changeType=0)
+    @SerializedName("reason") var reason: Int = 0,             // 0=deleted / 1=deregistered (client does not distinguish)
+    @SerializedName("deleteTime") var deleteTime: Long = 0,    // entered-weak time, ms UTC (matches DeletedRecordDto.deleteTime)
     )
 
 data class Group(

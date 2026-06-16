@@ -156,13 +156,12 @@ private fun CallContentContainer(
             .fillMaxSize()
             .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
             .testTag("call_root")
-            .pointerInput(Unit) {
+            .pointerInput(isUserSharingScreen) {
+                if (!isUserSharingScreen) return@pointerInput
                 awaitPointerEventScope {
                     while (true) {
                         awaitPointerEvent(PointerEventPass.Initial)
-                        if (viewModel.callUiController.isShareScreening.value) {
-                            viewModel.callUiController.notifyScreenShareInteraction()
-                        }
+                        viewModel.callUiController.notifyScreenShareInteraction()
                     }
                 }
             }
@@ -237,12 +236,12 @@ private fun OneOnOneCallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    isDualPane: Boolean = false,
     onInviteUsersClick: () -> Unit,
     onInviteViewAction: (InviteViewState) -> Unit,
     onWindowZoomOutClick: () -> Unit,
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDualPane: Boolean = false
 ) {
     CallSurface(modifier = modifier) {
         SingleParticipantCallPage(
@@ -300,13 +299,13 @@ private fun MultiParticipantCallContent(
     conversationId: String?,
     autoHideTimeout: Long,
     muteOtherEnabled: Boolean,
-    isDualPane: Boolean = false,
     onInviteUsersClick: () -> Unit,
     onInviteViewAction: (InviteViewState) -> Unit,
     onWindowZoomOutClick: () -> Unit,
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
     onBottomCallEndAction: (BottomCallEndAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDualPane: Boolean = false
 ) {
     CallSurface(modifier = modifier) {
         MultiParticipantCallPage(

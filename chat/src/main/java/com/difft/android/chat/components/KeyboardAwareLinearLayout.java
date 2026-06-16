@@ -15,6 +15,7 @@
  */
 package com.difft.android.chat.components;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Rect;
 import android.os.Build;
@@ -135,7 +136,7 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
   protected void onAttachedToWindow() {
     super.onAttachedToWindow();
     rotation = getDeviceRotation();
-    if (Build.VERSION.SDK_INT >= 23 && getRootWindowInsets() != null) {
+    if (getRootWindowInsets() != null) {
       int          bottomInset;
       WindowInsets windowInsets = getRootWindowInsets();
 
@@ -152,6 +153,7 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
     }
   }
 
+  @SuppressLint({"PrivateApi", "DiscouragedPrivateApi"})
   private int getViewInset() {
     try {
       Field attachInfoField = View.class.getDeclaredField("mAttachInfo");
@@ -165,8 +167,11 @@ public class KeyboardAwareLinearLayout extends LinearLayoutCompat {
           return insets.bottom;
         }
       }
-    } catch (NoSuchFieldException | IllegalAccessException e) {
-      // Do nothing
+    } catch (Exception e) {
+      // Catch Exception (not Throwable) — Android 11+ hidden-API enforcement throws
+      // RuntimeException wrapping the reflection error, which the original narrow
+      // multi-catch missed and would bubble up through onMeasure → activity crash.
+      // Errors (OOM, StackOverflow) intentionally propagate.
       L.w(e, () -> TAG + " getViewInset failed");
     }
     return statusBarHeight;

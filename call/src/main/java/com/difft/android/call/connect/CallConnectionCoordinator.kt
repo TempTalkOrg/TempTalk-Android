@@ -95,6 +95,11 @@ internal class CallConnectionCoordinator(
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
+        if (roomCtl.isProxyActiveWithoutTurn()) {
+            L.w { "[Call] blocked: proxy active without TURN, media would expose client IP" }
+            failWith(StartCallException(getString(R.string.call_proxy_turn_required_tip)))
+            return false
+        }
 
         var serviceUrls: ServiceUrls? = LCallManager.ensureCallServiceUrlsForCall()
             ?: DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
@@ -208,6 +213,11 @@ internal class CallConnectionCoordinator(
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
+        if (roomCtl.isProxyActiveWithoutTurn()) {
+            L.w { "[Call] manualSwitch blocked: proxy active without TURN, media would expose client IP" }
+            failWith(StartCallException(getString(R.string.call_proxy_turn_required_tip)))
+            return false
+        }
         val normalizedUrl = MeetingConnectionPlanner.normalizeConnectUrl(serverUrl) ?: run {
             failWith(StartCallException(getString(R.string.call_params_url_exception_tip)))
             return false
@@ -310,11 +320,12 @@ internal class CallConnectionCoordinator(
             LCallEngine.serverNodeSelected,
             LCallEngine.connectionType,
         ) { node, connectionType -> node to connectionType }
-            .collect { (selectedNode, connectionType) ->
+            .collect { (selectedNode, _) ->
                 val status = roomCtl.callStatus.value
                 if (status != CallStatus.CONNECTED && status != CallStatus.RECONNECTED) return@collect
 
-                val useQuicSignal = connectionType == CONNECTION_TYPE.HTTP3_QUIC
+                // Honors the proxy QUIC→WSS override centrally (see LCallEngine.isUseQuicSignal).
+                val useQuicSignal = LCallEngine.isUseQuicSignal()
                 val connectionTypeChanged = roomCtl.isUseQuicSignal() != useQuicSignal
                 if (selectedNode == null && !connectionTypeChanged) return@collect
 

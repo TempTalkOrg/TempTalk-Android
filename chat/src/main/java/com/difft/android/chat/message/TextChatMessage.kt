@@ -149,7 +149,7 @@ fun TextChatMessage.shouldShowFail(): Boolean {
  * Gets the relevant attachment for this message.
  * For single forward messages, returns the forward attachment, otherwise returns the message attachment.
  */
-private fun TextChatMessage.getRelevantAttachment(): Attachment? {
+internal fun TextChatMessage.getRelevantAttachment(): Attachment? {
     val forwards = forwardContext?.forwards
     return if (forwards?.size == 1) {
         forwards.firstOrNull()?.attachments?.firstOrNull()

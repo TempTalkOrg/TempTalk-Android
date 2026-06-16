@@ -16,6 +16,7 @@ import androidx.annotation.ColorInt
 import androidx.annotation.Dimension
 import androidx.appcompat.widget.AppCompatSeekBar
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.withSave
 import com.difft.android.chat.scribbles.HSVColorSlider.toHue
 import com.difft.android.chat.util.Util
 import com.difft.android.chat.util.ViewUtil
@@ -162,17 +163,17 @@ object HSVColorSlider {
     }
 
     return customizeOnDraw { wrapped, canvas ->
-      canvas.save()
-      bounds.set(this.bounds)
-      bounds.inset(0f, (height / 2f) + 1)
+      canvas.withSave {
+        bounds.set(this@forSeekBar.bounds)
+        bounds.inset(0f, (height / 2f) + 1)
 
-      clipPath.rewind()
-      clipPath.addRoundRect(bounds, radii, Path.Direction.CW)
+        clipPath.rewind()
+        clipPath.addRoundRect(bounds, radii, Path.Direction.CW)
 
-      canvas.drawPath(clipPath, paint)
-      canvas.clipPath(clipPath)
-      wrapped.draw(canvas)
-      canvas.restore()
+        canvas.drawPath(clipPath, paint)
+        canvas.clipPath(clipPath)
+        wrapped.draw(canvas)
+      }
     }
   }
 

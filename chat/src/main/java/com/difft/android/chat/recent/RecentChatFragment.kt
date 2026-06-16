@@ -626,7 +626,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     ComposeDialogManager.showWait(requireActivity())
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                            groupRepo.leaveGroup(group.gid ?: "", AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
                         }
                         if (!response.isSuccess()) {
                             ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
@@ -657,7 +657,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     ComposeDialogManager.showWait(requireActivity())
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.deleteGroup(group.gid)
+                            groupRepo.deleteGroup(group.gid ?: "")
                         }
                         if (!response.isSuccess()) {
                             ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
@@ -734,17 +734,17 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
             if (groupData != null) {
                 val (group, role) = groupData
-                    if (role == GROUP_ROLE_OWNER) {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
-                            disbandGroup(group)
-                            popupWindow?.dismiss()
-                        })
-                    } else {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
-                            leaveGroup(group)
-                            popupWindow?.dismiss()
-                        })
-                    }
+                if (role == GROUP_ROLE_OWNER) {
+                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        disbandGroup(group)
+                        popupWindow?.dismiss()
+                    })
+                } else {
+                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        leaveGroup(group)
+                        popupWindow?.dismiss()
+                    })
+                }
             }
             add(
                 ChativePopupView.Item(

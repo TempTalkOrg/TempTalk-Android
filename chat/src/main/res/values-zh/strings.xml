@@ -2,6 +2,7 @@
     <!--    <string name="search_default_hint">Search for messages or users</string>-->
     <string name="search_default_hint">搜索</string>
     <string name="attendee_external_label">外部</string>
+    <string name="attendee_host_prefix">主持人・</string>
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">了解更多</string>
     <string name="SpanUtil__read_more">查看更多</string>
@@ -48,6 +49,12 @@
     <string name="contact_add_contacts">添加联系人</string>
     <string name="contact_add_contacts_contact_name_not_correct">联系人 ID 不正确，请重试。</string>
     <string name="contact_add_contacts_code_not_correct">邀请码不正确，请重试。</string>
+    <string name="weak_contact_remove_in_days">%1$d天后移除</string>
+    <string name="weak_contact_remove_now">立即移除</string>
+    <string name="weak_contact_remove_now_failed">移除失败，请重试。</string>
+    <string name="weak_contact_account_unavailable_title">账号不可用</string>
+    <string name="weak_contact_account_unavailable_message">该账号不存在或暂不可访问。</string>
+    <string name="weak_contact_account_unavailable_ok">知道了</string>
     <string name="contact_unblock_users">取消屏蔽</string>
     <string name="contact_offline_tips">此帐号已登出，消息无法送达。</string>
     <string name="contact_account_exception_tips">此帐号已被禁用，消息无法送达。</string>
@@ -75,7 +82,6 @@
     <string name="chat_message_action_voice2text_tip_ok">确定</string>
     <string name="chat_message_action_select_multiple">选择多个</string>
     <string name="chat_message_action_select_max_limit">最多选择50条消息</string>
-    <string name="chat_message_action_combine_forward">合并转发</string>
     <string name="chat_message_action_quote">引用</string>
     <string name="chat_message_action_recall">撤回</string>
     <string name="chat_message_action_save_to_photos">保存到相册</string>
@@ -158,8 +164,12 @@
     <string name="chat_voice_hold_to_talk">按住说话</string>
     <string name="chat_voice_release_to_send">松开发送</string>
     <string name="chat_voice_release_to_cancel">松开取消</string>
+    <string name="chat_voice_cancel">取消</string>
+    <string name="chat_voice_add_effect">变声</string>
     <string name="chat_voice_recording_too_short">录音太短</string>
-    <string name="chat_voice_recording_will_stop">%d秒后将停止录音</string>
+    <plurals name="chat_voice_recording_will_stop">
+        <item quantity="other">%d秒后将停止录音</item>
+    </plurals>
     <string name="chat_voice_max_size_limit">录音文件最大限制为10M</string>
     <string name="chat_voice_focus_denied_hint">其他应用正在使用音频，请暂停音乐或结束通话后重试</string>
     <string name="chat_voice_record_failed">录音失败，请重试</string>
@@ -285,7 +295,7 @@
 
     <!-- Voice changer (call) settings -->
     <string name="me_call_voice_changer">变音</string>
-    <string name="me_call_voice_changer_desc">设置通话时的默认变音效果。</string>
+    <string name="me_call_voice_changer_desc">通话默认生效，语音消息可选使用。</string>
 
     <!-- Contact profile setting-->
     <string name="contact_profile_info">资料</string>
@@ -369,7 +379,9 @@
     <string name="search_title_group">群组</string>
     <string name="search_chat_history">查找聊天内容</string>
     <string name="search_messages_default_tips">输入关键词搜索</string>
-    <string name="search_related_messages">%d相关聊天记录</string>
+    <plurals name="search_related_messages">
+        <item quantity="other">%d相关聊天记录</item>
+    </plurals>
     <string name="max_support_file_size_limit">抱歉，您选择的文件超过了200M，无法发送。</string>
     <string name="text_file_exceeds_10mb_limit">超出10MB大小限制</string>
     <string name="chat_settings_mute">免打扰</string>

@@ -826,7 +826,17 @@ class ChatMessageListFragment : Fragment() {
                 is ScrollAction.ToBottom -> {
                     scrollTo(list.size - 1)
                 }
-                // 2. No scrollAction: handle auto-scroll
+
+                // 2. PreservePosition: pagination — DiffUtil keeps the anchor, never auto-snap.
+                //    Body is intentionally identical to the null/else arm today; kept as a
+                //    separate branch so pagination and passive-update paths can diverge later
+                //    without re-conflating them.
+                is ScrollAction.PreservePosition -> {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        updateBottomFloatingButton()
+                    }
+                }
+                // 3. No scrollAction: handle auto-scroll
                 null -> {
                     if (isAtBottomBeforeUpdateList) {
                         // Bypass scrollTo(): its lastScrollPos cache blocks re-anchoring when position/count are unchanged.
@@ -880,6 +890,8 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
+    // Numeric-only display (unread/mention counts); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private suspend fun updateBottomFloatingButton() {
         if (!isAdded || view == null) return
         val defaultTintColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon)
@@ -1313,6 +1325,9 @@ class ChatMessageListFragment : Fragment() {
      * @param isForForward Whether in forward selection mode
      * @param isSaved Whether the message is saved/favorited
      */
+    // Clears the OnTouchListener installed by TextTruncationUtil.setupDoubleClickPreview;
+    // no click semantics involved (setOnTouchListener(null) only).
+    @SuppressLint("ClickableViewAccessibility")
     private fun showNewMessageActionPopup(
         message: TextChatMessage,
         messageView: View,
@@ -2177,7 +2192,8 @@ class ChatMessageListFragment : Fragment() {
         override fun isDraggable(): Boolean = false
         override fun showDragHandle(): Boolean = false
 
-        @SuppressLint("ClickableViewAccessibility")
+        // SetTextI18n: line-number overlay uses numeric-only display; no English text to translate.
+        @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
         override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
 
             view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {

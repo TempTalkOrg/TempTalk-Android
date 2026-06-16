@@ -8,6 +8,7 @@ import android.os.Parcel
 import android.os.Parcelable
 import android.view.animation.Interpolator
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.withSave
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import org.signal.imageeditor.R
 import util.DimensionUnit
@@ -56,20 +57,20 @@ internal class TrashRenderer : InvalidateableRenderer, Renderer, Parcelable {
 
     val diameter = getInterpolatedDiameter(frameRenderTime - startTime)
 
-    rendererContext.canvas.save()
-    rendererContext.mapRect(bounds, Bounds.FULL_BOUNDS)
+    rendererContext.canvas.withSave {
+      rendererContext.mapRect(bounds, Bounds.FULL_BOUNDS)
 
-    buttonCenter[0] = bounds.centerX()
-    buttonCenter[1] = bounds.bottom - diameterLarge / 2f - padBottom
+      buttonCenter[0] = bounds.centerX()
+      buttonCenter[1] = bounds.bottom - diameterLarge / 2f - padBottom
 
-    rendererContext.canvasMatrix.setToIdentity()
+      rendererContext.canvasMatrix.setToIdentity()
 
-    rendererContext.canvas.drawCircle(buttonCenter[0], buttonCenter[1], diameter / 2f, shadePaint)
-    rendererContext.canvas.drawCircle(buttonCenter[0], buttonCenter[1], diameter / 2f, outlinePaint)
-    rendererContext.canvas.translate(bounds.centerX(), bounds.bottom - diameterLarge / 2f - padBottom)
-    rendererContext.canvas.translate(-(trashSize / 2f), -(trashSize / 2f))
-    trash.draw(rendererContext.canvas)
-    rendererContext.canvas.restore()
+      drawCircle(buttonCenter[0], buttonCenter[1], diameter / 2f, shadePaint)
+      drawCircle(buttonCenter[0], buttonCenter[1], diameter / 2f, outlinePaint)
+      translate(bounds.centerX(), bounds.bottom - diameterLarge / 2f - padBottom)
+      translate(-(trashSize / 2f), -(trashSize / 2f))
+      trash.draw(this)
+    }
 
     if (frameRenderTime - DURATION < startTime) {
       invalidate()

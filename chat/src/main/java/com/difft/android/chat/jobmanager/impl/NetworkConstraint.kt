@@ -3,7 +3,6 @@ package com.difft.android.chat.jobmanager.impl
 import android.app.Application
 import android.app.job.JobInfo
 import android.content.Context
-import androidx.annotation.RequiresApi
 import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.chat.jobmanager.Constraint
 
@@ -13,7 +12,6 @@ class NetworkConstraint private constructor(private val application: Application
 
     override fun getFactoryKey(): String = KEY
 
-    @RequiresApi(26)
     override fun applyToJobInfo(jobInfoBuilder: JobInfo.Builder) {
         jobInfoBuilder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
     }

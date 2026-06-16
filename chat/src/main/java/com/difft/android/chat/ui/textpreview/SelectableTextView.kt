@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui.textpreview
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -29,6 +30,8 @@ class SelectableTextView @JvmOverloads constructor(
         private const val DOUBLE_TAP_SLOP = 100f
     }
 
+    // Text-selection gesture — handled by selection state, not click.
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {

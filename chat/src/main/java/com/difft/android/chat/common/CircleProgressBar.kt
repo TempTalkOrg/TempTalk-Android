@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
+import androidx.core.content.withStyledAttributes
 import com.difft.android.chat.R
 
 class CircleProgressBar @JvmOverloads constructor(
@@ -24,11 +25,11 @@ class CircleProgressBar @JvmOverloads constructor(
 
     init {
         // 获取自定义属性
-        val typedArray = context.obtainStyledAttributes(attrs, R.styleable.CircleProgressBar)
-        progressBarColor = typedArray.getColor(R.styleable.CircleProgressBar_progressBarColor, Color.BLUE)
-        circleBackgroundColor = typedArray.getColor(R.styleable.CircleProgressBar_circleBackgroundColor, Color.GRAY)
-        strokeWidth = typedArray.getDimension(R.styleable.CircleProgressBar_strokeWidth, 10f)
-        typedArray.recycle()
+        context.withStyledAttributes(attrs, R.styleable.CircleProgressBar) {
+            progressBarColor = getColor(R.styleable.CircleProgressBar_progressBarColor, Color.BLUE)
+            circleBackgroundColor = getColor(R.styleable.CircleProgressBar_circleBackgroundColor, Color.GRAY)
+            strokeWidth = getDimension(R.styleable.CircleProgressBar_strokeWidth, 10f)
+        }
 
         // 初始化画笔
         paint.isAntiAlias = true

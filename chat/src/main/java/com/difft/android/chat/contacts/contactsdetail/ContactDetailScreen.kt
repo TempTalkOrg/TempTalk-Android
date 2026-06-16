@@ -1,5 +1,6 @@
 package com.difft.android.chat.contacts.contactsdetail
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Icon
@@ -52,6 +54,8 @@ import org.difft.app.database.models.ContactorModel
 data class ContactDetailUiState(
     val contactor: ContactorModel? = null,
     val isFriend: Boolean = true,
+    /** Weak-pending (delayed-removal) contact: isFriend=false + this true → show "Remove Now". */
+    val isWeakPending: Boolean = false,
     val isSelf: Boolean = false,
     val isBot: Boolean = false,
     val isOfficialBot: Boolean = false,
@@ -83,11 +87,11 @@ data class ContactDetailUiState(
  * @param onCommonGroupsClick Common groups click callback
  * @param onCopyUserId Copy user ID click callback
  */
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 fun ContactDetailScreen(
     uiState: ContactDetailUiState,
     isPopupMode: Boolean,
-    showBackButton: Boolean = true,
     onCloseClick: () -> Unit,
     onMoreClick: () -> Unit,
     onAvatarClick: () -> Unit,
@@ -99,12 +103,22 @@ fun ContactDetailScreen(
     onAddFriendClick: () -> Unit,
     onCommonGroupsClick: () -> Unit,
     onCopyUserId: () -> Unit,
+    modifier: Modifier = Modifier,
+    showBackButton: Boolean = true,
     onWebsiteClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onRemoveNowClick: () -> Unit = {}
 ) {
-    // Popup mode: calculate minimum height (40% of screen height) to avoid looking too short
+    // Popup mode: calculate minimum height (40% of screen height) to avoid looking too short.
+    // Fall back to Configuration on the first composition (before the first layout pass), otherwise
+    // containerSize.height is 0 and the popup would render with 0 min height for the first frame.
     val minHeight = if (isPopupMode) {
-        (LocalConfiguration.current.screenHeightDp * 0.4f).dp
+        val containerHeight = LocalWindowInfo.current.containerSize.height
+        val heightDp = if (containerHeight > 0) {
+            with(LocalDensity.current) { containerHeight.toDp() }
+        } else {
+            LocalConfiguration.current.screenHeightDp.dp
+        }
+        heightDp * 0.4f
     } else {
         0.dp
     }
@@ -158,11 +172,13 @@ fun ContactDetailScreen(
         ActionButtonsSection(
             isSelf = uiState.isSelf,
             isFriend = uiState.isFriend,
+            isWeakPending = uiState.isWeakPending,
             isBot = uiState.isBot,
             onMessageClick = onMessageClick,
             onCallClick = onCallClick,
             onShareClick = onShareClick,
             onAddFriendClick = onAddFriendClick,
+            onRemoveNowClick = onRemoveNowClick,
             modifier = Modifier.padding(horizontal = DifftTheme.spacing.insetLarge)
         )
 
@@ -461,11 +477,13 @@ private fun SmallOriginalAvatar(
 private fun ActionButtonsSection(
     isSelf: Boolean,
     isFriend: Boolean,
+    isWeakPending: Boolean,
     isBot: Boolean,
     onMessageClick: () -> Unit,
     onCallClick: () -> Unit,
     onShareClick: () -> Unit,
     onAddFriendClick: () -> Unit,
+    onRemoveNowClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -514,13 +532,23 @@ private fun ActionButtonsSection(
             }
 
             else -> {
-                // Non-friend: show only "Add Contact" button, which adds friend then navigates to chat
+                // Non-friend: show "Add Contact" button, which adds friend then navigates to chat
                 ActionButton(
                     iconRes = R.drawable.chat_icon_add_contact,
                     label = stringResource(R.string.contact_add_contacts),
                     onClick = onAddFriendClick,
                     modifier = Modifier.weight(1f)
                 )
+                // Weak-pending (delayed-removal) contact: also offer "Remove Now".
+                if (isWeakPending) {
+                    ActionButton(
+                        iconRes = R.drawable.chat_message_action_delete,
+                        label = stringResource(R.string.weak_contact_remove_now),
+                        onClick = onRemoveNowClick,
+                        tint = DifftTheme.colors.error,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
@@ -531,8 +559,11 @@ private fun ActionButton(
     iconRes: Int,
     label: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tint: Color? = null
 ) {
+    val iconTint = tint ?: DifftTheme.colors.icon
+    val labelColor = tint ?: DifftTheme.colors.textPrimary
     Column(
         modifier = modifier
             .height(72.dp)
@@ -546,13 +577,13 @@ private fun ActionButton(
             painter = painterResource(id = iconRes),
             contentDescription = label,
             modifier = Modifier.size(DifftTheme.spacing.iconMedium),
-            tint = DifftTheme.colors.icon
+            tint = iconTint
         )
         Spacer(modifier = Modifier.height(DifftTheme.spacing.stackSmall))
         Text(
             text = label,
             style = DifftTheme.typography.labelMedium,
-            color = DifftTheme.colors.textPrimary
+            color = labelColor
         )
     }
 }
@@ -766,6 +797,37 @@ private fun ContactDetailScreenNonFriendPreview() {
                 joinedAt = "2024-03-20",
                 commonGroupsCount = 1,
                 isFriend = false,
+                isSelf = false,
+                isBot = false
+            ),
+            isPopupMode = false,
+            onCloseClick = {},
+            onMoreClick = {},
+            onAvatarClick = {},
+            onOriginalAvatarClick = {},
+            onEditClick = {},
+            onMessageClick = {},
+            onCallClick = {},
+            onShareClick = {},
+            onAddFriendClick = {},
+            onCommonGroupsClick = {},
+            onCopyUserId = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Weak-Pending Contact")
+@Composable
+private fun ContactDetailScreenWeakPendingPreview() {
+    DifftTheme {
+        ContactDetailScreen(
+            uiState = ContactDetailUiState(
+                displayName = "Removing Soon",
+                userId = "removing_id",
+                joinedAt = "2024-03-20",
+                commonGroupsCount = 0,
+                isFriend = false,
+                isWeakPending = true,
                 isSelf = false,
                 isBot = false
             ),

@@ -6,22 +6,27 @@ package com.difft.android.base
 
 import com.difft.android.base.utils.ChunkingMethod
 import com.difft.android.base.utils.chunked
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.withIndex
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.coroutines.ContinuationInterceptor
-import kotlin.coroutines.CoroutineContext
-import kotlin.test.*
-import kotlin.time.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.time.ExperimentalTime
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.measureTimedValue
 
 @ExperimentalTime
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -264,83 +269,31 @@ class ChunkedTest {
 
         finish(1)
     }
-    @OptIn(InternalCoroutinesApi::class)
-    internal class VirtualTimeDispatcher(enclosingScope: CoroutineScope) : CoroutineDispatcher(), Delay {
-        private val originalDispatcher = enclosingScope.coroutineContext[ContinuationInterceptor] as CoroutineDispatcher
-        private val heap = ArrayList<TimedTask>()
-
-        var currentTime = 0L
-            private set
-
-        init {
-            /*
-             * Launch "event-loop-owning" task on start of the virtual time event loop.
-             * It ensures the progress of the enclosing event-loop and polls the timed queue
-             * when the enclosing event loop is empty, emulating virtual time.
-             */
-            enclosingScope.launch {
-                while (true) {
-                    val delayNanos = processNextEventInCurrentThread()
-                        ?: error("Event loop is missing, virtual time source works only as part of event loop")
-                    if (delayNanos <= 0) continue
-                    if (delayNanos > 0 && delayNanos != Long.MAX_VALUE) error("Unexpected external delay: $delayNanos")
-                    val nextTask = heap.minByOrNull { it.deadline } ?: return@launch
-                    heap.remove(nextTask)
-                    currentTime = nextTask.deadline
-                    nextTask.run()
-                }
-            }
-        }
-
-        private inner class TimedTask(
-            private val runnable: Runnable,
-            @JvmField val deadline: Long
-        ) : DisposableHandle, Runnable by runnable {
-
-            override fun dispose() {
-                heap.remove(this)
-            }
-        }
-
-        override fun dispatch(context: CoroutineContext, block: Runnable) {
-            originalDispatcher.dispatch(context, block)
-        }
-
-        override fun isDispatchNeeded(context: CoroutineContext): Boolean = originalDispatcher.isDispatchNeeded(context)
-
-        override fun invokeOnTimeout(timeMillis: Long, block: Runnable, context: CoroutineContext): DisposableHandle {
-            val task = TimedTask(block, deadline(timeMillis))
-            heap += task
-            return task
-        }
-
-        override fun scheduleResumeAfterDelay(timeMillis: Long, continuation: CancellableContinuation<Unit>) {
-            val task = TimedTask(Runnable { with(continuation) { resumeUndispatched(Unit) } }, deadline(timeMillis))
-            heap += task
-            continuation.invokeOnCancellation { task.dispose() }
-        }
-
-        private fun deadline(timeMillis: Long) =
-            if (timeMillis == Long.MAX_VALUE) Long.MAX_VALUE else currentTime + timeMillis
-    }
-
     /**
-     * Runs a test ([TestBase.runTest]) with a virtual time source.
-     * This runner has the following constraints:
-     * 1) It works only in the event-loop environment and it is relying on it.
-     *    None of the coroutines should be launched in any dispatcher different from a current
-     * 2) Regular tasks always dominate delayed ones. It means that
-     *    `launch { while(true) yield() }` will block the progress of the delayed tasks
-     * 3) [TestBase.finish] should always be invoked.
-     *    Given all the constraints into account, it is easy to mess up with a test and actually
-     *    return from [withVirtualTime] before the test is executed completely.
-     *    To decrease the probability of such error, additional `finish` constraint is added.
+     * Runs a test with a virtual time source backed by `runTest`'s built-in
+     * `TestScope.testScheduler` — `delay()` and `withTimeout()` advance virtual
+     * time without actually sleeping. [UnconfinedTestDispatcher] is used so
+     * that:
+     *  - **virtual time** still applies (the dispatcher implements `Delay`
+     *    against [testScheduler], so `delay()` skips wall-clock); and
+     *  - **eager dispatch** is preserved — continuations resume inline on the
+     *    calling thread, which the tests rely on for their interleaved
+     *    `expect(1)`, `expect(2)`, … ordering between producer and collector.
+     *
+     * [ensureFinished] enforces that `finish(N)` was called inside the block,
+     * catching early-return bugs.
+     *
+     * (Previously: custom `VirtualTimeDispatcher` using the internal
+     * `processNextEventInCurrentThread()` — removed in kotlinx-coroutines
+     * 1.11. `UnconfinedTestDispatcher(testScheduler)` provides equivalent
+     * semantics through the public test API. Note: switching to
+     * `Dispatchers.Unconfined` instead would defeat virtual time —
+     * `Unconfined` does not implement `Delay`, so `delay()` would fall
+     * through to `DefaultDelay` and consume real wall-clock.)
      */
     public fun withVirtualTime(block: suspend CoroutineScope.() -> Unit) = runTest {
-        withContext(Dispatchers.Unconfined) {
-            // Create a platform-independent event loop
-            val dispatcher = VirtualTimeDispatcher(this)
-            withContext(dispatcher) { block() }
+        withContext(UnconfinedTestDispatcher(testScheduler)) {
+            block()
             ensureFinished()
         }
     }

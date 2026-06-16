@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
+import androidx.core.net.toUri
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
@@ -89,7 +90,7 @@ class CallRingtoneManager @Inject constructor(
     fun playHangupRingTone() {
         appScope.launch(Dispatchers.IO) {
             L.d { "[Call] CallRingtoneManager set ringTone call_hangup" }
-            val ringtoneUri = Uri.parse("android.resource://${context.packageName}/${R.raw.new_call_hangup}")
+            val ringtoneUri = "android.resource://${context.packageName}/${R.raw.new_call_hangup}".toUri()
             
             try {
                 // 先停止当前播放的铃声
@@ -158,18 +159,18 @@ class CallRingtoneManager @Inject constructor(
                 if (roleType == CallRole.CALLER.type) {
                     L.d { "[Call] CallRingtoneManager set ringTone call_outgoing_1v1" }
                     isLooping = true // 1v1 去电需要循环播放
-                    Uri.parse("android.resource://${context.packageName}/${R.raw.new_call_outgoing_1v1}")
+                    "android.resource://${context.packageName}/${R.raw.new_call_outgoing_1v1}".toUri()
                 } else {
                     L.d { "[Call] CallRingtoneManager set ringTone new_call_incomming_1v1" }
                     isLooping = true // 1v1 来电铃声需要循环播放
-                    Uri.parse("android.resource://${context.packageName}/${R.raw.new_call_incomming_1v1}")
+                    "android.resource://${context.packageName}/${R.raw.new_call_incomming_1v1}".toUri()
                 }
             }
             
             (callType == CallType.GROUP.type || callType == CallType.INSTANT.type) && roleType == CallRole.CALLEE.type -> {
                 L.d { "[Call] CallRingtoneManager set ringTone call_incomming_group" }
                 isLooping = false // 群组来电不循环播放
-                Uri.parse("android.resource://${context.packageName}/${R.raw.new_call_incomming_group}")
+                "android.resource://${context.packageName}/${R.raw.new_call_incomming_group}".toUri()
             }
             
             else -> null

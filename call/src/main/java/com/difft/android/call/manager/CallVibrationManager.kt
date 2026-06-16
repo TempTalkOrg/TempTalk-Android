@@ -87,13 +87,7 @@ class CallVibrationManager @Inject constructor(
     @SuppressLint("MissingPermission")
     fun vibrateOnce(durationMillis: Long = 200L, amplitude: Int = 200) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(durationMillis, amplitude))
-            } else {
-                @Suppress("DEPRECATION")
-                val pattern = longArrayOf(durationMillis)
-                vibrator.vibrate(pattern, -1)
-            }
+            vibrator.vibrate(VibrationEffect.createOneShot(durationMillis, amplitude))
         } catch (e: Exception) {
             L.e { "[Call] CallVibrationManager vibrateOnce fail: ${e.message}" }
         }
@@ -108,12 +102,7 @@ class CallVibrationManager @Inject constructor(
     @SuppressLint("MissingPermission")
     fun vibratePattern(pattern: LongArray, repeat: Int = -1) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(pattern, repeat))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(pattern, repeat)
-            }
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, repeat))
         } catch (e: Exception) {
             L.e { "[Call] CallVibrationManager vibratePattern fail: ${e.message}" }
         }

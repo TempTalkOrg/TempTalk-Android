@@ -1,8 +1,10 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -14,11 +16,15 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
+import com.bumptech.glide.Glide
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
+import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
+import com.difft.android.base.utils.getLifecycleOwner
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -45,10 +51,23 @@ import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.difft.app.database.attachment
+import org.difft.app.database.forwardContext
+import org.difft.app.database.wcdb
 import org.difft.app.database.models.ContactorModel
+import org.difft.app.database.models.DBMessageModel
 import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.util.QuoteThumbnailBinder
 import com.difft.android.chat.util.Util
+import com.difft.android.chat.util.isHostActivityAlive
 import util.TimeFormatter
+import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 消息交互回调封装
@@ -191,6 +210,13 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
         private val quoteText: TextView
             get() = if (isMine) mineBinding!!.quoteText else othersBinding!!.quoteText
+
+        private val quoteThumbnail: ImageView
+            get() = if (isMine) mineBinding!!.quoteThumbnail else othersBinding!!.quoteThumbnail
+
+        // Pending pre-draw listener for quote-zone dynamic width; held so the recycle path can
+        // remove a still-pending listener (H4 — prevents OnPreDrawListener accumulation on rebind).
+        private var quotePreDrawListener: ViewTreeObserver.OnPreDrawListener? = null
 
         // 单条转发消息的信息头（时间+来源）
         private val forwardInfoZone: View
@@ -455,8 +481,67 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 }
                 quoteText.text = message.quote?.text
                 quoteZone.setOnClickListener { message.quote?.let { onQuoteClicked(it) } }
+
+                bindQuoteThumbnail(quoteThumbnail, message.quote!!, forWhat)
+                setupQuoteZoneDynamicWidth(contentContainer, quoteZone, quoteText, quoteThumbnail)
             } else {
                 quoteZone.visibility = View.GONE
+                clearQuoteThumbnail()
+            }
+        }
+
+        /**
+         * Sets the quote-zone dynamic width via a self-removing pre-draw listener (H4).
+         * Resizes the quote zone to right-align the thumbnail; for text-only quotes the resize is
+         * visually inert (the zone has no background), so it runs unconditionally.
+         */
+        private fun setupQuoteZoneDynamicWidth(
+            contentContainer: View,
+            quoteZone: View,
+            quoteText: View,
+            quoteThumbnail: View? = null,
+        ) {
+            // H4: drop any listener left over from a prior bind on this recycled holder before adding a new one.
+            quotePreDrawListener?.let { contentContainer.viewTreeObserver.removeOnPreDrawListener(it) }
+            val vto = contentContainer.viewTreeObserver
+            var preDrawCount = 0
+            val listener = object : ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    preDrawCount++
+                    val thumbnailWidth = quoteThumbnail
+                        ?.takeIf { it.visibility == View.VISIBLE }
+                        ?.let { it.width + 8.dp } ?: 0
+                    val frameWidth = contentContainer.width
+                    if (frameWidth > 0 && quoteText.width > 0) {
+                        computeQuoteZoneWidth(
+                            frameWidth, quoteText.width, thumbnailWidth, quoteThumbnail?.isVisible == true
+                        )?.let {
+                            quoteZone.layoutParams.width = it
+                            quoteZone.requestLayout()
+                        }
+                        contentContainer.viewTreeObserver.removeOnPreDrawListener(this) // H4: self-remove after the pass
+                        quotePreDrawListener = null
+                    } else if (preDrawCount >= MAX_PRE_DRAW) {
+                        contentContainer.viewTreeObserver.removeOnPreDrawListener(this) // H4: bounded fallback removal
+                        quotePreDrawListener = null
+                    }
+                    return true
+                }
+            }
+            quotePreDrawListener = listener
+            vto.addOnPreDrawListener(listener)
+        }
+
+        /**
+         * Recycle entry point: clears the thumbnail ImageView (delegates to the top-level fn) and
+         * removes any still-pending pre-draw listener so a recycled-before-draw holder leaves none
+         * registered on the shared contentContainer (H4).
+         */
+        fun clearQuoteThumbnail() {
+            clearQuoteThumbnail(quoteThumbnail)
+            quotePreDrawListener?.let {
+                contentContainer.viewTreeObserver.removeOnPreDrawListener(it)
+                quotePreDrawListener = null
             }
         }
 
@@ -685,6 +770,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
+        // Numeric-only display (read-recipient count); no English text to translate.
+        @SuppressLint("SetTextI18n")
         private fun bindSendAndReadStatus(
             sendStatus: Int?,
             readStatus: Int,
@@ -791,6 +878,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
     // ============== 公共辅助方法（从旧代码复制） ==============
 
+    // Reaction count branch uses numeric-only display; no English text to translate.
+    @SuppressLint("SetTextI18n")
     fun initReactionView(
         root: View,
         reactionsView: FlowLayout,
@@ -1007,4 +1096,158 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
         return false
     }
+}
+
+// ============================================================================
+// Quote thumbnail rendering (⑤) — TOP-LEVEL package functions.
+// Deliberately NOT instance methods of the Message ViewHolder: top-level placement means they
+// capture neither `this` nor any ViewHolder field. The Message class exposes only the thin
+// `quoteThumbnail` accessor + a `clearQuoteThumbnail()` recycle entry that delegates here.
+// ============================================================================
+
+/** Upper bound on pre-draw passes before [setupQuoteZoneDynamicWidth]'s listener force-removes itself. */
+private const val MAX_PRE_DRAW = 3
+
+/**
+ * Monotonic per-bind recycle token source. A per-bind unique token (instead of `quote.id`, the
+ * original timestamp) prevents two quotes of the SAME original — visible and recycled together —
+ * from colliding on the same tag value and cross-applying each other's async thumbnail.
+ */
+private val quoteThumbnailTokenSeq = AtomicLong()
+
+/**
+ * Binds the first [Quote] attachment to [imageView] using a tiered source priority:
+ *   1. voice (`flags==1` or [MediaUtil.isAudioType]) → mic icon (CENTER)
+ *   2. image/video:
+ *        a. inline thumbnail bytes (difft-android senders) → rounded Glide load (CENTER_CROP)
+ *        b. else → async reverse-lookup of the LOCAL original message (iOS/Mac/TT senders carry no
+ *           bytes); found on disk → rounded Glide load, else → hide the thumbnail (text-only).
+ *   3. genuine file (pdf/doc/zip/etc.) → `ic_file` icon (CENTER, NEVER center-crop)
+ *
+ * Image-loading is gated behind [MediaUtil.isImageOrVideoType] so a real file never goes through
+ * the center-crop path (which would render a stretched/oversized icon).
+ *
+ * @param forWhat the conversation scope, used to scope the reverse-lookup to this room. Derived
+ *   from the ViewHolder's injected `forWhat` field (TextChatMessage has no roomId/roomType).
+ */
+internal fun bindQuoteThumbnail(imageView: ImageView, quote: Quote, forWhat: For?) {
+    val qa = quote.attachments?.firstOrNull()
+    if (qa == null) {
+        clearQuoteThumbnail(imageView)
+        return
+    }
+
+    val isVoice = qa.flags == 1 || MediaUtil.isAudioType(qa.contentType)
+    // Per-bind unique recycle token (not quote.id) — see [quoteThumbnailTokenSeq].
+    val token = quoteThumbnailTokenSeq.incrementAndGet()
+    imageView.setTag(R.id.quote_thumbnail_job, token)
+    when {
+        isVoice -> {
+            imageView.visibility = View.VISIBLE
+            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.chat_ic_quote_mic)
+        }
+        MediaUtil.isImageOrVideoType(qa.contentType) -> {
+            val thumbBytes = qa.thumbnail?.thumbnail?.takeIf { it.isNotEmpty() }
+            if (thumbBytes != null) {
+                // difft-android inline-bytes path.
+                imageView.visibility = View.VISIBLE
+                QuoteThumbnailBinder.loadRoundedThumbnail(imageView, thumbBytes)
+            } else {
+                // iOS / Mac / TempTalk: no bytes on the wire → reverse-look-up the local original.
+                // Stay GONE until/unless the lookup finds a file (avoids a flash of misleading icon).
+                // clearQuoteThumbnail nulls the recycle tag, so re-set it after the clear.
+                clearQuoteThumbnail(imageView)
+                imageView.setTag(R.id.quote_thumbnail_job, token)
+                resolveOriginalThumbnailAsync(imageView, quote.id, forWhat?.id, forWhat?.typeValue ?: 0, token)
+            }
+        }
+        else -> {
+            // Genuine file (pdf/doc/zip/etc.) → file icon, CENTER (never center-crop).
+            imageView.visibility = View.VISIBLE
+            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.ic_file)
+        }
+    }
+}
+
+/**
+ * Reverse-looks-up the local original message (by timestamp + room) on [Dispatchers.IO] and, if a
+ * local image/video file is found, loads it as the quote thumbnail. Runs on the host Activity's
+ * lifecycle scope (resolved via [getLifecycleOwner] at bind time — NOT the fragment-view scope), so
+ * the launch is NOT auto-cancelled on item detach / recycle; staleness is instead guarded by
+ * re-checking the recycle [token] (the `quote_thumbnail_job` tag) and [isHostActivityAlive] before
+ * touching the view. No-ops (leaves text-only) when no original is found locally.
+ */
+private fun resolveOriginalThumbnailAsync(
+    imageView: ImageView,
+    originalTimestamp: Long,
+    roomId: String?,
+    roomType: Int,
+    token: Long,
+) {
+    if (roomId.isNullOrEmpty()) return
+    // getLifecycleOwner() resolves via view-tree first, then the context chain (Activity) — needed
+    // because findViewTreeLifecycleOwner() alone is null during onBindViewHolder (item not yet
+    // attached), which would otherwise make the image reverse-lookup never run.
+    val owner = imageView.getLifecycleOwner() ?: return
+    owner.lifecycleScope.launch {
+        val path = withContext(Dispatchers.IO) {
+            findOriginalAttachmentPath(originalTimestamp, roomId, roomType)
+        } ?: return@launch
+        // Back on Main: only apply if this view still represents the same quote and host is alive.
+        if (imageView.getTag(R.id.quote_thumbnail_job) == token && imageView.isHostActivityAlive()) {
+            imageView.visibility = View.VISIBLE
+            QuoteThumbnailBinder.loadRoundedThumbnail(imageView, File(path))
+        }
+    }
+}
+
+/**
+ * Finds the on-disk path of the original quoted message's image/video attachment, forward-aware.
+ * - Normal attachment message: file under `getMessageAttachmentFilePath(message.id)`.
+ * - Single-forward message: the forwarded file lives under the attachment's `authorityId` directory
+ *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment image-preview.
+ * Returns the path only if the file exists AND the attachment is image/video; else null (text-only).
+ */
+internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomType: Int): String? = runCatching {
+    val original = wcdb.message.getFirstObject(
+        DBMessageModel.roomId.eq(roomId)
+            .and(DBMessageModel.roomType.eq(roomType))
+            .and(DBMessageModel.timeStamp.eq(timestamp))
+    ) ?: return null
+
+    // Single-forward original → forwarded attachment under its authorityId directory.
+    val forward = original.forwardContext()?.forwards?.takeIf { it.size == 1 }?.firstOrNull()
+    if (forward != null) {
+        val att = forward.attachments?.firstOrNull() ?: return null
+        if (!MediaUtil.isImageOrVideoType(att.contentType)) return null
+        val fileName = att.fileName ?: return null
+        val path = FileUtil.getMessageAttachmentFilePath(att.authorityId.toString()) + fileName
+        return path.takeIf { File(it).exists() }
+    }
+
+    // Normal attachment original → file under message.id directory.
+    val att = original.attachment()?.takeIf { MediaUtil.isImageOrVideoType(it.contentType) } ?: return null
+    val fileName = att.fileName ?: return null
+    val path = FileUtil.getMessageAttachmentFilePath(original.id) + fileName
+    path.takeIf { File(it).exists() }
+}.onFailure {
+    L.w { "[QuoteThumb] findOriginalAttachmentPath failed ts=$timestamp: ${it.stackTraceToString()}" }
+}.getOrNull()
+
+/** Clears the thumbnail [imageView]: invalidates any in-flight lookup, clears Glide and hides it. */
+internal fun clearQuoteThumbnail(imageView: ImageView) {
+    imageView.setTag(R.id.quote_thumbnail_job, null)
+    if (imageView.isHostActivityAlive()) Glide.with(imageView).clear(imageView)
+    imageView.setImageDrawable(null)
+    imageView.visibility = View.GONE
+}
+
+/**
+ * Pure arithmetic slice of [ChatMessageViewHolder.Message.setupQuoteZoneDynamicWidth] (test anchor L14).
+ * Returns the target quote-zone width (`frameW - 16dp`) when the frame is wider than its content
+ * (`textW + thumbW`, the +8dp margin already folded into `thumbW`), else `null` (leave unchanged).
+ */
+internal fun computeQuoteZoneWidth(frameW: Int, textW: Int, thumbW: Int, thumbVisible: Boolean): Int? {
+    val contentWidth = textW + if (thumbVisible) thumbW else 0
+    return if (frameW > contentWidth) frameW - 16.dp else null
 }

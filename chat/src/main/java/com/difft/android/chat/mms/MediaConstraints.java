@@ -1,7 +1,6 @@
 package com.difft.android.chat.mms;
 
 import android.content.Context;
-import android.os.Build;
 
 import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
@@ -126,7 +125,9 @@ public abstract class MediaConstraints {
     }
 
     public static boolean isVideoTranscodeAvailable() {
-//        return Build.VERSION.SDK_INT >= 26 && (FeatureFlags.useStreamingVideoMuxer() || MemoryFileDescriptor.supported());
-        return Build.VERSION.SDK_INT >= 26;
+        // minSdk=26 and the feature-flag gating below is disabled, so transcode
+        // is always available. (Was: SDK_INT >= 26 && (useStreamingVideoMuxer() ||
+        // MemoryFileDescriptor.supported()).)
+        return true;
     }
 }

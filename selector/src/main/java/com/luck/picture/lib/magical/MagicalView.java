@@ -4,7 +4,6 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
-import android.os.Build;
 import android.transition.ChangeBounds;
 import android.transition.ChangeImageTransform;
 import android.transition.ChangeTransform;
@@ -17,7 +16,6 @@ import android.view.ViewGroup;
 import android.view.animation.Interpolator;
 import android.widget.FrameLayout;
 
-import androidx.annotation.RequiresApi;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.luck.picture.lib.config.SelectorConfig;
@@ -283,7 +281,6 @@ public class MagicalView extends FrameLayout {
         backToMinWithTransition();
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void backToMinWithTransition() {
         contentLayout.post(new Runnable() {
             @Override

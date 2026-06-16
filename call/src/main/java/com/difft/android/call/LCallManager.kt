@@ -226,7 +226,7 @@ object LCallManager {
         callServiceUrlManager.onAppForegrounded()
     }
 
-    /** Force-refreshes domain config after a connection failure (still keeps local if local config_version > remote). */
+    /** Force-refreshes domain config after a connection failure. */
     suspend fun refreshCallServiceUrlsAfterConnectionFailure() {
         callServiceUrlManager.refreshAfterConnectionFailure()
     }

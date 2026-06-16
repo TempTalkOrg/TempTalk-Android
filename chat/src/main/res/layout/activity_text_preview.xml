@@ -5,7 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg1"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    tools:ignore="Overdraw">
 
     <FrameLayout
         android:id="@+id/contentWrapper"

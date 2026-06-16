@@ -1,6 +1,6 @@
 package com.difft.android.chat.common
 
-import android.app.Activity
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -14,6 +14,7 @@ import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.getLifecycleOwner
+import com.difft.android.base.utils.getSafeContext
 import org.difft.app.database.wcdb
 import com.difft.android.chat.databinding.LayoutGroupAvatarBinding
 import com.difft.android.network.group.GroupAvatarData
@@ -49,15 +50,6 @@ class GroupAvatarView @JvmOverloads constructor(
         val membersNumber: Int,
         val gid: String?
     )
-
-    private val glideContext: Context
-        get() {
-            return if (context is Activity && !(context as Activity).isFinishing && !(context as Activity).isDestroyed) {
-                context
-            } else {
-                context.applicationContext
-            }
-        }
 
     init {
         resetView()
@@ -157,7 +149,7 @@ class GroupAvatarView @JvmOverloads constructor(
      * Load and display avatar from cache file, retry download on failure.
      */
     private fun loadFromCacheFile(avatarId: String, cacheFile: File, groupAvatarData: GroupAvatarData) {
-        Glide.with(glideContext)
+        Glide.with(context.getSafeContext())
             .load(cacheFile)
             .listener(object : RequestListener<Drawable> {
                 override fun onLoadFailed(
@@ -193,7 +185,7 @@ class GroupAvatarView @JvmOverloads constructor(
                 GroupAvatarUtil.ensureCached(context.applicationContext, groupAvatarData)
             }
             if (downloadedFile != null && currentLoadingId == avatarId && isAttachedToWindow) {
-                Glide.with(glideContext)
+                Glide.with(context.getSafeContext())
                     .load(downloadedFile)
                     .into(binding.ivAvatar)
             }
@@ -202,11 +194,13 @@ class GroupAvatarView @JvmOverloads constructor(
 
     fun setAvatar(localPath: String) {
         currentLoadingId = null
-        Glide.with(glideContext)
+        Glide.with(context.getSafeContext())
             .load(localPath)
             .into(binding.ivAvatar)
     }
 
+    // Numeric-only display (group member count); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private suspend fun updateMembersNumber(show: Boolean, number: Int, gid: String?) = withContext(Dispatchers.Main) {
         if (!show) {
             binding.tvMembersNumber.visibility = View.GONE

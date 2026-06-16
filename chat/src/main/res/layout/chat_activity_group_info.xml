@@ -225,6 +225,7 @@
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
                         android:text="@string/group_management"
+                        tools:ignore="RelativeOverlap"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp" />
 
@@ -251,6 +252,7 @@
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
                         android:text="@string/group_edit_info"
+                        tools:ignore="RelativeOverlap"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp" />
 
@@ -333,6 +335,7 @@
 
                     <TextView
                         android:id="@+id/save_to_photos_text"
+                        tools:ignore="RelativeOverlap"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
@@ -371,6 +374,7 @@
 
                     <TextView
                         android:id="@+id/disappearing_time_text"
+                        tools:ignore="RelativeOverlap"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
@@ -406,6 +410,7 @@
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
                         android:text="@string/notification_message_sounds"
+                        tools:ignore="RelativeOverlap"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp" />
 
@@ -436,6 +441,7 @@
 
                     <TextView
                         android:id="@+id/tv_notification"
+                        tools:ignore="RelativeOverlap"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"

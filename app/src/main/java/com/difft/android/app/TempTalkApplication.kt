@@ -23,6 +23,7 @@ import com.difft.android.base.storage.user.StorageBoundUserManagerImpl
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
+import org.difft.app.database.wcdb
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
@@ -152,21 +153,26 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
             .addBlocking("installCrashFilter", this::installCrashFilter)
-            .addNonBlocking {
+            .addNonBlocking("reapply locale") {
                 // Refresh the Application's Configuration with the user locale so legacy
                 // callers that read `application.resources` directly see the right locale.
                 LanguageUtils.getLanguage(this@TempTalkApplication)
                 LanguageUtils.reapplyLocaleToAppResources(this@TempTalkApplication)
             }
-            .addNonBlocking(this::cleanupLegacySqlCipherArtifacts)
-            .addNonBlocking(this::sweepStaleSendingMessages)
-            .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
-            .addNonBlocking { initCallEngine() }
-            .addNonBlocking { cleanupStaleCallNotification() }
-            .addNonBlocking { monitorMainThreadBlocking() }
-            .addNonBlocking { ContactorUtil.init() }
-            .addNonBlocking { initGlobalConfigs() }
-            .addNonBlocking { coordinator.get().initialize() }
+            .addNonBlocking("cleanup legacy sqlcipher", this::cleanupLegacySqlCipherArtifacts)
+            // Probe DB health early (off main, individually guarded) so DB-touching consumers
+            // below can fast-skip a corrupt DB via wcdb.dbCorrupted. Best-effort ordering, NOT a
+            // barrier — consumer-side safety (runCatching in ContactRemarkCache.preload, the
+            // soft-fail catches in job storage) is what guarantees correctness.
+            .addNonBlocking("probe db health") { wcdb.probeHealthy() }
+            .addNonBlocking("sweep stale sending messages", this::sweepStaleSendingMessages)
+            .addNonBlocking("begin job loop") { ApplicationDependencies.getJobManager().beginJobLoop() }
+            .addNonBlocking("init call engine") { initCallEngine() }
+            .addNonBlocking("cleanup stale call notification") { cleanupStaleCallNotification() }
+            .addNonBlocking("monitor main thread blocking") { monitorMainThreadBlocking() }
+            .addNonBlocking("init contactor") { ContactorUtil.init() }
+            .addNonBlocking("init global configs") { initGlobalConfigs() }
+            .addNonBlocking("init coordinator") { coordinator.get().initialize() }
             .execute()
 
         L.i { "[AppStartup] application onCreate() took " + (System.currentTimeMillis() - AppStartup.getApplicationStartTime()) + " ms" }

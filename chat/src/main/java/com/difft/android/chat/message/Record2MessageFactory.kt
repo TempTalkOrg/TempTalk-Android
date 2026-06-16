@@ -117,10 +117,10 @@ fun generateMessageTwo(
     groupMemberCount: Int = 0
 ): ChatMessage? {
     val isFromMySelf = globalServices.myId == record.fromWho
-    val authorId = record.fromWho
+    val authorId = record.fromWho ?: ""
     val author =
         contactor.firstOrNull { it.id == record.fromWho } ?: ContactorModel().also {
-            it.id = record.fromWho
+            it.id = record.fromWho ?: ""
         }
     return if (record.type == MessageModel.TYPE_TEXT || record.type == MessageModel.TYPE_ATTACHMENT || record.type == MessageModel.TYPE_UNSUPPORTED) {
         TextChatMessage().apply {

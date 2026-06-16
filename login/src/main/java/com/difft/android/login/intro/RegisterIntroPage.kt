@@ -32,8 +32,8 @@ import com.difft.android.login.R
 internal fun RegisterIntroPage(
     data: RegisterIntroPageData,
     onNext: () -> Unit,
-    onButtonBottomYInRoot: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
+    onButtonBottomYInRoot: (Int) -> Unit = {},
 ) {
     Box(
         modifier = modifier

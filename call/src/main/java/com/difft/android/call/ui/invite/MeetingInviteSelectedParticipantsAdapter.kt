@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -148,7 +149,8 @@ class MeetingInviteSelectedParticipantsAdapter(
             textViewAvatarLetter.setTextColor(
                 itemView.context.getColor(android.R.color.white)
             )
-            textViewAvatarLetter.background = itemView.context.getDrawable(
+            textViewAvatarLetter.background = AppCompatResources.getDrawable(
+                itemView.context,
                 com.difft.android.call.R.drawable.bg_circle_avatar
             ) ?: android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL

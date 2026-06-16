@@ -326,7 +326,7 @@ class ChatForwardMessageActivity : BaseActivity() {
 
             // Outer message context for copy/forward notice attribution
             outerSourceAuthorId = message.fromWho
-            outerSourceConversation = if (message.roomType == 1) For.Group(message.roomId) else For.Account(message.roomId)
+            outerSourceConversation = if (message.roomType == 1) For.Group(message.roomId ?: "") else For.Account(message.roomId ?: "")
 
             // Load contactors for author name lookup in title (recursively collect all author IDs)
             val authorIds = collectAllAuthorIds(forwardContext)

@@ -5,9 +5,12 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 
 /**
- * Encrypted proto `DataStore<UserAuthData>` payload — 15 auth/identity fields carved
- * out of the legacy 43-field `UserData` blob (`SHARED_PREFERENCES_KEY_USERDATA` in
- * `secure_prefs` EncryptedSP), plus a defense-in-depth migration marker.
+ * Encrypted proto `DataStore<UserAuthData>` payload — 17 auth/identity + self-hosted
+ * proxy fields, plus a defense-in-depth migration marker. Carved out of the legacy
+ * 43-field `UserData` blob (`SHARED_PREFERENCES_KEY_USERDATA` in `secure_prefs`
+ * EncryptedSP); the self-hosted proxy share-link + on/off flag were added later
+ * (tags 17, 18) since the share-link embeds a TURN `static-auth-secret` and is
+ * lifecycle-bound to the user.
  *
  * **All String fields are non-nullable** with empty-string default — `kotlinx-serialization-protobuf`
  * does NOT support nullable properties (proto wire format has no explicit null). Conversion
@@ -15,12 +18,14 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * ([UserAuthDataMapper]): `null` ↔ `""`. Downstream callers continue to see nullable
  * via the legacy [com.difft.android.base.user.UserData] type.
  *
- * **MUST encrypt** (9): `baseAuth`, `microToken`, `signalingKey`, `passcode`, `pattern`,
- *  `aciIdentityPrivateKey`, `aciIdentityOldPrivateKey`, `email`, `phoneNumber`.
+ * **MUST encrypt** (10): `baseAuth`, `microToken`, `signalingKey`, `passcode`, `pattern`,
+ *  `aciIdentityPrivateKey`, `aciIdentityOldPrivateKey`, `email`, `phoneNumber`,
+ *  `proxyShareLink` (embeds the TURN `static-auth-secret` when present).
  *
- * **Could encrypt** (6, kept together for lifecycle isolation): `account`, `customUid`,
+ * **Could encrypt** (7, kept together for lifecycle isolation): `account`, `customUid`,
  *  `aciIdentityPublicKey`, `aciIdentityOldPublicKey`, `aciIdentityKeyGenTime`,
- *  `contactRequestStatus`.
+ *  `contactRequestStatus`, `proxyEnabled` (not a secret per se, but lifecycle-bound to
+ *  the user — co-located with `proxyShareLink` for free encryption).
  *
  * **Not here**: `searchByCustomUid` (Int feature flag) lives in `app_state` — it's a
  * UX toggle, not identity material. The legacy `UserData.password` field was dropped
@@ -36,9 +41,10 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * See design report §2.2 for the full carve-out rationale.
  *
  * **Tag stability contract (`@ProtoNumber`)**: explicit field numbers below match the
- * implicit declaration-order tags that PR #789 shipped (1..16). Any future schema change
- * MUST preserve these numbers — wire format on every deployed device depends on them.
- *  - **Add a field**: append at the bottom with the next unused tag (17+).
+ * implicit declaration-order tags that PR #789 shipped (1..16); tags 17..18 were
+ * appended later for self-hosted proxy state. Tags 1..18 are stable now — any future
+ * schema change MUST preserve them; wire format on every deployed device depends on them.
+ *  - **Add a field**: append at the bottom with the next unused tag (19+).
  *  - **Remove a field**: delete the line; **never reuse** the freed tag number.
  *  - **Rename a field**: free — tag is the contract, not the Kotlin name.
  *  - **Reorder fields**: free — `@ProtoNumber` decouples wire format from declaration order.
@@ -69,6 +75,19 @@ data class UserAuthData(
      * — atomically with the 15 field projections in one `updateData` write.
      */
     @ProtoNumber(16) val migrationV1Completed: Boolean = false,
+    /**
+     * Self-hosted proxy share-link (`ytp://config?d=...`). Embeds a coturn
+     * `static-auth-secret` when TURN media-relay is configured — therefore lives
+     * in the encrypted half. Empty string = absent (mapper boundary converts to
+     * `null` in [com.difft.android.base.user.UserData.proxyShareLink]).
+     */
+    @ProtoNumber(17) val proxyShareLink: String = "",
+    /**
+     * User's on/off intent for the self-hosted proxy. Orthogonal to whether
+     * [proxyShareLink] parses successfully — the settings UI can hold an
+     * invalid-but-displayed link while routing stays off.
+     */
+    @ProtoNumber(18) val proxyEnabled: Boolean = false,
 ) {
     companion object {
         val EMPTY = UserAuthData()

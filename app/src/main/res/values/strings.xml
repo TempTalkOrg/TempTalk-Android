@@ -5,10 +5,6 @@
     <string name="test_dialog_content" translatable="false">This is an example of a custom view dialog using traditional XML layout.\n\nYou can embed traditional View components in Compose via AndroidView, keeping existing layouts while enjoying modern Compose features.</string>
     <string name="test_dialog_close" translatable="false">Close</string>
     <!--    settings-->
-    <string name="settings_privacy_find_me">METHODS FOR FINDING ME</string>
-    <string name="settings_privacy_phone">Phone Number</string>
-    <string name="settings_privacy_email">Email</string>
-    <string name="settings_security">SECURITY</string>
     <string name="settings_screen_lock">Screen lock</string>
     <string name="settings_screen_lock_timeout">Timeout</string>
     <string name="settings_screen_lock_timeout_instant">Instant</string>
@@ -57,7 +53,6 @@
     <string name="settings_contact_ID_status_uid_invalid_1">Must start with a letter or “_”. Please try another one.</string>
     <string name="settings_contact_ID_status_uid_invalid_2">Use only letters, numbers, “_” or “-”. Please try another one.</string>
     <string name="settings_contact_ID_status_uid_length_invalid">Must be 6–20 characters long. Please try another one.</string>
-    <string name="settings_information">INFORMATION</string>
     <string name="settings_version">Version</string>
     <string name="settings_build_version">Build Version</string>
     <string name="settings_build_time">Build Time</string>
@@ -73,8 +68,6 @@
     <string name="settings_handle_log_fail">Log upload failed, please try again</string>
     <string name="settings_handle_log_success">Log upload successful</string>
 
-    <!--    <string name="search_users_default_tips">Enter email or phone number to search users</string>-->
-    <string name="search_user">Search User:</string>
     <string name="search_no_results_found">No results found</string>
     <string name="search_view_more">View More</string>
     <string name="search_more_contacts">More Contacts</string>
@@ -101,11 +94,42 @@
     <string name="me_text_size_lage">Large</string>
 
     <!-- Database Recovery -->
-    <string name="database_recovery_title">Database Recovery</string>
-    <string name="database_recovery_progress">Recovering database, please wait… %d%%</string>
-    <string name="database_recovery_failed">Database recovery failed，please log in again.</string>
-    <string name="database_recovery_retry_tip">Database recovery failed. The app will restart to try again. (%d/3)</string>
+    <string name="db_recovery_in_progress">Recovering database</string>
+    <string name="db_recovery_please_wait">Please wait, this may take a moment…</string>
+    <string name="db_recovery_resync_message">Database reset. Re-syncing your account; local chat history could not be recovered.</string>
+    <string name="db_recovery_unrecoverable_message">Unable to recover the database. Please sign in again.</string>
 
-    <string name="leak_canary_test_class_name">assertk.Assert</string>
     <string name="dual_pane_divider_drag_hint">Drag to resize panes</string>
+
+    <!-- Self-hosted proxy -->
+    <string name="proxy_settings_title">Use proxy</string>
+    <string name="proxy_use_proxy">Use proxy</string>
+    <string name="proxy_use_proxy_desc">Route Yelling through your self-hosted proxy to improve connectivity and protect your privacy.</string>
+    <string name="proxy_address_label">Proxy address</string>
+    <string name="proxy_address_hint">Enter proxy address</string>
+    <string name="proxy_share">Share</string>
+    <string name="proxy_save">Save</string>
+    <string name="proxy_status_on">On</string>
+    <string name="proxy_status_off">Off</string>
+    <string name="proxy_saved">Proxy settings saved</string>
+    <string name="proxy_invalid_address">Invalid proxy address</string>
+    <string name="proxy_no_turn_warning">This proxy has no media relay (TURN) configured. Messaging will be protected, but calls will be disabled to avoid exposing your real IP address.</string>
+    <string name="proxy_scan">Scan</string>
+    <string name="proxy_status_checking">Checking proxy…</string>
+    <string name="proxy_status_available">Proxy reachable</string>
+    <string name="proxy_status_unavailable">Proxy unreachable</string>
+    <string name="proxy_check_fail_unreachable">Can\'t reach the proxy server. Check the address and your network.</string>
+    <string name="proxy_check_fail_timeout">Connection timed out. The proxy may be offline.</string>
+    <string name="proxy_check_fail_pin">Certificate fingerprint doesn\'t match. The link may be wrong or tampered with.</string>
+    <string name="proxy_check_fail_unknown">Couldn\'t connect to the proxy.</string>
+    <string name="proxy_recheck">Check again</string>
+    <string name="proxy_passphrase_title">Enter passphrase</string>
+    <string name="proxy_passphrase_desc">This link is passphrase-protected. Enter the passphrase the proxy owner gave you.</string>
+    <string name="proxy_passphrase_hint">Passphrase</string>
+    <string name="proxy_passphrase_wrong">Wrong passphrase or the link is corrupted.</string>
+    <string name="proxy_passphrase_confirm">Confirm</string>
+    <string name="proxy_passphrase_cancel">Cancel</string>
+    <string name="proxy_e2e_checking">Verifying connection to Yelling…</string>
+    <string name="proxy_e2e_ok">Connected to Yelling through proxy</string>
+    <string name="proxy_e2e_failed">Proxy works, but couldn\'t reach Yelling through it. Try again, or contact whoever gave you this proxy.</string>
 </resources>

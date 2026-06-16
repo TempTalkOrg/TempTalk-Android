@@ -66,7 +66,7 @@ import javax.inject.Singleton
  *    would otherwise crash with `UninitializedPropertyAccessException`.
  *
  * **Routing rules** (unchanged from initial #725):
- *  - 15 auth fields → [secureUserStore] (`secure_user.pb`, encrypted Tink AEAD).
+ *  - 17 auth fields → [secureUserStore] (`secure_user.pb`, encrypted Tink AEAD).
  *  - Remaining UX/state fields → [appStateStore] (`app_state.preferences_pb`, plain).
  *
  * **R3 recovery** (`readAuthDataOrRecover`): if reading `secure_user`
@@ -292,6 +292,11 @@ class StorageBoundUserManagerImpl @Inject constructor(
                 aciIdentityOldPublicKey = null,
                 aciIdentityOldPrivateKey = null,
                 aciIdentityKeyGenTime = 0L,
+                // Self-hosted proxy state — CLEARED. The share-link embeds the TURN
+                // `static-auth-secret` (when present); that's user-bound credential
+                // material and must not survive passive logout on shared devices.
+                proxyShareLink = null,
+                proxyEnabled = false,
                 // Identity fields (`account`, `customUid`, `email`, `phoneNumber`) deliberately
                 // preserved so the re-login screen can display "logged out as <account>".
             )
@@ -313,6 +318,10 @@ class StorageBoundUserManagerImpl @Inject constructor(
                             aciIdentityOldPublicKey = "",
                             aciIdentityOldPrivateKey = "",
                             aciIdentityKeyGenTime = 0L,
+                            // Self-hosted proxy state — cleared on passive logout for
+                            // the same reason: the share-link embeds a TURN secret.
+                            proxyShareLink = "",
+                            proxyEnabled = false,
                         )
                     }
                 }.onFailure {

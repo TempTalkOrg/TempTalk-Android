@@ -25,6 +25,7 @@
     <string name="call_single_person_timeout_reminder">当前会议无其他参与者，是否退出会议？</string>
     <string name="call_reminder_button_continue">继续</string>
     <string name="call_reminder_button_exit">退出</string>
+    <string name="call_ending_seconds_left">剩余 %d 秒</string>
     <string name="call_group_send_message">%s has started a call</string>
     <string name="call_1v1_send_message">Calling</string>
     <string name="call_invite_send_message">%s invites you to a call</string>
@@ -65,6 +66,7 @@
     <string name="call_chat_header_1v1_calling">%s呼叫中</string>
     <string name="call_params_url_exception_tip">服务端URL参数异常</string>
     <string name="call_params_startcall_exception_tip">会议连接参数异常</string>
+    <string name="call_proxy_turn_required_tip">当前代理未配置媒体中继(TURN),通话会暴露你的真实 IP。请在设置中更新代理或关闭代理后再试。</string>
     <string name="call_service_node_dashboard_title">会议服务设置</string>
     <string name="call_rating_feedback_no_choice_tip">请给出评分</string>
     <string name="call_rating_feedback_title">请评价您的通话质量</string>

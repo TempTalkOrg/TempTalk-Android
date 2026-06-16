@@ -17,13 +17,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import coil3.compose.rememberAsyncImagePainter
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 import com.difft.android.call.ui.LocalImageLoaderProvider
 import com.difft.android.call.util.IdUtil
@@ -62,7 +62,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
             .height(24.dp)
             .clip(shape = RoundedCornerShape(4.dp))
             .background(
-                colorResource(id = com.difft.android.base.R.color.bg1_night).copy(alpha = 0.8f)
+                DifftTheme.colors.background.copy(alpha = 0.8f)
             )
     ){
         val (speakStatusView, shareStatusView, userNameView) = createRefs()

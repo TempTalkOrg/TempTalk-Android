@@ -1,7 +1,6 @@
 package com.difft.android.security
 
 import android.annotation.SuppressLint
-import android.os.Build
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 
@@ -9,7 +8,6 @@ import java.util.concurrent.TimeUnit
 internal object SecurityRuntime {
 
     private const val COMMAND_TIMEOUT_MS = 3_000L
-    private const val PROCESS_POLL_INTERVAL_MS = 50L
 
     fun runShellCommand(command: String): List<String> {
         return runCatching {
@@ -40,16 +38,7 @@ internal object SecurityRuntime {
     }
 
     private fun waitForProcess(process: Process): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            process.waitFor(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-        } else {
-            val deadlineNs = System.nanoTime() + COMMAND_TIMEOUT_MS * 1_000_000L
-            while (runCatching { process.exitValue() }.isFailure) {
-                if (System.nanoTime() >= deadlineNs) return false
-                Thread.sleep(PROCESS_POLL_INTERVAL_MS)
-            }
-            true
-        }
+        return process.waitFor(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     }
 
     private val systemPropertiesClass: Class<*>? by lazy {

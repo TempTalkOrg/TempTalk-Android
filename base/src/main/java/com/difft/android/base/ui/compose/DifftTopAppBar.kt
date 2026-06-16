@@ -54,12 +54,12 @@ import com.difft.android.base.ui.theme.DifftTheme
 @Composable
 fun DifftTopAppBar(
     title: String,
+    modifier: Modifier = Modifier,
     onNavigateBack: (() -> Unit)? = null,
     actionText: String? = null,
     onActionClick: (() -> Unit)? = null,
     actionEnabled: Boolean = true,
-    titleStyle: TextStyle? = null,
-    modifier: Modifier = Modifier
+    titleStyle: TextStyle? = null
 ) {
     TopAppBar(
         title = {

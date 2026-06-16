@@ -1,5 +1,6 @@
 package com.difft.android.chat.video.videoconverter;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
@@ -15,7 +16,6 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
-import androidx.annotation.RequiresApi;
 
 import com.difft.android.chat.R;
 
@@ -25,7 +25,6 @@ import com.difft.android.chat.util.ViewUtil;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
-@RequiresApi(api = 23)
 public final class VideoThumbnailsRangeSelectorView extends VideoThumbnailsView {
 
     private static final String TAG = "VideoThumbnailsRangeSelectorView";
@@ -342,6 +341,8 @@ public final class VideoThumbnailsRangeSelectorView extends VideoThumbnailsView 
         return Math.min(Math.max(min, value), max);
     }
 
+    // Range-slider drag — not a clickable view.
+    @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         int actionMasked = event.getActionMasked();

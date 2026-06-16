@@ -19,31 +19,30 @@ import com.difft.android.base.utils.globalServices
 /**
  * Migration chain for the `app_state.preferences_pb` DataStore (issue #725, Task 5).
  *
- * **Four migrations, in strict order**:
+ * **Three migrations, in strict order**:
  *   1. [migrateFromSpChativeAccount]   — 11 keys from `sp_chative_account` (Section B + 2 keyboard).
- *   2. [migrateFromWcdbRecoveryPrefs]  — 2 DB-recovery keys from `wcdb_recovery_data`.
- *   3. [migrateFromDefaultPrefs]       — 2 keyboard keys from `${packageName}_preferences`
+ *   2. [migrateFromDefaultPrefs]       — 2 keyboard keys from `${packageName}_preferences`
  *      + zombie-key cleanup in `cleanUp()`. **Does NOT stamp `MIGRATION_VERSION`.**
- *   4. [UserDataUxFieldsMigration]     — 26 UX fields from the encrypted legacy
+ *   3. [UserDataUxFieldsMigration]     — 26 UX fields from the encrypted legacy
  *      `secure_prefs` Gson blob. Stamps `AppStateKeys.MIGRATION_VERSION` as the
  *      **LAST write inside `migrate()`** (atomic with the 26 field projections).
  *
- * **Why the stamp lives in migration 4, not migration 3's `cleanUp()`**:
+ * **Why the stamp lives in the last migration, not its predecessor's `cleanUp()`**:
  *   - `DataMigration.cleanUp()` has no DataStore handle — it cannot perform `edit { ... }`.
- *   - Stamping inside `migrate()` of the LAST migration guarantees all 4 migrations
+ *   - Stamping inside `migrate()` of the LAST migration guarantees all migrations
  *     completed before `shouldMigrate` returns false on next cold start.
  *   - The marker write is atomic with the 26 field projections (single DataStore commit) —
  *     process kill between fields and marker is impossible.
  *
  * **Keyboard-height precedence**: migration 1 reads from `sp_chative_account` first.
- * Migration 3 only fills the keyboard keys if absent (uses `shouldMigrate` short-circuit
- * via `keysToMigrate` so already-present keys are not overwritten).
+ * Migration 2 (default-prefs) only fills the keyboard keys if absent (uses `shouldMigrate`
+ * short-circuit via `keysToMigrate` so already-present keys are not overwritten).
  *
  * **Idempotency**:
- *   - Migrations 1–3 use `SharedPreferencesMigration` whose internal `shouldMigrate`
+ *   - Migrations 1–2 use `SharedPreferencesMigration` whose internal `shouldMigrate`
  *     short-circuits when all `keysToMigrate` are already present in DataStore.
- *   - Migration 4 short-circuits on `MIGRATION_VERSION` presence.
- *   - Once stamped, none of the 4 migrations re-run on subsequent cold starts.
+ *   - The last migration short-circuits on `MIGRATION_VERSION` presence.
+ *   - Once stamped, none of the migrations re-run on subsequent cold starts.
  */
 internal object AppStateMigrations {
 
@@ -51,14 +50,12 @@ internal object AppStateMigrations {
     internal const val CURRENT_MIGRATION_VERSION = 1
 
     private const val LEGACY_SP_CHATIVE_ACCOUNT = "sp_chative_account"
-    private const val LEGACY_SP_WCDB_RECOVERY = "wcdb_recovery_data"
     private const val LEGACY_SP_SECURE_PREFS = "secure_prefs"
     private const val LEGACY_KEY_USERDATA =
         "com.difft.chative.base.user.SimpleUserManager\$Companion.SHARED_PREFERENCES_KEY_USERDATA"
 
     fun build(context: Context): List<DataMigration<Preferences>> = listOf(
         migrateFromSpChativeAccount(context),
-        migrateFromWcdbRecoveryPrefs(context),
         migrateFromDefaultPrefs(context),
         UserDataUxFieldsMigration(context),
     )
@@ -71,7 +68,7 @@ internal object AppStateMigrations {
      * so absent keys are not stamped with defaults.
      *
      * Keyboard-height keys win FROM HERE (per design §4.3 — `sp_chative_account`
-     * is the Kotlin writer's file; default-prefs is only a fallback in migration 3).
+     * is the Kotlin writer's file; default-prefs is only a fallback in migration 2).
      */
     private fun migrateFromSpChativeAccount(context: Context): DataMigration<Preferences> =
         SharedPreferencesMigration(
@@ -118,33 +115,7 @@ internal object AppStateMigrations {
     }
 
     /**
-     * Migration 2 — copies the 2 DB-recovery keys from `wcdb_recovery_data` SP file.
-     * Key names preserved verbatim to match the legacy writers in `DatabaseRecoveryPreferences`.
-     */
-    private fun migrateFromWcdbRecoveryPrefs(context: Context): DataMigration<Preferences> =
-        SharedPreferencesMigration(
-            context = context,
-            sharedPreferencesName = LEGACY_SP_WCDB_RECOVERY,
-            keysToMigrate = setOf(
-                "needRecoveryDatabase",
-                "databaseRecoveryFailureCount",
-            ),
-            migrate = ::projectWcdbRecoveryKeys,
-        )
-
-    private suspend fun projectWcdbRecoveryKeys(
-        sp: SharedPreferencesView,
-        current: Preferences,
-    ): Preferences {
-        val mut = current.toMutablePreferences()
-        copyBooleanIfPresent(sp, mut, "needRecoveryDatabase", AppStateKeys.NEED_RECOVERY_DATABASE)
-        copyIntIfPresent(sp, mut, "databaseRecoveryFailureCount", AppStateKeys.DATABASE_RECOVERY_FAILURE_COUNT)
-        L.i { "[Storage][app_state][Migration2] migrated wcdb_recovery_data keys" }
-        return mut.toPreferences()
-    }
-
-    /**
-     * Migration 3 — copies the 2 keyboard-height keys from
+     * Migration 2 — copies the 2 keyboard-height keys from
      * `${packageName}_preferences` (the SP file used by `PreferenceManager.getDefaultSharedPreferences`,
      * historically written by the Java `KeyboardAwareLinearLayout` path).
      *
@@ -153,7 +124,7 @@ internal object AppStateMigrations {
      * (i.e. migration 1 already moved them, this is a no-op).
      *
      * Zombie cleanup lives in [cleanUp]. **Does NOT stamp `MIGRATION_VERSION`** — only
-     * migration 4 does.
+     * the last migration does.
      */
     private fun migrateFromDefaultPrefs(context: Context): DataMigration<Preferences> {
         val defaultPrefsName = "${context.packageName}_preferences"
@@ -185,14 +156,14 @@ internal object AppStateMigrations {
                     mut[AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE] =
                         sp.getInt("keyboard_height_landscape", 0)
                 }
-                L.i { "[Storage][app_state][Migration3] migrated keyboard-height keys from default-prefs" }
+                L.i { "[Storage][app_state][Migration2] migrated keyboard-height keys from default-prefs" }
                 return mut.toPreferences()
             }
 
             override suspend fun cleanUp() {
                 // Drop migrated keys + zombie keys (T-1/T-2/T-3/T-4/L-1/L-2 per design §11)
                 // from the legacy default-prefs file. We do NOT stamp MIGRATION_VERSION here
-                // — that lives in migration 4's migrate().
+                // — that lives in the last migration's migrate().
                 try {
                     sp.edit {
                         remove("keyboard_height_portrait")
@@ -204,9 +175,9 @@ internal object AppStateMigrations {
                         remove("pref_database_encrypted_secret")
                         remove("pref_database_unencrypted_secret")
                     }
-                    L.i { "[Storage][app_state][Migration3] zombie-key cleanup complete" }
+                    L.i { "[Storage][app_state][Migration2] zombie-key cleanup complete" }
                 } catch (e: Exception) {
-                    L.w { "[Storage][app_state][Migration3] cleanUp failed: ${e.stackTraceToString()}" }
+                    L.w { "[Storage][app_state][Migration2] cleanUp failed: ${e.stackTraceToString()}" }
                 }
             }
         }

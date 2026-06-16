@@ -4,7 +4,8 @@
     tools:viewBindingIgnore="true"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg1">
+    android:background="@color/bg1"
+    tools:ignore="Overdraw">
 
     <com.difft.android.chat.video.VideoPlayer
         android:id="@+id/video_player"

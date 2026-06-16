@@ -25,6 +25,7 @@
     <string name="call_single_person_timeout_reminder">No other participants are in the meeting. Would you like to leave?</string>
     <string name="call_reminder_button_continue">Continue</string>
     <string name="call_reminder_button_exit">Exit</string>
+    <string name="call_ending_seconds_left">%ds left</string>
     <string name="call_group_send_message">%s has started a call</string>
     <string name="call_1v1_send_message">Calling</string>
     <string name="call_invite_send_message">%s invites you to a call</string>
@@ -66,6 +67,7 @@
     <string name="call_chat_header_1v1_calling">%s is calling</string>
     <string name="call_params_url_exception_tip">The server URL parameter is abnormal.</string>
     <string name="call_params_startcall_exception_tip">Abnormal conference connection parameters.</string>
+    <string name="call_proxy_turn_required_tip">This proxy has no media relay (TURN) configured, so a call would expose your real IP address. Update the proxy in Settings or turn it off to continue.</string>
     <string name="call_service_node_dashboard_title">Call service settings</string>
     <string name="call_rating_feedback_no_choice_tip">Please give a rating</string>
     <string name="call_rating_feedback_title">Rate the quality of your call</string>

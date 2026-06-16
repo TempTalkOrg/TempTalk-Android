@@ -4,15 +4,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
-    alias(libs.plugins.kotlin.kapt)
-
-
+    alias(libs.plugins.ksp)
 }
 
-val appVersionName = "2.2.5"
+val appVersionName = "2.2.8"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -21,7 +18,10 @@ fun getCurrentDayTimestamp(): String {
     return simpleDateFormat.format(currentDate)
 }
 
-val appVersionCode = 732318
+// F-Droid uses a fixed versionCode (official channel versionCode + 1).
+// No getTimeBasedVersionCode()/VERSION_CODE env — F-Droid builds reproducibly.
+val appVersionCode = 762504
+val resolvedBuildTimestamp = getCurrentDayTimestamp()
 
 fun getBuildTime(): String {
     return System.currentTimeMillis().toString()
@@ -58,6 +58,8 @@ fun getKeyPassword(): String? {
 android {
     namespace = "com.difft.android"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    // ndkVersion required: AGP 9 dropped the implicit NDK fallback used for llvm-strip (see libs.versions.toml).
+    ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
         minSdk = libs.versions.minSdk.get().toInt()
@@ -70,9 +72,6 @@ android {
         localeFilters += setOf("en", "zh", "en-rUS", "zh-rCN")
     }
 
-    buildFeatures {
-        viewBinding = true
-    }
 //    val flavorDimensionType = "type"
     val flavorDimensionEnvironment = "environment"
     val flavorDimensionChannel = "channel"
@@ -177,25 +176,6 @@ android {
         }
     }
 
-    /**
-     * 修改生成的 apk 文件名
-     */
-    android.applicationVariants.all {
-        val flavorName1 = this.productFlavors[0].name
-        var flavorName2 = ""
-        if (this.productFlavors.size > 1) {
-            flavorName2 = this.productFlavors[1].name
-        }
-        val buildType = this.buildType.name
-        val versionName = this.versionName
-        val versionCode = this.versionCode
-        outputs.all {
-            if (this is com.android.build.gradle.internal.api.ApkVariantOutputImpl) {
-                this.outputFileName = "${flavorName1}-${flavorName2}-v${versionName}-${versionCode}-${getCurrentDayTimestamp()}-${buildType}.apk"
-            }
-        }
-    }
-
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -204,7 +184,6 @@ android {
 
     buildFeatures {
         viewBinding = true
-        dataBinding = true
         buildConfig = true
         compose = true
     }
@@ -212,6 +191,10 @@ android {
     packaging {
         // Exclude non-Android platform libraries (following Signal's approach)
         jniLibs {
+            // AGP 9 rejects `android:extractNativeLibs="true"` in the manifest;
+            // express the same intent (extract native libs at install time)
+            // here instead. Preserves prior packaging behavior.
+            useLegacyPackaging = true
             excludes += setOf(
                 "**/*.dylib",
                 "**/*.dll",
@@ -243,9 +226,29 @@ kotlin {
     }
 }
 
-// Allow references to generated code
-kapt {
-    correctErrorTypes = true
+/**
+ * Customise the generated APK filename. Migrated from the AGP 8
+ * `applicationVariants.all{}` API (removed in AGP 9) to the new Variant API:
+ * onVariants sets outputFileName on each APK output. Filename format matches
+ * the old logic: {flavor1}-{flavor2}-v{versionName}-{versionCode}-{timestamp}-{buildType}.apk
+ *
+ * Reuses the file-scope appVersionCode (fixed for F-Droid) / resolvedBuildTimestamp
+ * (sampled once at configuration start) so the filename's versionCode is identical to
+ * the one baked into the flavor config, and every APK in one build shares the suffix.
+ */
+androidComponents {
+    onVariants { variant ->
+        val flavor1 = variant.productFlavors.getOrNull(0)?.second.orEmpty()
+        val flavor2 = variant.productFlavors.getOrNull(1)?.second.orEmpty()
+        val buildType = variant.buildType.orEmpty()
+        variant.outputs.forEach { output ->
+            // outputFileName is declared on the public VariantOutput interface;
+            // only APK outputs have a settable filename (bundle outputs ignore it).
+            output.outputFileName.set(
+                "$flavor1-$flavor2-v$appVersionName-$appVersionCode-$resolvedBuildTimestamp-$buildType.apk"
+            )
+        }
+    }
 }
 
 hilt {
@@ -274,8 +277,7 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    kapt(libs.kotlin.metadata.jvm)
+    ksp(libs.hilt.compiler)
 
     // 其他依赖
     implementation(libs.jwtdecode)

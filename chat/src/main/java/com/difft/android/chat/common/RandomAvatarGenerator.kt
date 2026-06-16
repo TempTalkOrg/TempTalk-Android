@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.createBitmap
 import java.util.Random
 
 class RandomAvatarGenerator {
@@ -32,7 +33,7 @@ class RandomAvatarGenerator {
             // 创建 Bitmap
             val size = DEFAULT_SIZE
             val blockSize = 32 // 每个块的大小
-            val bitmap = Bitmap.createBitmap(size * blockSize, size * blockSize, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(size * blockSize, size * blockSize)
             val canvas = Canvas(bitmap)
 
             val paint = Paint()

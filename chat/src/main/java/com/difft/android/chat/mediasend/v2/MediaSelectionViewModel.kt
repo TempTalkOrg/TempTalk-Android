@@ -2,6 +2,7 @@ package com.difft.android.chat.mediasend.v2
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -85,18 +86,18 @@ class MediaSelectionViewModel(
             // Note: We initialize with totalInputDurationUs=0, and the accurate duration will be set
             // when onEditVideoDuration is called with the precise value from MediaExtractor
             val initializedVideoEditorStates = newSelectionList
-                .filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
+                .filterNot { media -> it.editorStateMap.containsKey(media.realPath.toUri()) }
                 .filter { media -> MediaUtil.isVideoType(media.mimeType) }
                 .associate { media: LocalMedia ->
-                    Uri.parse(media.realPath) to VideoTrimData()
+                    media.realPath.toUri() to VideoTrimData()
                 }
 
             // For images, preserve existing editor states (e.g., drawings, stickers)
             val initializedImageEditorStates = newSelectionList
-                .filterNot { media -> it.editorStateMap.containsKey(Uri.parse(media.realPath)) }
+                .filterNot { media -> it.editorStateMap.containsKey(media.realPath.toUri()) }
                 .filter { media -> MediaUtil.isImageAndNotGif(media.mimeType) }
                 .associate { media: LocalMedia ->
-                    Uri.parse(media.realPath) to ImageEditorFragment.Data()
+                    media.realPath.toUri() to ImageEditorFragment.Data()
                 }
 
             it.copy(
@@ -170,7 +171,7 @@ class MediaSelectionViewModel(
             it.copy(
                 selectedMedia = newMediaList,
                 focusedMedia = newFocus,
-                editorStateMap = it.editorStateMap - Uri.parse(media.realPath)
+                editorStateMap = it.editorStateMap - media.realPath.toUri()
             )
         }
 
@@ -213,7 +214,7 @@ class MediaSelectionViewModel(
 
     fun onEditVideoDuration(context: Context, totalDurationUs: Long, startTimeUs: Long, endTimeUs: Long, touchEnabled: Boolean) {
         store.update {
-            val uri = it.focusedMedia?.realPath?.let { path -> Uri.parse(path) } ?: return@update it
+            val uri = it.focusedMedia?.realPath?.toUri() ?: return@update it
             val data = it.getOrCreateVideoTrimData(uri)
             val clampedStartTime = max(startTimeUs, 0)
 

@@ -723,7 +723,7 @@ class SelectChatsUtils @Inject constructor(
             if (isGroup) {
                 val group = groupUtil.getSingleGroupInfo(accountID, false)
                 group?.members?.forEach { member ->
-                    recipientIds.add(member.id)
+                    member.id?.let { recipientIds.add(it) }
                 }
                 if (group != null) {
                     recipientIds.add(globalServices.myId)
@@ -1165,7 +1165,7 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
                         .sortedBy { it.name }
                         .map { group ->
                             ChatsContact(
-                                group.gid,
+                                group.gid ?: "",
                                 group.name,
                                 null,
                                 null,

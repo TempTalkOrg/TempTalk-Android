@@ -11,7 +11,7 @@ import com.difft.android.base.user.UserData
  * Pure-function field router for [UserData] writes (issue #725, Task 7).
  *
  * Decides which underlying DataStore receives the changed fields:
- *  - 15 auth fields  → `secure_user.pb` ([UserAuthData] via [UserAuthDataMapper]).
+ *  - 17 auth fields  → `secure_user.pb` ([UserAuthData] via [UserAuthDataMapper]).
  *  - 26 UX fields    → `app_state.preferences_pb` (typed [Preferences.Key]).
  *  - `password` dead field was dropped in Task 1.
  *

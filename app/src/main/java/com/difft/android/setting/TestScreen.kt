@@ -52,7 +52,6 @@ fun TestScreen(
     onSendMessageToSingleGroup: (count: Int) -> Unit,
     onCorruptDatabase: () -> Unit,
     onBackupDatabase: () -> Unit,
-    onSendRecoveryEvent: () -> Unit,
     onDialogTest: () -> Unit
 ) {
     var memberIds by remember { mutableStateOf("") }
@@ -153,13 +152,6 @@ fun TestScreen(
                 TestRowItem(
                     title = "Manual Backup Database",
                     onClick = onBackupDatabase
-                )
-
-                HorizontalDivider(color = DifftTheme.colors.bg)
-
-                TestRowItem(
-                    title = "Send Recovery Event",
-                    onClick = onSendRecoveryEvent
                 )
             }
 
@@ -351,7 +343,6 @@ private fun TestScreenPreview() {
             onSendMessageToSingleGroup = {},
             onCorruptDatabase = {},
             onBackupDatabase = {},
-            onSendRecoveryEvent = {},
             onDialogTest = {}
         )
     }

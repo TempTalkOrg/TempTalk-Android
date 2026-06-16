@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -24,6 +25,7 @@ import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.globalServices
@@ -176,12 +178,17 @@ class CriticalAlertActivity: ComponentActivity() {
 
     private fun showCriticalAlertUI(conversationId: String, title: String, message: String, roomId: String? = null) {
         setContent {
-            Content(
-                title = title,
-                message = message,
-                conversationId = conversationId,
-                roomId = roomId
-            )
+            DifftTheme(darkTheme = true) {
+                SideEffect {
+                    window.setBackgroundDrawableResource(android.R.color.transparent)
+                }
+                Content(
+                    title = title,
+                    message = message,
+                    conversationId = conversationId,
+                    roomId = roomId
+                )
+            }
         }
     }
 

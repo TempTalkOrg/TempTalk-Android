@@ -12,6 +12,7 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import difft.android.messageserialization.MessageStore
 import com.difft.android.network.config.WsTokenManager
+import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import org.difft.app.database.WCDB
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,7 @@ class LogoutManagerImpl @Inject constructor(
     private val webSocketManager: WebSocketManager,
     private val coordinator: DomainSpeedTestCoordinator,
     private val wcdb: WCDB,
+    private val proxyConfigProvider: ProxyConfigProvider,
 ) : LogoutManager {
     override fun doLogout() {
         performLogout(clearAllData = true)
@@ -70,6 +72,14 @@ class LogoutManagerImpl @Inject constructor(
                 // we explicitly clear the unread counter here.
                 userManager.update { unreadMsgNum = 0 }
                 ContactRemarkCache.clear()
+                // Mirror the full-clear path: invalidate the proxy provider's in-memory
+                // @Volatile cache eagerly so it doesn't keep serving the previous user's
+                // TURN secret until the next refreshFromUserDataIfChanged() read. The
+                // on-disk wipe of proxyShareLink/proxyEnabled happens inside
+                // clearStoragesForAuthOnly() -> StorageBoundUserManager.clearAuthOnly();
+                // this call is the in-memory belt-and-braces.
+                runCatching { proxyConfigProvider.clear() }
+                    .onFailure { L.w { "[Proxy] clear during passive logout failed: ${it.message}" } }
                 clearStoragesForAuthOnly()
                 // Issue #754: failed_message retry queue is per-account. On
                 // passive logout the WCDB itself survives, so clear the table
@@ -113,6 +123,13 @@ class LogoutManagerImpl @Inject constructor(
         messageStore.deleteDatabase()
 
         ContactRemarkCache.clear()
+
+        // Unconditional clear on logout: the share link embeds the coturn
+        // `static-auth-secret` (when present) — that's a user-bound secret and
+        // must not persist across account boundaries. Wrapped in runCatching so
+        // a clear failure cannot block the rest of the logout sequence.
+        runCatching { proxyConfigProvider.clear() }
+            .onFailure { L.w { "[Proxy] clear during logout failed: ${it.message}" } }
 
         FileUtil.clearAllFilesExceptLogs()
 

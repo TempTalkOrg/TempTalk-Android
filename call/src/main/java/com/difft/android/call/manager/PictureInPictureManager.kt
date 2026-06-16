@@ -5,7 +5,6 @@ import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.util.Rational
-import androidx.annotation.RequiresApi
 import androidx.lifecycle.Lifecycle
 import com.difft.android.base.log.lumberjack.L
 import kotlinx.coroutines.CoroutineScope
@@ -62,8 +61,7 @@ class PictureInPictureManager(
      * 检查系统是否支持 PIP
      */
     fun isSystemPipEnabledAndAvailable(): Boolean {
-        return android.os.Build.VERSION.SDK_INT >= 26 &&
-                activity.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        return activity.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
     /**
@@ -71,7 +69,6 @@ class PictureInPictureManager(
      * @param tag 调用标签，用于日志记录
      * @return 是否成功进入 PIP 模式
      */
-    @RequiresApi(android.os.Build.VERSION_CODES.O)
     fun enterPipMode(tag: String? = null): Boolean {
         L.i { "[Call] PictureInPictureManager enterPipMode tag:$tag" }
         
@@ -103,7 +100,6 @@ class PictureInPictureManager(
      * @param newConfig 新的配置
      * @param isScreenLocked 屏幕是否锁定（由调用方提供）
      */
-    @RequiresApi(android.os.Build.VERSION_CODES.O)
     fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration,
@@ -135,7 +131,6 @@ class PictureInPictureManager(
     /**
      * 尝试设置 PIP 参数（Binder IPC，可能耗时较长）
      */
-    @RequiresApi(android.os.Build.VERSION_CODES.O)
     private fun tryToSetPictureInPictureParams() {
         if (isPipParamsSet) return
         try {

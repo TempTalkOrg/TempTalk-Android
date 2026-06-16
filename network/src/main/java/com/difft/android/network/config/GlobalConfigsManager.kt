@@ -13,6 +13,7 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.network.requests.ContactsRequestBody
 import com.difft.android.base.user.Data
 import com.difft.android.network.BuildConfig
@@ -45,6 +46,7 @@ class GlobalConfigsManager @Inject constructor(
     @param:ChativeHttpClientModule.Chat
     private val chatHttpClient: Lazy<ChativeHttpClient>,
     private val secureConfigStore: SecureConfigStore,
+    private val proxyConfigProviderLazy: Lazy<ProxyConfigProvider>,
     private val gson: Gson,
 ) : IGlobalConfigsManager {
 
@@ -119,6 +121,13 @@ class GlobalConfigsManager @Inject constructor(
             L.i { "[GlobalConfigsManager] Starting refresh job" }
             try {
                 inMemoryGlobalConfig = loadInitialConfig()
+                // Hydration push: the disk/assets read just above updates the in-memory
+                // field, which is what `getNewGlobalConfigs()` returns. Without this push,
+                // a freshly-loaded richer disk cache is invisible to the tunnel-host set
+                // until the next successful HTTP fetch (5 min foreground / 1 hr bg).
+                // runCatching: a fault in the proxy hook must not break the refresh loop.
+                runCatching { proxyConfigProviderLazy.get().onGlobalConfigChanged() }
+                    .onFailure { L.w { "[GlobalConfigsManager] proxy hydration hook failed: ${it.stackTraceToString()}" } }
             } catch (e: Exception) {
                 L.e { "[GlobalConfigsManager] Failed to init config cache: ${e.message}" }
             }
@@ -179,6 +188,9 @@ class GlobalConfigsManager @Inject constructor(
                     L.i { "[GlobalConfigsManager] get global configs success: $url" }
                     inMemoryGlobalConfig = config
                     saveConfigToStore(config)
+                    // runCatching: a fault in the proxy hook must not break the refresh loop.
+                    runCatching { proxyConfigProviderLazy.get().onGlobalConfigChanged() }
+                        .onFailure { L.w { "[GlobalConfigsManager] proxy hook failed: ${it.stackTraceToString()}" } }
                     config.data?.emojiReaction?.let { emojis ->
                         updateMostUseEmojis(emojis)
                     }

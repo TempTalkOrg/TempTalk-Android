@@ -15,7 +15,6 @@ import android.view.View
 import android.webkit.MimeTypeMap
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -48,6 +47,7 @@ import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.ContactsFragment
+import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupChatContentActivity
@@ -184,8 +184,10 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     @Inject
     lateinit var gson: Gson
 
+    @Inject
+    lateinit var weakContactReconciler: WeakContactReconciler
+
     @SuppressLint("ClickableViewAccessibility")
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityIndexBinding.inflate(layoutInflater)
@@ -193,6 +195,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         // Setup dual-pane layout for large screens (w840dp)
         setupDualPaneLayout()
+
+        val density = resources.displayMetrics.density
+        L.i { "[IndexActivity] screen swDp=${resources.configuration.smallestScreenWidthDp} widthDp=${(WindowSizeClassUtil.getWindowWidthPx(this) / density).toInt()} heightDp=${(WindowSizeClassUtil.getWindowHeightPx(this) / density).toInt()} dualPane=$isDualPaneMode" }
 
         // Load and emit text size early to avoid ANR in UI components
         TextSizeUtil.loadAndEmitTextSize()
@@ -268,6 +273,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             }
         }
 
+        // Reclaim recreation-restored detail fragments once the adapter + restored currentItem are ready.
+        binding.viewpager.post { restoreDetailFragmentsState() }
+
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 RecentChatUtil.emitChatDoubleTab()
@@ -284,6 +292,11 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         recordUA()
 
         initWCDB()
+
+        // Weak-contact cold-start reconcile: fetch deletedRecords, full overwrite + diff side-effects.
+        // Placed after initWCDB() so the weak table is mounted; reconcile is Mutex-serialized internally
+        // and concurrency-safe against WS notify.
+        lifecycleScope.launch(Dispatchers.IO) { weakContactReconciler.reconcile("coldStart") }
 
         startReceivingMessages()
 
@@ -1009,11 +1022,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         isDualPaneMode = detailPane != null
 
         if (isDualPaneMode) {
-            // Clear any restored fragments from configuration change to prevent overlap
-            // tabDetailFragments map is empty after recreation but FragmentManager may restore fragments
-            clearRestoredDetailFragments()
-
-            // Show empty state initially
+            // Empty state by default; restoreDetailFragmentsState() (posted from onCreate) reclaims
+            // any recreation-restored detail fragments — too early to reclaim here.
             findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
             findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
 
@@ -1108,6 +1118,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      * MVP: uses notifyDataSetChanged on visible items. Heavier than payload-based refresh
      * but acceptable for the once-per-drag-end frequency.
      */
+    @SuppressLint("NotifyDataSetChanged")
     private fun refreshDetailPaneMessageBubbles() {
         val detailPane = findViewById<View>(com.difft.android.R.id.detail_pane) ?: return
         // Walk descendants to find any RecyclerView. ChatFragment hosts its message list as one.
@@ -1153,33 +1164,82 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         const val MIN_DETAIL_PANE_WIDTH_DP = 360
     }
 
+    // Per-tab tag (not per-conversation) — one detail fragment per tab, ceiling 3.
+    private fun detailFragmentTagForTab(tabIndex: Int): String = "detail_tab_$tabIndex"
+    private val detailFragmentTagRegex = Regex("""detail_tab_(\d+)""")
+
     /**
-     * Clear any fragments that were restored by FragmentManager after configuration change.
-     * This prevents fragment overlap when tabDetailFragments map is empty but FragmentManager
-     * has restored fragments from the previous configuration.
+     * After a config-change recreation, FragmentManager auto-restores the detail fragments but our
+     * [tabDetailFragments] map (an Activity field) is lost. Rebuild it from each fragment's per-tab
+     * tag, then show the current tab's fragment and hide the rest — they share one container, so
+     * without this they'd overlap (the bug #438 avoided by clearing instead).
      */
-    private fun clearRestoredDetailFragments() {
-        // ViewPager fragments that should NOT be cleared
+    private fun restoreDetailFragmentsState() {
+        if (!isDualPaneMode) return
+
+        // List-pane fragments to exclude (same whitelist as the old clear path).
         val viewPagerFragmentTypes = setOf(
             RecentChatFragment::class.java,
             ContactsFragment::class.java,
             MeFragment::class.java
         )
 
-        // Find all detail fragments (any fragment that is NOT a ViewPager fragment)
-        val restoredFragments = supportFragmentManager.fragments.filter { fragment ->
-            !viewPagerFragmentTypes.contains(fragment.javaClass)
+        // Restored detail fragments = non-list fragments with a per-tab tag (already attached, don't re-add).
+        val restored = supportFragmentManager.fragments.filter { fragment ->
+            !viewPagerFragmentTypes.contains(fragment.javaClass) &&
+                fragment.tag?.let { detailFragmentTagRegex.matches(it) } == true
         }
 
-        if (restoredFragments.isNotEmpty()) {
-            val transaction = supportFragmentManager.beginTransaction()
-            restoredFragments.forEach { transaction.remove(it) }
-            transaction.commitNow()
+        if (restored.isEmpty()) return // fresh launch / nothing open
+
+        restored.forEach { fragment ->
+            val tabIndex = detailFragmentTagRegex.matchEntire(fragment.tag!!)!!.groupValues[1].toInt()
+            tabDetailFragments[tabIndex] = fragment
         }
 
-        // Clear the map as well
-        tabDetailFragments.clear()
-        currentConversationId = null
+        currentTabIndex = binding.viewpager.currentItem
+
+        // Show only the current tab's fragment, hide the rest (overlap fix).
+        val transaction = supportFragmentManager.beginTransaction()
+        tabDetailFragments.forEach { (tab, fragment) ->
+            if (fragment != null) {
+                if (tab == currentTabIndex) transaction.show(fragment) else transaction.hide(fragment)
+            }
+        }
+        transaction.commit()
+
+        // Restore current tab's chrome + currentConversationId (mirrors handleTabChangeForDualPane).
+        val current = tabDetailFragments[currentTabIndex]
+        if (current != null) {
+            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
+            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+            currentConversationId = when (current) {
+                is ChatFragment -> {
+                    setDetailPaneChatBackground()
+                    current.arguments?.getString(ChatFragment.ARG_CONTACT_ID)
+                }
+                is GroupChatFragment -> {
+                    setDetailPaneChatBackground()
+                    current.arguments?.getString(GroupChatFragment.ARG_GROUP_ID)
+                }
+                is ContactDetailFragment -> {
+                    clearDetailPaneChatBackground()
+                    current.arguments?.getString(ContactDetailFragment.ARG_CONTACT_ID)
+                }
+                else -> {
+                    clearDetailPaneChatBackground()
+                    null
+                }
+            }
+        } else {
+            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
+            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
+            clearDetailPaneChatBackground()
+            currentConversationId = null
+        }
+
+        L.i { "[IndexActivity] restoreDetailFragmentsState reclaimed=${tabDetailFragments.size} currentTab=$currentTabIndex hasDetail=${current != null}" }
+        notifyListFragmentSelectionChanged()
     }
 
     /**
@@ -1270,15 +1330,15 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             currentConversationId = when (newFragment) {
                 is ChatFragment -> {
                     setDetailPaneChatBackground()
-                    newFragment.arguments?.getString("ARG_CONTACT_ID")
+                    newFragment.arguments?.getString(ChatFragment.ARG_CONTACT_ID)
                 }
                 is GroupChatFragment -> {
                     setDetailPaneChatBackground()
-                    newFragment.arguments?.getString("ARG_GROUP_ID")
+                    newFragment.arguments?.getString(GroupChatFragment.ARG_GROUP_ID)
                 }
                 is ContactDetailFragment -> {
                     clearDetailPaneChatBackground()
-                    newFragment.arguments?.getString("ARG_CONTACT_ID")
+                    newFragment.arguments?.getString(ContactDetailFragment.ARG_CONTACT_ID)
                 }
                 else -> {
                     clearDetailPaneChatBackground()
@@ -1320,11 +1380,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         val transaction = supportFragmentManager.beginTransaction()
 
-        // Remove old fragment for current tab
+        // Remove old + add new => one detail fragment per tab (ceiling stays 3).
         oldFragment?.let { transaction.remove(it) }
 
-        // Add new fragment
-        transaction.add(com.difft.android.R.id.fragment_container_detail, newFragment, tag)
+        // Per-tab tag lets restoreDetailFragmentsState() reclaim this fragment after recreation.
+        val effectiveTag = tag ?: detailFragmentTagForTab(currentTabIndex)
+        transaction.add(com.difft.android.R.id.fragment_container_detail, newFragment, effectiveTag)
         transaction.commit()
 
         // Update the map

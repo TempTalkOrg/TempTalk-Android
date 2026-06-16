@@ -31,9 +31,9 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
+                android:importantForAccessibility="no"
                 android:padding="4dp"
-                app:tint="@color/t.primary.night"
-                tools:ignore="ContentDescription" />
+                app:tint="@color/t.primary.night" />
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_title_initial"
@@ -47,6 +47,7 @@
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_invite"
+                tools:ignore="RelativeOverlap"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_alignParentEnd="true"
@@ -86,6 +87,7 @@
             <ImageView
                 android:layout_width="20dp"
                 android:layout_height="20dp"
+                android:importantForAccessibility="no"
                 android:src="@drawable/call_ic_arrow_right"
                 app:tint="@color/t.secondary.night" />
         </LinearLayout>
@@ -123,9 +125,9 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
+                android:importantForAccessibility="no"
                 android:padding="4dp"
-                app:tint="@color/t.primary.night"
-                tools:ignore="ContentDescription" />
+                app:tint="@color/t.primary.night" />
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_title_add"
@@ -139,6 +141,7 @@
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_done"
+                tools:ignore="RelativeOverlap"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_alignParentEnd="true"

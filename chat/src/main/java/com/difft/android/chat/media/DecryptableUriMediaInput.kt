@@ -2,14 +2,12 @@ package com.difft.android.chat.media
 
 import android.content.Context
 import android.net.Uri
-import androidx.annotation.RequiresApi
 import org.thoughtcrime.securesms.video.interfaces.MediaInput
 import java.io.IOException
 
 /**
  * A media input source that is decrypted on the fly.
  */
-@RequiresApi(api = 23)
 object DecryptableUriMediaInput {
     @JvmStatic
     @Throws(IOException::class)

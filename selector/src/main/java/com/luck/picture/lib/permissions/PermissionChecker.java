@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.Build;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
@@ -62,12 +61,6 @@ public class PermissionChecker {
             return;
         }
         if (fragment instanceof PictureCommonFragment) {
-            if (Build.VERSION.SDK_INT < 23) {
-                if (permissionResultCallback != null) {
-                    permissionResultCallback.onGranted();
-                }
-                return;
-            }
             Activity activity = fragment.getActivity();
             List<String> permissionList = new ArrayList<>();
             for (String[] permissionArray : permissionGroupList) {

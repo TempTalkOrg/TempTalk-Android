@@ -4,8 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.net.Uri
 import android.os.Looper
+import androidx.core.net.toUri
 import android.os.Process
 import android.view.View
 import androidx.lifecycle.LifecycleOwner
@@ -38,7 +38,7 @@ fun String.utf8Substring(maxUtf8Len: Int): String {
 }
 
 fun Context.openExternalBrowser(url: String) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
     startActivity(intent)
 }
 

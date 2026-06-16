@@ -14,6 +14,7 @@ import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.mapToMessageId
 import kotlinx.coroutines.launch
 import org.difft.app.database.delete
+import org.difft.app.database.deleteMessagesPaged
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBReactionModel
@@ -76,7 +77,7 @@ constructor(
             try {
                 wcdb.message.getAllObjects(DBMessageModel.id.`in`(messageIds)).forEach {
                     it.delete()
-                    RoomChangeTracker.trackRoom(it.roomId, RoomChangeType.MESSAGE)
+                    RoomChangeTracker.trackRoom(it.roomId ?: "", RoomChangeType.MESSAGE)
                     L.d { "[Message] delete message success:" + it.id }
                 }
             } catch (e: Exception) {
@@ -88,10 +89,14 @@ constructor(
     override fun removeRoomAndMessages(roomId: String) {
         appScope.launch {
             try {
+                // Delete the room row FIRST so the conversation disappears from the list
+                // immediately — a user-initiated delete should feel instant. Then page-delete
+                // its messages. An interrupted paged delete leaves orphan messages (room gone,
+                // rows remain) — harmless: no room row to surface them; a later sweep reclaims
+                // them. Deleting messages first instead would keep the room visible for the whole
+                // paged-delete window (~100ms × pages). Orphan cleanup is a tracked follow-up. (#909)
                 wcdb.room.deleteObjects(DBRoomModel.roomId.eq(roomId))
-                wcdb.message.getAllObjects(DBMessageModel.roomId.eq(roomId)).forEach {
-                    it.delete()
-                }
+                deleteMessagesPaged(DBMessageModel.roomId.eq(roomId))
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
                 L.i { "[Message] remove room and messages success: $roomId" }
             } catch (e: Exception) {
@@ -262,15 +267,14 @@ constructor(
         val expression = DBMessageModel.roomId.eq(conversationId)
             .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
             .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
-        val list = wcdb.message.getAllObjects(expression)
-        L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp} size:${list.size}" }
-        if (list.isNotEmpty()) {
-            wcdb.message.updateValue(
-                readMaxTimestamp,
-                DBMessageModel.readTime,
-                expression
-            )
-        }
+        // #909 #4: drop the unbounded getAllObjects load — updateValue is a no-op on an
+        // empty match set, so the isNotEmpty() guard was pure overhead. No load needed.
+        wcdb.message.updateValue(
+            readMaxTimestamp,
+            DBMessageModel.readTime,
+            expression
+        )
+        L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp}" }
     }
 
     override fun savePendingMessage(messageId: String, originalMessageTimeStamp: Long, messageEnvelopBytes: ByteArray) {

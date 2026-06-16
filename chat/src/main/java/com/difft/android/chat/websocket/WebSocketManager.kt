@@ -1,6 +1,7 @@
 package com.difft.android.chat.websocket
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.chat.messages.IncomingMessageObserver
 import com.difft.android.websocket.api.AppWebSocketHelper
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
@@ -16,7 +17,13 @@ import javax.inject.Singleton
 class WebSocketManager @Inject constructor(
     private val appWebSocketHelper: AppWebSocketHelper,
     private val incomingMessageObserver: IncomingMessageObserver
-) {
+) : IConnectionRefresher {
+    // @Volatile: read by reconnectAfterProxyChange() outside the @Synchronized
+    // start/stop/reset path. Without @Volatile, a writer thread's update would
+    // not be guaranteed to be visible to a non-synchronized reader on a
+    // different thread (JMM happens-before only holds between synchronized
+    // accesses on the same monitor).
+    @Volatile
     private var isStarted = false
 
     /**
@@ -95,4 +102,32 @@ class WebSocketManager @Inject constructor(
      * Get current connection state
      */
     fun getConnectionState() = appWebSocketHelper.chatDataWebSocketConnection.webSocketConnectionState.value
-} 
+
+    /**
+     * Drop the current IM WebSocket (when connected) so the next reconnect picks
+     * up the latest `ProxyConfigProvider` state. healthMonitor (started via
+     * `startMonitoring()` in [start]) re-establishes the connection automatically.
+     *
+     * Fire-and-forget — see [IConnectionRefresher.reconnectAfterProxyChange] contract.
+     */
+    override fun reconnectAfterProxyChange() {
+        if (!isStarted) {
+            L.i { "[ws] reconnectAfterProxyChange: manager not started, no-op" }
+            return
+        }
+        val conn = appWebSocketHelper.chatDataWebSocketConnection
+        val state = conn.webSocketConnectionState.value
+        when (state) {
+            WebSocketConnectionState.CONNECTED, WebSocketConnectionState.CONNECTING -> {
+                L.i { "[ws] reconnectAfterProxyChange: state=$state, evicting pool + cancelling to force fresh connect" }
+                conn.evictConnectionPool()
+                conn.cancelConnection()
+                // healthMonitor (started via startMonitoring()) re-establishes
+                // and the new attempt reads the updated ProxyConfigProvider.current.
+            }
+            else -> {
+                L.i { "[ws] reconnectAfterProxyChange: state=$state, no active socket; next connect picks up new state" }
+            }
+        }
+    }
+}

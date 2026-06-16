@@ -1,5 +1,6 @@
 package com.difft.android.call.ui.screenshare
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -16,11 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.ui.video.VideoItemTrackSelector
@@ -29,6 +30,8 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 
+// Screen sharing requires landscape on phones; restored on dispose.
+@SuppressLint("SourceLockedOrientationActivity")
 @Composable
 fun ScreenSharingView(
     room: Room,
@@ -65,7 +68,7 @@ fun ScreenSharingView(
     Box(
         modifier = Modifier.fillMaxSize()
             .clip(shape = RoundedCornerShape(8.dp))
-            .background(colorResource(id = com.difft.android.base.R.color.bg1_night)),
+            .background(DifftTheme.colors.background),
         contentAlignment = Alignment.Center )
     {
         VideoItemTrackSelector(

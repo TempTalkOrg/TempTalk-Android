@@ -588,7 +588,7 @@ class MessageNotificationUtil @Inject constructor(
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             // Add unique data URI to ensure PendingIntent uniqueness
             // (PendingIntent matching doesn't include extras)
-            data = android.net.Uri.parse("app://notification/$notificationId/${System.currentTimeMillis()}")
+            data = "app://notification/$notificationId/${System.currentTimeMillis()}".toUri()
         }
         
         return PendingIntent.getActivity(

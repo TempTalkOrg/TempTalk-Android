@@ -58,7 +58,7 @@ object SearchUtils {
                 viewData.onlyOneResult = true
                 viewData.messageTimeStamp = singleMessage.timeStamp
             } else {
-                viewData.detail = context.getString(R.string.search_related_messages, result.messageCount)
+                viewData.detail = context.resources.getQuantityString(R.plurals.search_related_messages, result.messageCount, result.messageCount)
             }
 
             viewData
@@ -70,11 +70,11 @@ object SearchUtils {
         val contacts = wcdb.getContactorsFromAllTable(contactorIds)
 
         val result = messageModels.map { messageModel ->
-            val conversationId = messageModel.roomId
+            val conversationId = messageModel.roomId ?: ""
             val senderId = messageModel.fromWho
 
             val newChatViewData = SearchChatHistoryViewData(conversationId)
-            val contact: ContactorModel = contacts.find { contact -> contact.id == messageModel.fromWho } ?: ContactorModel().also { it.id = senderId }
+            val contact: ContactorModel = contacts.find { contact -> contact.id == messageModel.fromWho } ?: ContactorModel().also { it.id = senderId ?: "" }
 
             newChatViewData.label = contact.getDisplayNameForUI()
             newChatViewData.detail = messageModel.messageText

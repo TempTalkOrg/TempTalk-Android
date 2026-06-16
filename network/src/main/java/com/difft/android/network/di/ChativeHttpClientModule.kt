@@ -6,6 +6,7 @@ import android.content.Context
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
+import com.difft.android.network.proxy.ProxyConfigProvider
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -53,9 +54,15 @@ object ChativeHttpClientModule {
     fun provideDefaultClient(
         @ApplicationContext applicationContext: Context,
         urlManager: UrlManager,
-        authTokenProvider: ChativeHttpClient.AuthProvider
+        authTokenProvider: ChativeHttpClient.AuthProvider,
+        proxyConfigProvider: ProxyConfigProvider
     ): ChativeHttpClient {
-        return ChativeHttpClient(applicationContext, urlManager.default, authTokenProvider)
+        return ChativeHttpClient(
+            applicationContext,
+            urlManager.default,
+            authTokenProvider,
+            proxyConfigProvider = proxyConfigProvider
+        )
     }
 
     @Chat
@@ -64,9 +71,15 @@ object ChativeHttpClientModule {
     fun provideChatClient(
         @ApplicationContext applicationContext: Context,
         urlManager: UrlManager,
-        authTokenProvider: ChativeHttpClient.AuthProvider
+        authTokenProvider: ChativeHttpClient.AuthProvider,
+        proxyConfigProvider: ProxyConfigProvider
     ): ChativeHttpClient {
-        return ChativeHttpClient(applicationContext, urlManager.chat, authTokenProvider)
+        return ChativeHttpClient(
+            applicationContext,
+            urlManager.chat,
+            authTokenProvider,
+            proxyConfigProvider = proxyConfigProvider
+        )
     }
 
     @Call
@@ -75,14 +88,16 @@ object ChativeHttpClientModule {
     fun provideMeetingNewClient(
         @ApplicationContext applicationContext: Context,
         urlManager: UrlManager,
-        authTokenProvider: ChativeHttpClient.AuthProvider
+        authTokenProvider: ChativeHttpClient.AuthProvider,
+        proxyConfigProvider: ProxyConfigProvider
     ): ChativeHttpClient {
         return ChativeHttpClient(
             applicationContext,
             urlManager.call,
             authTokenProvider,
             connectTimeoutSeconds = 5,
-            readWriteTimeoutSeconds = 5
+            readWriteTimeoutSeconds = 5,
+            proxyConfigProvider = proxyConfigProvider
         )
     }
 
@@ -92,14 +107,16 @@ object ChativeHttpClientModule {
     fun provideFileShareClient(
         @ApplicationContext applicationContext: Context,
         urlManager: UrlManager,
-        authTokenProvider: ChativeHttpClient.AuthProvider
+        authTokenProvider: ChativeHttpClient.AuthProvider,
+        proxyConfigProvider: ProxyConfigProvider
     ): ChativeHttpClient {
         return ChativeHttpClient(
             applicationContext,
             urlManager.fileSharing,
             authTokenProvider,
             connectTimeoutSeconds = 30,
-            readWriteTimeoutSeconds = 30
+            readWriteTimeoutSeconds = 30,
+            proxyConfigProvider = proxyConfigProvider
         )
     }
 
@@ -109,6 +126,7 @@ object ChativeHttpClientModule {
     fun provideNoHeaderClient(
         @ApplicationContext applicationContext: Context,
         urlManager: UrlManager,
+        proxyConfigProvider: ProxyConfigProvider
     ): ChativeHttpClient {
         return ChativeHttpClient(
             applicationContext,
@@ -117,7 +135,8 @@ object ChativeHttpClientModule {
             useCustomCa = false,
             removeHeader = true,
             connectTimeoutSeconds = 30,
-            readWriteTimeoutSeconds = 30
+            readWriteTimeoutSeconds = 30,
+            proxyConfigProvider = proxyConfigProvider
         )
     }
 
@@ -131,14 +150,16 @@ object ChativeHttpClientModule {
     fun provideSignalApiClient(
         @ApplicationContext applicationContext: Context,
         urlManager: UrlManager,
-        authTokenProvider: ChativeHttpClient.AuthProvider
+        authTokenProvider: ChativeHttpClient.AuthProvider,
+        proxyConfigProvider: ProxyConfigProvider
     ): ChativeHttpClient {
         return ChativeHttpClient(
             applicationContext,
             urlManager.chat,
             authTokenProvider,
             useHttpClientInterceptor = false,
-            serializeNulls = true  // Match Jackson's default null-field serialization
+            serializeNulls = true,  // Match Jackson's default null-field serialization
+            proxyConfigProvider = proxyConfigProvider
         )
     }
 

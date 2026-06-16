@@ -155,7 +155,7 @@ class ChatNormalPaginationController @AssistedInject constructor(
         _chatMessagesStateFlow.value =
             ChatMessageListBehavior(
                 messageList = newMessageList,
-                scrollAction = null, // 加载上一页不滚动，保持当前位置
+                scrollAction = ScrollAction.PreservePosition, // 加载上一页不滚动，保持当前位置
                 updateTimestamp = System.currentTimeMillis(),
                 anchorMessageBefore = anchorMessageBefore,
                 anchorMessageAfter = anchorMessageAfter
@@ -208,7 +208,7 @@ class ChatNormalPaginationController @AssistedInject constructor(
         _chatMessagesStateFlow.value =
             ChatMessageListBehavior(
                 messageList = messageList,
-                scrollAction = null, // 加载下一页不滚动，保持当前位置
+                scrollAction = ScrollAction.PreservePosition, // 加载下一页不滚动，保持当前位置
                 updateTimestamp = System.currentTimeMillis(),
                 anchorMessageBefore = anchorMessageBefore,
                 anchorMessageAfter = anchorMessageAfter

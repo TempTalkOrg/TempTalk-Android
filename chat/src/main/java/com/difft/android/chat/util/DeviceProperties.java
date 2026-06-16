@@ -4,7 +4,6 @@ import android.app.ActivityManager;
 import android.app.ActivityManager.MemoryInfo;
 import android.content.Context;
 import android.net.ConnectivityManager;
-import android.os.Build;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
@@ -72,15 +71,13 @@ public final class DeviceProperties {
   }
 
   public static DataSaverState getDataSaverState(@NonNull Context context) {
-    if (Build.VERSION.SDK_INT >= 24) {
-      switch (ServiceUtil.getConnectivityManager(context).getRestrictBackgroundStatus()) {
-        case ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED:
-          return DataSaverState.ENABLED;
-        case ConnectivityManager.RESTRICT_BACKGROUND_STATUS_WHITELISTED:
-          return DataSaverState.ENABLED_BUT_EXEMPTED;
-        case ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED:
-          return DataSaverState.DISABLED;
-      }
+    switch (ServiceUtil.getConnectivityManager(context).getRestrictBackgroundStatus()) {
+      case ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED:
+        return DataSaverState.ENABLED;
+      case ConnectivityManager.RESTRICT_BACKGROUND_STATUS_WHITELISTED:
+        return DataSaverState.ENABLED_BUT_EXEMPTED;
+      case ConnectivityManager.RESTRICT_BACKGROUND_STATUS_DISABLED:
+        return DataSaverState.DISABLED;
     }
 
     return DataSaverState.DISABLED;

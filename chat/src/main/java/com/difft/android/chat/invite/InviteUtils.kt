@@ -15,6 +15,7 @@ import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import cn.bingoogolapple.qrcode.zxing.QRCodeEncoder
@@ -212,7 +213,7 @@ class InviteUtils @Inject constructor() {
 
     private fun createQRBitmap(context: Activity, url: String): Bitmap? {
         val logoBitmap = androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_invite_qr_logo)?.let {
-            val bitmap = Bitmap.createBitmap(it.intrinsicWidth, it.intrinsicHeight, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(it.intrinsicWidth, it.intrinsicHeight)
             val canvas = android.graphics.Canvas(bitmap)
             it.setBounds(0, 0, canvas.width, canvas.height)
             it.draw(canvas)

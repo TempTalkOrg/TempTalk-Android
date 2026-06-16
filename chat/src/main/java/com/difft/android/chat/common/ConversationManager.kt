@@ -42,7 +42,7 @@ class ConversationManagerImpl @Inject constructor(
         is For.Account -> listOf(room.id, globalServices.myId)
         is For.Group -> groupUtil.getSingleGroupInfo(room.id)
             ?.members
-            ?.map { it.id }
+            ?.mapNotNull { it.id }
             ?: emptyList()
     }
 
@@ -68,7 +68,7 @@ class ConversationManagerImpl @Inject constructor(
         is For.Group -> wcdb.group
             .getFirstObject(DBGroupModel.gid.eq(room.id))
             ?.members
-            ?.map { it.id }
+            ?.mapNotNull { it.id }
             ?: emptyList()
     }
 

@@ -1303,7 +1303,7 @@ public final class FileUtils {
             }
             sb.append(hex);
         }
-        return sb.toString().toUpperCase();
+        return sb.toString().toUpperCase(java.util.Locale.ROOT);
     }
 
     public static byte[] decodeDigestHex(String encoded) throws IOException {
@@ -1458,15 +1458,8 @@ public final class FileUtils {
     public static long getFsTotalSize(String anyPathInFs) {
         if (TextUtils.isEmpty(anyPathInFs)) return 0;
         StatFs statFs = new StatFs(anyPathInFs);
-        long blockSize;
-        long totalSize;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            blockSize = statFs.getBlockSizeLong();
-            totalSize = statFs.getBlockCountLong();
-        } else {
-            blockSize = statFs.getBlockSize();
-            totalSize = statFs.getBlockCount();
-        }
+        long blockSize = statFs.getBlockSizeLong();
+        long totalSize = statFs.getBlockCountLong();
         return blockSize * totalSize;
     }
 
@@ -1479,15 +1472,8 @@ public final class FileUtils {
     public static long getFsAvailableSize(final String anyPathInFs) {
         if (TextUtils.isEmpty(anyPathInFs)) return 0;
         StatFs statFs = new StatFs(anyPathInFs);
-        long blockSize;
-        long availableSize;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            blockSize = statFs.getBlockSizeLong();
-            availableSize = statFs.getAvailableBlocksLong();
-        } else {
-            blockSize = statFs.getBlockSize();
-            availableSize = statFs.getAvailableBlocks();
-        }
+        long blockSize = statFs.getBlockSizeLong();
+        long availableSize = statFs.getAvailableBlocksLong();
         return blockSize * availableSize;
     }
 

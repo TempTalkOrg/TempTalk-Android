@@ -4,7 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg1">
+    android:background="@color/bg1"
+    tools:ignore="Overdraw">
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
@@ -37,7 +38,8 @@
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toStartOf="@+id/action_button_area"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:targetApi="28" />
 
                 <androidx.appcompat.widget.LinearLayoutCompat
                     android:id="@+id/action_button_area"
@@ -83,6 +85,7 @@
             android:textColor="@color/t.primary"
             android:textSize="20sp"
             tools:drawableRight="@drawable/circled_close_f"
+            tools:ignore="LabelFor"
             tools:text="Wea Meeting" />
 
         <View
@@ -120,7 +123,9 @@
                 android:text="@string/install_call_btn_add"
                 android:textColor="@color/t.info"
                 android:textSize="14sp"
-                android:textStyle="normal" />
+                android:textStyle="normal"
+                tools:ignore="RtlHardcoded"
+                tools:targetApi="28" />
         </LinearLayout>
 
 

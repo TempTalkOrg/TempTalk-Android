@@ -24,10 +24,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Service for updating database and notifying UI changes.
@@ -36,7 +38,7 @@ import org.difft.app.database.models.DBRoomModel
 object WCDBUpdateService :
     CoroutineScope by CoroutineScope(CoroutineName("WCDBUpdateService") + Dispatchers.IO + SupervisorJob()) {
 
-    private var isUpdatingRoomsStarted = false
+    private val isUpdatingRoomsStarted = AtomicBoolean(false)
 
     // Room table update notification
     private val _roomTableUpdated = MutableSharedFlow<Unit>(
@@ -62,7 +64,7 @@ object WCDBUpdateService :
      *    - New data: use emptyRoomSince for timeout check
      *    - Old data (emptyRoomSince is null): fallback to lastActiveTime
      */
-    fun cleanEmptyRooms(activeConversationConfig: ActiveConversation) {
+    suspend fun cleanEmptyRooms(activeConversationConfig: ActiveConversation) = withContext(Dispatchers.IO) {
         try {
             val currentTime = System.currentTimeMillis()
             val groupTimeoutMillis = activeConversationConfig.group * 1000L
@@ -117,33 +119,34 @@ object WCDBUpdateService :
             val roomsToDelete = wcdb.room.getAllObjects(finalCondition)
             if (roomsToDelete.isEmpty()) {
                 L.i { "[WCDBUpdateService] cleanEmptyRooms: no rooms to delete" }
-                return
+                return@withContext
             }
 
             val roomIdsToDelete = roomsToDelete.map { it.roomId }
             L.i { "[WCDBUpdateService] cleanEmptyRooms: deleting ${roomIdsToDelete.size} rooms: $roomIdsToDelete" }
 
-            // Delete all messages in these rooms (should mostly be archive system messages)
-            // Use MessageModel.delete() to properly clean up related data (attachments, reactions, etc.)
-            var totalDeletedCount = 0
-
+            // Delete all messages in these rooms (should mostly be archive system messages).
+            // #909 R3: use deleteMessagesPaged so we never materialize an entire room's messages
+            // into memory (same unbounded getAllObjects anti-pattern the issue removed elsewhere).
             roomIdsToDelete.forEach { roomId ->
-                val messages = wcdb.message.getAllObjects(DBMessageModel.roomId.eq(roomId))
-
-                // Log warning for non-archive messages (shouldn't exist in empty rooms)
-                val nonArchiveMessages = messages.filterNot { isArchiveExpiredSystemMessage(it) }
-                if (nonArchiveMessages.isNotEmpty()) {
-                    L.w { "[WCDBUpdateService] cleanEmptyRooms: Found ${nonArchiveMessages.size} non-archive messages in empty room $roomId" }
-                    nonArchiveMessages.forEach { message ->
-                        L.w { "[WCDBUpdateService] cleanEmptyRooms: - type=${message.type}, id=${message.id}" }
-                    }
+                // Diagnostic: warn if any business (non-Notify) message survives in an "empty" room.
+                // Archive-expired system messages are TYPE_NOTIFY (actionType 10012); a non-Notify
+                // message here is unexpected. Checked via COUNT (no object load) — this is a SQL
+                // approximation of the old per-row isArchiveExpiredSystemMessage filter (which parses
+                // messageText JSON and cannot be expressed in SQL); it narrows to "stray business
+                // messages", the case the warning actually exists to surface.
+                val nonArchiveCount = messageCount(
+                    DBMessageModel.roomId.eq(roomId)
+                        .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
+                )
+                if (nonArchiveCount > 0) {
+                    L.w { "[WCDBUpdateService] cleanEmptyRooms: Found $nonArchiveCount non-archive (non-Notify) messages in empty room $roomId" }
                 }
 
-                // Delete all messages with related data
-                messages.forEach { it.delete() }
-                totalDeletedCount += messages.size
+                // Delete all messages with related data (per-row delete preserved by the helper).
+                deleteMessagesPaged(DBMessageModel.roomId.eq(roomId))
             }
-            L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted $totalDeletedCount messages with related data" }
+            L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted messages with related data for ${roomIdsToDelete.size} rooms" }
 
             // Delete room records
             val deletedRooms = wcdb.room.deleteObjects(finalCondition)
@@ -164,11 +167,8 @@ object WCDBUpdateService :
     }
 
     fun updatingRooms() {
-        if (isUpdatingRoomsStarted) {
-            L.d { "[WCDBUpdateService] updatingRooms already started, skipping duplicate registration" }
-            return
-        }
-        isUpdatingRoomsStarted = true
+        // Atomic check-then-act: exactly one caller registers the collector, concurrent callers no-op.
+        if (!isUpdatingRoomsStarted.compareAndSet(false, true)) return
 
         L.i { "[WCDBUpdateService] Starting room updates listener" }
         RoomChangeTracker.roomChanges
@@ -320,6 +320,8 @@ object WCDBUpdateService :
             }
             .catch { e ->
                 L.e(e) { "[Message][WCDBUpdateService] Error in flow:" }
+                // Reset so a future caller can re-register after a flow crash (no auto-restart here).
+                isUpdatingRoomsStarted.set(false)
             }
             .launchIn(this)
     }

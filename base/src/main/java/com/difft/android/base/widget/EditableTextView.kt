@@ -1,5 +1,6 @@
 package com.difft.android.base.widget
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.text.Editable
@@ -7,6 +8,7 @@ import android.text.TextWatcher
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.AppCompatAutoCompleteTextView
 import com.difft.android.base.R
 import com.difft.android.base.utils.RtlUtils
@@ -50,13 +52,17 @@ open class EditableTextView : AppCompatAutoCompleteTextView {
 
     private fun init(attributes: AttributeSet) {
         val ta = context.obtainStyledAttributes(attributes, R.styleable.EditableTextView)
-        //获取是否显示可快速清除按钮
-        mCanClear = ta.getBoolean(R.styleable.EditableTextView_clearable, false)
+        try {
+            //获取是否显示可快速清除按钮
+            mCanClear = ta.getBoolean(R.styleable.EditableTextView_clearable, false)
+        } finally {
+            ta.recycle()
+        }
         mDrawable = if (mCanClear) {
             compoundDrawablesRelative[2]
         } else {
             // 若属性中不传，使用默认值
-            context?.getDrawable(R.drawable.account_input_clear_icon)
+            context?.let { AppCompatResources.getDrawable(it, R.drawable.account_input_clear_icon) }
         }
 
         isFocusableInTouchMode = true
@@ -111,6 +117,8 @@ open class EditableTextView : AppCompatAutoCompleteTextView {
         )
     }
 
+    // Drawable hit-region 'click' is not whole-view click; performClick() would be misleading here.
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         when (event?.action) {
             MotionEvent.ACTION_UP -> {

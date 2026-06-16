@@ -3,6 +3,7 @@ package com.difft.android.chat.messages
 import android.os.Looper
 import com.difft.android.base.utils.ForegroundServiceStarter
 import io.mockk.every
+import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
@@ -14,6 +15,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.difft.app.database.WCDBUpdateService
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -112,6 +114,31 @@ class MessageForegroundServiceIntegrationTest {
         val scope = field.get(service) as CoroutineScope
         return scope.coroutineContext[Job]
             ?: error("serviceScope must have a Job in coroutineContext")
+    }
+
+    // T6 (Fix 1): onCreate must call WCDBUpdateService.updatingRooms(). mockkObject (Kotlin object, not mockkStatic); guards against removal / revert to start() / serviceScope.launch wrapping.
+    @Test
+    fun `T6 onCreate starts room-update collector via WCDBUpdateService_updatingRooms`() {
+        // Helper returns true (successful startForeground) so onCreate proceeds normally.
+        every {
+            ForegroundServiceStarter.startForegroundSafely(any(), any(), any(), any())
+        } returns true
+
+        // mockkObject (Kotlin singleton): stub updatingRooms() to a no-op so verify is deterministic.
+        mockkObject(WCDBUpdateService)
+        every { WCDBUpdateService.updatingRooms() } returns Unit
+
+        // Act: drive only onCreate (the single-shot registration hook).
+        val controller = Robolectric.buildService(MessageForegroundService::class.java)
+        controller.create()
+        idleMainLooper()
+
+        // Assert: production onCreate DELEGATED to WCDBUpdateService.updatingRooms() exactly once.
+        verify(exactly = 1) { WCDBUpdateService.updatingRooms() }
+
+        controller.destroy()
+        idleMainLooper()
+        assertFalse("isRunning must be false after destroy", MessageForegroundService.isRunning)
     }
 
     // ---------- T-int-1 + T-reg-1 ----------

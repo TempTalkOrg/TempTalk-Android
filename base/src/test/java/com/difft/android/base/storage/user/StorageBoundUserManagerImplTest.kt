@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.storage.AppStateKeys
+import com.difft.android.base.storage.UnavailableDataStore
 import com.difft.android.base.storage.schema.UserAuthData
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
@@ -193,6 +194,11 @@ class StorageBoundUserManagerImplTest {
             aciIdentityPublicKey = "pubkey-1"
             aciIdentityPrivateKey = "privkey-1"
             aciIdentityKeyGenTime = 11_111L
+            // Self-hosted proxy state — must be cleared by clearAuthOnly() because
+            // the share-link embeds a TURN secret (user-bound credential material
+            // that must not survive passive logout on shared devices).
+            proxyShareLink = "ytp://config?d=seeded-link"
+            proxyEnabled = true
             theme = 2
             lastUseTime = 7_777L
             textSize = 18
@@ -219,6 +225,9 @@ class StorageBoundUserManagerImplTest {
         assertNull(after.aciIdentityPublicKey)
         assertNull(after.aciIdentityPrivateKey)
         assertEquals(0L, after.aciIdentityKeyGenTime)
+        // Self-hosted proxy state cleared — TURN secret must not survive passive logout.
+        assertNull(after.proxyShareLink)
+        assertEquals(false, after.proxyEnabled)
         // UX fields preserved.
         assertEquals(2, after.theme)
         assertEquals(7_777L, after.lastUseTime)
@@ -245,6 +254,9 @@ class StorageBoundUserManagerImplTest {
         assertEquals("", storedAuth.aciIdentityPublicKey)
         assertEquals("", storedAuth.aciIdentityPrivateKey)
         assertEquals(0L, storedAuth.aciIdentityKeyGenTime)
+        // Proxy fields cleared on disk too (empty-string + false sentinel).
+        assertEquals("", storedAuth.proxyShareLink)
+        assertEquals(false, storedAuth.proxyEnabled)
 
         // app_state untouched.
         val appPrefs = appStateStore.data.first()
@@ -335,6 +347,26 @@ class StorageBoundUserManagerImplTest {
         assertEquals("bob", auth.account)
         assertEquals("blob-token", auth.baseAuth)
         assertEquals(true, auth.migrationV1Completed)
+    }
+
+    // T9 (crash 8d61a948): when the keystore-failure stub is injected as the secure store,
+    // warmUp must complete normally and the snapshot's baseAuth must be null (→ isLoggedIn=false).
+    // The stub's updateData is a no-op, so no R3 write-back can crash or persist anything.
+    @Test
+    fun `warmUp with UnavailableDataStore yields not-logged-in snapshot`() = runBlocking {
+        val degradedManager = StorageBoundUserManagerImpl(
+            secureUserStore = UnavailableDataStore(UserAuthData.EMPTY),
+            appStateStore = appStateStore,
+            context = ctx,
+            gson = Gson(),
+        )
+
+        degradedManager.warmUp()
+
+        val composed = degradedManager.getUserData()
+        assertNotNull(composed, "warmUp must complete and produce a snapshot")
+        assertNull(composed.baseAuth, "baseAuth must be null → isLoggedIn=false")
+        assertNull(composed.account)
     }
 
 }

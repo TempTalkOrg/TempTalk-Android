@@ -3,8 +3,8 @@ package com.difft.android.chat.group
 import com.difft.android.base.utils.globalServices
 
 import android.content.Context
-import android.net.Uri
 import android.util.Base64
+import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.common.GroupAvatarUtil
@@ -84,7 +84,7 @@ class GroupAvatarUploader @Inject constructor(
         val avatarData = GroupAvatarData(
             0,
             data.size.toString(),
-            MediaUtil.getMimeType(context, Uri.parse(filePath)),
+            MediaUtil.getMimeType(context, filePath.toUri()),
             digest,
             encryptionKey,
             response.id.toString()

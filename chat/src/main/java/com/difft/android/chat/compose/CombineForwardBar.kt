@@ -49,7 +49,6 @@ import com.difft.android.chat.R
 fun CombineForwardBar(
     @PreviewParameter(StateSelectMessageModelDataProvider::class) stateData: SelectMessageState,
     onForwardClick: () -> Unit = {},
-    onCombineClick: () -> Unit = {},
     onCopyClick: () -> Unit = {},
     onSaveClick: () -> Unit = {},
     onRecallClick: () -> Unit = {}
@@ -76,7 +75,7 @@ fun CombineForwardBar(
             )
         }
 
-        // Icons row with weights to distribute space evenly (5 tabs)
+        // Icons row with weights to distribute space evenly (4 tabs)
         // Horizontal padding: 8dp from Row + 4dp from each item = 12dp on edges
         // Middle spacing: 4dp + 4dp = 8dp between adjacent tabs
         Row(
@@ -85,22 +84,15 @@ fun CombineForwardBar(
                 .padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            // Forward Icon
+            // Forward Icon — single selection forwards one message; multi-selection
+            // bundles the selected messages into one combined-forward container
+            // (decided in ChatMessageViewModel.onForwardClick by selection count).
             IconWithText(
                 iconPainter = painterResource(R.drawable.ic_chat_pinned_manage_forward),
                 text = stringResource(R.string.chat_message_action_forward),
                 isEnabled = state.selectedMessageIds.isNotEmpty(),
                 onClick = onForwardClick,
                 modifier = Modifier.weight(1f)  // Use weight to distribute space
-            )
-
-            // Combine & Forward Icon
-            IconWithText(
-                iconPainter = painterResource(R.drawable.chat_message_action_select_multiple),
-                text = stringResource(R.string.chat_message_action_combine_forward),
-                isEnabled = state.selectedMessageIds.size > 1,
-                onClick = onCombineClick,
-                modifier = Modifier.weight(1f)
             )
 
             // Copy Icon — reuses the long-press menu copy icon

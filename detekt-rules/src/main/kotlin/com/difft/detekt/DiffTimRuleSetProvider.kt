@@ -7,9 +7,11 @@ import dev.detekt.api.RuleSetProvider
 /**
  * Custom Detekt rules for difft TempTalk Android.
  *
- * Scope: Coroutines / threading anti-patterns from issue #723. Each rule
- * targets a pattern proven to cause ANRs during the RxJava → Coroutines
- * migration (issues #718, #722).
+ * Scope: project-specific correctness rules. Most target coroutine / threading
+ * anti-patterns from issue #723 (patterns proven to cause ANRs during the
+ * RxJava → Coroutines migration, issues #718, #722); PrepareSelectMissingSelect
+ * targets a WCDB chaincall misuse (#910). Grouped under one ruleset id for now —
+ * split into a focused set (e.g. difft-wcdb) if the WCDB rule count grows.
  *
  * Adding new rules: append the class reference below; the SPI registration
  * in `resources/META-INF/services/dev.detekt.api.RuleSetProvider` still
@@ -29,6 +31,7 @@ class DiffTimRuleSetProvider : RuleSetProvider {
             ::BlockingWcdbInSuspend,
             ::BlockingSharedPrefsInSuspend,
             ::LifecycleScopeBlockingCall,
+            ::PrepareSelectMissingSelect,
         ),
     )
 

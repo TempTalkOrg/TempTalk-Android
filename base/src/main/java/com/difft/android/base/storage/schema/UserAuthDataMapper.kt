@@ -3,8 +3,8 @@ package com.difft.android.base.storage.schema
 import com.difft.android.base.user.UserData
 
 /**
- * Bidirectional mapping between the legacy 43-field [UserData] blob and the
- * 15-field encrypted [UserAuthData] payload.
+ * Bidirectional mapping between the legacy [UserData] blob and the encrypted
+ * [UserAuthData] payload (17 fields: 15 auth/identity + 2 self-hosted-proxy).
  *
  * Used by:
  *  1. [com.difft.android.base.storage.migration.SecureUserSpMigration] — projects
@@ -18,9 +18,9 @@ import com.difft.android.base.user.UserData
  * [UserAuthData], this mapper, and [com.difft.android.base.storage.user.UserDataFieldRouter]
  * (Task 7) — guarded by a Robolectric round-trip test.
  *
- * **Field count invariant**: 15 fields mapped both directions. The non-auth fields
- * (28 UX fields) are preserved verbatim from the `base` argument in [toUserData];
- * they never round-trip through this mapper.
+ * **Field count invariant**: 17 fields mapped both directions. The non-auth UX fields
+ * are preserved verbatim from the `base` argument in [toUserData]; they never
+ * round-trip through this mapper.
  */
 object UserAuthDataMapper {
 
@@ -47,12 +47,14 @@ object UserAuthDataMapper {
         aciIdentityOldPublicKey = auth.aciIdentityOldPublicKey.nullIfEmpty(),
         aciIdentityOldPrivateKey = auth.aciIdentityOldPrivateKey.nullIfEmpty(),
         aciIdentityKeyGenTime = auth.aciIdentityKeyGenTime,
+        proxyShareLink = auth.proxyShareLink.nullIfEmpty(),
+        proxyEnabled = auth.proxyEnabled,
     )
 
     /**
-     * Extract the 15 auth fields from [userData]. The [UserAuthData.migrationV1Completed]
-     * marker is left at its default `false` — only set during the migration path via
-     * [fromLegacyComplete].
+     * Extract the 17 auth + proxy fields from [userData]. The
+     * [UserAuthData.migrationV1Completed] marker is left at its default `false` —
+     * only set during the migration path via [fromLegacyComplete].
      *
      * Boundary conversion: `null` in [UserData] → empty string in [UserAuthData].
      * Required because `kotlinx-serialization-protobuf` does NOT support nullable properties.
@@ -74,6 +76,8 @@ object UserAuthDataMapper {
         aciIdentityOldPrivateKey = userData.aciIdentityOldPrivateKey.orEmpty(),
         aciIdentityKeyGenTime = userData.aciIdentityKeyGenTime,
         migrationV1Completed = false,
+        proxyShareLink = userData.proxyShareLink.orEmpty(),
+        proxyEnabled = userData.proxyEnabled,
     )
 
     private fun String.nullIfEmpty(): String? = if (this.isEmpty()) null else this

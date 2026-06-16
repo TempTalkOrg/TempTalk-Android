@@ -4,7 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/bg1">
+    android:background="@color/bg1"
+    tools:ignore="Overdraw">
 
     <!--    <View-->
     <!--        android:id="@+id/topLine"-->
@@ -115,6 +116,16 @@
             </LinearLayout>
 
             <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/quoteThumbnail"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                tools:src="@tools:sample/avatars"
+                tools:visibility="visible" />
+
+            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/quoteDelete"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
@@ -215,7 +226,7 @@
                 app:layout_goneMarginEnd="12dp"
                 app:layout_goneMarginStart="12dp">
 
-                <com.difft.android.chat.widget.PasteAwareEditText
+                <com.difft.android.chat.widget.RichContentEditText
                     android:id="@+id/edittext_input"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"

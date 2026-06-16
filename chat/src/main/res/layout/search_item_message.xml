@@ -75,7 +75,7 @@
         android:textSize="12sp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/avatar_view"
+        app:layout_constraintTop_toTopOf="@+id/cl_avatar"
         tools:text="3:54" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

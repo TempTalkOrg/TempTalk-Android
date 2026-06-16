@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
@@ -29,6 +30,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.chat.contacts.contactsremark.ContactSetRemarkActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.isBotId
@@ -103,13 +105,17 @@ class ContactDetailFragment : Fragment() {
     }
 
     companion object {
-        private const val ARG_CONTACT_ID = "ARG_CONTACT_ID"
+        // Public so IndexActivity can read it when reconstructing the dual-pane detail after recreation.
+        const val ARG_CONTACT_ID = "ARG_CONTACT_ID"
         private const val ARG_CUSTOM_ID = "ARG_CUSTOM_ID"
         private const val ARG_CONTACT_NAME = "ARG_CONTACT_NAME"
         private const val ARG_SOURCE_TYPE = "ARG_SOURCE_TYPE"
         private const val ARG_SOURCE = "ARG_SOURCE"
         private const val ARG_AVATAR = "ARG_AVATAR"
         private const val ARG_JOINED_AT = "ARG_JOINED_AT"
+
+        /** Server business status: target account logged out / deregistered / unavailable. */
+        private const val ERR_ACCOUNT_UNAVAILABLE = 19009
 
         fun newInstance(
             contactId: String,
@@ -169,6 +175,9 @@ class ContactDetailFragment : Fragment() {
 
     private var isFriend = true
 
+    /** Weak-pending (delayed-removal) contact — drives the "Remove Now" entry. */
+    private var isWeakPending = false
+
     /** Whether this fragment is displayed in popup (BottomSheet) mode */
     private val isPopupMode: Boolean
         get() = parentFragment is com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -201,7 +210,8 @@ class ContactDetailFragment : Fragment() {
                         onAddFriendClick = ::requestAddFriend,
                         onCommonGroupsClick = ::handleCommonGroupsClick,
                         onCopyUserId = ::handleCopyUserId,
-                        onWebsiteClick = ::handleWebsiteClick
+                        onWebsiteClick = ::handleWebsiteClick,
+                        onRemoveNowClick = ::requestRemoveNow
                     )
                 }
             }
@@ -223,21 +233,37 @@ class ContactDetailFragment : Fragment() {
     }
 
     private fun initData() {
+        // SharedFlow tryEmit can resume collector before viewLifecycleOwner cancels — guard before sync access (Crashlytics 936790a0).
+        if (!isAdded || view == null) return
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Weak-pending check: pending contacts are already moved out of the contactor table,
+                // so isPending=true forces non-friend + the "Remove Now" entry. Re-evaluated on every
+                // initData() — observeContactsUpdate() re-runs this on contactsUpdate emits
+                // (remove-now / reconcile), giving a reactive refresh.
+                isWeakPending = withContext(Dispatchers.IO) {
+                    requireContext().getEntryPoint().getPendingRemovalContactRepository().isPending(contactId)
+                }
+
                 val contact = withContext(Dispatchers.IO) {
                     java.util.Optional.ofNullable(wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId)))
                 }
 
-                val finalContact = if (contact.isPresent) {
+                val finalContact = if (contact.isPresent && !isWeakPending) {
                     isFriend = true
                     contact
                 } else {
                     isFriend = false
                     withContext(Dispatchers.IO) {
-                        val rows = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.eq(contactId))
-                        val selected = rows.firstOrNull { it.gid == "" } ?: rows.firstOrNull()
-                        java.util.Optional.ofNullable(selected?.convertToContactorModel())
+                        // Weak-pending: use the value chain (getContactWithID inserts the weak
+                        // snapshot layer) so the name/avatar render even after the peer deregisters.
+                        if (isWeakPending) {
+                            ContactorUtil.getContactWithID(requireContext(), contactId)
+                        } else {
+                            val rows = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.id.eq(contactId))
+                            val selected = rows.firstOrNull { it.gid == "" } ?: rows.firstOrNull()
+                            java.util.Optional.ofNullable(selected?.convertToContactorModel())
+                        }
                     }
                 }
 
@@ -321,6 +347,7 @@ class ContactDetailFragment : Fragment() {
         ContactorUtil.contactsUpdate
             .filter { it.contains(contactId) }
             .onEach {
+                if (!isAdded || view == null) return@onEach // belt-and-suspenders, initData also guards
                 if (skipNextUpdate) {
                     // Skip self-triggered update to avoid redundant reload
                     skipNextUpdate = false
@@ -510,6 +537,7 @@ class ContactDetailFragment : Fragment() {
         uiState = ContactDetailUiState(
             contactor = contactor,
             isFriend = isFriend,
+            isWeakPending = isWeakPending,
             isSelf = isSelf,
             isBot = isBot,
             isOfficialBot = isOfficialBot,
@@ -549,12 +577,59 @@ class ContactDetailFragment : Fragment() {
                     navigateToChat()
                 } else {
                     ComposeDialogManager.dismissWait()
-                    response.reason?.let { ToastUtil.show(it) }
+                    when {
+                        // 19009 = peer account logged out / deregistered. Weak-pending (still in the
+                        // address book, removable) → alert offering a delete entry; otherwise a plain
+                        // toast. Both use the product-fixed copy, not the server reason.
+                        response.status == ERR_ACCOUNT_UNAVAILABLE && isWeakPending ->
+                            showAccountUnavailableDialog()
+
+                        response.status == ERR_ACCOUNT_UNAVAILABLE ->
+                            ToastUtil.show(getString(R.string.weak_contact_account_unavailable_message))
+
+                        else -> response.reason?.let { ToastUtil.show(it) }
+                    }
                 }
             } catch (e: Exception) {
                 ComposeDialogManager.dismissWait()
                 e.message?.let { ToastUtil.show(it) }
             }
+        }
+    }
+
+    /**
+     * 19009 + weak-pending: the peer account is gone but the contact is still in the address book.
+     * Offer a delete entry (reuses "Remove Now") so the user can clear it instead of retrying add.
+     * Not weak-pending → the caller shows a toast instead (no delete entry, per the product spec).
+     */
+    private fun showAccountUnavailableDialog() {
+        ComposeDialogManager.showMessageDialog(
+            context = requireContext(),
+            title = getString(R.string.weak_contact_account_unavailable_title),
+            message = getString(R.string.weak_contact_account_unavailable_message),
+            confirmText = getString(R.string.contact_remove),
+            cancelText = getString(R.string.weak_contact_account_unavailable_ok),
+            confirmButtonColor = ColorTokens.Error, // align with detail page "Remove Now" (DifftTheme.colors.error)
+            onConfirm = { requestRemoveNow() }
+        )
+    }
+
+    /**
+     * "Remove Now" for a weak-pending contact. Pessimistic: the server DELETE must succeed before
+     * the local removal happens — onSuccess means the record is gone, so close the card; onFailure
+     * leaves the card open with a retry toast.
+     */
+    private fun requestRemoveNow() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            requireContext().getEntryPoint().getWeakContactReconciler().removeNow(contactId)
+                .onSuccess {
+                    // Close the card via the popup-aware path (dismiss sheet in popup mode,
+                    // finish Activity otherwise) — a bare finish() would kill the host Activity.
+                    if (isAdded) handleCloseClick()
+                }
+                .onFailure {
+                    if (isAdded) ToastUtil.show(getString(R.string.weak_contact_remove_now_failed))
+                }
         }
     }
 

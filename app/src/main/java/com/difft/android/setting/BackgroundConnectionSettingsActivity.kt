@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -97,14 +98,14 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         // Trigger recomposition to refresh system states
-        refreshTrigger.value++
+        refreshTrigger.intValue++
     }
 
     @Preview
     @Composable
     private fun MainContent() {
         // Watch refresh trigger to update system states
-        val trigger = refreshTrigger.value
+        val trigger = refreshTrigger.intValue
 
         var isBackgroundConnectionEnabled by remember(trigger) {
             mutableStateOf(MessageForegroundService.isRunning)
@@ -214,7 +215,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             Modifier.fillMaxSize().systemBarsPadding()
         ) {
             TitleBar(
-                titleText = context.getString(com.difft.android.chat.R.string.background_connection),
+                titleText = stringResource(com.difft.android.chat.R.string.background_connection),
                 onBackClick = {
                     (context as? BackgroundConnectionSettingsActivity)?.onBackPressedDispatcher?.onBackPressed()
                 }
@@ -290,11 +291,11 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 DividerLine()
                 CheckItem(
-                    title = context.getString(com.difft.android.chat.R.string.background_restriction_check),
+                    title = stringResource(com.difft.android.chat.R.string.background_restriction_check),
                     status = if (isBackgroundRestricted) {
-                        context.getString(com.difft.android.chat.R.string.background_restriction_restricted)
+                        stringResource(com.difft.android.chat.R.string.background_restriction_restricted)
                     } else {
-                        context.getString(com.difft.android.chat.R.string.background_restriction_unrestricted)
+                        stringResource(com.difft.android.chat.R.string.background_restriction_unrestricted)
                     },
                     showArrow = true,
                     onClick = onBackgroundRestrictionClick
@@ -304,11 +305,11 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             // Battery optimization check
             DividerLine()
             CheckItem(
-                title = context.getString(com.difft.android.chat.R.string.battery_optimization_check),
+                title = stringResource(com.difft.android.chat.R.string.battery_optimization_check),
                 status = if (isIgnoringBatteryOpt) {
-                    context.getString(com.difft.android.chat.R.string.battery_optimization_ignored)
+                    stringResource(com.difft.android.chat.R.string.battery_optimization_ignored)
                 } else {
-                    context.getString(com.difft.android.chat.R.string.battery_optimization_not_ignored)
+                    stringResource(com.difft.android.chat.R.string.battery_optimization_not_ignored)
                 },
                 showArrow = !isIgnoringBatteryOpt,
                 onClick = if (!isIgnoringBatteryOpt) onBatteryOptimizationClick else null
@@ -317,11 +318,11 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             // Data saver check
             DividerLine()
             CheckItem(
-                title = context.getString(com.difft.android.chat.R.string.data_saver_check),
+                title = stringResource(com.difft.android.chat.R.string.data_saver_check),
                 status = if (isDataSaverRestricted) {
-                    context.getString(com.difft.android.chat.R.string.data_saver_restricted)
+                    stringResource(com.difft.android.chat.R.string.data_saver_restricted)
                 } else {
-                    context.getString(com.difft.android.chat.R.string.data_saver_unrestricted)
+                    stringResource(com.difft.android.chat.R.string.data_saver_unrestricted)
                 },
                 showArrow = true,
                 onClick = onDataSaverClick
@@ -331,8 +332,8 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             if (canOpenAutoStart) {
                 DividerLine()
                 CheckItem(
-                    title = context.getString(com.difft.android.chat.R.string.auto_start_check),
-                    status = context.getString(com.difft.android.chat.R.string.auto_start_need_check),
+                    title = stringResource(com.difft.android.chat.R.string.auto_start_check),
+                    status = stringResource(com.difft.android.chat.R.string.auto_start_need_check),
                     showArrow = true,
                     onClick = onAutoStartClick
                 )
@@ -342,11 +343,11 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 DividerLine()
                 CheckItem(
-                    title = context.getString(com.difft.android.chat.R.string.exact_alarm_check),
+                    title = stringResource(com.difft.android.chat.R.string.exact_alarm_check),
                     status = if (hasExactAlarmPermission) {
-                        context.getString(com.difft.android.chat.R.string.exact_alarm_granted)
+                        stringResource(com.difft.android.chat.R.string.exact_alarm_granted)
                     } else {
-                        context.getString(com.difft.android.chat.R.string.exact_alarm_not_granted)
+                        stringResource(com.difft.android.chat.R.string.exact_alarm_not_granted)
                     },
                     showArrow = !hasExactAlarmPermission,
                     onClick = if (!hasExactAlarmPermission) onExactAlarmClick else null
@@ -360,7 +361,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
     private fun BottomTipsText() {
         val context = LocalContext.current
         Text(
-            text = context.getString(com.difft.android.chat.R.string.background_connection_tips),
+            text = stringResource(com.difft.android.chat.R.string.background_connection_tips),
             fontSize = 14.sp,
             color = Color(
                 ContextCompat.getColor(
@@ -387,7 +388,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = context.getString(com.difft.android.chat.R.string.background_connection),
+                text = stringResource(com.difft.android.chat.R.string.background_connection),
                 fontSize = 16.sp,
                 color = Color(
                     ContextCompat.getColor(

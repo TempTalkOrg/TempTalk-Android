@@ -2,11 +2,11 @@ package com.difft.android.call.manager
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import android.widget.TextView
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
@@ -66,7 +66,7 @@ class CallDialogManager(
         // 如果对话框已存在，只更新倒计时
         if (callEndReminderDialog != null) {
             val remainingSeconds = secondsToLeaveMeeting - 1
-            callEndReminderMessageView?.text = "${remainingSeconds}s left"
+            callEndReminderMessageView?.text = activity.getString(R.string.call_ending_seconds_left, remainingSeconds)
             if (remainingSeconds <= 0) {
                 onEndCall()
             }
@@ -121,7 +121,7 @@ class CallDialogManager(
             },
             onViewCreated = { view ->
                 val messageView = view.findViewById<TextView>(R.id.tv_message)
-                messageView.text = "${secondsToLeaveMeeting}s left"
+                messageView.text = activity.getString(R.string.call_ending_seconds_left, secondsToLeaveMeeting)
                 callEndReminderMessageView = messageView
             }
         )
@@ -178,7 +178,7 @@ class CallDialogManager(
                     try {
                         val intent = Intent(
                             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:${activity.packageName}")
+                            "package:${activity.packageName}".toUri()
                         ).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
@@ -231,7 +231,7 @@ class CallDialogManager(
                         return@launch
                     }
                     // 更新倒计时显示
-                    callEndReminderMessageView?.text = "${remainingSeconds}s left"
+                    callEndReminderMessageView?.text = activity.getString(R.string.call_ending_seconds_left, remainingSeconds)
                     if (remainingSeconds <= 0) {
                         onEndCall()
                         return@launch

@@ -2,6 +2,9 @@ package com.difft.android.network
 
 import android.content.Context
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
+import com.difft.android.network.proxy.ProxyConfigProvider
+import com.difft.android.network.proxy.ProxyTunnelDns
+import com.difft.android.network.proxy.ProxyTunnelSocketFactory
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import okhttp3.ConnectionSpec
@@ -23,7 +26,13 @@ class ChativeHttpClient(
     connectTimeoutSeconds: Long = 15,
     readWriteTimeoutSeconds: Long = 15,
     useHttpClientInterceptor: Boolean = true,
-    serializeNulls: Boolean = false
+    serializeNulls: Boolean = false,
+    /**
+     * When non-null, all connections from this client are routed through the
+     * self-hosted proxy (TLS-in-TLS) whenever the provider reports an active
+     * config. Read at connect time, so runtime enable/disable needs no rebuild.
+     */
+    private val proxyConfigProvider: ProxyConfigProvider? = null
 ) {
 
     interface AuthProvider {
@@ -66,6 +75,12 @@ class ChativeHttpClient(
                 val socketFactory = officialSSLSocketFactoryCreator.socketFactory
                 val trustManager = officialSSLSocketFactoryCreator.trustManager
                 sslSocketFactory(socketFactory, trustManager)
+            }
+            // Outer TLS-in-TLS tunnel. No-op while the proxy is disabled (plain
+            // socket + system DNS), so the inner chative TLS above is unchanged.
+            proxyConfigProvider?.let { provider ->
+                dns(ProxyTunnelDns(provider))
+                socketFactory(ProxyTunnelSocketFactory(provider))
             }
         }
         .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)

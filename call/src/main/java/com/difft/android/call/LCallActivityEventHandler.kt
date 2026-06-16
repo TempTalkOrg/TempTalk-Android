@@ -1,6 +1,5 @@
 package com.difft.android.call
 
-import android.os.Build
 import android.provider.Settings
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
@@ -118,11 +117,7 @@ internal fun LCallActivity.handleInviteViewAction(action: InviteViewState) {
 }
 
 internal fun LCallActivity.enterPipModeIfPossible(tag: String? = null): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        pictureInPictureManager?.enterPipMode(tag) ?: false
-    } else {
-        false
-    }
+    return pictureInPictureManager?.enterPipMode(tag) ?: false
 }
 
 internal fun LCallActivity.showPipPermissionToastOrEnterPipMode(tag: String?) {

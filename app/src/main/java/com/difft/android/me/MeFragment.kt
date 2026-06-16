@@ -30,6 +30,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.difft.android.BuildConfig
 import com.difft.android.R
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneHost
@@ -213,8 +214,8 @@ class MeFragment : Fragment() {
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        //测试环境显示测试页面入口
-        if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT)) {
+        //测试环境显示测试页面入口（且仅 debug 构建，避免破坏性 DB 测试入口进入 TTDevOfficialRelease）
+        if (environmentHelper.isThatEnvironment(environmentHelper.ENVIRONMENT_DEVELOPMENT) && BuildConfig.DEBUG) {
             binding.clTest.visibility = View.VISIBLE
             binding.clTest.setOnClickListener {
                 startActivity(Intent(requireContext(), TestActivity::class.java))

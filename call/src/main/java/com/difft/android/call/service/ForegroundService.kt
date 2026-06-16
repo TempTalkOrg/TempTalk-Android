@@ -293,16 +293,14 @@ open class ForegroundService : Service() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(
-                CHANNEL_CONFIG_NAME_ONGOING_CALL,
-                DEFAULT_CHANNEL_ID,  // User-visible name
-                NotificationManager.IMPORTANCE_DEFAULT // or HIGH, LOW, MIN
-            )
-            val manager = getSystemService<NotificationManager?>(NotificationManager::class.java)
-            if (manager != null) {
-                manager.createNotificationChannel(serviceChannel)
-            }
+        val serviceChannel = NotificationChannel(
+            CHANNEL_CONFIG_NAME_ONGOING_CALL,
+            DEFAULT_CHANNEL_ID,  // User-visible name
+            NotificationManager.IMPORTANCE_DEFAULT // or HIGH, LOW, MIN
+        )
+        val manager = getSystemService<NotificationManager?>(NotificationManager::class.java)
+        if (manager != null) {
+            manager.createNotificationChannel(serviceChannel)
         }
     }
 
@@ -322,7 +320,7 @@ open class ForegroundService : Service() {
      */
     @RequiresApi(30)
     private fun updateServiceType() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isForegroundStarted) {
+        if (isForegroundStarted) {
             val newServiceType = getServiceType()
             val notification = buildForegroundNotification()
             if (ForegroundServiceStarter.startForegroundSafely(

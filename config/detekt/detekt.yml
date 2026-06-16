@@ -38,6 +38,15 @@ difft-coroutines:
       - '**/src/androidTest/**'
       - '**/src/testFixtures/**'
 
+  # Guards against the #910 read-receipt regression: a WCDB prepareSelect() chain
+  # missing .select(...) compiles but NPEs at runtime (Select.fields null).
+  PrepareSelectMissingSelect:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
   # LifecycleScopeBlockingCall deliberately OFF in PR 1.
   # Initial scan flagged 234 lambdas; ~95% were legitimate non-blocking suspend
   # work (flow collect, simple state updates, etc.). Without lambda-body

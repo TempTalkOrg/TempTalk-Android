@@ -28,9 +28,9 @@ class WebsocketResponse internal constructor(
                     val colonIndex = raw.indexOf(":")
 
                     if (colonIndex > 0 && colonIndex < raw.length - 1) {
-                        val key = raw.substring(0, colonIndex).trim { it <= ' ' }
+                        val key = raw.substring(0, colonIndex).trim()
                             .lowercase(Locale.getDefault())
-                        val value = raw.substring(colonIndex + 1).trim { it <= ' ' }
+                        val value = raw.substring(colonIndex + 1).trim()
 
                         headers[key] = value
                     }

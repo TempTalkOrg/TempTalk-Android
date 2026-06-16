@@ -17,7 +17,6 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.widget.ConstraintLayout
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 import com.difft.android.call.util.StringUtil
 import com.difft.android.base.R as BaseR
@@ -35,7 +35,7 @@ internal fun MicQueueList(waitingSpeakers: List<WaitingSpeakerDisplay>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider(
             thickness = 1.dp,
-            color = colorResource(id = BaseR.color.bg3_night),
+            color = DifftTheme.colors.backgroundTertiary,
         )
         Text(
             text = stringResource(id = R.string.call_screen_share_mic_queue),
@@ -44,7 +44,7 @@ internal fun MicQueueList(waitingSpeakers: List<WaitingSpeakerDisplay>) {
                 lineHeight = 14.sp,
                 fontWeight = FontWeight.Normal,
             ),
-            color = colorResource(id = BaseR.color.t_secondary_night),
+            color = DifftTheme.colors.textSecondary,
         )
         waitingSpeakers.forEach { speaker ->
             key(speaker.sid) {
@@ -76,7 +76,7 @@ internal fun MicQueueItem(speaker: WaitingSpeakerDisplay) {
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.Normal,
             ),
-            color = colorResource(id = BaseR.color.t_secondary_night),
+            color = DifftTheme.colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -106,7 +106,7 @@ internal fun AvatarContent(avatarModel: Any?) {
             Box(
                 modifier = Modifier
                     .size(AVATAR_SIZE)
-                    .background(colorResource(id = BaseR.color.bg2_night)),
+                    .background(DifftTheme.colors.backgroundSecondary),
             )
         }
     }

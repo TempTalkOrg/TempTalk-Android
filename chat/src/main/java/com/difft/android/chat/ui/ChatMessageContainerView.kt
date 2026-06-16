@@ -37,9 +37,9 @@ class ChatMessageContainerView @JvmOverloads constructor(
 
         val clMessageTime = findViewById<View>(R.id.cl_message_time)
         val icon = findViewById<View>(R.id.iv_confidential_icon)
-        var timeViewWidth = if (clMessageTime != null && clMessageTime.visibility == VISIBLE) clMessageTime.measuredWidth else 0
+        var timeViewWidth = if (clMessageTime != null && clMessageTime.isVisible) clMessageTime.measuredWidth else 0
         // Confidential icon visible: fixed offset covers icon(22) + gap(3) + margin(8) + buffer(7)
-        if (icon != null && icon.visibility == VISIBLE) {
+        if (icon != null && icon.isVisible) {
             timeViewWidth += 40.dp
         }
 

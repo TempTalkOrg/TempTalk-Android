@@ -84,7 +84,7 @@ class GroupInCommonActivity : BaseActivity() {
     private val mGroupsAdapter: GroupInCommonAdapter by lazy {
         object : GroupInCommonAdapter() {
             override fun onItemClick(group: GroupModel) {
-                GroupChatContentActivity.startActivity(this@GroupInCommonActivity, group.gid)
+                GroupChatContentActivity.startActivity(this@GroupInCommonActivity, group.gid ?: "")
             }
 
             override fun onItemLongClick(itemView: View, group: GroupModel, touchX: Int, touchY: Int) {
@@ -252,7 +252,7 @@ class GroupInCommonActivity : BaseActivity() {
                     ComposeDialogManager.showWait(this@GroupInCommonActivity)
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(myID)))
+                            groupRepo.leaveGroup(group.gid ?: "", AddOrRemoveMembersReq(mutableListOf(myID)))
                         }
                         if (!response.isSuccess()) {
                             ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
@@ -283,7 +283,7 @@ class GroupInCommonActivity : BaseActivity() {
                     ComposeDialogManager.showWait(this@GroupInCommonActivity)
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.deleteGroup(group.gid)
+                            groupRepo.deleteGroup(group.gid ?: "")
                         }
                         if (!response.isSuccess()) {
                             ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
@@ -322,7 +322,7 @@ class GroupInCommonActivity : BaseActivity() {
                         ComposeDialogManager.showWait(this@GroupInCommonActivity)
                         try {
                             val response = withContext(Dispatchers.IO) {
-                                groupRepo.removeMembers(group.gid, listOf(cid))
+                                groupRepo.removeMembers(group.gid ?: "", listOf(cid))
                             }
                             if (!response.isSuccess()) {
                                 ToastUtil.show(response.reason ?: getString(R.string.operation_failed))

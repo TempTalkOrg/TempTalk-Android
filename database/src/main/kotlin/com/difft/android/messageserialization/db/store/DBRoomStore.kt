@@ -8,7 +8,7 @@ import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import org.difft.app.database.convertToContactorModel
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.mentions
+import org.difft.app.database.messageCount
 import org.difft.app.database.updateRoomUnreadState
 import org.difft.app.database.wcdb
 import difft.android.messageserialization.For
@@ -20,9 +20,12 @@ import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Column
+import com.tencent.wcdb.winq.Order
+import com.tencent.wcdb.winq.StatementSelect
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
+import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBRoomModel
@@ -319,39 +322,72 @@ class DBRoomStore @Inject constructor(
 
     override suspend fun getUnreadMessageInfo(room: For): UnreadMessageInfo {
         val readPosition = getMessageReadPosition(room)
-        L.d { "[Message] get unread info readPosition:$readPosition" }
-        val unreadMessages = wcdb.message.getAllObjects(
-            DBMessageModel.roomId.eq(room.id)
-                .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
-                .and(DBMessageModel.fromWho.notEq(myID))
-                .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
-        )
-        return if (room is For.Group) {
-            val mentionsList = unreadMessages.filter { message ->
-                message.mentions()
-                    .find { mention -> mention.uid == myID } != null || message.mentions()
-                    .find { mention -> mention.uid == MENTIONS_ALL_ID } != null
-            }
-            val mentionType = if (mentionsList.find { message ->
-                    message.mentions().find { mention -> mention.uid == myID } != null
-                } != null) {
-                MENTIONS_TYPE_ME
-            } else if (mentionsList.find { message ->
-                    message.mentions()
-                        .find { mention -> mention.uid == MENTIONS_ALL_ID } != null
-                } != null) {
-                MENTIONS_TYPE_ALL
-            } else {
-                MENTIONS_TYPE_NONE
-            }
-            UnreadMessageInfo(
-                unreadMessages.size,
-                mentionType,
-                mentionsList.size,
-                mentionsList.map { messageModel -> messageModel.timeStamp }
+        // #909 #3: count via SQL COUNT (no object load); mention info via subquery against
+        // the `mention` table (bounded by mention count, not by total unread count).
+        val unreadCond = DBMessageModel.roomId.eq(room.id)
+            .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
+            .and(DBMessageModel.fromWho.notEq(myID))
+            .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
+
+        val unreadCount = messageCount(unreadCond).toInt()
+        // #909 R3 hot-path short-circuit: when nothing is unread, mentions are necessarily empty —
+        // skip the group mention subquery entirely (this is called on every bottom-button refresh).
+        if (unreadCount == 0) return UnreadMessageInfo(0)
+        if (room !is For.Group) return UnreadMessageInfo(unreadCount)
+
+        val (mentionType, mentionTimeStamps) = queryUnreadMentions(room.id, readPosition)
+        return UnreadMessageInfo(unreadCount, mentionType, mentionTimeStamps.size, mentionTimeStamps)
+    }
+
+    /**
+     * Computes the @-mention type and the `timeStamp`s of mentioning unread messages for a
+     * group room, without loading any [MessageModel]. (#909 TP3)
+     *
+     * - The unread message ids are expressed as a correlated SQL subquery (never materialized).
+     * - `mentionType` is derived from the matching `mention.uid`s (me > all > none).
+     * - `mentionTimeStamps` = `message.timeStamp` of the mentioning messages — the consumer
+     *   (ChatMessageListFragment) matches these against `MessageModel.timeStamp`, so the
+     *   `timeStamp` field (not `systemShowTimestamp`) is preserved.
+     *
+     * @return Pair(mentionType, mentionTimeStamps).
+     */
+    private fun queryUnreadMentions(roomId: String, readPosition: Long): Pair<Int, List<Long>> {
+        // Subquery: ids of unread messages in range (mirrors unreadCond above).
+        val unreadIdsSubquery = StatementSelect()
+            .select(DBMessageModel.id)
+            .from("message")
+            .where(
+                DBMessageModel.roomId.eq(roomId)
+                    .and(DBMessageModel.systemShowTimestamp.gt(readPosition))
+                    .and(DBMessageModel.fromWho.notEq(myID))
+                    .and(DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER))
             )
-        } else {
-            UnreadMessageInfo(unreadMessages.size)
+
+        // Single pass over mention rows (uid + messageId) for those unread messages where uid
+        // is me or @all — derives BOTH mentionType and the mentioning message ids in one query
+        // instead of two DB calls sharing the same WHERE. (#910 review r3372078153)
+        val mentionRows = wcdb.mention.getAllObjects(
+            DBMentionModel.uid.`in`(myID, MENTIONS_ALL_ID)
+                .and(DBMentionModel.messageId.`in`(unreadIdsSubquery))
+        )
+        val mentionType = when {
+            mentionRows.any { it.uid == myID } -> MENTIONS_TYPE_ME
+            mentionRows.any { it.uid == MENTIONS_ALL_ID } -> MENTIONS_TYPE_ALL
+            else -> MENTIONS_TYPE_NONE
         }
+        if (mentionType == MENTIONS_TYPE_NONE) return MENTIONS_TYPE_NONE to emptyList()
+
+        // timeStamps of mentioning messages (bounded by mention count, not total unread).
+        // Order by systemShowTimestamp ASC (earliest first) so the consumer's
+        // mentionIds.firstOrNull() jumps to the earliest @-mention. The select column stays
+        // `timeStamp` (matched against MessageModel.timeStamp by ChatMessageListFragment);
+        // ordering is on systemShowTimestamp (the authoritative display order). (#909 R3)
+        val mentioningIds = mentionRows.map { it.messageId }.distinct()
+        val mentionTimeStamps = wcdb.message.getOneColumnLong(
+            DBMessageModel.timeStamp,
+            DBMessageModel.id.`in`(mentioningIds),
+            DBMessageModel.systemShowTimestamp.order(Order.Asc)
+        )
+        return mentionType to mentionTimeStamps
     }
 }

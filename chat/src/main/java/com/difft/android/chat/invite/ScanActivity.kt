@@ -29,11 +29,21 @@ import com.difft.android.base.widget.ToastUtil
 class ScanActivity : BaseActivity(), QRCodeView.Delegate {
 
     companion object {
+        /** When true, the raw scanned string is returned via setResult instead of being handled in-place. */
+        const val EXTRA_RETURN_RESULT = "extra_return_result"
+        const val EXTRA_SCAN_RESULT = "extra_scan_result"
+
         fun startActivity(activity: Activity) {
             val intent = Intent(activity, ScanActivity::class.java)
             activity.startActivity(intent)
         }
+
+        /** Builds an intent that makes ScanActivity return the scanned string to the caller. */
+        fun createResultIntent(context: android.content.Context): Intent =
+            Intent(context, ScanActivity::class.java).putExtra(EXTRA_RETURN_RESULT, true)
     }
+
+    private val returnResult: Boolean by lazy { intent.getBooleanExtra(EXTRA_RETURN_RESULT, false) }
 
     private val mBinding: ActivityScanBinding by viewbind()
 
@@ -90,6 +100,13 @@ class ScanActivity : BaseActivity(), QRCodeView.Delegate {
 
     override fun onScanQRCodeSuccess(result: String) {
         ServiceUtil.getVibrator(this).vibrate(50)
+
+        // Caller (e.g. proxy settings) just wants the raw string back.
+        if (returnResult) {
+            setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_SCAN_RESULT, result))
+            finish()
+            return
+        }
 
         val uri = result.toUri()
         if (uri.scheme?.startsWith("http") == true) {

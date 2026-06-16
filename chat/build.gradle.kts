@@ -2,10 +2,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
     id("androidx.navigation.safeargs.kotlin")
@@ -25,16 +24,10 @@ android {
         viewBinding = true
     }
 
-    viewBinding.isEnabled = true
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kapt {
-        correctErrorTypes = true
-    }
-
 
     buildFeatures {
         compose = true
@@ -68,10 +61,15 @@ dependencies {
     implementation(project(":selector"))
     implementation(project(":call"))
 
+    // Voice message dual-candidate recorder (denoise + voice changer pipeline).
+    // :call already transitively pulls this for the RTC voice changer, but
+    // :chat needs it as a direct dependency to compile against the new
+    // OfflineAudioPipeline / PipelineTapConfig types in `voice/`.
+    implementation(libs.denoise.filter)
+
     // Hilt
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    kapt(libs.kotlin.metadata.jvm)
+    ksp(libs.hilt.compiler)
 
     // Test dependencies
     testImplementation(libs.junit)
@@ -81,7 +79,7 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.hilt.android.testing)
-    kaptTest(libs.hilt.compiler)
+    kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
     // Compose test
     testImplementation(platform(libs.compose.bom))
