@@ -43,6 +43,11 @@ object ChativeHttpClientModule {
     @Retention(AnnotationRetention.RUNTIME)
     annotation class SignalApi
 
+    /** No-header client with a long timeout, for large uploads (e.g. debug-log upload). */
+    @Qualifier
+    @Retention(AnnotationRetention.RUNTIME)
+    annotation class NoHeaderLongTimeout
+
     @Provides
     fun provideAuthProvider(): ChativeHttpClient.AuthProvider = object : ChativeHttpClient.AuthProvider {
         override fun provideAuth(): String = (globalServices.userManager.getUserData()?.baseAuth ?: "")
@@ -136,6 +141,32 @@ object ChativeHttpClientModule {
             removeHeader = true,
             connectTimeoutSeconds = 30,
             readWriteTimeoutSeconds = 30,
+            proxyConfigProvider = proxyConfigProvider
+        )
+    }
+
+    /**
+     * No-header client with a 300s read/write timeout (vs the 30s default) for large uploads such
+     * as the debug-log upload — a multi-hundred-MB encrypted log can't finish within 30s on a slow
+     * network. Separate from [provideNoHeaderClient] so the small avatar/config calls keep the
+     * short timeout. Matches FileShareService's OSS-upload window.
+     */
+    @NoHeaderLongTimeout
+    @Provides
+    @Singleton
+    fun provideNoHeaderLongTimeoutClient(
+        @ApplicationContext applicationContext: Context,
+        urlManager: UrlManager,
+        proxyConfigProvider: ProxyConfigProvider
+    ): ChativeHttpClient {
+        return ChativeHttpClient(
+            applicationContext,
+            urlManager.chat,
+            null,
+            useCustomCa = false,
+            removeHeader = true,
+            connectTimeoutSeconds = 30,
+            readWriteTimeoutSeconds = 300,
             proxyConfigProvider = proxyConfigProvider
         )
     }

@@ -6,7 +6,6 @@ import android.view.View
 import android.widget.PopupMenu
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.globalServices
 import com.difft.android.login.databinding.LoginActivityLoginBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
@@ -23,9 +22,7 @@ class LoginActivity : BaseActivity() {
         mBinding.fragmentLogIn.visibility = View.GONE
         mBinding.fragmentSignUp.visibility = View.VISIBLE
 
-        // Proxy entry is only available in insider builds
-        mBinding.ibLoginMenu.visibility =
-            if (globalServices.environmentHelper.isInsiderChannel()) View.VISIBLE else View.GONE
+        mBinding.ibLoginMenu.visibility = View.VISIBLE
         mBinding.ibLoginMenu.setOnClickListener { showProxyMenu(it) }
     }
 

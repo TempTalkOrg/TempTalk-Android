@@ -2,19 +2,18 @@ package com.difft.android.call.manager
 
 import com.difft.android.base.utils.globalServices
 
-import android.content.Context
 import com.difft.android.base.call.ServiceUrlDataV2
 import com.difft.android.base.call.ServiceUrls
+import com.difft.android.base.call.UrlInfo
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.storage.SecureConfigStore
-import com.difft.android.base.utils.ICallServiceUrlsProvider
+import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.base.utils.appScope
-import com.difft.android.call.connect.DefaultGlobalConfigCallServiceUrlsReader
+import com.difft.android.call.data.CallStatisticsEvent
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.proxy.ProxyConfigProvider
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -35,11 +34,12 @@ import javax.inject.Singleton
  */
 @Singleton
 class CallServiceUrlManager @Inject constructor(
-    @param:ApplicationContext private val appContext: Context,
+    private val statisticsLogManager: dagger.Lazy<CallStatisticsLogManager>,
     @ChativeHttpClientModule.Call private val callHttpClient: dagger.Lazy<ChativeHttpClient>,
     private val secureConfigStore: SecureConfigStore,
     private val proxyConfigProviderLazy: dagger.Lazy<ProxyConfigProvider>,
-) : ICallServiceUrlsProvider {
+    private val globalConfigsManagerLazy: dagger.Lazy<IGlobalConfigsManager>,
+) {
 
     private val callHttpService: LCallHttpService by lazy {
         callHttpClient.get().getService(LCallHttpService::class.java)
@@ -68,18 +68,28 @@ class CallServiceUrlManager @Inject constructor(
     private val foregroundRefreshMinIntervalMs = 20 * 60 * 1000L
 
     /**
-     * Lazily parsed FQDN list from the bundled `default_global_config.json`,
-     * cached in memory for the lifetime of this singleton. Read by
-     * [getCachedServiceUrlsDomains] when `memState` is null AND the assets
-     * fallback hasn't been parsed yet.
+     * Synthesizes a [ServiceUrls] from the proxy call tunnel domains
+     * (`proxy.tunnelDomains.call`, live-preferred + embedded fallback). While the
+     * proxy is active, call connections are forced onto these domains so the call
+     * domain stays inside the relay's `ssl_preread` whitelist.
      *
-     * Guarded by [assetsFallbackLock] — independent of [lock] to keep the
-     * recompute path free of `runBlocking(IO)` nesting (see C1 invariant on
-     * [getCachedServiceUrlsDomains]).
+     * Only the DOMAIN is needed: under the proxy, the meeting connection planner
+     * connects by domain (WSS, or QUIC-over-proxy when the relay advertises `q`),
+     * never by IP — so no `addrs` are synthesized. The first domain becomes
+     * [ServiceUrls.primary]; the rest become [ServiceUrls.fallback]. Returns
+     * `null` when no proxy call domain is configured (callers then fail closed
+     * rather than connect direct).
      */
-    @Volatile
-    private var assetsFallbackDomains: List<String>? = null
-    private val assetsFallbackLock = Any()
+    private fun proxyServiceUrls(): ServiceUrls? {
+        val domains = globalConfigsManagerLazy.get().getProxyTunnelCallDomains()
+        val primaryDomain = domains.firstOrNull() ?: return null
+        return ServiceUrls(
+            config_version = 0,
+            fallback = domains.drop(1).map { UrlInfo(addrs = emptyList(), domain = it, region = "") },
+            primary = UrlInfo(addrs = emptyList(), domain = primaryDomain, region = ""),
+            ttl = 0,
+        )
+    }
 
     /**
      * Loads the persisted [CallServiceUrlDiskState] from [SecureConfigStore] into the
@@ -201,6 +211,15 @@ class CallServiceUrlManager @Inject constructor(
      * preventing use of expired configuration as valid.
      */
     suspend fun ensureServiceUrlsForCall(timeoutMs: Long = 15_000L): ServiceUrls? {
+        // Proxy active for calls: hard-switch to the proxy call tunnel domains (no
+        // live fetch, no fallback) so the call domain stays whitelist-aligned with
+        // the relay. Gated on isEnabledForCall ("Protect IP address in calls") so
+        // calls fall back to live URLs (direct) when the toggle is off. Read the
+        // injected instance (not the static mirror) so the cold-start refresh
+        // self-heals before warmUp.
+        if (proxyConfigProviderLazy.get().isEnabledForCall) {
+            return proxyServiceUrls()
+        }
         val snapshot = synchronized(lock) {
             loadFromDiskLocked()
             memState
@@ -262,6 +281,12 @@ class CallServiceUrlManager @Inject constructor(
             val response = callHttpService.getServiceUrlV2(token)
             if (response.status != 0 || response.data == null) {
                 L.e { "[Call] CallServiceUrlManager getServiceUrlV2 failed status=${response.status}" }
+                statisticsLogManager.get().report(
+                    CallStatisticsEvent.ConfigRefreshFail(
+                        errorCode = response.status.toString(),
+                        errorMsg = response.reason.orEmpty(),
+                    )
+                )
                 return synchronized(lock) {
                     loadFromDiskLocked()
                     connectionEndpointsFromState(memState)
@@ -305,79 +330,21 @@ class CallServiceUrlManager @Inject constructor(
                 merged
             }
         }
-        if (remote != null) {
-            // runCatching: a fault in the proxy hook must not break the merge result or the caller's state machine.
-            runCatching { proxyConfigProviderLazy.get().onCallServiceUrlsChanged() }
-                .onFailure { L.w { "[Call] CallServiceUrlManager proxy hook failed: ${it.stackTraceToString()}" } }
-        }
         return result
     }
 
     /** Current in-memory/disk [ServiceUrls] (no expiration check), used to read refresh results after failover. */
     fun getCachedServiceUrls(): ServiceUrls? {
+        // Proxy active for calls: keep parity with ensureServiceUrlsForCall — read the
+        // proxy call tunnel domains so failover paths don't fall back to live URLs.
+        if (proxyConfigProviderLazy.get().isEnabledForCall) {
+            return proxyServiceUrls()
+        }
         synchronized(lock) {
             loadFromDiskLocked()
             return memState?.serviceUrls?.toServiceUrls()
         }
     }
-
-    /**
-     * Returns the FQDN list from the cached `getServiceUrlV2` response (primary +
-     * fallback domains). Falls back to the assets-bundled default config when no
-     * cached response exists yet (cold start before first successful fetch).
-     *
-     * Result is normalized: lowercase, `trim()`, `trimEnd('.')`, blanks dropped.
-     * IP addresses (`UrlInfo.addrs`) are NEVER returned.
-     *
-     * **Concurrency (C1 invariant)**: this method does NOT acquire [lock] and does
-     * NOT call [loadFromDiskLocked]. The recompute path that calls this method
-     * runs under `ProxyConfigProvider.recomputeLock`, and may be triggered from
-     * `mergeAndPersist()` (which itself holds [lock] during `persistLocked`'s
-     * `runBlocking(IO)`). Going through [lock] here would create nested
-     * `runBlocking(IO)` from an already-blocked IO-dispatcher thread. Instead:
-     *
-     *  1. Read `memState` via a single volatile load (no lock, no disk hit). If
-     *     a successful refresh / persist has run, this returns immediately with
-     *     the live snapshot.
-     *  2. Otherwise lazily parse the bundled assets default under
-     *     [assetsFallbackLock] (NOT [lock]) and cache the parsed result.
-     */
-    override fun getCachedServiceUrlsDomains(): List<String> {
-        val state = memState
-        val live = state?.serviceUrls?.toServiceUrls()
-        if (live != null) return domainsFrom(live)
-        return getOrInitAssetsFallback()
-    }
-
-    /**
-     * Lazily parses the bundled `default_global_config.json` and caches the
-     * resulting domains list. Subsequent callers see the cached value with no
-     * I/O. Race-safe: double-checked under [assetsFallbackLock] (race outcome
-     * is idempotent because both racers parse the same assets file, but locking
-     * avoids duplicate parsing and makes the cache write happen-before any
-     * reader's volatile load of [assetsFallbackDomains]).
-     *
-     * On parse failure / missing file, caches and returns [emptyList] so we do
-     * not reparse repeatedly.
-     */
-    private fun getOrInitAssetsFallback(): List<String> {
-        assetsFallbackDomains?.let { return it }
-        return synchronized(assetsFallbackLock) {
-            assetsFallbackDomains?.let { return@synchronized it }
-            val parsed = DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
-                ?.let { domainsFrom(it) }
-                ?: emptyList()
-            assetsFallbackDomains = parsed
-            parsed
-        }
-    }
-
-    private fun domainsFrom(serviceUrls: ServiceUrls): List<String> =
-        (listOfNotNull(serviceUrls.primary?.domain) + serviceUrls.fallback.mapNotNull { it?.domain })
-            .asSequence()
-            .map { it.trim().lowercase().trimEnd('.') }
-            .filter { it.isNotEmpty() }
-            .toList()
 
     companion object {
         private const val FAILURE_REFRESH_MIN_INTERVAL_MS = 30_000L

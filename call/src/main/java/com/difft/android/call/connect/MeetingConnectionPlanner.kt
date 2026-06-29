@@ -2,14 +2,19 @@ package com.difft.android.call.connect
 
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.call.UrlInfo
+import com.difft.android.network.proxy.ProxyConfigProvider
 
 /**
  * Connection strategy:
- * - QUIC is only used with IP direct connections (from [UrlInfo.addrs]).
+ * - QUIC normally uses IP direct connections (from [UrlInfo.addrs]). EXCEPTION: under a
+ *   self-hosted proxy QUIC relay ([ProxyConfigProvider.isProxyForCallQuicEnabled], MASQUE-lite §9.6)
+ *   QUIC uses the DOMAIN instead — the relay forwards by the tunnel's CONNECT target host and
+ *   enforces a domain-suffix allowlist, so an IP literal would be denied.
  * - WSS (WebSocket) is only used with the domain (from [UrlInfo.domain]); WSS over IP is not allowed.
  *
  * Attempt order:
  * - QUIC enabled: primary.addrs (QUIC) → primary.domain (WSS) → each fallback in the same order
+ * - QUIC enabled + proxy QUIC relay: primary.domain (QUIC) → primary.domain (WSS) → each fallback domain (QUIC→WSS)
  * - QUIC disabled: primary.domain (WSS) → each fallback.domain (WSS)
  *
  * [ConnectionAttempt.serverHost] is used for TLS/SNI (typically the certificate domain);
@@ -42,9 +47,18 @@ object MeetingConnectionPlanner {
     private fun appendNodeAttempts(out: ArrayList<ConnectionAttempt>, node: UrlInfo, quicEnabled: Boolean, nodeType: String) {
         val domain = node.domain.trim().ifEmpty { null } ?: return
         if (quicEnabled) {
-            for (raw in node.addrs) {
-                val url = normalizeConnectUrl(raw) ?: continue
-                out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
+            if (ProxyConfigProvider.isProxyForCallQuicEnabled) {
+                // QUIC-over-proxy (MASQUE-lite, §9.6): connect via the DOMAIN, not the
+                // node IPs. The relay forwards by the tunnel's CONNECT target host and
+                // enforces a domain-suffix allowlist — an IP literal would be denied.
+                normalizeConnectUrl(domain)?.let { url ->
+                    out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
+                }
+            } else {
+                for (raw in node.addrs) {
+                    val url = normalizeConnectUrl(raw) ?: continue
+                    out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
+                }
             }
         }
         val domainUrl = normalizeConnectUrl(domain) ?: return

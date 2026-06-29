@@ -8,6 +8,7 @@ import com.difft.android.network.proxy.ProxyTunnelSocketFactory
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import okhttp3.ConnectionSpec
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.TlsVersion
 import okhttp3.logging.HttpLoggingInterceptor
@@ -51,6 +52,13 @@ class ChativeHttpClient(
 
     private val okHttpClient = OkHttpClient.Builder()
         .apply {
+            // First in the chain: while the proxy is active, pin the request host
+            // to the embedded best host BEFORE header/failover/logging see it, so
+            // the runtime-toggled proxy host applies without rebuilding this
+            // @Singleton's fixed Retrofit baseUrl. Gated to THIS client's own
+            // baseUrl host so absolute-URL CDN requests keep their host/TLS trust.
+            // No-op when the proxy is off.
+            addInterceptor(ProxyHostInterceptor(baseUrl.toHttpUrlOrNull()?.host))
             if (removeHeader) {
                 addInterceptor(NoHeaderInterceptor())
             } else {
@@ -88,6 +96,13 @@ class ChativeHttpClient(
         .writeTimeout(readWriteTimeoutSeconds, TimeUnit.SECONDS)
         .connectionSpecs(listOf(customConnectionSpec))
         .build()
+    init {
+        // Register so a runtime proxy enable/disable evicts THIS client's connection
+        // pool too — otherwise OkHttp keep-alive reuses the stale tunnel/direct socket
+        // and requests keep flowing through the old route until it dies on its own.
+        proxyConfigProvider?.registerHttpClient(okHttpClient)
+    }
+
     private val retrofit: Retrofit = Retrofit.Builder()
         .addConverterFactory(ScalarsConverterFactory.create())
         .addConverterFactory(GsonConverterFactory.create(gson))

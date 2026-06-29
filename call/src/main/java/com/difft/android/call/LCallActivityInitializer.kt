@@ -173,13 +173,24 @@ internal fun LCallActivity.initializeView() {
         CallWaitDialogUtil.show(this)
     }
     lifecycleScope.launch {
-        withContext(Dispatchers.Default) {
-            viewModel.room
+        // Phase B can throw if a release races in mid-wiring (fail-loud room getter). Catch it so the
+        // dismiss below ALWAYS runs — otherwise the wait dialog would stick on screen forever.
+        val wiringOk = withContext(Dispatchers.Default) {
+            runCatching { viewModel.startRoomDependentWiring() }
+                .onFailure { L.w(it) { "[Call] startRoomDependentWiring aborted (release in flight)" } }
+                .isSuccess
         }
         withContext(Dispatchers.Main) {
             CallWaitDialogUtil.dismiss()
+            // Read the room once, defensively: if wiring aborted or the room was released, finish
+            // gracefully instead of feeding a released room into setContent.
+            val room = if (wiringOk) runCatching { viewModel.room }.getOrNull() else null
+            if (room == null) {
+                L.i { "[Call] initView: room unavailable (release in flight), finishing" }
+                finish()
+                return@withContext
+            }
             setContent {
-                val room = viewModel.room
                 val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
                 CallContent(
                     room = room,

@@ -3,6 +3,7 @@ package com.difft.android.chat.ui
 import android.app.Activity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
@@ -408,6 +409,12 @@ class ChatMessageInputFragment : Fragment() {
                                 listOf(messageToForward),
                                 isSubContext = false,
                             )
+                            // PRD v2.0 §改动1/§改动2 条件①④: trace only if the message is someone
+                            // else's (CF judged by inner authors). The forward/save proceeds either way.
+                            val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContent(
+                                listOf(messageToForward),
+                                globalServices.myId,
+                            )
                             if (saveToNote) {
                                 selectChatsUtils.saveToNotes(
                                     requireActivity(),
@@ -418,6 +425,7 @@ class ChatMessageInputFragment : Fragment() {
                                     // Single selected message → exactly one outer author.
                                     sourceAuthorIds = listOf(messageToForward.authorId),
                                     combinedForwardMode = singleMode,
+                                    carriesForeignContent = carriesForeignContent,
                                 )
                             } else {
                                 selectChatsUtils.showChatSelectAndSendDialog(
@@ -433,6 +441,7 @@ class ChatMessageInputFragment : Fragment() {
                                     // Single selected message → exactly one outer author.
                                     sourceAuthorIds = listOf(messageToForward.authorId),
                                     combinedForwardMode = singleMode,
+                                    carriesForeignContent = carriesForeignContent,
                                 )
                             }
                             forwardContext = null
@@ -547,6 +556,7 @@ class ChatMessageInputFragment : Fragment() {
                 sourceAuthorIds = it.sourceAuthorIds,
                 messageCount = it.messageCount,
                 combinedForwardMode = it.combinedForwardMode,
+                carriesForeignContent = it.carriesForeignContent,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -561,6 +571,7 @@ class ChatMessageInputFragment : Fragment() {
                 sourceAuthorIds = it.sourceAuthorIds,
                 messageCount = it.messageCount,
                 combinedForwardMode = it.combinedForwardMode,
+                carriesForeignContent = it.carriesForeignContent,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -802,12 +813,7 @@ class ChatMessageInputFragment : Fragment() {
         binding.buttonAttachment.setOnClickListener {
             if (!checkCanSpeak()) return@setOnClickListener
             ScreenLockUtil.temporarilyDisabled = true
-            fileActivityLauncher.launch(
-                Intent(Intent.ACTION_GET_CONTENT).apply {
-                    setType("*/*")
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                }
-            )
+            launchFilePicker()
         }
 
         binding.buttonContact.setOnClickListener {
@@ -1239,6 +1245,36 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    /**
+     * Prefer ACTION_OPEN_DOCUMENT (SAF / DocumentsProvider) over ACTION_GET_CONTENT.
+     *
+     * ACTION_GET_CONTENT can be routed to legacy providers (e.g. some OEM file
+     * managers, stale MediaStore _data entries) that expose metadata but fail the
+     * byte-stream open with ENOENT. ACTION_OPEN_DOCUMENT resolves against the real
+     * filesystem and avoids that. Falls back to ACTION_GET_CONTENT only when no
+     * activity handles ACTION_OPEN_DOCUMENT. Mirrors Signal's AttachmentManager.
+     */
+    private fun launchFilePicker() {
+        val intent = Intent().apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        intent.action = Intent.ACTION_OPEN_DOCUMENT
+        try {
+            fileActivityLauncher.launch(intent)
+            return
+        } catch (e: ActivityNotFoundException) {
+            L.w { "[ChatMessageInputFragment] ACTION_OPEN_DOCUMENT no activity, fallback to GET_CONTENT: ${e.message}" }
+        }
+        intent.action = Intent.ACTION_GET_CONTENT
+        try {
+            fileActivityLauncher.launch(intent)
+        } catch (e: ActivityNotFoundException) {
+            L.w { "[ChatMessageInputFragment] ACTION_GET_CONTENT no activity: ${e.message}" }
+            ToastUtil.showLong(R.string.unsupported_file_type)
+        }
+    }
+
     private val fileActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -1247,7 +1283,7 @@ class ChatMessageInputFragment : Fragment() {
 
         val uri = result.data?.data
         if (uri == null) {
-            ToastUtil.showLong(R.string.unsupported_file_type)
+            ToastUtil.showLong(R.string.file_unavailable)
             return@registerForActivityResult
         }
 
@@ -1267,7 +1303,7 @@ class ChatMessageInputFragment : Fragment() {
             }
 
             if (copyResult == null) {
-                ToastUtil.showLong(R.string.unsupported_file_type)
+                ToastUtil.showLong(R.string.file_unavailable)
                 return@launch
             }
 
@@ -2529,7 +2565,7 @@ class ChatMessageInputFragment : Fragment() {
             }
 
             if (copyResult == null) {
-                ToastUtil.showLong(R.string.unsupported_file_type)
+                ToastUtil.showLong(R.string.file_unavailable)
                 return@launch
             }
 

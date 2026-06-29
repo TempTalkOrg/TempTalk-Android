@@ -167,6 +167,7 @@
       "chatWithoutReceiptThreshold": 50,
       "membersMaxSize": 200,
       "encryptionEnabled": false,
+      "encryptionKeyResetEnabled": false,
       "messageArchivingTimeOptionValues": [
         15,
         30,
@@ -299,6 +300,12 @@
         ],
         "baseSpeed": 4600,
         "deltaSpeed": 400
+      }
+    },
+    "proxy": {
+      "tunnelDomains": {
+        "chat": ["chat.test.chative.im"],
+        "call": ["test.ablivekit.org"]
       }
     }
   }

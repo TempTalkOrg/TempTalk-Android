@@ -3,24 +3,23 @@ package com.difft.android.network.proxy
 /**
  * Pure derivation of the tunnel-host set. Visible for tests.
  *
- * Each input list is normalized (lowercase, [String.trim], [String.trimEnd] with
- * a trailing dot, drop blanks) and the three sources are unioned into an
- * immutable [Set]. The baseline is always present — even when both other
- * sources are empty, the result equals `baseline` (never empty when `baseline`
- * is non-empty).
+ * The whitelist is the union of the proxy chat domains and the proxy call
+ * domains (both from `proxy.tunnelDomains`, see
+ * [com.difft.android.base.utils.IGlobalConfigsManager]). Each input list is
+ * normalized (lowercase, [String.trim], [String.trimEnd] with a trailing dot,
+ * drop blanks) and unioned into an immutable [Set] — the proxy path forces ALL
+ * traffic onto these same domains, so the whitelist and the actual traffic share
+ * one source of truth.
  *
- * The output preserves insertion order (baseline first, then global self-cert
- * hosts, then call-service domains) so log emission and any debug iteration is
- * deterministic.
+ * The output preserves insertion order (chat domains first, then call domains)
+ * so log emission and any debug iteration is deterministic.
  */
 internal fun computeTunnelHosts(
-    globalSelfCertHosts: List<String>,
+    chatDomains: List<String>,
     callDomains: List<String>,
-    baseline: Set<String>,
 ): Set<String> {
-    val result = LinkedHashSet<String>(baseline.size + globalSelfCertHosts.size + callDomains.size)
-    baseline.forEach { add(result, it) }
-    globalSelfCertHosts.forEach { add(result, it) }
+    val result = LinkedHashSet<String>(chatDomains.size + callDomains.size)
+    chatDomains.forEach { add(result, it) }
     callDomains.forEach { add(result, it) }
     return result.toSet()
 }

@@ -41,10 +41,10 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * See design report §2.2 for the full carve-out rationale.
  *
  * **Tag stability contract (`@ProtoNumber`)**: explicit field numbers below match the
- * implicit declaration-order tags that PR #789 shipped (1..16); tags 17..18 were
- * appended later for self-hosted proxy state. Tags 1..18 are stable now — any future
+ * implicit declaration-order tags that PR #789 shipped (1..16); tags 17..19 were
+ * appended later for self-hosted proxy state. Tags 1..19 are stable now — any future
  * schema change MUST preserve them; wire format on every deployed device depends on them.
- *  - **Add a field**: append at the bottom with the next unused tag (19+).
+ *  - **Add a field**: append at the bottom with the next unused tag (20+).
  *  - **Remove a field**: delete the line; **never reuse** the freed tag number.
  *  - **Rename a field**: free — tag is the contract, not the Kotlin name.
  *  - **Reorder fields**: free — `@ProtoNumber` decouples wire format from declaration order.
@@ -88,6 +88,12 @@ data class UserAuthData(
      * invalid-but-displayed link while routing stays off.
      */
     @ProtoNumber(18) val proxyEnabled: Boolean = false,
+    /**
+     * Whether call/meeting network traffic is routed through the proxy. Gated by
+     * [proxyEnabled]: meaningless (and treated as off) while the proxy is off. Kept
+     * in the encrypted half alongside the other proxy state for lifecycle isolation.
+     */
+    @ProtoNumber(19) val proxyProtectCallIp: Boolean = false,
 ) {
     companion object {
         val EMPTY = UserAuthData()

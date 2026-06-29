@@ -78,7 +78,7 @@
     <string name="chat_message_action_voice2text">转文字</string>
     <string name="chat_message_action_voice2text_off">取消转文字</string>
     <string name="chat_message_action_voice2text_tip_title">信息</string>
-    <string name="chat_message_action_voice2text_tip_info">语音转文字由Yelling服务器提供</string>
+    <string name="chat_message_action_voice2text_tip_info">语音转文字由Quicall服务器提供</string>
     <string name="chat_message_action_voice2text_tip_ok">确定</string>
     <string name="chat_message_action_select_multiple">选择多个</string>
     <string name="chat_message_action_select_max_limit">最多选择50条消息</string>
@@ -312,6 +312,7 @@
     <string name="invalid_link">无效链接</string>
     <string name="not_supported_link">不支持的链接。请升级客户端后重试。</string>
     <string name="unsupported_file_type">不支持的文件类型</string>
+    <string name="file_unavailable">无法读取该文件，它可能已被移动或删除</string>
 
     <!-- Forward message -->
     <string name="forwarded_message">转发消息</string>
@@ -347,7 +348,7 @@
     <string name="invite_enter_hint">输入 4 位邀请码或联系人 ID</string>
     <string name="invite_button_add_friend">搜索</string>
     <string name="invite_copy_link">复制链接</string>
-    <string name="invite_tips">在Yelling上跟我聊天%s</string>
+    <string name="invite_tips">在Quicall上跟我聊天%s</string>
     <string name="invite_regenerate_dialog_title">重新生成邀请码</string>
     <string name="invite_regenerate_dialog_content">旧的邀请码将过期。您确定要继续吗？</string>
     <string name="invite_regenerate_dialog_cancel">取消</string>
@@ -568,6 +569,13 @@
     <string name="group_encrypted_info_description">群信息已从通道加密增强为端到端加密。</string>
     <string name="group_encrypted_info_dismiss">知道了</string>
     <string name="group_encryption_hint_message">🔒 群信息已增强为端到端加密</string>
+    <string name="group_crypto_reset_hint_message">🔒 群信息加密密钥已重置</string>
+    <string name="group_crypto_reset_title">重置加密密钥</string>
+    <string name="group_crypto_reset_message">重置后，群信息将使用新的加密密钥。请确认群头像和群名称。</string>
+    <string name="group_crypto_reset_confirm">重置</string>
+    <string name="group_crypto_reset_success">加密密钥已重置</string>
+    <string name="group_crypto_reset_failed">重置失败，请稍后再试</string>
+    <string name="group_crypto_reset_name_hint">请输入群名称</string>
     <string name="group_name_encrypted_placeholder">🔒 群组</string>
     <string name="group_encryption_update_required">暂时无法操作</string>
     <string name="group_edit_name_edit">编辑</string>
@@ -580,8 +588,6 @@
     <plurals name="chat_forward_notice">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条来自 %3$s 的消息</item>
     </plurals>
-    <!-- Self-only variant: used when all distinct source authors are the current
-         user, so the "from You" suffix would be redundant. -->
     <plurals name="chat_forward_notice_self_only">
         <item quantity="other">\"%1$s\" 转发了 %2$d 条消息</item>
     </plurals>

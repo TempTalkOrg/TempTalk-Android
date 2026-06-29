@@ -1,5 +1,6 @@
 package org.difft.app.database
 
+import androidx.annotation.WorkerThread
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
@@ -586,11 +587,24 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
 // ---------------------------
 
 fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L) {
-    val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
-    if (existing == null) {
-        putMessage(message, roomReadPosition)
-    } else {
-        L.i { "[Message] message existing:${message.timeStamp}" }
+    // #971: wrap the single-message cascade (existence check + putMessage's ~11 child inserts)
+    // in ONE transaction so it is atomic — no "half message" (e.g. message row inserted but its
+    // attachment/mention/reaction rows missing, or vice-versa) on partial failure. Per-message
+    // grain ONLY — never spans messages (that would re-introduce #197 eager-ACK batch-loss +
+    // long-tx white-screen). runTransaction is BEGIN IMMEDIATE (takes the write lock up front, so
+    // even the existence-check read runs under the write lock) — intentional: one lock for
+    // atomicity. The body is pure synchronous WCDB calls (no suspend / network). On throw,
+    // runTransaction rolls back AND re-throws, so the exception still propagates to
+    // putWhenNonExist → process.classify → FailedMessage retry — the message-loss safety net is
+    // preserved unchanged.
+    this.db.runTransaction {
+        val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
+        if (existing == null) {
+            putMessage(message, roomReadPosition)
+        } else {
+            L.i { "[Message] message existing:${message.timeStamp}" }
+        }
+        true // commit
     }
 }
 
@@ -605,7 +619,6 @@ private fun WCDB.putMessage(message: Message, roomReadPosition: Long = 0L) {
 private fun WCDB.putTextMessage(message: TextMessage, roomReadPosition: Long = 0L) {
     val messageModel = convertToMessageModel(message, roomReadPosition)
     this.message.insertObject(messageModel)
-    L.d { "observerMessagesChanges: Inserted message: ${messageModel.messageText}, time stamp is ${System.currentTimeMillis()}" }
 }
 
 fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
@@ -851,6 +864,27 @@ fun messageCount(condition: Expression): Long =
     wcdb.message.getValue(DBMessageModel.databaseId.count(), condition)?.long ?: 0L
 
 /**
+ * Current MAX(databaseId) among messages of [roomId], or 0 if none. (#969)
+ *
+ * databaseId is the autoincrement PK ([MessageModel.databaseId], #901) — strictly monotonic,
+ * so this is a STABLE upper bound: any message inserted AFTER this call gets a databaseId
+ * greater than the returned value. Used to snapshot a room-delete's match set so concurrent
+ * inserts during the paged delete cannot extend it — the unbounded `roomId.eq` match set
+ * never converges under a message flood. No object load — SQL MAX only. Mirrors the
+ * `messageCount` `getValue(col.aggregate(), cond)` idiom.
+ *
+ * @WorkerThread — blocking WCDB read; callers MUST invoke off the main thread. NOTE this is the
+ * ONLY guard and it is advisory at runtime: detekt's BlockingWcdbInSuspend matches only DIRECT
+ * `wcdb.*` call expressions (rootReceiverText == "wcdb"), so an indirect call to this helper from a
+ * `suspend fun` without `withContext(IO)` is NOT flagged. Current callers are already off-main
+ * (`appScope.launch` = Dispatchers.IO in DBMessageStore; `withContext(IO)` in cleanEmptyRooms);
+ * a new suspend caller must wrap it itself. #969
+ */
+@WorkerThread
+fun maxMessageDatabaseId(roomId: String): Int =
+    wcdb.message.getValue(DBMessageModel.databaseId.max(), DBMessageModel.roomId.eq(roomId))?.int ?: 0
+
+/**
  * Delete all messages matching [condition] in pages, calling [MessageModel.delete]
  * per row so attachment files + related tables are cascaded. (#909 #1)
  *
@@ -861,6 +895,14 @@ fun messageCount(condition: Expression): Long =
  * the matching set each iteration — no OFFSET needed. Mirrors
  * `MessageArchiveManager.clearMessagesBeforeTimestamp`. Exceptions propagate to the
  * caller's try/catch; [delay] respects coroutine cancellation.
+ *
+ * Convergence note (#969): re-LIMIT-from-front only converges when the match set is
+ * monotonically non-increasing. A `databaseId.le(snapshotMax)` upper bound is REQUIRED
+ * whenever [condition] has no natural converging boundary (e.g. `roomId.eq` alone — a
+ * concurrent insert flood keeps extending the set). Conditions that already carry an upper
+ * bound — time/anchor cutoffs like `systemShowTimestamp.lt(ts)` in MessageArchiveManager —
+ * converge on their own and need no databaseId snapshot. Do not re-introduce an unbounded
+ * `roomId.eq` delete without a snapshot.
  */
 suspend fun deleteMessagesPaged(condition: Expression, pageSize: Long = 100) = withContext(Dispatchers.IO) {
     while (true) {

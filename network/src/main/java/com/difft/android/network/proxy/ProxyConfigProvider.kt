@@ -1,14 +1,10 @@
 package com.difft.android.network.proxy
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.ICallServiceUrlsProvider
 import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.base.utils.IGlobalConfigsManager
-import com.difft.android.base.utils.appScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import java.net.InetAddress
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,39 +35,65 @@ import javax.inject.Singleton
 class ProxyConfigProvider @Inject constructor(
     private val userManager: UserManager,
     private val globalConfigsManagerLazy: dagger.Lazy<IGlobalConfigsManager>,
-    private val callServiceUrlsProviderLazy: dagger.Lazy<ICallServiceUrlsProvider>,
     private val connectionRefresherLazy: dagger.Lazy<IConnectionRefresher>,
-) {
-    private val recomputeLock = Any()
-
     /**
-     * Guards multi-volatile writes to the share-link / enabled / cached / activeForRouting
+     * Registry of proxy-aware HTTP clients (see [ProxyHttpConnectionRegistry]).
+     * On a real proxy state change [save] / [clear] evict every registered client's
+     * connection pool so HTTP API requests stop reusing the stale tunnel/direct
+     * socket — the HTTP counterpart of [IConnectionRefresher.reconnectAfterProxyChange]
+     * for the IM WebSocket. Defaulted so existing unit tests construct the provider
+     * with the three core collaborators only.
+     */
+    private val httpConnectionRegistry: ProxyHttpConnectionRegistry = ProxyHttpConnectionRegistry(),
+) {
+    /**
+     * Guards multi-field writes to the share-link / enabled / cached / routingState
      * state so concurrent readers cannot observe a torn snapshot (e.g. [savedLink]
      * updated while [cached] still has the old value). Wraps the write blocks in
      * [refreshFromUserDataIfChanged], [save], and [clear]. Read paths use the cheap
      * volatile dirty-check at the top of [refreshFromUserDataIfChanged]; the lock is
      * only acquired on a change, so it's uncontended in the steady state.
      *
-     * Separate from [recomputeLock] — that one protects the tunnel-host snapshot
-     * ([tunnelHostSet]), this one protects the proxy share-link/enabled state.
-     * They MUST stay separate; merging them would couple a hot read path
-     * (tunnel-host lookup on every connection) to share-link writes. Lock
-     * ordering: when both must be held, [refreshLock] is acquired first.
-     * [recomputeLock] is never acquired from inside [refreshLock] (verified by
-     * inspection — neither [save], [clear], nor [refreshFromUserDataIfChanged]
-     * calls [recomputeTunnelHosts] or [shouldTunnel]).
+     * Separate from [tunnelHostsLock] — that one protects the derivation
+     * of the tunnel-host snapshot ([tunnelSnapshot]), this one protects the proxy
+     * share-link/enabled state. They MUST stay separate; merging them would couple
+     * a hot read path (tunnel-host lookup on every connection) to share-link
+     * writes. [tunnelHostsLock] is never acquired from inside [refreshLock]
+     * (verified by inspection — neither [save], [clear], nor
+     * [refreshFromUserDataIfChanged] calls [tunnelHosts] or [shouldTunnel]).
      */
     private val refreshLock = Any()
 
     /**
-     * Immutable snapshot of host suffixes to tunnel. Replaced atomically by
-     * [recomputeTunnelHosts]; readers ([shouldTunnel]) do a single volatile
-     * load. Initialized to [HARDCODED_BASELINE] so `shouldTunnel` never returns
-     * false for the floor hosts even between construction and the first
-     * recompute.
+     * Cached tunnel-host whitelist snapshot, keyed on the identity of the source
+     * domain lists it was derived from. The whitelist is the union of the proxy
+     * chat domains ∪ proxy call domains, both read from `proxy.tunnelDomains`
+     * via [IGlobalConfigsManager] (live-preferred + embedded fallback).
+     *
+     * [IGlobalConfigsManager.getProxyTunnelChatDomains] /
+     * [IGlobalConfigsManager.getProxyTunnelCallDomains] return the SAME (`===`)
+     * list instances while the underlying config is unchanged, and DIFFERENT
+     * instances after a live config refresh. So [tunnelHosts] compares both
+     * source lists by reference on the hot path: same refs → return the cached
+     * [TunnelSnapshot.set] lock-free; changed refs → recompute the union under
+     * [tunnelHostsLock]. This makes a LIVE update to `proxy.tunnelDomains`
+     * propagate to the whitelist without an app restart, while keeping the
+     * steady-state [shouldTunnel] read allocation-free.
+     *
+     * `null` until first computed; an EMPTY union is NOT cached so the
+     * fail-closed self-heal in [tunnelHosts] still applies. Published via
+     * `@Volatile`.
      */
     @Volatile
-    private var tunnelHostSet: Set<String> = HARDCODED_BASELINE
+    private var tunnelSnapshot: TunnelSnapshot? = null
+    private val tunnelHostsLock = Any()
+
+    /** Cached whitelist + the source list refs it was derived from (see [tunnelSnapshot]). */
+    private class TunnelSnapshot(
+        val chat: List<String>,
+        val call: List<String>,
+        val set: Set<String>,
+    )
 
     /** Raw share link the user entered, persisted even while the proxy is OFF. */
     @Volatile
@@ -80,6 +102,17 @@ class ProxyConfigProvider @Inject constructor(
     /** User's on/off intent, independent of whether [savedLink] is valid. */
     @Volatile
     private var enabledFlag: Boolean = userManager.getUserData()?.proxyEnabled ?: false
+
+    /**
+     * User's "Protect IP address in calls" intent. Gated by [enabledFlag]: only
+     * meaningful while the proxy is active. When OFF the call/meeting plane routes
+     * DIRECT (real IP exposed to the SFU) even though the IM plane still tunnels;
+     * when ON the call plane joins the tunnel (see [currentForCall]). Independent of
+     * whether [savedLink] parses — the settings UI keeps the toggle's value while
+     * the proxy is off and surfaces it again when re-enabled.
+     */
+    @Volatile
+    private var protectCallIpFlag: Boolean = userManager.getUserData()?.proxyProtectCallIp ?: false
 
     /** Active config = parse([savedLink]) only when [enabledFlag]; else null. */
     @Volatile
@@ -123,18 +156,11 @@ class ProxyConfigProvider @Inject constructor(
     }
 
     init {
-        activeForRouting = cached != null
-        // tunnelHostSet was already initialized to HARDCODED_BASELINE at the field
-        // initializer. Log the baseline-only state synchronously to make startup
-        // observable, then dispatch the full recompute to appScope/Dispatchers.IO
-        // so any potential runBlocking(IO) inside the manager .get() chain cannot
-        // block whatever thread instantiated us. The construction thread is not
-        // guaranteed to be off the main thread — Hilt may resolve ProxyConfigProvider
-        // eagerly from any of the 6 HTTP-client @Provides sites in
-        // ChativeHttpClientModule, and StoragePreloader is a runtime assumption,
-        // not a compile-time precondition. See design §5.
-        L.i { "[Proxy] tunnel hosts initial (baseline only): total=${tunnelHostSet.size}" }
-        appScope.launch(Dispatchers.IO) { recomputeTunnelHosts() }
+        routingState = buildRoutingState()
+        // [tunnelSnapshot] is derived lazily on the first [shouldTunnel] call
+        // (proxy-active path only), so construction stays cheap and off the
+        // config-read path. It re-derives automatically when the source
+        // `proxy.tunnelDomains` lists change reference after a live config refresh.
     }
 
     /**
@@ -154,11 +180,43 @@ class ProxyConfigProvider @Inject constructor(
             return cached
         }
 
+    /**
+     * Active proxy config for the CALL/meeting plane, or null when calls must go
+     * DIRECT. Returns [current] only while "Protect IP address in calls" is ON;
+     * otherwise null even when the proxy is active, so the call signaling socket
+     * factory / DNS ([ProxyTunnelSocketFactory] / [ProxyTunnelDns] in call scope)
+     * fall back to a direct connection while the IM plane keeps tunneling.
+     */
+    val currentForCall: ProxyConfig?
+        get() {
+            refreshFromUserDataIfChanged()
+            return if (protectCallIpFlag) cached else null
+        }
+
     /** Whether the proxy is currently active (enabled AND the saved link is valid). */
     val isEnabled: Boolean
         get() {
             refreshFromUserDataIfChanged()
             return cached != null
+        }
+
+    /**
+     * Whether the proxy is active AND routes the call/meeting plane through the
+     * tunnel ("Protect IP address in calls" ON). The call module reads this in
+     * place of [isEnabled] so toggling the protection off restores direct calls
+     * while the IM plane stays tunneled.
+     */
+    val isEnabledForCall: Boolean
+        get() {
+            refreshFromUserDataIfChanged()
+            return cached != null && protectCallIpFlag
+        }
+
+    /** The user's "Protect IP address in calls" intent (independent of proxy on/off). */
+    val isProtectCallIpEnabled: Boolean
+        get() {
+            refreshFromUserDataIfChanged()
+            return protectCallIpFlag
         }
 
     /** The user's on/off toggle intent (may be true while the saved link is invalid). */
@@ -177,7 +235,7 @@ class ProxyConfigProvider @Inject constructor(
 
     /**
      * Re-reads `UserData.proxyShareLink` / `UserData.proxyEnabled` from [userManager]
-     * and refreshes the [savedLink] / [enabledFlag] / [cached] / [activeForRouting]
+     * and refreshes the [savedLink] / [enabledFlag] / [cached] / [routingState]
      * fields when either differs from what we cached. Single volatile load +
      * nullable-string compare + boolean compare on the hot path; only re-parses
      * the share link when the source string actually changed.
@@ -186,22 +244,32 @@ class ProxyConfigProvider @Inject constructor(
         val ud = userManager.getUserData() ?: return
         val liveLink = ud.proxyShareLink
         val liveEnabled = ud.proxyEnabled
+        val liveProtectCall = ud.proxyProtectCallIp
         // Cheap volatile dirty-check before taking the lock. Steady-state callers
         // (post-save / post-warm-up) see savedLink/enabledFlag already match and
         // bail without contending on refreshLock.
-        if (liveLink == savedLink && liveEnabled == enabledFlag) return
+        if (liveLink == savedLink && liveEnabled == enabledFlag && liveProtectCall == protectCallIpFlag) return
         synchronized(refreshLock) {
             // Re-check inside the lock — another caller may have raced ahead and
             // published the same update. Without the re-check, two concurrent
             // refreshes could each compute recompute() and race on the final
-            // four-field write order (bounded, but messy).
-            if (liveLink == savedLink && liveEnabled == enabledFlag) return
+            // field write order (bounded, but messy).
+            if (liveLink == savedLink && liveEnabled == enabledFlag && liveProtectCall == protectCallIpFlag) return
             savedLink = liveLink
             enabledFlag = liveEnabled
+            protectCallIpFlag = liveProtectCall
             cached = recompute()
-            activeForRouting = cached != null
+            routingState = buildRoutingState()
         }
     }
+
+    /**
+     * Registers a proxy-aware HTTP client so its OkHttp connection pool is evicted
+     * on the next proxy state change. Called by each [com.difft.android.network.ChativeHttpClient]
+     * at construction — they already hold this provider, so no extra DI wiring is
+     * needed at the 7 client construction sites.
+     */
+    fun registerHttpClient(client: OkHttpClient) = httpConnectionRegistry.register(client)
 
     /**
      * Persists the share link and the on/off intent together (the Save action of
@@ -240,7 +308,7 @@ class ProxyConfigProvider @Inject constructor(
             savedLink = newLink
             enabledFlag = newEnabled
             cached = if (newEnabled) parsed else null
-            activeForRouting = cached != null
+            routingState = buildRoutingState()
             userManager.update {
                 proxyShareLink = newLink
                 proxyEnabled = newEnabled
@@ -255,6 +323,9 @@ class ProxyConfigProvider @Inject constructor(
             // Proxy target may have changed — drop stale resolved IPs so the next
             // lookup repopulates against the new host.
             resetResolvedProxyAddresses()
+            // Drop pooled HTTP keep-alive connections so API requests stop reusing
+            // the stale tunnel/direct socket (the WS equivalent is the refresher below).
+            httpConnectionRegistry.evictAll()
             runCatching { connectionRefresherLazy.get().reconnectAfterProxyChange() }
                 .onFailure { L.w { "[Proxy] connection refresher failed after save: ${it.message}" } }
         }
@@ -265,8 +336,27 @@ class ProxyConfigProvider @Inject constructor(
      * Flips the on/off toggle using the already-saved link. Returns false when
      * enabling but no valid link is saved.
      */
-    @Suppress("unused") // public API kept for settings UI toggle paths
     fun setEnabled(enabled: Boolean): Boolean = save(savedLink.orEmpty(), enabled)
+
+    /**
+     * Persists the "Protect IP address in calls" intent and refreshes [routingState]
+     * so the call plane's routing decision ([currentForCall] / [isProxyActiveForCall])
+     * picks it up on the next call connection. Independent of the IM plane: the IM
+     * WebSocket / HTTP clients are NOT reconnected here — only call connections (built
+     * fresh per session) read this flag, and the settings screen blocks the toggle
+     * during an active call, so there is no live call socket to evict.
+     */
+    fun setProtectCallIp(enabled: Boolean) {
+        if (protectCallIpFlag == enabled) return
+        synchronized(refreshLock) {
+            protectCallIpFlag = enabled
+            routingState = buildRoutingState()
+            userManager.update {
+                proxyProtectCallIp = enabled
+            }
+        }
+        L.i { "[Proxy] protectCallIp=$enabled" }
+    }
 
     /**
      * Applies a `ytp://config?d=...` share link and enables the proxy. Returns
@@ -287,16 +377,19 @@ class ProxyConfigProvider @Inject constructor(
         synchronized(refreshLock) {
             savedLink = null
             enabledFlag = false
+            protectCallIpFlag = false
             cached = null
-            activeForRouting = false
+            routingState = RoutingState(active = false, quic = false, protectCall = false)
             userManager.update {
                 proxyShareLink = null
                 proxyEnabled = false
+                proxyProtectCallIp = false
             }
         }
         L.i { "[Proxy] cleared" }
         if (hadState) {
             resetResolvedProxyAddresses()
+            httpConnectionRegistry.evictAll()
             runCatching { connectionRefresherLazy.get().reconnectAfterProxyChange() }
                 .onFailure { L.w { "[Proxy] connection refresher failed after clear: ${it.message}" } }
         }
@@ -304,103 +397,157 @@ class ProxyConfigProvider @Inject constructor(
 
     /**
      * Whether `host` is in the tunnel-host whitelist (lock-free read of an
-     * immutable [Set]).
+     * immutable [Set] after the one-time lazy derivation).
      *
      * Match semantics: `h == entry || h.endsWith(".$entry")` over a normalized
      * (lowercase, [String.trimEnd] with a trailing dot) form of `host`. Per-FQDN —
      * mirrors the server relay's per-FQDN `ssl_preread` whitelist. The whitelist
-     * is the union of self-cert hosts from the global config (`certType=self`),
-     * domains from the cached `getServiceUrlV2` response, and a small hardcoded
-     * baseline. See [recomputeTunnelHosts].
+     * is the union of the proxy chat domains and the proxy call domains, both from
+     * `proxy.tunnelDomains` (live-preferred + embedded fallback, see [tunnelHosts]).
+     *
+     * Fail-closed: if the derivation yields an EMPTY whitelist (the chat
+     * dimension is missing — see [tunnelHosts]), tunnel EVERY host instead of
+     * letting it fall through to a direct (IP-leaking) connection. This is only
+     * reached while the proxy is active, so over-tunnelling fails safe — a host
+     * the relay does not accept just fails to connect, it never leaks the real IP.
      */
     fun shouldTunnel(host: String): Boolean {
+        val snapshot = tunnelHosts()
+        if (snapshot.isEmpty()) return true
         val h = host.lowercase().trimEnd('.')
-        val snapshot = tunnelHostSet
         return snapshot.any { h == it || h.endsWith(".$it") }
     }
 
-    /** Push hook — invoked by `GlobalConfigsManager` after a successful refresh. */
-    fun onGlobalConfigChanged() = recomputeTunnelHosts()
-
-    /** Push hook — invoked by `CallServiceUrlManager` after `mergeAndPersist()`. */
-    fun onCallServiceUrlsChanged() = recomputeTunnelHosts()
+    /**
+     * Returns the tunnel-host whitelist (proxy chat domains ∪ proxy call domains).
+     * Reads both source lists from [IGlobalConfigsManager] (`proxy.tunnelDomains`,
+     * live-preferred + embedded fallback, each cached so the read is O(1)) and
+     * compares them by reference against [tunnelSnapshot]: unchanged refs return
+     * the cached set lock-free; changed refs recompute the union under
+     * [tunnelHostsLock] (double-checked). A live config refresh swaps the source
+     * list instances, so the whitelist re-derives without an app restart.
+     *
+     * Each source read is guarded by `runCatching` so a fault in one provider
+     * cannot mask the other's contribution.
+     *
+     * An EMPTY result is NOT cached: it would otherwise pin the whitelist to
+     * empty until the next config change. While empty, [shouldTunnel] fails
+     * closed (tunnels everything) so privacy holds regardless of whether the
+     * source recovers.
+     */
+    private fun tunnelHosts(): Set<String> {
+        val gcm = globalConfigsManagerLazy.get()
+        val chatDomains = runCatching { gcm.getProxyTunnelChatDomains() }.getOrElse { emptyList() }
+        val callDomains = runCatching { gcm.getProxyTunnelCallDomains() }.getOrElse { emptyList() }
+        tunnelSnapshot?.let { snap ->
+            if (snap.chat === chatDomains && snap.call === callDomains) return snap.set
+        }
+        return synchronized(tunnelHostsLock) {
+            tunnelSnapshot?.let { snap ->
+                if (snap.chat === chatDomains && snap.call === callDomains) return@synchronized snap.set
+            }
+            // Privacy anchor on the CHAT dimension: UrlManager.getBestHost /
+            // getAllHostsRanked only fall back to the non-whitelisted
+            // `protocol.defaultHost` when the proxy chat domain set is EMPTY (when
+            // it is non-empty they always return one of its members). A call-only
+            // partial whitelist would leave that fallback host outside the set, so
+            // it would route DIRECT and leak the real IP. Treat a missing chat
+            // dimension as an underivable whitelist (empty) so [shouldTunnel] fails
+            // closed and tunnels everything, including the fallback host.
+            val set = if (chatDomains.isEmpty()) {
+                emptySet()
+            } else {
+                computeTunnelHosts(chatDomains, callDomains)
+            }
+            if (set.isNotEmpty()) tunnelSnapshot = TunnelSnapshot(chatDomains, callDomains, set)
+            L.i {
+                "[Proxy] tunnel hosts derived: chat=${chatDomains.size} " +
+                    "call=${callDomains.size} total=${set.size}"
+            }
+            set
+        }
+    }
 
     private fun recompute(): ProxyConfig? =
         if (enabledFlag) savedLink?.let { ProxyConfig.parse(it) } else null
 
-    /**
-     * Recomputes [tunnelHostSet] from the three sources and replaces the field
-     * atomically. Serialized under [recomputeLock] so two concurrent push hooks
-     * cannot tear the set-construction sequence; the replacement itself is a
-     * single reference assignment under the lock, published via `@Volatile`.
-     *
-     * Each manager call is guarded by `runCatching` so a fault in one provider
-     * (e.g. DataStore I/O exception, assets-parse failure) cannot mask the
-     * other provider's contribution to the new set.
-     */
-    private fun recomputeTunnelHosts() {
-        synchronized(recomputeLock) {
-            val gc = runCatching { globalConfigsManagerLazy.get().getNewGlobalConfigs() }.getOrNull()
-            val callDomains = runCatching {
-                callServiceUrlsProviderLazy.get().getCachedServiceUrlsDomains()
-            }.getOrElse { emptyList() }
-
-            val globalHosts = extractGlobalSelfCertHosts(gc)
-            val newSet = computeTunnelHosts(globalHosts, callDomains, HARDCODED_BASELINE)
-            tunnelHostSet = newSet
-
-            L.i {
-                "[Proxy] tunnel hosts recomputed: globalSelf=${globalHosts.size} " +
-                    "call=${callDomains.size} baseline=${HARDCODED_BASELINE.size} " +
-                    "total=${newSet.size}"
-            }
-        }
-    }
-
-    // internal for testing — unit tests in :network can call this directly
-    // without going through the manager mocks.
-    internal fun extractGlobalSelfCertHosts(gc: NewGlobalConfig?): List<String> {
-        val data = gc?.data ?: return emptyList()
-        val hostNames = data.hosts.orEmpty()
-            .asSequence()
-            .filter { it.certType.equals("self", ignoreCase = true) }
-            .mapNotNull { it.name }
-        val domainNames = data.domains.orEmpty()
-            .asSequence()
-            .filter { it.certType.equals("self", ignoreCase = true) }
-            .mapNotNull { it.domain }
-        return (hostNames + domainNames).toList()
-    }
+    /** Builds the published [RoutingState] from the current cached config + protect flag. */
+    private fun buildRoutingState(): RoutingState = RoutingState(
+        active = cached != null,
+        quic = cached?.quicEnabled == true,
+        protectCall = protectCallIpFlag,
+    )
 
     companion object {
         /**
-         * Last-resort tunnel hosts when both cached configs AND assets parsing
-         * yield nothing. Conservative: retains all five previously-hardcoded
-         * suffixes — the bundled `default_global_config.json` does NOT list
-         * `chative.online` or `chative.ninja` under `certType=self`, so without
-         * these two baseline entries a fresh install before the first successful
-         * live `getNewGlobalConfigs` fetch would silently bypass the tunnel for
-         * any active `*.chative.online` / `*.chative.ninja` TempTalk origin.
-         * Follow-up cleanup task: see design §11.
+         * Immutable (active, quic) pair published as ONE `@Volatile` reference so a
+         * lock-free reader can never observe a torn combination (e.g. active=true
+         * while quic is still the stale value). The two flags were previously two
+         * separate volatiles written non-atomically inside [refreshLock]; readers
+         * don't take the lock, so the pair could tear. The torn read failed safe
+         * (forced WSS), but a single-store publish removes the hazard outright.
+         *
+         * NOTE: atomicity holds only for a SINGLE read of [routingState]. A caller
+         * that needs both flags for one decision must read the reference once, not
+         * call [isProxyActive] and [isProxyQuicEnabled] separately.
          */
-        private val HARDCODED_BASELINE: Set<String> = setOf(
-            "chative.im",
-            "temptalk.net",
-            "ablivekit.org",
-            "chative.online",
-            "chative.ninja",
-        )
+        private data class RoutingState(val active: Boolean, val quic: Boolean, val protectCall: Boolean)
 
         /**
-         * Process-level, DI-free mirror of [isEnabled]. Lets modules that cannot
-         * inject this @Singleton (e.g. the call engine deciding to force WSS over
-         * QUIC — see the self-hosted-proxy design §9) cheaply read the proxy state.
-         * Kept in sync with [current] on init / apply / clear.
+         * Process-level, DI-free mirror of [isEnabled] + `current?.quicEnabled`. Lets
+         * modules that cannot inject this @Singleton (e.g. the call engine deciding to
+         * force WSS over QUIC — see the self-hosted-proxy design §9) cheaply read the
+         * proxy state. Kept in sync with [current] on init / apply / clear.
          */
         @Volatile
-        private var activeForRouting: Boolean = false
+        private var routingState: RoutingState = RoutingState(active = false, quic = false, protectCall = false)
 
+        /** Whether the proxy is active for routing (enabled AND saved link valid). */
         val isProxyActive: Boolean
-            get() = activeForRouting
+            get() = routingState.active
+
+        /**
+         * Whether the CALL/meeting plane routes through the proxy: proxy active AND
+         * "Protect IP address in calls" ON. The call module gates its proxy logic on
+         * this (instead of [isProxyActive]) so the user can keep the IM plane tunneled
+         * while letting calls connect directly. Reads [routingState] EXACTLY ONCE so
+         * the (active, protectCall) pair is evaluated atomically.
+         */
+        val isProxyActiveForCall: Boolean
+            get() = routingState.let { it.active && it.protectCall }
+
+        /**
+         * QUIC-over-proxy is usable for calls: proxy active for calls AND the relay
+         * advertises a QUIC relay (`q`). Call-plane counterpart of [isProxyQuicEnabled].
+         */
+        val isProxyForCallQuicEnabled: Boolean
+            get() = routingState.let { it.active && it.protectCall && it.quic }
+
+        /**
+         * The call plane is proxied but the relay advertises NO QUIC relay — QUIC
+         * signaling must be forced off for calls. Call-plane counterpart of
+         * [isProxyActiveWithoutQuic]; single atomic read of [routingState].
+         */
+        val isProxyForCallActiveWithoutQuic: Boolean
+            get() = routingState.let { it.active && it.protectCall && !it.quic }
+
+        /**
+         * Mirror of `current?.quicEnabled` (share-code `q`). True only when proxy is
+         * active AND the operator runs a MASQUE-lite QUIC relay, so the call engine
+         * may keep QUIC signaling on (tunneled). See design §9.6.
+         */
+        val isProxyQuicEnabled: Boolean
+            get() = routingState.quic
+
+        /**
+         * True when the proxy is active but advertises NO QUIC relay — i.e. QUIC
+         * signaling must be forced off (the tunnel is TCP-only, so QUIC/UDP would
+         * hit a dead path). Reads [routingState] EXACTLY ONCE so the (active, quic)
+         * pair is evaluated atomically: callers that need both flags for a single
+         * decision must use this instead of combining [isProxyActive] and
+         * [isProxyQuicEnabled], whose separate loads can straddle a state change.
+         */
+        val isProxyActiveWithoutQuic: Boolean
+            get() = routingState.let { it.active && !it.quic }
     }
 }

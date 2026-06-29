@@ -198,6 +198,7 @@ class GroupUtil @Inject constructor(
                     group.groupCryptoMode = groupInfo?.groupCryptoMode
                     group.encryptedName = groupInfo?.encryptedName
                     group.encryptedAvatar = groupInfo?.encryptedAvatar
+                    group.groupCryptoKeyVersion = groupInfo?.groupCryptoKeyVersion
 
                     val members = groupInfo?.members?.map { member ->
                         GroupMemberContactorModel().apply {

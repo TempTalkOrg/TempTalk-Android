@@ -152,8 +152,14 @@ class LCallServerNodeActivity : BaseActivity() {
                     Switch(
                         checked = connectionType == CONNECTION_TYPE.HTTP3_QUIC,
                         onCheckedChange = { checked ->
-                            val protocol = if (checked) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET
-                            LCallEngine.setSelectedConnectMode(protocol, fromUserSelection = true)
+                            if (checked && !LCallEngine.isQuicSelectable()) {
+                                // QUIC unavailable under the current proxy: refuse the toggle
+                                // without mutating state so the controlled Switch snaps back to OFF.
+                                ToastUtil.show(getString(R.string.call_server_node_quic_unavailable))
+                            } else {
+                                val protocol = if (checked) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET
+                                LCallEngine.setSelectedConnectMode(protocol, fromUserSelection = true)
+                            }
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF2196F3),

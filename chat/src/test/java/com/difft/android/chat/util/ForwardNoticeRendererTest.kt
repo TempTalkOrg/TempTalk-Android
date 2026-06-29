@@ -289,6 +289,7 @@ class ForwardNoticeRendererTest {
             ),
             context = context, resolveDisplayName = resolver
         )
+        // PRD v2.0: all-self source list (outer authors) → short form, no redundant "from You".
         assertEquals("\"You\" forwarded a message.", result)
     }
 

@@ -47,6 +47,18 @@ difft-coroutines:
       - '**/src/androidTest/**'
       - '**/src/testFixtures/**'
 
+  # Guards the #914 footgun: WCDB conflict inserts (insertOrReplace*/insertOrIgnore*)
+  # resolve ON CONFLICT on the PRIMARY KEY. On a databaseId-auto-increment-PK table,
+  # a batch of fresh models (all databaseId=0) collapses into one row — silent data
+  # loss. Default-deny: flagged on any wcdb accessor not on the natural-key-PK
+  # allowlist (maintained in UnsafeWcdbConflictInsert.NATURAL_KEY_PK_ACCESSORS).
+  UnsafeWcdbConflictInsert:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
   # LifecycleScopeBlockingCall deliberately OFF in PR 1.
   # Initial scan flagged 234 lambdas; ~95% were legitimate non-blocking suspend
   # work (flow collect, simple state updates, etc.). Without lambda-body

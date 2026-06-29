@@ -1035,8 +1035,13 @@ class ChatMessageViewModel @AssistedInject constructor(
             return@launch
         }
 
+        val myId = globalServices.myId
         val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
-        val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages)
+        // PRD v2.0 §改动3: pin the operator (myId) last in the source list.
+        val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId)
+        // PRD v2.0 §改动1/§改动2 条件①④: forward leaves a trace only if it carries someone else's
+        // real message (CF judged by inner authors). The forward ACTION still proceeds either way.
+        val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
 
         val (forwardContexts, scene) = if (loadedMessages.size == 1) {
             // Single selection → forward the one message as its own message.
@@ -1100,6 +1105,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             sourceAuthorIds = sortedAuthorIds,
             messageCount = loadedMessages.size,
             combinedForwardMode = mode,
+            carriesForeignContent = carriesForeignContent,
         )
         resetSelectMessageState()
     }
@@ -1165,16 +1171,23 @@ class ChatMessageViewModel @AssistedInject constructor(
 
         // PRD §4: emit copy notice into the source conversation. Android's multi-select
         // is single-source, so all selected messages share forWhat as the source.
-        // PRD §5.3: derive mode + sorted authors via NoticeAggregator (isSubContext=false —
-        // multi-select copy is always main-conv).
-        val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
-        val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages)
-        activityNoticeDispatcher.dispatchCopyNotice(
-            sourceConversation = forWhat,
-            sourceAuthorIds = sortedAuthorIds,
-            messageCount = loadedMessages.size,
-            combinedForwardMode = mode,
-        )
+        // PRD v2.0 §改动1 条件①④⑤: only leave a trace when the clipboard actually carries
+        // another person's real content. A selection that is all-self, or only placeholder
+        // bubbles (Chat History / single forward / contact card), leaks nothing real.
+        val myId = globalServices.myId
+        if (NoticeAggregator.copyCarriesForeignContentFromTextMessages(loadedMessages, myId)) {
+            // PRD §5.3: derive mode + sorted authors (isSubContext=false — multi-select copy
+            // is always main-conv); §改动3 pins the operator (myId) last in the source list.
+            val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
+            val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId)
+            activityNoticeDispatcher.dispatchCopyNotice(
+                sourceConversation = forWhat,
+                sourceAuthorIds = sortedAuthorIds,
+                myId = myId,
+                messageCount = loadedMessages.size,
+                combinedForwardMode = mode,
+            )
+        }
 
         resetSelectMessageState()
     }
@@ -1193,9 +1206,15 @@ class ChatMessageViewModel @AssistedInject constructor(
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
     ) {
         if (sourceMessages.isEmpty()) return
+        // PRD v2.0 §改动1/§改动2 条件①⑤: trace only when the clipboard carries another person's
+        // real content. A self message, or a placeholder bubble (Chat History / single forward /
+        // contact card copies as a bracketed placeholder), leaks nothing real.
+        val myId = globalServices.myId
+        if (!NoticeAggregator.copyCarriesForeignContent(sourceMessages, myId)) return
         activityNoticeDispatcher.dispatchCopyNotice(
             sourceConversation = forWhat,
             sourceAuthorIds = sourceMessages.map { it.authorId },
+            myId = myId,
             messageCount = sourceMessages.size,
             combinedForwardMode = combinedForwardMode,
         )
@@ -1205,6 +1224,10 @@ class ChatMessageViewModel @AssistedInject constructor(
         val loadedMessages = wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray())).map { it.convertToTextMessage() }
         // PRD §5.3: derive mode from main-conv selection (isSubContext=false).
         val saveMode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
+        val myId = globalServices.myId
+        // PRD v2.0 §改动1/§改动2 条件①④: save-to-notes leaves a trace only if it moves someone
+        // else's real message out of the conversation. The save ACTION proceeds either way.
+        val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
         if (loadedMessages.size == 1 && loadedMessages.firstOrNull()?.sharedContact != null) {
             val sharedContactId = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
             val sharedContactName = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.name?.displayName
@@ -1215,9 +1238,10 @@ class ChatMessageViewModel @AssistedInject constructor(
                     listOf(ForwardContext(emptyList(), false, sharedContactId, sharedContactName)),
                     ForwardNoticeData.Scene.SAVE_TO_NOTES,
                     forWhat,
-                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages),
+                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId),
                     messageCount = loadedMessages.size,
                     combinedForwardMode = saveMode,
+                    carriesForeignContent = carriesForeignContent,
                 )
         } else {
             val forwardContext = ForwardContext(loadedMessages.map {
@@ -1241,9 +1265,10 @@ class ChatMessageViewModel @AssistedInject constructor(
                     listOfNotNull(forwardContext),
                     ForwardNoticeData.Scene.SAVE_TO_NOTES,
                     forWhat,
-                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages),
+                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId),
                     messageCount = loadedMessages.size,
                     combinedForwardMode = saveMode,
+                    carriesForeignContent = carriesForeignContent,
                 )
         }
         resetSelectMessageState()
@@ -1281,4 +1306,10 @@ data class ForwardContextData(
     // PRD v1.0 §5.3 combined-forward mode derived from the selected messages by the ViewModel
     // (single source of truth; UI fragment just plumbs through to SelectChatsUtils).
     val combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+    // PRD v2.0 §改动1/§改动2 条件①④: whether the selection includes another person's real message
+    // (by original author — CF/single-forward judged by recursing to the leaf authors). Drives
+    // whether a forward/save notice fires. Callers SHOULD always compute and pass this explicitly via
+    // NoticeAggregator.forwardCarriesForeignContent*; the `true` default exists only for legacy/share
+    // entry points that cannot compute it (conservative: trace rather than silently miss).
+    val carriesForeignContent: Boolean = true,
 )

@@ -183,6 +183,9 @@ class SelectChatsUtils @Inject constructor(
         // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN keeps
         // legacy share/external entries untouched; Phase 4 dispatch sites populate explicitly.
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+        // PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded content includes someone else's real
+        // message. Default true keeps share/external callers tracing; forward sites compute it.
+        carriesForeignContent: Boolean = true,
     ) {
         val fragment = ChatSelectBottomSheetFragment.newInstance(
             isContactOnly = false,
@@ -209,6 +212,7 @@ class SelectChatsUtils @Inject constructor(
                 sourceAuthorIds,
                 messageCount,
                 combinedForwardMode,
+                carriesForeignContent,
                 scope = fragment.lifecycleScope,
                 onDismiss = { fragment.dismiss() }
             )
@@ -334,6 +338,11 @@ class SelectChatsUtils @Inject constructor(
 
     private var etMessage: AppCompatEditText? = null
 
+    // Long by nature: a single forward/share dialog builder (view binding in onViewCreated +
+    // sequential send-task assembly in onConfirm). PRD v2.0 only threaded the notice params
+    // (targetConversationId / carriesForeignContent) through it, nudging it just past the limit.
+    // Suppressed rather than split to keep the dialog's send flow in one readable place.
+    @Suppress("LongMethod")
     private fun showSendToDialog(
         context: Activity,
         chatsContact: ChatsContact,
@@ -346,6 +355,7 @@ class SelectChatsUtils @Inject constructor(
         sourceAuthorIds: List<String>? = null,
         messageCount: Int? = null,
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+        carriesForeignContent: Boolean = true,
         scope: CoroutineScope,
         onDismiss: () -> Unit
     ) {
@@ -426,6 +436,7 @@ class SelectChatsUtils @Inject constructor(
                             sourceAuthorIds = sourceAuthorIds,
                             messageCount = messageCount,
                             combinedForwardMode = combinedForwardMode,
+                            carriesForeignContent = carriesForeignContent,
                         )
                     }
                 } else {
@@ -442,6 +453,8 @@ class SelectChatsUtils @Inject constructor(
                                 sourceAuthorIds,
                                 messageCount,
                                 combinedForwardMode,
+                                targetConversationId = chatsContact.id,
+                                carriesForeignContent = carriesForeignContent,
                             )
                         }
                     }
@@ -494,6 +507,8 @@ class SelectChatsUtils @Inject constructor(
         messageCount: Int? = null,
         // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN.
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+        // PRD v2.0 §改动1/§改动2 条件①④: whether the saved content includes someone else's real message.
+        carriesForeignContent: Boolean = true,
     ) {
         // 显示全局 WaitDialog，设置为不可取消
         showWaitDialog(context)
@@ -529,6 +544,7 @@ class SelectChatsUtils @Inject constructor(
                     // "these messages were saved to notes". If caller didn't pass sourceConversation
                     // (non-chat entry, test tool, etc.), skip the notice silently.
                     if (sourceConversation != null) {
+                        // Save-to-notes target is the user's own notes (globalServices.myId).
                         sendForwardNotice(
                             sourceConversation,
                             forwardContexts,
@@ -536,6 +552,8 @@ class SelectChatsUtils @Inject constructor(
                             sourceAuthorIds,
                             messageCount,
                             combinedForwardMode,
+                            targetConversationId = globalServices.myId,
+                            carriesForeignContent = carriesForeignContent,
                         )
                     } else {
                         L.w { "[ForwardNotice] saveToNotes called without sourceConversation, skip notice" }
@@ -603,6 +621,7 @@ class SelectChatsUtils @Inject constructor(
         sourceAuthorIds: List<String>? = null,   // Deduped/priority-sorted authors of the user-selected messages (outer, not nested).
         messageCount: Int? = null,   // PRD §5.3: explicit selected-message count; null falls back to sourceAuthorIds.size.
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+        carriesForeignContent: Boolean = true,   // PRD v2.0 §改动1: see sendForwardNotice.
     ) = coroutineScope {
         // 使用 async 等待所有内部协程完成
         val deferredTasks = forwardContexts.map { forwardContext ->
@@ -631,7 +650,7 @@ class SelectChatsUtils @Inject constructor(
         // "someone forwarded your messages away". This mirrors screenshot-notification semantics.
         // NOT to the forward target — target-side already sees the forwarded messages themselves.
         if (sourceConversation != null) {
-            sendForwardNotice(sourceConversation, forwardContexts, scene, sourceAuthorIds, messageCount, combinedForwardMode)
+            sendForwardNotice(sourceConversation, forwardContexts, scene, sourceAuthorIds, messageCount, combinedForwardMode, targetConversationId = chatsContact.id, carriesForeignContent = carriesForeignContent)
         } else {
             L.w { "[ForwardNotice] sourceConversation missing, skip notice (non-forward share or caller bug?)" }
         }
@@ -670,7 +689,30 @@ class SelectChatsUtils @Inject constructor(
         // PRD v1.0 §5.3 combined-forward mode of the source selection. Default UNKNOWN matches
         // pre-PRD callers; Phase 4 dispatch sites populate explicitly.
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+        // PRD v2.0 §改动1: the forward target conversation id. Used for conditions ② (Saved) and
+        // ③ (target == source). Null skips the target check (e.g. callers without a single target).
+        targetConversationId: String? = null,
+        // PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded content includes another person's
+        // real message (judged by real author at the dispatch site — CF by its inner authors).
+        // Default true keeps legacy/share callers tracing; dispatch sites compute it explicitly.
+        carriesForeignContent: Boolean = true,
     ) {
+        // PRD v2.0 §改动1 条件①④: nothing of anyone else's left the conversation → no trace.
+        if (!carriesForeignContent) {
+            L.i { "[ForwardNotice] skip — no foreign content (all self) (conv=${sourceConversation.id})" }
+            return
+        }
+        // PRD v2.0 §改动1 条件②: forwarding from inside the user's own Saved conversation has no
+        // other audience. 条件③: forwarding back into the source conversation keeps the content
+        // inside it — nothing left. Either way, no trace. Central guard for every forward surface.
+        if (sourceConversation.id == globalServices.myId) {
+            L.i { "[ForwardNotice] skip — Saved source conversation (conv=${sourceConversation.id})" }
+            return
+        }
+        if (targetConversationId != null && targetConversationId == sourceConversation.id) {
+            L.i { "[ForwardNotice] skip — target equals source conversation (conv=${sourceConversation.id})" }
+            return
+        }
         val authorIds: List<String>
         val totalCount: Int
         if (sourceAuthorIds != null) {

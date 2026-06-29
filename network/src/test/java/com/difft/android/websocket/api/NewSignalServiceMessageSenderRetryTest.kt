@@ -3,6 +3,7 @@ package com.difft.android.websocket.api
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.network.signal.MessageSendRepository
 import com.difft.android.websocket.api.messages.PublicKeyInfo
+import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
 import com.difft.android.websocket.api.services.NewMessagingService
 import com.difft.android.websocket.api.util.EncryptResult
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
@@ -29,6 +30,7 @@ import org.junit.Test
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import java.io.IOException
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -76,6 +78,13 @@ class NewSignalServiceMessageSenderRetryTest {
 
         // Default: no server-side retry signal. Tests override per-case.
         coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns true
+        // issue #970 ②: createNewOutgoingPushMessage now reads updatePublicKeyInfoDataResult
+        // (For-keyed) at :424 and classifyEmptyKeys at :442. Default both to the happy path so
+        // existing retry-branch tests (which keep has=true and a non-empty key) are unaffected.
+        coEvery { conversationManager.updatePublicKeyInfoDataResult(any()) } returns
+            PublicKeyUpdateResult.Updated
+        coEvery { conversationManager.classifyEmptyKeys(any()) } returns
+            PublicKeyUpdateResult.Updated
         coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
             PublicKeyInfo(uid = "c", identityKey = "k-c", registrationId = 1, resetIdentityKeyTime = 0)
         )
@@ -342,5 +351,117 @@ class NewSignalServiceMessageSenderRetryTest {
         // uid-keyed overload NOT invoked with [gid] — that would be a silent no-op
         // because group ids are not valid uids in the /keys service.
         coVerify(exactly = 0) { conversationManager.updatePublicKeyInfoData(any<List<String>>()) }
+    }
+
+    // -----------------------------------------------------------------
+    // issue #970 ②: createNewOutgoingPushMessage permanent vs transient
+    // routing. Two assertions must never cross-misfire:
+    //   invalid group → NoValidRecipientKeysException (permanent, onShouldRetry=false)
+    //   server-empty / weak-net / not-synced → IOException (transient, onShouldRetry=true)
+    // -----------------------------------------------------------------
+
+    /** T11: invalid group (EntityInvalid) at :424 → NoValidRecipientKeysException (NOT IOException). */
+    @Test
+    fun createMessage_invalid_group_throws_permanent_not_io() = runTest {
+        val recipient = For.Group("g-invalid")
+        coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns false
+        coEvery { conversationManager.updatePublicKeyInfoDataResult(any()) } returns
+            PublicKeyUpdateResult.EntityInvalid
+
+        val thrown = assertFailsWith<NoValidRecipientKeysException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+        }
+        // Critical: NOT an IOException (would be re-tried forever by PushSendJob.onShouldRetry).
+        // Reflective check (not `is`) so the assertion can't be statically folded away.
+        assertFalse(
+            IOException::class.java.isAssignableFrom(thrown.javaClass),
+            "permanent exception must not be an IOException"
+        )
+    }
+
+    /**
+     * T11b: ServerEmpty (HTTP200 + non-null but empty keys array) at :424 → IOException (transient).
+     * An empty array is an AMBIGUOUS signal (entity gone vs valid recipient whose keys have not yet
+     * propagated), so it must stay retryable — only EntityInvalid (group status != 0) is permanent.
+     * Guards the PR #973 code-review fix against dropping recoverable messages/group-keys.
+     */
+    @Test
+    fun createMessage_server_empty_is_transient_io() = runTest {
+        val recipient = For.Account("c")
+        coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns false
+        coEvery { conversationManager.updatePublicKeyInfoDataResult(any()) } returns
+            PublicKeyUpdateResult.ServerEmpty
+
+        // IOException, NOT NoValidRecipientKeysException (which is not an IOException subtype).
+        assertFailsWith<IOException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+        }
+    }
+
+    /** T12: weak network (FetchFailed) at :424 → IOException (retryable). */
+    @Test
+    fun createMessage_fetch_failed_throws_transient_io() = runTest {
+        val recipient = For.Account("c")
+        coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns false
+        coEvery { conversationManager.updatePublicKeyInfoDataResult(any()) } returns
+            PublicKeyUpdateResult.FetchFailed
+
+        // assertFailsWith<IOException> proves the transient type. Since
+        // NoValidRecipientKeysException is NOT an IOException subtype, catching IOException here
+        // already guarantees it is not the permanent type — weak net stays retryable.
+        assertFailsWith<IOException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+        }
+    }
+
+    /** T12b: unresolved group (Unresolved) at :424 → IOException (retryable). */
+    @Test
+    fun createMessage_unresolved_throws_transient_io() = runTest {
+        val recipient = For.Group("g-unresolved")
+        coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns false
+        coEvery { conversationManager.updatePublicKeyInfoDataResult(any()) } returns
+            PublicKeyUpdateResult.Unresolved
+
+        assertFailsWith<IOException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+        }
+    }
+
+    /**
+     * :442 path — has=true (cache claims present) but filtered-empty + entity invalid →
+     * classifyEmptyKeys=EntityInvalid → NoValidRecipientKeysException.
+     */
+    @Test
+    fun createMessage_filtered_empty_entity_invalid_throws_permanent() = runTest {
+        val recipient = For.Group("g-cleanup")
+        coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns true
+        // All keys filtered out (blank identityKey) → :442 branch.
+        coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
+            PublicKeyInfo(uid = "m1", identityKey = "", registrationId = 1, resetIdentityKeyTime = 0)
+        )
+        coEvery { conversationManager.classifyEmptyKeys(any()) } returns
+            PublicKeyUpdateResult.EntityInvalid
+
+        assertFailsWith<NoValidRecipientKeysException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+        }
+    }
+
+    /** :442 path — filtered-empty but classify=Updated (transient self-heal) → IOException. */
+    @Test
+    fun createMessage_filtered_empty_classify_transient_throws_io() = runTest {
+        val recipient = For.Account("c")
+        coEvery { conversationManager.hasPublicKeyInfoData(any()) } returns true
+        coEvery { conversationManager.getPublicKeyInfos(any<For>()) } returns listOf(
+            PublicKeyInfo(uid = "c", identityKey = "", registrationId = 1, resetIdentityKeyTime = 0)
+        )
+        coEvery { conversationManager.classifyEmptyKeys(any()) } returns
+            PublicKeyUpdateResult.Updated
+
+        // assertFailsWith<IOException> proves transient; permanent type is excluded by the
+        // type hierarchy (NoValidRecipientKeysException !is IOException).
+        assertFailsWith<IOException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+        }
     }
 }

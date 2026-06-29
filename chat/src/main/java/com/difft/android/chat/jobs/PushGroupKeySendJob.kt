@@ -55,7 +55,7 @@ class PushGroupKeySendJob @AssistedInject constructor(
     override fun onAdded() {}
 
     public override suspend fun onPushSend() {
-        val rGroupBytes = groupCryptoRepo.getRGroupBytes(gid) ?: run {
+        val (rGroupBytes, version) = groupCryptoRepo.getRGroupWithVersion(gid) ?: run {
             L.w { "[GE][PushGroupKeySendJob] No R_group for $gid, drop" }
             return
         }
@@ -65,6 +65,7 @@ class PushGroupKeySendJob @AssistedInject constructor(
         val message = groupKeyMessage {
             groupId = ByteString.copyFrom(gid.transformGroupIdFromLocalToServer())
             groupRootKey = ByteString.copyFrom(rGroupBytes)
+            keyVersion = version
         }
 
         L.i {

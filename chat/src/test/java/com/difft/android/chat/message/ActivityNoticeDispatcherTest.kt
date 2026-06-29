@@ -60,6 +60,12 @@ class ActivityNoticeDispatcherTest {
         clearMocks(jobManager, factory)
     }
 
+    private companion object {
+        // Operator id passed explicitly to dispatchCopyNotice — differs from every test
+        // conversation so the Saved guard stays inert unless a test uses it as the source.
+        const val MY_ID = "+myself"
+    }
+
     @Test
     fun `dispatchCopyNotice — default mode is UNKNOWN preserved in payload`() {
         val conv = For.Account("+conv")
@@ -69,6 +75,7 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = conv,
             sourceAuthorIds = listOf("+a"),
+            myId = MY_ID,
             messageCount = 1,
         )
 
@@ -88,6 +95,7 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = conv,
             sourceAuthorIds = listOf("+a", "+b"),
+            myId = MY_ID,
             messageCount = 2,
             combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
         )
@@ -105,6 +113,7 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = conv,
             sourceAuthorIds = listOf("+a"),
+            myId = MY_ID,
             messageCount = 3,
             combinedForwardMode = CombinedForwardMode.CONTAINS_COMBINED_FORWARD,
         )
@@ -121,6 +130,7 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = conv,
             sourceAuthorIds = listOf("+a"),
+            myId = MY_ID,
             messageCount = 5,
             combinedForwardMode = CombinedForwardMode.ALL_COMBINED_FORWARD,
         )
@@ -133,6 +143,7 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = For.Account("+conv"),
             sourceAuthorIds = emptyList(),
+            myId = MY_ID,
             messageCount = 1,
             combinedForwardMode = CombinedForwardMode.ALL_COMBINED_FORWARD,
         )
@@ -145,6 +156,7 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = For.Account("+conv"),
             sourceAuthorIds = listOf("+a"),
+            myId = MY_ID,
             messageCount = 0,
         )
         verify(exactly = 0) { jobManager.add(any()) }
@@ -152,7 +164,21 @@ class ActivityNoticeDispatcherTest {
         dispatcher.dispatchCopyNotice(
             sourceConversation = For.Account("+conv"),
             sourceAuthorIds = listOf("+a"),
+            myId = MY_ID,
             messageCount = -1,
+        )
+        verify(exactly = 0) { jobManager.add(any()) }
+    }
+
+    @Test
+    fun `dispatchCopyNotice — Saved (source equals myId) drops silently`() {
+        // PRD v2.0 §改动1 条件②: copying inside the user's own Saved conversation has no audience.
+        // A foreign author is supplied so only the Saved guard can suppress it.
+        dispatcher.dispatchCopyNotice(
+            sourceConversation = For.Account(MY_ID),
+            sourceAuthorIds = listOf("+a"),
+            myId = MY_ID,
+            messageCount = 1,
         )
         verify(exactly = 0) { jobManager.add(any()) }
     }

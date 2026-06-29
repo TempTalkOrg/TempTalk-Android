@@ -154,7 +154,17 @@ internal class AacM4aEncoder(
                 }
                 idx >= 0 -> {
                     val out = codec.getOutputBuffer(idx)
-                    if (out != null && bufferInfo.size > 0 && muxerStarted) {
+                    // Some vendor AAC encoders (seen on certain Android 10/12
+                    // devices) emit a separate BUFFER_FLAG_CODEC_CONFIG buffer
+                    // *after* INFO_OUTPUT_FORMAT_CHANGED. Its payload is the
+                    // AudioSpecificConfig, which the muxer already stored via
+                    // addTrack(outputFormat). Writing it as a media sample
+                    // produces a bogus 2-byte leading frame that strict
+                    // decoders (desktop Chromium/Electron) reject, even though
+                    // ffmpeg tolerantly skips it. Never mux config buffers.
+                    val isCodecConfig =
+                        bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                    if (out != null && !isCodecConfig && bufferInfo.size > 0 && muxerStarted) {
                         out.position(bufferInfo.offset)
                         out.limit(bufferInfo.offset + bufferInfo.size)
                         muxer.writeSampleData(trackIndex, out, bufferInfo)

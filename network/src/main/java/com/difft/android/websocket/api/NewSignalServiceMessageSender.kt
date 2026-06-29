@@ -5,6 +5,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.websocket.api.messages.DetailMessageType
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.messages.SendMessageResult
+import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
 import com.difft.android.websocket.api.push.exceptions.UnregisteredUserException
 import com.difft.android.websocket.api.services.NewMessagingService
@@ -421,9 +422,27 @@ class NewSignalServiceMessageSender @Inject constructor(
         timestamp: Long,
     ): NewOutgoingPushMessage {
         if (conversationManager.hasPublicKeyInfoData(room).not()) {
-            if (!conversationManager.updatePublicKeyInfoData(room)) {
-                throw IOException("Failed to update public key info data")
-            }
+            // issue #970 ②: only "group invalid" (EntityInvalid = server group status != 0,
+            // reliable and unambiguous) is permanent (stop retrying). ServerEmpty (HTTP200 +
+            // non-null body but an empty keys array) is an **ambiguous** signal — the entity may
+            // be gone, or a valid recipient's keys may not have propagated yet (new group) /
+            // a transient server blank — so it is **transient** (IOException, retry self-heals),
+            // avoiding permanent loss of recoverable messages/group keys (PR #973 code-review).
+            // Network failure / not yet synced are likewise transient. Invalid-group churn is
+            // closed by EntityInvalid, not by ServerEmpty.
+            when (conversationManager.updatePublicKeyInfoDataResult(room)) {
+                PublicKeyUpdateResult.Updated -> { /* ok, fallthrough */ }
+
+                PublicKeyUpdateResult.EntityInvalid ->
+                    throw NoValidRecipientKeysException(
+                        "recipient keys unavailable (group invalid, status != 0) room=${room.id}"
+                    )
+
+                PublicKeyUpdateResult.ServerEmpty,
+                PublicKeyUpdateResult.FetchFailed,
+                PublicKeyUpdateResult.Unresolved ->
+                    throw IOException("Failed to update public key info data (transient) room=${room.id}")
+            }.exhaustive  // expression form → a new PublicKeyUpdateResult variant is a compile error, not a silent fallthrough
         } else {
             L.i { "[Message] public key info is ready" }
         }
@@ -437,9 +456,23 @@ class NewSignalServiceMessageSender @Inject constructor(
             }
 
         if (publicKeyInfos.isEmpty()) {
-            val error = "No valid public key info available after filtering (all identityKeys were empty)"
-            L.e { error }
-            throw IOException(error)
+            // Reached here: has=true (cache claims present) but everything filtered out, or
+            // has=false then update=Updated but the read came back empty. Re-confirm entity
+            // status: only EntityInvalid (group status != 0) → permanent; ServerEmpty (empty
+            // array, possibly a valid recipient not yet propagated) and the rest are all treated
+            // as transient, letting the job retry / self-heal (PR #973 code-review).
+            when (conversationManager.classifyEmptyKeys(room)) {
+                PublicKeyUpdateResult.EntityInvalid ->
+                    throw NoValidRecipientKeysException(
+                        "no valid public key info after filtering, group invalid (status != 0) room=${room.id}"
+                    )
+
+                PublicKeyUpdateResult.Updated,
+                PublicKeyUpdateResult.ServerEmpty,
+                PublicKeyUpdateResult.FetchFailed,
+                PublicKeyUpdateResult.Unresolved ->
+                    throw IOException("No valid public key info available after filtering (transient) room=${room.id}")
+            }.exhaustive  // expression form → a missing arm for a future variant is a compile error here too
         }
 
         val msgType = getMsgType(content)
@@ -941,3 +974,9 @@ class NewSignalServiceMessageSender @Inject constructor(
         }
     }
 }
+
+/**
+ * Forces a `when` to be evaluated as an expression so the compiler enforces exhaustiveness
+ * over sealed subjects (a missing arm becomes a compile error, not a silent statement fallthrough).
+ */
+private val <T> T.exhaustive: T get() = this

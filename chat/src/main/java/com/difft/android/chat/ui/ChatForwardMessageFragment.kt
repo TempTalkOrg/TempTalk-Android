@@ -19,6 +19,7 @@ import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePe
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
+import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
@@ -26,6 +27,7 @@ import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.databinding.ChatFragmentForwardMessageBinding
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.MessageActionHelper
+import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
@@ -161,7 +163,7 @@ class ChatForwardMessageFragment : Fragment() {
             MessageAction.Type.COPY -> {
                 viewLifecycleOwner.lifecycleScope.launch {
                     if (messageActionHelper.copyMessageContent(message)) {
-                        dispatchOuterCopyNotice()
+                        dispatchOuterCopyNotice(message)
                     }
                 }
             }
@@ -173,19 +175,27 @@ class ChatForwardMessageFragment : Fragment() {
                     sourceConversation = outerSourceConversation,
                     sourceAuthorIdsOverride = outerSourceAuthorIds,
                     combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
+                    // PRD v2.0 §改动1/§改动2 条件①④: real author of the moved inner = message.authorId.
+                    carriesForeignContent = NoticeAggregator.forwardCarriesForeignContent(listOf(message), globalServices.myId),
                 )
             }
             else -> {}
         }
     }
 
-    private fun dispatchOuterCopyNotice() {
+    private fun dispatchOuterCopyNotice(message: TextChatMessage) {
         val conv = outerSourceConversation ?: return
         val authors = outerSourceAuthorIds ?: return
+        // PRD v2.0 §改动1/§改动2 条件①④⑤: trace only when the copied sub-message carries another
+        // person's real content. Its real author is the inner sub-author (message.authorId);
+        // a nested-CF / contact-card sub-message copies as a placeholder and leaks nothing.
+        val myId = globalServices.myId
+        if (!NoticeAggregator.copyCarriesForeignContent(listOf(message), myId)) return
         // PRD §5.3.2: copy from inside a CF detail view → SUB_COMBINED_FORWARD.
         activityNoticeDispatcher.dispatchCopyNotice(
             sourceConversation = conv,
             sourceAuthorIds = authors,
+            myId = myId,
             messageCount = 1,
             combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
         )
@@ -370,6 +380,10 @@ class ChatForwardMessageFragment : Fragment() {
 
         override fun onItemLongClick(rootView: View, data: ChatMessage) {
             if (data !is TextChatMessage) return
+            // PRD v2.0 §改动5: a confidential combined-forward may be expanded for viewing, but ALL
+            // long-press operations (copy / forward / save / text-selection) are blocked — consistent
+            // with the main conversation, where a confidential message gets no action menu at all.
+            if ((activity as? ChatForwardMessageActivity)?.isConfidentialMessage() == true) return
             if (!shouldShowMenu(data)) return
 
             // Get bubble view (ChatMessageContainerView with id contentContainer)
@@ -393,7 +407,7 @@ class ChatForwardMessageFragment : Fragment() {
                             if (selectedText != null) {
                                 _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                                 ToastUtil.show(getString(R.string.chat_message_action_copied))
-                                dispatchOuterCopyNotice()
+                                dispatchOuterCopyNotice(message)
                             } else {
                                 handleActionSelected(MessageAction.Type.COPY, message)
                             }
@@ -410,6 +424,8 @@ class ChatForwardMessageFragment : Fragment() {
                                     sourceConversation = outerSourceConversation,
                                     sourceAuthorIds = outerSourceAuthorIds,
                                     combinedForwardMode = CombinedForwardMode.SUB_COMBINED_FORWARD,
+                                    // PRD v2.0 §改动1/§改动2 条件①: real author of the selected inner text = message.authorId.
+                                    carriesForeignContent = NoticeAggregator.forwardCarriesForeignContent(listOf(message), globalServices.myId),
                                 )
                             } else {
                                 // Full selection - forward as original message

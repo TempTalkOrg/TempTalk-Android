@@ -2,7 +2,6 @@ package com.difft.android.network.proxy
 
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.ICallServiceUrlsProvider
 import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.base.utils.IGlobalConfigsManager
 import dagger.Lazy
@@ -79,14 +78,11 @@ class ProxyConfigProviderSaveBehaviorTest {
     ): Triple<ProxyConfigProvider, FakeUserManager, IConnectionRefresher> {
         val gcm = mockk<IGlobalConfigsManager>(relaxed = true)
         every { gcm.getNewGlobalConfigs() } returns null
-        val csp = mockk<ICallServiceUrlsProvider>(relaxed = true)
-        every { csp.getCachedServiceUrlsDomains() } returns emptyList()
 
         val userManager = FakeUserManager()
         val provider = ProxyConfigProvider(
             userManager = userManager,
             globalConfigsManagerLazy = Lazy { gcm },
-            callServiceUrlsProviderLazy = Lazy { csp },
             connectionRefresherLazy = Lazy { refresher },
         )
         return Triple(provider, userManager, refresher)

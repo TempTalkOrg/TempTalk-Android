@@ -421,9 +421,10 @@ class MessageContentProcessor @Inject constructor(
 
             // Fallback: extract R_group from group message if present
             if (message.hasGroup() && message.group.hasGroupRootKey()) {
-                val saved = groupCryptoRepo.saveRGroupIfNeeded(
+                val saved = groupCryptoRepo.saveOrRotateRGroup(
                     content.conversation.id,
-                    message.group.groupRootKey.toByteArray()
+                    message.group.groupRootKey.toByteArray(),
+                    message.group.keyVersion // absent proto field defaults to 0
                 )
                 if (saved) {
                     L.i { "[GE] Fallback key extracted from group message for ${content.conversation.id}" }
@@ -746,9 +747,17 @@ class MessageContentProcessor @Inject constructor(
         val gid = groupKeyMessage.groupId.toByteArray().transformGroupIdFromServerToLocal()
         val rGroup = groupKeyMessage.groupRootKey.toByteArray()
         L.i { "[GE] Received GroupKeyMessage for group $gid from ${content.senderId}" }
-        groupCryptoRepo.saveRGroupIfNeeded(gid, rGroup)
-        // Always refresh to ensure decrypted fields are up to date
-        groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
+        val saved = groupCryptoRepo.saveOrRotateRGroup(
+            gid,
+            rGroup,
+            groupKeyMessage.keyVersion // absent proto field defaults to 0
+        )
+        if (saved) {
+            // Key just arrived or rotated — refresh group info so decrypted
+            // name/avatar are re-derived with the new K_group. Stale/older keys
+            // are skipped (saved=false) and need no refresh.
+            groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
+        }
         return null // Not displayed in UI
     }
 

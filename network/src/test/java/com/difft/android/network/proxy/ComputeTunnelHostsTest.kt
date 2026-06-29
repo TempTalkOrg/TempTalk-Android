@@ -9,130 +9,75 @@ import kotlin.test.assertTrue
  * (`ProxyTunnelHostDerivation.kt`). Pure JVM — no Android dependencies, no
  * Robolectric runner required.
  *
- * Each test pins one observable property of the derivation contract documented
- * in design §3.4 / §10.
+ * The whitelist is the union of the EMBEDDED chat hosts and the EMBEDDED
+ * call-service domains; there is no live/dynamic source and no hardcoded
+ * baseline. Each test pins one observable property of the derivation contract.
  */
 class ComputeTunnelHostsTest {
 
-    /** Mirrors `ProxyConfigProvider.HARDCODED_BASELINE` (kept in lockstep). */
-    private val baseline: Set<String> = setOf(
-        "chative.im",
-        "temptalk.net",
-        "ablivekit.org",
-        "chative.online",
-        "chative.ninja",
-    )
-
     @Test
-    fun `T1 derivation - both sources populated produces union with dedup`() {
-        // Arrange
-        val global = listOf("api.chative.im", "wss.temptalk.net")
-        val call = listOf("call-primary.ablivekit.org", "call-fb.ablivekit.org")
+    fun `both sources populated produces union with dedup`() {
+        val chatHosts = listOf("chat.temptalk.net", "chat.chative.im")
+        val callDomains = listOf("call-primary.ablivekit.org", "call-fb.ablivekit.org")
 
-        // Act
-        val result = computeTunnelHosts(global, call, baseline)
+        val result = computeTunnelHosts(chatHosts, callDomains)
 
-        // Assert: 5 baseline entries (none collide with input — input entries are
-        // distinct FQDNs from the baseline parent-domain entries) + 4 inputs = 9.
-        assertEquals(9, result.size)
-        assertTrue(result.containsAll(baseline))
-        assertTrue("api.chative.im" in result)
-        assertTrue("wss.temptalk.net" in result)
+        assertEquals(4, result.size)
+        assertTrue("chat.temptalk.net" in result)
+        assertTrue("chat.chative.im" in result)
         assertTrue("call-primary.ablivekit.org" in result)
         assertTrue("call-fb.ablivekit.org" in result)
     }
 
     @Test
-    fun `T2 derivation - empty global plus non-empty call yields baseline plus call entry`() {
-        // Arrange
-        val global = emptyList<String>()
-        val call = listOf("call.ablivekit.org")
+    fun `empty chat hosts plus non-empty call yields call entry only`() {
+        val result = computeTunnelHosts(emptyList(), listOf("call.ablivekit.org"))
 
-        // Act
-        val result = computeTunnelHosts(global, call, baseline)
-
-        // Assert
-        assertEquals(6, result.size)
-        assertTrue(result.containsAll(baseline))
-        assertTrue("call.ablivekit.org" in result)
+        assertEquals(setOf("call.ablivekit.org"), result)
     }
 
     @Test
-    fun `T3 derivation - non-empty global plus empty call yields baseline plus global entry`() {
-        // Arrange
-        val global = listOf("self.example.com")
-        val call = emptyList<String>()
+    fun `non-empty chat hosts plus empty call yields chat entry only`() {
+        val result = computeTunnelHosts(listOf("chat.temptalk.net"), emptyList())
 
-        // Act
-        val result = computeTunnelHosts(global, call, baseline)
-
-        // Assert
-        assertEquals(6, result.size)
-        assertTrue(result.containsAll(baseline))
-        assertTrue("self.example.com" in result)
+        assertEquals(setOf("chat.temptalk.net"), result)
     }
 
     @Test
-    fun `T4 derivation - both sources empty yields baseline only`() {
-        // Act
-        val result = computeTunnelHosts(emptyList(), emptyList(), baseline)
+    fun `both sources empty yields empty set`() {
+        val result = computeTunnelHosts(emptyList(), emptyList())
 
-        // Assert: exactly baseline.
-        assertEquals(baseline, result)
+        assertTrue(result.isEmpty())
     }
 
     @Test
-    fun `T5 extractGlobalSelfCertHosts - filters certType self across both list shapes`() {
-        // T5 covers the extractor behavior; the test for the extractor lives in
-        // ProxyConfigProviderTunnelHostsTest because it requires the provider's
-        // visibility. Here we cover the equivalent pure-function path: confirm
-        // that whatever the extractor returns is unioned as-is by
-        // computeTunnelHosts (i.e. computeTunnelHosts does NOT re-filter by
-        // certType — that's the extractor's job, not the derivation's).
+    fun `normalization lowercases trims trimEnds dot and drops blank`() {
+        val chatHosts = listOf("  Chat.Temptalk.NET  ", "chat.chative.im.", "", "   ")
+        val callDomains = emptyList<String>()
 
-        // Arrange — simulate the extractor having already produced ["a.com", "d.com"]
-        // from a NewGlobalConfig with mixed self/authority entries.
-        val global = listOf("a.com", "d.com")
+        val result = computeTunnelHosts(chatHosts, callDomains)
 
-        // Act
-        val result = computeTunnelHosts(global, emptyList(), baseline)
-
-        // Assert: both extracted entries flow through, baseline preserved.
-        assertTrue("a.com" in result)
-        assertTrue("d.com" in result)
-        assertTrue(result.containsAll(baseline))
-        assertEquals(baseline.size + 2, result.size)
+        assertTrue("chat.temptalk.net" in result)
+        assertTrue("chat.chative.im" in result)
+        // blanks dropped, trailing dot stripped, case normalized → exactly 2 entries.
+        assertEquals(2, result.size)
     }
 
     @Test
-    fun `T6 derivation - normalization lowercases trims trimEnds dot and drops blank`() {
-        // Arrange — mixed-case, padded, trailing dot, blank entries.
-        val global = listOf("  Api.Chative.IM  ", "wss.temptalk.net.", "", "   ")
-        val call = emptyList<String>()
+    fun `dedup across both sources reduces to single member`() {
+        val result = computeTunnelHosts(listOf("chat.chative.im"), listOf("chat.chative.im"))
 
-        // Act
-        val result = computeTunnelHosts(global, call, baseline)
-
-        // Assert: blanks dropped, trailing dot stripped, case normalized.
-        assertTrue("api.chative.im" in result)
-        assertTrue("wss.temptalk.net" in result)
-        // 5 baseline + "api.chative.im" + "wss.temptalk.net" = 7 (api.chative.im
-        // is distinct from baseline "chative.im" — per-FQDN match semantics).
-        assertEquals(7, result.size)
-    }
-
-    @Test
-    fun `T7 derivation - dedup across sources reduces to single member`() {
-        // Arrange — same entry appears in all three sources.
-        val global = listOf("chative.im")
-        val call = listOf("chative.im")
-        val singletonBaseline = setOf("chative.im")
-
-        // Act
-        val result = computeTunnelHosts(global, call, singletonBaseline)
-
-        // Assert: Set semantics dedup the three contributions to one entry.
-        assertEquals(setOf("chative.im"), result)
+        assertEquals(setOf("chat.chative.im"), result)
         assertEquals(1, result.size)
+    }
+
+    @Test
+    fun `insertion order is chat hosts then call domains`() {
+        val result = computeTunnelHosts(
+            listOf("chat.temptalk.net"),
+            listOf("call.ablivekit.org"),
+        )
+
+        assertEquals(listOf("chat.temptalk.net", "call.ablivekit.org"), result.toList())
     }
 }

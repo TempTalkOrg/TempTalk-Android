@@ -9,6 +9,7 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
+import com.difft.android.websocket.api.PublicKeyUpdateResult
 import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import com.difft.android.websocket.api.messages.GetPublicKeysResp
 import com.difft.android.websocket.api.messages.PublicKeyInfo
@@ -277,5 +278,176 @@ class ConversationManagerImplTest {
         assertFalse(result)
         coVerify(exactly = 0) { groupUtil.fetchAndSaveSingleGroupInfo(any(), any()) }
         coVerify(exactly = 0) { publicKeyInfoStore.hasAllUids(any()) }  // empty-list guard
+    }
+
+    // -----------------------------------------------------------------
+    // issue #970 ②: updatePublicKeyInfoDataResult — null/empty signal split.
+    // These assert the CLASSIFICATION enum. Downstream permanent/transient mapping (in
+    // NewSignalServiceMessageSender) treats ONLY EntityInvalid (group status != 0) as permanent;
+    // ServerEmpty (empty keys array) is mapped to transient — an empty array is ambiguous (entity
+    // gone vs valid recipient mid key-propagation), see PR #973 code-review. So the result enum
+    // still distinguishes ServerEmpty from FetchFailed (for logging), but both retry downstream.
+    // -----------------------------------------------------------------
+
+    /** T11/G-invalid (runnable): group status!=0 → EntityInvalid (permanent). No members access. */
+    @Test
+    fun updateResult_group_status_invalid_returns_entityInvalid() = runTest {
+        val gid = "g-invalid"
+        val invalidGroup = GroupModel().apply { this.gid = gid; this.status = 1 }
+        coEvery { groupUtil.getSingleGroupInfo(gid, any()) } returns invalidGroup
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Group(gid))
+
+        assertEquals(PublicKeyUpdateResult.EntityInvalid, result)
+        // status!=0 short-circuits before any getPublicKeys / members read.
+        coVerify(exactly = 0) { httpService.getPublicKeys(any(), any()) }
+    }
+
+    /** T12/G-unresolved (runnable): group==null (fetch threw / concurrent guard) → Unresolved (transient). */
+    @Test
+    fun updateResult_group_null_returns_unresolved() = runTest {
+        val gid = "g-null"
+        coEvery { groupUtil.getSingleGroupInfo(gid, any()) } returns null
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Group(gid))
+
+        assertEquals(PublicKeyUpdateResult.Unresolved, result)
+        coVerify(exactly = 0) { httpService.getPublicKeys(any(), any()) }
+    }
+
+    /** ARCH-CRIT-1 (runnable): concurrent guard returns null → Unresolved (transient, not permanent). */
+    @Test
+    fun updateResult_group_concurrent_skip_null_returns_unresolved_transient() = runTest {
+        // groupsInProgress concurrent guard makes the 2nd concurrent call return null.
+        val gid = "g-concurrent"
+        coEvery { groupUtil.getSingleGroupInfo(gid, any()) } returns null
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Group(gid))
+
+        // Must be transient — next round each job resolves status!=0 → permanent.
+        assertEquals(PublicKeyUpdateResult.Unresolved, result)
+    }
+
+    /** T3 (runnable): For.Account, getPublicKeys throws → FetchFailed (transient). */
+    @Test
+    fun updateResult_account_fetch_throws_returns_fetchFailed() = runTest {
+        coEvery { httpService.getPublicKeys(any(), any()) } throws java.io.IOException("network down")
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Account("peer"))
+
+        assertEquals(PublicKeyUpdateResult.FetchFailed, result)
+        coVerify(exactly = 0) { publicKeyInfoStore.upsert(any()) }
+    }
+
+    /** T4 (runnable): For.Account, server returns empty array → ServerEmpty (transient downstream). */
+    @Test
+    fun updateResult_account_server_empty_array_returns_serverEmpty() = runTest {
+        stubServerReturns(emptyList())
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Account("peer"))
+
+        assertEquals(PublicKeyUpdateResult.ServerEmpty, result)
+        coVerify(exactly = 0) { publicKeyInfoStore.upsert(any()) }
+    }
+
+    /** Boundary (runnable): server body null (.data?.keys==null) → FetchFailed (transient, conservative). */
+    @Test
+    fun updateResult_account_server_body_null_returns_fetchFailed() = runTest {
+        stubServerReturns(null)
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Account("peer"))
+
+        assertEquals(PublicKeyUpdateResult.FetchFailed, result)
+        coVerify(exactly = 0) { publicKeyInfoStore.upsert(any()) }
+    }
+
+    /** T5 (runnable): For.Account, server returns keys → Updated + upsert. */
+    @Test
+    fun updateResult_account_server_keys_returns_updated_and_upserts() = runTest {
+        stubServerReturns(listOf(serverKey("peer"), serverKey("selfUid")))
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Account("peer"))
+
+        assertEquals(PublicKeyUpdateResult.Updated, result)
+        coVerify(exactly = 1) { publicKeyInfoStore.upsert(any()) }
+    }
+
+    /**
+     * G6 (ignored — needs native WCDB Expression for group.members read):
+     * group status==0 but members empty → resolved 0 uids → ServerEmpty (transient downstream).
+     */
+    @Test
+    @Ignore("group.members read instantiates native WCDB Expression; run as instrumentation test.")
+    fun updateResult_group_valid_but_empty_members_returns_serverEmpty() = runTest {
+        val gid = "g-empty"
+        val validGroup = GroupModel().apply { this.gid = gid; this.status = 0 }
+        coEvery { groupUtil.getSingleGroupInfo(gid, any()) } returns validGroup
+        every<List<GroupMemberContactorModel>> {
+            wcdb.groupMemberContactor.getAllObjects(any<Expression>())
+        } returns emptyList()
+
+        val result = manager.updatePublicKeyInfoDataResult(For.Group(gid))
+
+        assertEquals(PublicKeyUpdateResult.ServerEmpty, result)
+    }
+
+    // -----------------------------------------------------------------
+    // classifyEmptyKeys — reuses updatePublicKeyInfoDataResult (Round2-A1).
+    // -----------------------------------------------------------------
+
+    /** T6 (runnable): group status!=0 → EntityInvalid (permanent for :442 path). */
+    @Test
+    fun classifyEmptyKeys_group_status_invalid_returns_entityInvalid() = runTest {
+        val gid = "g-invalid2"
+        val invalidGroup = GroupModel().apply { this.gid = gid; this.status = 1 }
+        coEvery { groupUtil.getSingleGroupInfo(gid, any()) } returns invalidGroup
+
+        val result = manager.classifyEmptyKeys(For.Group(gid))
+
+        assertEquals(PublicKeyUpdateResult.EntityInvalid, result)
+    }
+
+    /** T7 (runnable): account server keys present → Updated → caller maps to transient. */
+    @Test
+    fun classifyEmptyKeys_account_server_keys_returns_updated_transient_mapping() = runTest {
+        stubServerReturns(listOf(serverKey("peer"), serverKey("selfUid")))
+
+        val result = manager.classifyEmptyKeys(For.Account("peer"))
+
+        // Updated → caller (createNewOutgoingPushMessage) treats as transient (retry self-heal).
+        assertEquals(PublicKeyUpdateResult.Updated, result)
+    }
+
+    /** HIGH-1 (runnable): account confirming fetch returns empty → ServerEmpty (classification; transient downstream). */
+    @Test
+    fun classifyEmptyKeys_account_server_empty_returns_serverEmpty_permanent() = runTest {
+        stubServerReturns(emptyList())
+
+        val result = manager.classifyEmptyKeys(For.Account("peer"))
+
+        assertEquals(PublicKeyUpdateResult.ServerEmpty, result)
+    }
+
+    /**
+     * T7 (ignored — needs native WCDB Expression for group.members read, same constraint as G6):
+     * For.Group status==0 with non-empty members + server returns keys → Updated → caller maps to
+     * transient (retry self-heal). The Updated→transient mapping itself is exercised runnable by
+     * [classifyEmptyKeys_account_server_keys_returns_updated_transient_mapping]; this @Ignore variant
+     * documents the For.Group resolveUidsWithStatus=Resolved (status==0) path for completeness.
+     */
+    @Test
+    @Ignore("group.members read instantiates native WCDB Expression; run as instrumentation test.")
+    fun classifyEmptyKeys_group_valid_with_members_returns_updated_transient() = runTest {
+        val gid = "g-valid-members"
+        val validGroup = GroupModel().apply { this.gid = gid; this.status = 0 }
+        coEvery { groupUtil.getSingleGroupInfo(gid, any()) } returns validGroup
+        every<List<GroupMemberContactorModel>> {
+            wcdb.groupMemberContactor.getAllObjects(any<Expression>())
+        } returns listOf(GroupMemberContactorModel().apply { id = "m1"; this.gid = gid })
+        stubServerReturns(listOf(serverKey("m1"), serverKey("selfUid")))
+
+        val result = manager.classifyEmptyKeys(For.Group(gid))
+
+        assertEquals(PublicKeyUpdateResult.Updated, result)
     }
 }

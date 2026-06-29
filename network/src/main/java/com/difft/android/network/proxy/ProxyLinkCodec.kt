@@ -52,6 +52,21 @@ object ProxyLinkCodec {
         }
     }
 
+    /**
+     * True when [link] is a structurally valid ytp envelope (correct scheme /
+     * authority / base64 payload) but its version byte is one this client does
+     * not support. Lets the settings screen distinguish "unsupported version"
+     * (a recognizable-but-too-new link, see proxy design §5.4) from a generic
+     * malformed address, so it can surface the precise message. A malformed link
+     * (bad scheme / not base64 / too short) returns false — [inspect] reports it
+     * as `null` and the caller treats it as invalid.
+     */
+    fun isUnsupportedVersion(link: String): Boolean {
+        val blob = blobOf(link) ?: return false
+        if (blob.size < ENVELOPE_LEN) return false
+        return (blob[0].toInt() and 0xFF) != VERSION
+    }
+
     /** Decodes a plain (mode=0x00) link to a [ProxyConfig]; null if not plain/invalid. */
     fun decodePlain(link: String): ProxyConfig? {
         val blob = blobOf(link) ?: return null
@@ -135,16 +150,16 @@ object ProxyLinkCodec {
             ?.let { ProxyConfig.normalizeBase64Pin(it) } ?: return null
         val port = obj.optInt("p", ProxyConfig.DEFAULT_PORT).takeIf { it in 1..65535 }
             ?: ProxyConfig.DEFAULT_PORT
-        // `tp` (legacy plain-3478 TURN port) is intentionally ignored: stealth mode
-        // relays media via turns:<host>:<port> on the 443 front (design §9.4.1).
         val turnSecret = obj.optString("t").takeIf { it.isNotBlank() }
         val sni = obj.optString("sni").takeIf { it.isNotBlank() }
+        val quicEnabled = obj.optInt("q", 0) == 1
         ProxyConfig(
             host = host,
             port = port,
             spkiPinBase64 = fp,
             sni = sni,
             turnSecret = turnSecret,
+            quicEnabled = quicEnabled,
         )
     }.getOrNull()
 
@@ -156,6 +171,7 @@ object ProxyLinkCodec {
         obj.put("f", config.spkiPinBase64)
         config.turnSecret?.takeIf { it.isNotBlank() }?.let { obj.put("t", it) }
         config.sni?.takeIf { it.isNotBlank() }?.let { obj.put("sni", it) }
+        if (config.quicEnabled) obj.put("q", 1)
         return obj.toString().toByteArray(Charsets.UTF_8)
     }
 

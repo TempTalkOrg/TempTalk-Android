@@ -81,6 +81,9 @@ class DBRoomStore @Inject constructor(
                 }
                 try {
                     wcdb.room.insertObject(this)
+                    // New (or re-created after delete) room: trigger a server-config refetch
+                    // (mute, etc.) so settings survive delete + recreate without a restart.
+                    RoomChangeTracker.trackRoomCreated(forWhat.id)
                 } catch (e: Exception) {
                     L.w { "[DBRoomStore] insertObject failed: ${e.stackTraceToString()}" }
                 }

@@ -1,6 +1,7 @@
 package com.difft.android.chat.setting
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
@@ -12,7 +13,6 @@ import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.ConversationSetResponseBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -27,6 +27,9 @@ import javax.inject.Singleton
  * Used to distinguish between "no change" (null) and "set to default" (-1)
  */
 const val SAVE_TO_PHOTOS_SET_DEFAULT = -1
+
+/** Min interval between full syncs; repeated triggers within this window are skipped. */
+private const val MIN_BULK_SYNC_INTERVAL_MS = 60_000L
 
 /**
  * Conversation setting update event
@@ -57,6 +60,39 @@ class ConversationSettingsManager @Inject constructor(
 
     private val _conversationSettingUpdate = MutableSharedFlow<ConversationSettingUpdate>(extraBufferCapacity = 1)
     val conversationSettingUpdate: SharedFlow<ConversationSettingUpdate> = _conversationSettingUpdate.asSharedFlow()
+
+    // Full-sync throttle, shared by cold start and every foreground (guarded by bulkSyncLock).
+    // The window is stamped only AFTER a successful sync, so a failed/empty attempt does not burn
+    // it and the next foreground can retry. bulkSyncInFlight dedups the near-simultaneous
+    // cold-start IndexActivity + onForeground triggers.
+    private var lastBulkSyncSuccessAtMs = 0L
+    private var bulkSyncInFlight = false
+    private val bulkSyncLock = Any()
+
+    init {
+        // Refetch a single conversation's config when its room is (re)created, so delete + recreate
+        // recovers immediately even when the full sync is throttled. roomCreated has a replay buffer
+        // so events emitted just before this collector subscribes at startup are not lost.
+        launch(Dispatchers.IO) {
+            RoomChangeTracker.roomCreated.collect { roomIds ->
+                syncSettingsForRooms(roomIds)
+            }
+        }
+    }
+
+    // Claims the single in-flight slot; check + claim must be locked, otherwise cold start's
+    // near-simultaneous IndexActivity + onForeground triggers both pass.
+    private fun tryBeginBulkSync(force: Boolean): Boolean = synchronized(bulkSyncLock) {
+        if (bulkSyncInFlight) return false
+        if (!force && System.currentTimeMillis() - lastBulkSyncSuccessAtMs < MIN_BULK_SYNC_INTERVAL_MS) return false
+        bulkSyncInFlight = true
+        true
+    }
+
+    private fun endBulkSync(success: Boolean) = synchronized(bulkSyncLock) {
+        bulkSyncInFlight = false
+        if (success) lastBulkSyncSuccessAtMs = System.currentTimeMillis()
+    }
 
     /**
      * 通知会话配置已更新
@@ -104,33 +140,67 @@ class ConversationSettingsManager @Inject constructor(
         _conversationSettingUpdate.tryEmit(update)
     }
     /**
-     * 同步会话设置从服务器
-     * 此方法将从数据库获取所有房间对象并同步其设置
+     * Full sync of all rooms' server config. Called on cold start and every foreground,
+     * throttled by [MIN_BULK_SYNC_INTERVAL_MS]. Delete + recreate of a single conversation is
+     * handled instantly by [syncSettingsForRooms], so no startup delay is needed here.
+     *
+     * @param force bypass the throttle.
      */
-    fun syncConversationSettings() {
+    fun syncConversationSettings(force: Boolean = false) {
         launch(Dispatchers.IO) {
+            if (!tryBeginBulkSync(force)) {
+                L.i { "[ConversationSettingsManager] bulk sync throttled, skip" }
+                return@launch
+            }
+            var success = false
             try {
-                delay(3000)
-                // 获取所有房间对象
                 val roomModels = getRoomModels()
                 if (roomModels.isEmpty()) {
                     L.i { "[ConversationSettingsManager] No rooms found for conversation settings sync" }
+                    success = true // nothing to sync is a stable outcome — keep the throttle window
                     return@launch
                 }
-
-                // 获取会话设置
-                val conversationSettings = fetchConversationSettings(roomModels.map { it.roomId })
-                if (conversationSettings.isEmpty()) {
+                success = fetchAndApply(roomModels)
+                if (!success) {
                     L.i { "[ConversationSettingsManager] No conversation settings received from server" }
-                    return@launch
                 }
-
-                // 更新房间设置
-                updateRoomSettings(roomModels, conversationSettings)
             } catch (e: Exception) {
-                L.e { "[ConversationSettingsManager] syncConversationSettings error: ${e.message}" }
+                L.e { "[ConversationSettingsManager] syncConversationSettings error: ${e.stackTraceToString()}" }
+            } finally {
+                // Only a successful sync arms the throttle; a failure lets the next foreground retry.
+                endBulkSync(success)
             }
         }
+    }
+
+    /**
+     * Refetch server config for the given rooms (delete + recreate and similar incremental cases).
+     * Not throttled: room-created events are inherently sparse (only a genuine new/recreated room
+     * fires one), and a recreated room always needs a fresh fetch since its row starts at defaults.
+     */
+    private suspend fun syncSettingsForRooms(roomIds: List<String>) {
+        try {
+            val ids = roomIds.filter { it.isNotEmpty() && it != "server" }
+            if (ids.isEmpty()) return
+
+            // Only rooms still present (an event may arrive after the room was deleted again).
+            val roomModels = wcdb.room.getAllObjects(DBRoomModel.roomId.`in`(ids))
+            if (roomModels.isEmpty()) return
+
+            L.i { "[ConversationSettingsManager] sync settings for newly created rooms: ${roomModels.map { it.roomId }}" }
+            fetchAndApply(roomModels)
+        } catch (e: Exception) {
+            L.e { "[ConversationSettingsManager] syncSettingsForRooms error: ${e.stackTraceToString()}" }
+        }
+    }
+
+    /** Shared fetch → apply core. Returns true if settings were fetched and applied. */
+    private suspend fun fetchAndApply(roomModels: List<RoomModel>): Boolean {
+        if (roomModels.isEmpty()) return false
+        val conversationSettings = fetchConversationSettings(roomModels.map { it.roomId })
+        if (conversationSettings.isEmpty()) return false
+        updateRoomSettings(roomModels, conversationSettings)
+        return true
     }
 
     /**

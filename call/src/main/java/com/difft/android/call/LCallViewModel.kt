@@ -32,6 +32,7 @@ import com.difft.android.call.manager.AudioDeviceManager
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.CallFeedbackManager
 import com.difft.android.call.manager.CallRingtoneManager
+import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.CallTimeoutManager
 import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.manager.ContactorCacheManager
@@ -67,8 +68,10 @@ import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.util.concurrent.atomic.AtomicBoolean
 import livekit.org.webrtc.CameraXHelper
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
@@ -94,6 +97,7 @@ class LCallViewModel @AssistedInject constructor(
     private val callRingtoneManager: CallRingtoneManager,
     private val contactorCacheManager: ContactorCacheManager,
     private val callFeedbackManager: CallFeedbackManager,
+    private val callStatisticsLogManager: CallStatisticsLogManager,
     private val callTimeoutManager: CallTimeoutManager,
     private val callTlsProvider: CallTlsProvider,
     @ChativeHttpClientModule.Chat private val httpClient: dagger.Lazy<ChativeHttpClient>,
@@ -134,22 +138,14 @@ class LCallViewModel @AssistedInject constructor(
         decryptCallMKey = { eKey, eMKey -> messageEncryptor.decryptCallKey(eKey, eMKey) }
     )
 
-    private val activeSpeakers = room::activeSpeakers.flow
+    private lateinit var activeSpeakers: StateFlow<List<Participant>>
 
     val room get() = roomCtl.room
     val callStatus get() = roomCtl.callStatus
     val callType get() = roomCtl.callType
     val error get() = roomCtl.error
 
-    private val mediaCtl = CallMediaController(
-        room = room,
-        roomCtl = roomCtl,
-        audioProcessor = audioProcessor,
-        audioDeviceManager = audioDeviceManager,
-        scope = viewModelScope,
-        showBarrage = { p, m -> showCallBarrageMessage(p, m) },
-        showToast = { m -> showToastMessage(m) },
-    )
+    private lateinit var mediaCtl: CallMediaController
 
     val deNoiseEnable get() = mediaCtl.deNoiseEnable
     val deNoiseMode get() = mediaCtl.deNoiseMode
@@ -191,6 +187,7 @@ class LCallViewModel @AssistedInject constructor(
         appContext = application,
         roomCtl = roomCtl,
         callTlsProvider = callTlsProvider,
+        statisticsLogManager = callStatisticsLogManager,
     )
 
     private val screenSharePreWarmer = ScreenSharePreWarmer(viewModelScope)
@@ -259,7 +256,7 @@ class LCallViewModel @AssistedInject constructor(
         )
     }
 
-    private val roomEventDispatcher by lazy {
+    private val _roomEventDispatcherLazy = lazy {
         RoomEventDispatcher(
             scope = viewModelScope,
             room = room,
@@ -273,11 +270,13 @@ class LCallViewModel @AssistedInject constructor(
             timerManager = timerManager,
             speakerState = speakerState,
             callDataManager = callDataManager,
+            statisticsLogManager = callStatisticsLogManager,
             json = json,
             mySelfId = mySelfId,
             host = roomEventHost,
         )
     }
+    private val roomEventDispatcher by _roomEventDispatcherLazy
 
     private val instantCallConverter by lazy {
         InstantCallConverter(
@@ -307,22 +306,42 @@ class LCallViewModel @AssistedInject constructor(
             e2eeEnable = e2eeEnable,
             mySelfId = mySelfId,
             createCallMsgConfig = callConfig.createCallMsg,
-            onRoomIdAssigned = { rid -> roomId = rid },
+            onRoomIdAssigned = { rid ->
+                roomId = rid
+                callStatisticsLogManager.setRoomId(rid)
+            },
             onE2eeKeyAssigned = { key -> e2eeKey = key },
         )
     }
-
+    private val roomWiringStarted = AtomicBoolean(false)
     init {
         initCameraProvider(application)
-        initRtmHandler()
         audioSetup.start()
-        applyInitialVoicePreset()
         contactorCacheManager.startParticipantObservation(viewModelScope)
+    }
+
+    /** Phase B: create [room] off-main (LiveKit.create) then wire all room-dependent collaborators; call once. */
+    fun startRoomDependentWiring() {
+        if (!roomWiringStarted.compareAndSet(false, true)) return
+        val r = roomCtl.createRoom()
+        activeSpeakers = r::activeSpeakers.flow
+        mediaCtl = CallMediaController(
+            room = r,
+            roomCtl = roomCtl,
+            audioProcessor = audioProcessor,
+            audioDeviceManager = audioDeviceManager,
+            scope = viewModelScope,
+            showBarrage = { p, m -> showCallBarrageMessage(p, m) },
+            showToast = { m -> showToastMessage(m) },
+        )
+        initRtmHandler()
+        if (roomCtl.isReleaseIntended()) { L.i { "[Call] Phase B abort: release in flight" }; return }
+        applyInitialVoicePreset()
         roomEventDispatcher.startCollectingRoomEvents()
         roomEventDispatcher.startCollectingParticipants()
         CallObservers.register(
             scope = viewModelScope,
-            room = room,
+            room = r,
             participantManager = participantManager,
             callUiController = callUiController,
             contactorCacheManager = contactorCacheManager,
@@ -338,7 +357,8 @@ class LCallViewModel @AssistedInject constructor(
             roomIdGetter = { roomId },
             showToast = { m -> showToastMessage(m) },
         )
-        checkCriticalAlertStatusById(callIntent)
+        if (roomCtl.isReleaseIntended()) { L.i { "[Call] Phase B abort: release in flight (pre-connect re-check)" }; return }
+        checkCriticalAlertStatusById(callIntent) // forces criticalAlertDispatcher → room getter; keep under the guard
         sessionStarter.start()
     }
 
@@ -428,7 +448,8 @@ class LCallViewModel @AssistedInject constructor(
         speakerState = speakerState,
         screenShareFloatingSpeakerStateHolder = _screenShareSpeakerLazy.takeIf { it.isInitialized() }?.value,
         screenSharePreWarmer = screenSharePreWarmer,
-        roomEventDispatcher = roomEventDispatcher,
+        roomEventDispatcher = _roomEventDispatcherLazy.takeIf { it.isInitialized() }?.value,
+        statisticsLogManager = callStatisticsLogManager,
         feedbackBinder = feedbackBinder,
         shouldTriggerFeedbackView = { shouldTriggerFeedbackView() },
         clearE2eeKey = {

@@ -65,6 +65,9 @@ class GroupModel {
     @WCDBField
     var encryptedAvatar: String? = null
 
+    @WCDBField
+    var groupCryptoKeyVersion: Int? = null
+
     // exclude databaseId: rowid must not affect content equality (faithful to the
     // original Java equals/hashCode, which already excluded it), #901
     override fun equals(other: Any?): Boolean {
@@ -87,7 +90,8 @@ class GroupModel {
                 criticalAlert == other.criticalAlert &&
                 groupCryptoMode == other.groupCryptoMode &&
                 encryptedName == other.encryptedName &&
-                encryptedAvatar == other.encryptedAvatar
+                encryptedAvatar == other.encryptedAvatar &&
+                groupCryptoKeyVersion == other.groupCryptoKeyVersion
     }
 
     // exclude databaseId: rowid must not affect content equality, #901
@@ -108,6 +112,7 @@ class GroupModel {
         criticalAlert,
         groupCryptoMode,
         encryptedName,
-        encryptedAvatar
+        encryptedAvatar,
+        groupCryptoKeyVersion
     )
 }

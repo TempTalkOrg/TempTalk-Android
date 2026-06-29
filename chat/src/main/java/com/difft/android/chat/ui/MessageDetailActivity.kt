@@ -150,7 +150,10 @@ class MessageDetailActivity : BaseActivity() {
                 binding.tvFileName.text = attachment.fileName
 
                 val attachmentPath = FileUtil.getMessageAttachmentFilePath(message.id) + attachment.fileName
-                if (File(attachmentPath).exists()) {
+                // A confidential attachment must not be shared out of the app — hide the share entry
+                // (consistent with confidential messages getting no copy/forward/save elsewhere).
+                val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
+                if (File(attachmentPath).exists() && !isConfidential) {
                     binding.llShare.visibility = View.VISIBLE
                     binding.ivShare.setOnClickListener {
                         this.shareFile(attachmentPath)

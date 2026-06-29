@@ -73,7 +73,7 @@ class MessageServiceManager @Inject constructor(
      **/
     fun startService() {
         // 1. Enable keep-alive (only modify service layer state)
-        userManager.update { keepAliveEnabled = true }
+        setKeepAlive(true)
 
         // 2. Register keep-alive mechanism (AlarmManager)
         scheduleAlarmCheck()
@@ -96,7 +96,7 @@ class MessageServiceManager @Inject constructor(
         ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
 
         // 2. Disable keep-alive (only modify service layer state)
-        userManager.update { keepAliveEnabled = false }
+        setKeepAlive(false)
 
         // 3. Cancel keep-alive mechanism
         cancelAlarmCheck()
@@ -118,11 +118,20 @@ class MessageServiceManager @Inject constructor(
         ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
 
         // 2. Disable keep-alive (don't modify autoStartMessageService, preserve user intent)
-        userManager.update { keepAliveEnabled = false }
+        setKeepAlive(false)
 
         // 3. Cancel keep-alive mechanism
         cancelAlarmCheck()
         L.i { "[MessageService] Keep-alive mechanism cancelled due to FCM available" }
+    }
+
+    /**
+     * Persist the keep-alive flag.
+     *
+     * Centralizes the write at every change point so callers can never drift.
+     */
+    private fun setKeepAlive(enabled: Boolean) {
+        userManager.update { keepAliveEnabled = enabled }
     }
 
     /**

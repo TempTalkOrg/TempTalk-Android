@@ -3,6 +3,8 @@ package com.difft.android.network.speedtest
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.proxy.ProxyConfigProvider
+import io.mockk.every
 import io.mockk.mockk
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +42,7 @@ class DomainSpeedTestCoordinatorTest {
 
     private val mockSpeedTester = mockk<DomainSpeedTester>(relaxed = true)
     private val mockGlobalConfigsManager = mockk<GlobalConfigsManager>(relaxed = true)
+    private val mockProxyConfigProvider = mockk<ProxyConfigProvider>(relaxed = true)
 
     private lateinit var userManager: InMemoryUserManager
     private lateinit var coordinator: DomainSpeedTestCoordinator
@@ -47,11 +50,14 @@ class DomainSpeedTestCoordinatorTest {
     @Before
     fun setUp() {
         userManager = InMemoryUserManager()
+        // Default: proxy disabled — exercises the normal speed-test path.
+        every { mockProxyConfigProvider.isEnabled } returns false
 
         coordinator = DomainSpeedTestCoordinator(
             globalConfigsManager = dagger.Lazy { mockGlobalConfigsManager },
             speedTester = mockSpeedTester,
             userManager = userManager,
+            proxyConfigProvider = dagger.Lazy { mockProxyConfigProvider },
         )
     }
 
@@ -138,6 +144,39 @@ class DomainSpeedTestCoordinatorTest {
         val ranked = coordinator.getAllHostsRanked()
 
         assertTrue(ranked.isEmpty())
+    }
+
+    // -- firstAvailableHost (proxy embedded-host failover) --
+
+    @Test
+    fun `firstAvailableHost returns first candidate when none invalidated`() {
+        assertEquals(
+            "chat.temptalk.net",
+            coordinator.firstAvailableHost(listOf("chat.temptalk.net", "chat.chative.im")),
+        )
+    }
+
+    @Test
+    fun `firstAvailableHost skips invalidated candidate`() {
+        coordinator.markHostUnavailable("chat.temptalk.net")
+
+        assertEquals(
+            "chat.chative.im",
+            coordinator.firstAvailableHost(listOf("chat.temptalk.net", "chat.chative.im")),
+        )
+    }
+
+    @Test
+    fun `firstAvailableHost returns null when all candidates invalidated`() {
+        coordinator.markHostUnavailable("chat.temptalk.net")
+        coordinator.markHostUnavailable("chat.chative.im")
+
+        assertNull(coordinator.firstAvailableHost(listOf("chat.temptalk.net", "chat.chative.im")))
+    }
+
+    @Test
+    fun `firstAvailableHost returns null for empty candidates`() {
+        assertNull(coordinator.firstAvailableHost(emptyList()))
     }
 
     // -- onWsFailure / onWsConnected --

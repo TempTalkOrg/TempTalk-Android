@@ -43,6 +43,7 @@ data class UserData(
     var aciIdentityKeyGenTime: Long = 0, // ACI身份密钥生成时间
     var proxyShareLink: String? = null, // self-hosted proxy share link (ytp://config?d=...). Contains TURN secret when set.
     var proxyEnabled: Boolean = false,   // self-hosted proxy on/off toggle. Orthogonal to whether proxyShareLink parses successfully.
+    var proxyProtectCallIp: Boolean = false, // route call/meeting network through the proxy only when ON. Gated by proxyEnabled; meaningless while the proxy is off.
 
     // ═══════════════════════════════════════════════════════════════
     // [app_state.preferences_pb] Plain key-value, grouped by domain

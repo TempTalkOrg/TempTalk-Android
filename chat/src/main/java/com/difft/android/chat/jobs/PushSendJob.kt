@@ -1,6 +1,7 @@
 package com.difft.android.chat.jobs
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
 import com.difft.android.websocket.api.push.exceptions.ProofRequiredException
 import com.difft.android.websocket.api.push.exceptions.ServerRejectedException
@@ -25,6 +26,13 @@ abstract class PushSendJob(parameters: Parameters) : com.difft.android.chat.jobs
 
     override fun onShouldRetry(exception: Exception): Boolean {
         if (exception is ServerRejectedException) {
+            return false
+        }
+        // issue #970 ②: target confirmed to have no valid keys (group invalid / account
+        // deregistered / server confirms empty) = permanent, stop retrying.
+        // NoValidRecipientKeysException is intentionally not an IOException subtype, so the
+        // trailing `is IOException` branch does not catch it.
+        if (exception is NoValidRecipientKeysException) {
             return false
         }
         return exception is IOException

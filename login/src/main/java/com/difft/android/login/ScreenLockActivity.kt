@@ -474,7 +474,7 @@ class ScreenLockActivity : BaseActivity() {
 
     private fun updateCountdownText(remainingSeconds: Int) {
         if (remainingSeconds > 0) {
-            mBinding.tvErrorTips.text = getString(R.string.settings_yelling_unavailable_countdown, remainingSeconds)
+            mBinding.tvErrorTips.text = getString(R.string.settings_service_unavailable_countdown, remainingSeconds)
         } else {
             mBinding.tvErrorTips.visibility = View.INVISIBLE
         }

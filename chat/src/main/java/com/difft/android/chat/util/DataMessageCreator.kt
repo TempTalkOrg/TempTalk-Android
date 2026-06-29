@@ -200,8 +200,9 @@ class DataMessageCreator @Inject constructor(
                     id = groupIdBytes
                     type = SignalServiceProtos.DataMessage.Group.Type.DELIVER
                     // Encrypted group fallback: attach R_group so members who missed the key message can recover
-                    groupCryptoRepo.getRGroupBytes(textMessage.forWhat.id)?.let { rGroup ->
+                    groupCryptoRepo.getRGroupWithVersion(textMessage.forWhat.id)?.let { (rGroup, version) ->
                         groupRootKey = ByteString.copyFrom(rGroup)
+                        keyVersion = version
                     }
                 }
             }?.let(::group::set)

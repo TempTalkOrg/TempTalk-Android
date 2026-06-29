@@ -49,6 +49,7 @@ object UserAuthDataMapper {
         aciIdentityKeyGenTime = auth.aciIdentityKeyGenTime,
         proxyShareLink = auth.proxyShareLink.nullIfEmpty(),
         proxyEnabled = auth.proxyEnabled,
+        proxyProtectCallIp = auth.proxyProtectCallIp,
     )
 
     /**
@@ -78,6 +79,7 @@ object UserAuthDataMapper {
         migrationV1Completed = false,
         proxyShareLink = userData.proxyShareLink.orEmpty(),
         proxyEnabled = userData.proxyEnabled,
+        proxyProtectCallIp = userData.proxyProtectCallIp,
     )
 
     private fun String.nullIfEmpty(): String? = if (this.isEmpty()) null else this

@@ -32,6 +32,7 @@ class DiffTimRuleSetProvider : RuleSetProvider {
             ::BlockingSharedPrefsInSuspend,
             ::LifecycleScopeBlockingCall,
             ::PrepareSelectMissingSelect,
+            ::UnsafeWcdbConflictInsert,
         ),
     )
 

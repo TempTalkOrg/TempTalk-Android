@@ -1,9 +1,5 @@
 package com.difft.android.setting.proxy
 
-import com.difft.android.base.user.Data
-import com.difft.android.base.user.Domain
-import com.difft.android.base.user.Host
-import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
@@ -24,13 +20,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Unit tests for [ProxyE2eProbeImpl] (design §10 T6–T10).
+ * Unit tests for [ProxyE2eProbeImpl].
  *
  * Mocks the Retrofit [HttpService] (via a mocked [ChativeHttpClient]) and the
  * [IGlobalConfigsManager]; no real network.
  *
+ * Probe hosts come from the proxy chat tunnel domains
+ * ([IGlobalConfigsManager.getProxyTunnelChatDomains]) — the same hosts the proxy
+ * path actually uses; that getter already does live-preferred + embedded fallback.
+ *
  * [HttpException] has NO `HttpException(Int)` constructor — build a 4xx/404 via
- * `HttpException(Response.error<ResponseBody>(code, "".toResponseBody(null)))` (TEST-2).
+ * `HttpException(Response.error<ResponseBody>(code, "".toResponseBody(null)))`.
  */
 class ProxyE2eProbeImplTest {
 
@@ -45,41 +45,42 @@ class ProxyE2eProbeImplTest {
         client = mockk()
         httpService = mockk()
         every { client.httpService } returns httpService
+        // Default: no probe hosts. Tests that exercise the probe path override
+        // getProxyTunnelChatDomains() via [embeddedHosts].
+        every { configsManager.getProxyTunnelChatDomains() } returns emptyList()
         probe = ProxyE2eProbeImpl(configsManager, client)
     }
 
     private fun httpException(code: Int) =
         HttpException(Response.error<ResponseBody>(code, "".toResponseBody(null)))
 
-    private fun configWithSelfHosts(vararg hostNames: String) {
-        every { configsManager.getNewGlobalConfigs() } returns NewGlobalConfig(
-            data = Data(hosts = hostNames.map { Host(certType = "self", name = it) })
-        )
+    private fun embeddedHosts(vararg hostNames: String) {
+        every { configsManager.getProxyTunnelChatDomains() } returns hostNames.toList()
     }
 
-    // T6: 4xx (401) from getResponseBody → probe true (transport/route reached).
+    // 4xx (401) from getResponseBody → probe true (transport/route reached).
     @Test
     fun `4xx response counts as success`() = runTest {
-        configWithSelfHosts("chat.test.chative.im")
+        embeddedHosts("chat.test.chative.im")
         coEvery { httpService.getResponseBody(any(), any(), any()) } throws httpException(401)
 
         assertTrue(probe.probe())
     }
 
-    // T7: SSLHandshakeException (IOException subclass) → probe false.
+    // SSLHandshakeException (IOException subclass) → probe false.
     @Test
     fun `IOException counts as failure`() = runTest {
-        configWithSelfHosts("chat.test.chative.im")
+        embeddedHosts("chat.test.chative.im")
         coEvery { httpService.getResponseBody(any(), any(), any()) } throws
             SSLHandshakeException("handshake failed")
 
         assertFalse(probe.probe())
     }
 
-    // T8: multi-host fallback — A throws IOException, B throws HttpException(404) → true; both called.
+    // Multi-host fallback — A throws IOException, B throws HttpException(404) → true; both called.
     @Test
     fun `multi host fallback succeeds when later host returns http status`() = runTest {
-        configWithSelfHosts("hostA", "hostB")
+        embeddedHosts("hostA", "hostB")
         coEvery { httpService.getResponseBody("https://hostA/", any(), any()) } throws
             SSLHandshakeException("A down")
         coEvery { httpService.getResponseBody("https://hostB/", any(), any()) } throws
@@ -90,36 +91,25 @@ class ProxyE2eProbeImplTest {
         coVerify(exactly = 1) { httpService.getResponseBody("https://hostB/", any(), any()) }
     }
 
-    // T9: only certType=self hosts are probed; authority hosts (srv.*, cloudfront) never requested.
+    // Proxy chat tunnel domains are probed in order (stops at first success).
     @Test
-    fun `only self cert hosts are probed`() = runTest {
-        every { configsManager.getNewGlobalConfigs() } returns NewGlobalConfig(
-            data = Data(
-                hosts = listOf(
-                    Host(certType = "self", name = "chat.temptalk.net"),
-                    Host(certType = "authority", name = "srv.temptalk.net"),
-                ),
-                domains = listOf(
-                    Domain(domain = "chat.chative.im", certType = "self"),
-                    Domain(domain = "abc.cloudfront.net", certType = "authority"),
-                ),
-            )
-        )
+    fun `proxy chat domains are probed in order`() = runTest {
+        embeddedHosts("chat.temptalk.net", "chat.chative.im")
         val urlSlot = mutableListOf<String>()
         coEvery { httpService.getResponseBody(capture(urlSlot), any(), any()) } throws
             httpException(401)
 
         assertTrue(probe.probe())
-        // Stops at first self host (chat.temptalk.net returns 401 = success), never reaches authority.
+        // Stops at first host (chat.temptalk.net returns 401 = success).
         assertEquals(listOf("https://chat.temptalk.net/"), urlSlot)
-        coVerify(exactly = 0) { httpService.getResponseBody("https://srv.temptalk.net/", any(), any()) }
-        coVerify(exactly = 0) { httpService.getResponseBody("https://abc.cloudfront.net/", any(), any()) }
     }
 
-    // T10: no config (null) → false, no request issued.
+    // No proxy chat domains → false, no request issued. (The getter already does
+    // live-preferred + embedded fallback internally, so an empty result here means
+    // neither source carried the block.)
     @Test
     fun `empty host list returns false without request`() = runTest {
-        every { configsManager.getNewGlobalConfigs() } returns null
+        every { configsManager.getProxyTunnelChatDomains() } returns emptyList()
 
         assertFalse(probe.probe())
         coVerify(exactly = 0) { httpService.getResponseBody(any(), any(), any()) }

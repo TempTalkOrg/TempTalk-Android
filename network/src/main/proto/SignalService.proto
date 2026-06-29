@@ -158,6 +158,7 @@ message ForwardNoticeMessage {
 message GroupKeyMessage {
   optional bytes  groupId      = 1;
   optional bytes  groupRootKey = 2;
+  optional uint32 keyVersion   = 3;
 }
 
 message Card {
@@ -522,6 +523,7 @@ message DataMessage {
     required bytes  id = 1;
     required Type   type = 2;
     optional bytes  groupRootKey = 6;
+    optional uint32 keyVersion = 7;
   }
 
   optional string             body = 1;

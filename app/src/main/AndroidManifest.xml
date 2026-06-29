@@ -282,8 +282,9 @@
             Disable androidx.startup auto-initializers we do not need:
             - WorkManagerInitializer: project does not enqueue any Worker; auto-init still
               registers a default network callback every cold start, hitting the per-app
-              limit on Android 16 (TooManyRequestsException). Re-enable via
-              Configuration.Provider if WorkManager is reintroduced.
+              limit on Android 16 (TooManyRequestsException). Kept disabled; TempTalkApplication
+              implements Configuration.Provider for on-demand init, so still-merged components
+              (e.g. SystemForegroundService) don't crash on getInstance().
             - ProfileInstallerInitializer: project ships no baseline-prof.txt, so the
               5s-delayed writeInBackground is a no-op that still spawns a ThreadPoolExecutor
               on the main thread and shows up in BACKGROUND ANR samples on vivo devices.

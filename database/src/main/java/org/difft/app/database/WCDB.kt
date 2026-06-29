@@ -53,6 +53,14 @@ class WCDB @Inject constructor(
 
     companion object {
         const val DATABASE_NAME = "tt_wcdb_database.db"
+
+        // #971 write-throughput main fix. WCDB's encrypted+WAL pool reports synchronous=NORMAL
+        // via PRAGMA query but its C++ layer actually fsyncs every commit (FULL-like, ~90 msgs/s
+        // measured). Explicitly executing `PRAGMA synchronous=1` on every handle overrides that
+        // layer so fsync is deferred to WAL checkpoint — on-device benchmark: 7.3x on the real
+        // production init path (autoBackup + corruption callback). See wcdb-benchmark-results.md.
+        private const val SYNCHRONOUS_CONFIG_NAME = "tt_synchronous_normal"
+        private const val SYNCHRONOUS_NORMAL = 1 // SQLite: 0=OFF 1=NORMAL 2=FULL 3=EXTRA
     }
 
     /**
@@ -154,7 +162,35 @@ class WCDB @Inject constructor(
                 reportCorruptionOnce("notification_callback")
                 markCorrupted()
             }
+            // #971 write-throughput fix: force synchronous=NORMAL. setConfig runs per-handle so it
+            // reaches the write handle (a one-shot execute might hit a read one); high priority runs
+            // after the cipher config. WAL+NORMAL never corrupts the DB but may drop writes committed
+            // after the last checkpoint on power loss (IM messages are resendable) — team sign-off, see PR.
+            setConfig(
+                SYNCHRONOUS_CONFIG_NAME,
+                { handle -> handle.execute("PRAGMA synchronous=$SYNCHRONOUS_NORMAL") },
+                Database.ConfigPriority.high,
+            )
         }
+    }
+
+    /**
+     * Diagnostic only: log-confirms `synchronous=NORMAL` reached a write handle. WCDB's PRAGMA query
+     * can report NORMAL while writes still fsync like FULL, so we read it back through `getHandle(true)`.
+     * Mismatch is a soft `L.w` (perf-only, no Crashlytics). Once per process; call off the main thread.
+     */
+    private val synchronousVerifyAttempted = AtomicBoolean(false)
+
+    fun verifySynchronousApplied() {
+        if (dbCorrupted || !synchronousVerifyAttempted.compareAndSet(false, true)) return
+        runCatching {
+            val onWriteHandle = db.getHandle(true).use { it.getValueFromSQL("PRAGMA synchronous")?.int }
+            if (onWriteHandle == SYNCHRONOUS_NORMAL) {
+                L.i { "[WCDB] synchronous=NORMAL confirmed on write handle (value=$onWriteHandle)" }
+            } else {
+                L.w { "[WCDB] synchronous NOT NORMAL on write handle (value=$onWriteHandle), perf fix may be inert" }
+            }
+        }.onFailure { L.w { "[WCDB] synchronous verify failed: ${it.stackTraceToString()}" } }
     }
 
     /**

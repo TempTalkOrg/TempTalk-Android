@@ -2,10 +2,10 @@ package org.difft.app.database
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.ActiveConversation
+import com.difft.android.base.utils.RoomChange
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.utils.sampleAfterFirst
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
@@ -16,14 +16,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBGroupModel
@@ -39,6 +44,12 @@ object WCDBUpdateService :
     CoroutineScope by CoroutineScope(CoroutineName("WCDBUpdateService") + Dispatchers.IO + SupervisorJob()) {
 
     private val isUpdatingRoomsStarted = AtomicBoolean(false)
+
+    // Room changes merged by roomId, drained fairly. Replaces sampleAfterFirst, which kept only
+    // the latest batch and let a busy room starve quiet 1:1 conversations.
+    private val pendingRoomChanges = LinkedHashMap<String, MutableSet<RoomChangeType>>()
+    private val pendingRoomChangesMutex = Mutex()
+    private val drainSignal = Channel<Unit>(capacity = Channel.CONFLATED)
 
     // Room table update notification
     private val _roomTableUpdated = MutableSharedFlow<Unit>(
@@ -144,7 +155,14 @@ object WCDBUpdateService :
                 }
 
                 // Delete all messages with related data (per-row delete preserved by the helper).
-                deleteMessagesPaged(DBMessageModel.roomId.eq(roomId))
+                // #969: snapshot the upper bound (max databaseId) before deleting so concurrent
+                // inserts during the paged delete cannot extend the unbounded `roomId.eq` match set
+                // (the same non-convergence under flood that DBMessageStore.removeRoomAndMessages
+                // fixes). Empty room → snapshotMax 0 → le(0) matches nothing → first page breaks.
+                val snapshotMax = maxMessageDatabaseId(roomId)
+                deleteMessagesPaged(
+                    DBMessageModel.roomId.eq(roomId).and(DBMessageModel.databaseId.le(snapshotMax))
+                )
             }
             L.i { "[WCDBUpdateService] cleanEmptyRooms: deleted messages with related data for ${roomIdsToDelete.size} rooms" }
 
@@ -171,8 +189,22 @@ object WCDBUpdateService :
         if (!isUpdatingRoomsStarted.compareAndSet(false, true)) return
 
         L.i { "[WCDBUpdateService] Starting room updates listener" }
-        RoomChangeTracker.roomChanges
-            .sampleAfterFirst(500)
+
+        // Collector: merge each change into pendingRoomChanges (cheap, never drops), then signal.
+        val collectorJob = launch {
+            RoomChangeTracker.roomChanges.collect { changes ->
+                pendingRoomChangesMutex.withLock {
+                    changes.forEach { pendingRoomChanges.getOrPut(it.roomId) { mutableSetOf() }.add(it.type) }
+                    // Signal inside the lock so write + signal are atomic vs collectorJob.cancel()
+                    // (trySend is non-suspending, so it's safe to call while holding the mutex).
+                    drainSignal.trySend(Unit)
+                }
+            }
+        }
+
+        // Drainer: on each signal, process ALL pending rooms (deduped) so a busy room can't starve
+        // quiet ones. RoomChangeTracker already throttles emissions to ~500ms.
+        drainedRoomChanges()
             .onEach { changes ->
                 // 按房间ID分组，合并同一房间的多个变更
                 val changesByRoom = changes.groupBy { it.roomId }
@@ -320,10 +352,24 @@ object WCDBUpdateService :
             }
             .catch { e ->
                 L.e(e) { "[Message][WCDBUpdateService] Error in flow:" }
-                // Reset so a future caller can re-register after a flow crash (no auto-restart here).
+                // Drainer crashed: stop the collector too (SupervisorJob won't) so re-registration is clean.
+                collectorJob.cancel()
                 isUpdatingRoomsStarted.set(false)
             }
             .launchIn(this)
+    }
+
+    // Emits the merged pending changes once per drain signal (conflated). Merges by roomId so no
+    // room is dropped; the conflated signal collapses bursts that arrive while a drain is in flight.
+    private fun drainedRoomChanges(): Flow<List<RoomChange>> = flow {
+        for (signal in drainSignal) {
+            val batch = pendingRoomChangesMutex.withLock {
+                if (pendingRoomChanges.isEmpty()) return@withLock null
+                pendingRoomChanges.flatMap { (roomId, types) -> types.map { RoomChange(roomId, it) } }
+                    .also { pendingRoomChanges.clear() }
+            }
+            if (batch != null) emit(batch)
+        }
     }
 
     // Earlier messages expired 系统消息的 actionType

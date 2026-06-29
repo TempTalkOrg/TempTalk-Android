@@ -6,6 +6,7 @@ import com.difft.android.base.storage.SecureConfigStore
 import com.difft.android.base.user.ActiveConversation
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NewGlobalConfig
+import com.difft.android.base.user.TunnelDomains
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.IGlobalConfigsManager
@@ -13,7 +14,6 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.network.requests.ContactsRequestBody
 import com.difft.android.base.user.Data
 import com.difft.android.network.BuildConfig
@@ -46,7 +46,6 @@ class GlobalConfigsManager @Inject constructor(
     @param:ChativeHttpClientModule.Chat
     private val chatHttpClient: Lazy<ChativeHttpClient>,
     private val secureConfigStore: SecureConfigStore,
-    private val proxyConfigProviderLazy: Lazy<ProxyConfigProvider>,
     private val gson: Gson,
 ) : IGlobalConfigsManager {
 
@@ -54,6 +53,14 @@ class GlobalConfigsManager @Inject constructor(
         private const val FOREGROUND_REFRESH_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
         private const val BACKGROUND_REFRESH_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
         private const val DEFAULT_CONFIG_FILE_NAME = "default_global_config.json"
+
+        /**
+         * Sentinel for [proxyDomainsConfigRef]'s initial value. A fresh [Any]
+         * is never `===` any real [NewGlobalConfig] nor `null`, so the first
+         * proxy-domain read always recomputes (even when the effective config
+         * is `null`).
+         */
+        private val UNINITIALIZED_CONFIG_REF = Any()
     }
 
     @Volatile
@@ -121,13 +128,6 @@ class GlobalConfigsManager @Inject constructor(
             L.i { "[GlobalConfigsManager] Starting refresh job" }
             try {
                 inMemoryGlobalConfig = loadInitialConfig()
-                // Hydration push: the disk/assets read just above updates the in-memory
-                // field, which is what `getNewGlobalConfigs()` returns. Without this push,
-                // a freshly-loaded richer disk cache is invisible to the tunnel-host set
-                // until the next successful HTTP fetch (5 min foreground / 1 hr bg).
-                // runCatching: a fault in the proxy hook must not break the refresh loop.
-                runCatching { proxyConfigProviderLazy.get().onGlobalConfigChanged() }
-                    .onFailure { L.w { "[GlobalConfigsManager] proxy hydration hook failed: ${it.stackTraceToString()}" } }
             } catch (e: Exception) {
                 L.e { "[GlobalConfigsManager] Failed to init config cache: ${e.message}" }
             }
@@ -188,9 +188,6 @@ class GlobalConfigsManager @Inject constructor(
                     L.i { "[GlobalConfigsManager] get global configs success: $url" }
                     inMemoryGlobalConfig = config
                     saveConfigToStore(config)
-                    // runCatching: a fault in the proxy hook must not break the refresh loop.
-                    runCatching { proxyConfigProviderLazy.get().onGlobalConfigChanged() }
-                        .onFailure { L.w { "[GlobalConfigsManager] proxy hook failed: ${it.stackTraceToString()}" } }
                     config.data?.emojiReaction?.let { emojis ->
                         updateMostUseEmojis(emojis)
                     }
@@ -234,6 +231,104 @@ class GlobalConfigsManager @Inject constructor(
 
     override fun getNewGlobalConfigs(): NewGlobalConfig? {
         return inMemoryGlobalConfig ?: loadInitialConfigBlocking().also { inMemoryGlobalConfig = it }
+    }
+
+    /**
+     * Parsed snapshot of the bundled assets [DEFAULT_CONFIG_FILE_NAME], cached for
+     * the singleton lifetime. Distinct from [inMemoryGlobalConfig] (which prefers
+     * live/disk cache) — this ALWAYS reflects the embedded file, used as the
+     * per-dimension fallback for the proxy tunnel domains (see
+     * [proxyTunnelDomainsFrom]).
+     *
+     * `by lazy` so a parse failure (`null`) is cached too — a nullable
+     * double-checked-lock would re-enter and re-read the assets on every call
+     * after a failed parse.
+     */
+    private val embeddedConfig: NewGlobalConfig? by lazy {
+        try {
+            val json = context.assets.open(DEFAULT_CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
+            gson.fromJson(json, NewGlobalConfig::class.java)
+        } catch (e: Exception) {
+            L.e { "[GlobalConfigsManager] load embedded assets error: ${e.stackTraceToString()}" }
+            null
+        }
+    }
+
+    /**
+     * Cache for the derived proxy tunnel domains, keyed on the identity of the
+     * [NewGlobalConfig] they were derived from. The proxy path reads these on
+     * every connection ([com.difft.android.network.proxy.ProxyConfigProvider.shouldTunnel],
+     * [com.difft.android.network.UrlManager.getBestHost]), so the steady-state
+     * read must be lock-free: when [getNewGlobalConfigs] returns the same
+     * (`===`) config reference as last time, we return the already-derived
+     * lists without re-filtering or re-normalizing.
+     *
+     * A fresh fetch in [fetchGlobalConfigsWithRetry] replaces
+     * [inMemoryGlobalConfig] with a new object, so the next read sees a
+     * different reference and recomputes — this is how a LIVE config update to
+     * `proxy.tunnelDomains` propagates to the whitelist / forced domains without
+     * an app restart. [UNINITIALIZED_CONFIG_REF] (never `===` any real config,
+     * including `null`) forces the first read to compute.
+     */
+    @Volatile
+    private var proxyDomainsConfigRef: Any? = UNINITIALIZED_CONFIG_REF
+
+    @Volatile
+    private var cachedProxyChatDomains: List<String> = emptyList()
+
+    @Volatile
+    private var cachedProxyCallDomains: List<String> = emptyList()
+
+    private val proxyDomainsLock = Any()
+
+    /**
+     * Refreshes [cachedProxyChatDomains] / [cachedProxyCallDomains] when the
+     * effective config reference changed. Cheap volatile identity check on the
+     * hot path; the lock is taken only on a config change.
+     */
+    private fun ensureProxyDomainsCache() {
+        val cfg = getNewGlobalConfigs()
+        if (cfg === proxyDomainsConfigRef) return
+        synchronized(proxyDomainsLock) {
+            if (cfg === proxyDomainsConfigRef) return
+            cachedProxyChatDomains = proxyTunnelDomainsFrom(cfg) { it?.chat }
+            cachedProxyCallDomains = proxyTunnelDomainsFrom(cfg) { it?.call }
+            proxyDomainsConfigRef = cfg
+        }
+    }
+
+    /**
+     * Live-preferred + per-dimension embedded fallback: takes the selected
+     * dimension ([TunnelDomains.chat] / [TunnelDomains.call]) from the effective
+     * [cfg] when non-empty, else from the bundled assets default. The fallback
+     * covers the rollout window where the live/online config has not yet shipped
+     * a `proxy` block but the embedded baseline has.
+     */
+    private fun proxyTunnelDomainsFrom(
+        cfg: NewGlobalConfig?,
+        select: (TunnelDomains?) -> List<String>?,
+    ): List<String> {
+        val live = normalizeDomains(select(cfg?.data?.proxy?.tunnelDomains))
+        if (live.isNotEmpty()) return live
+        return normalizeDomains(select(embeddedConfig?.data?.proxy?.tunnelDomains))
+    }
+
+    private fun normalizeDomains(raw: List<String>?): List<String> =
+        raw?.asSequence()
+            ?.map { it.trim().lowercase().trimEnd('.') }
+            ?.filter { it.isNotEmpty() }
+            ?.distinct()
+            ?.toList()
+            .orEmpty()
+
+    override fun getProxyTunnelChatDomains(): List<String> {
+        ensureProxyDomainsCache()
+        return cachedProxyChatDomains
+    }
+
+    override fun getProxyTunnelCallDomains(): List<String> {
+        ensureProxyDomainsCache()
+        return cachedProxyCallDomains
     }
 
     /**
@@ -375,5 +470,13 @@ class GlobalConfigsManager @Inject constructor(
      */
     fun isGroupEncryptionEnabled(): Boolean {
         return getNewGlobalConfigs()?.data?.group?.encryptionEnabled ?: false
+    }
+
+    /**
+     * Independent feature flag for the encrypted-group key reset/rotation entry.
+     * When false, the reset entry is hidden even if group encryption is enabled.
+     */
+    fun isGroupEncryptionKeyResetEnabled(): Boolean {
+        return getNewGlobalConfigs()?.data?.group?.encryptionKeyResetEnabled ?: false
     }
 }

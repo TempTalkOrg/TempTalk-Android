@@ -93,6 +93,12 @@ object AppStateKeys {
     // in the chain). Once present, migrations 1–4 short-circuit on the next cold start.
     // `internal` because no consumer should be reading the marker outside migration code.
     internal val MIGRATION_VERSION = intPreferencesKey("__app_state_migration_version")
+
+    // ---------- Section E: Monitoring (#971) ----------
+    //
+    // Newest ApplicationExitInfo timestamp already reported to Crashlytics. Used to dedup the
+    // startup freeze probe so each real process exit is reported exactly once.
+    val LAST_SEEN_EXIT_TS = longPreferencesKey("last_seen_exit_ts")
 }
 
 /**

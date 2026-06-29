@@ -165,6 +165,18 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_use_proxy_tips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:background="@null"
+        android:paddingStart="32dp"
+        android:paddingEnd="28dp"
+        android:text="@string/proxy_use_proxy_setting_desc"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp" />
+
     <LinearLayout
         android:id="@+id/cl_renew_identity_key"
         android:layout_width="match_parent"

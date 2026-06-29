@@ -319,4 +319,150 @@ class WCDBPagedMessageAccessTest {
         assertEquals(0L, messageCount(roomCond("rbig")))
         assertTrue(messageCount(roomCond("rbig")) == 0L)
     }
+
+    // ------------------------------------------------------------------
+    // #969 — snapshot upper bound + per-room delete de-dup
+    // ------------------------------------------------------------------
+    // Same @Ignore-d-guard rationale as T1–T19: the snapshot/convergence cases pin the SAME
+    // SQL shape (`getValue(databaseId.max(), roomId.eq)` and `deleteMessagesPaged(roomId.eq
+    // AND databaseId.le(snap))`) against the test wcdb, since maxMessageDatabaseId reaches the
+    // production `wcdb` global via Hilt and can't be redirected here. The guard cases (D6/D9)
+    // pin the de-dup contract on a stand-in set with the SAME structure as DBMessageStore's
+    // private `deletingRoomIds` / `pendingRedeleteRoomIds` companions.
+    //
+    // D4 is the key framework-assumption regression anchor — it asserts SQLite autoincrement
+    // databaseId is strictly monotonic so inserts made DURING a paged delete land past
+    // snapshotMax and survive. That assumption underpins convergence; it MUST be promoted to
+    // an instrumented test (real WCDB) — see PR description follow-up.
+
+    // Local re-implementation of maxMessageDatabaseId's SQL shape against the test wcdb
+    // (the production helper binds the `wcdb` global via Hilt). Mirrors WCDBExtensions:
+    // getValue(databaseId.max(), roomId.eq) ?: 0.
+    private fun maxDatabaseId(roomId: String): Int =
+        wcdbInstance.message.getValue(DBMessageModel.databaseId.max(), DBMessageModel.roomId.eq(roomId))?.int ?: 0
+
+    private fun boundedCond(roomId: String, snapshotMax: Int): Expression =
+        DBMessageModel.roomId.eq(roomId).and(DBMessageModel.databaseId.le(snapshotMax))
+
+    // D1 — maxMessageDatabaseId shape: empty room ⇒ 0 (so le(0) matches an empty set).
+    @Test
+    fun `maxMessageDatabaseId returns 0 for empty room`() = runTest {
+        assertEquals(0, maxDatabaseId("d1-empty"))
+    }
+
+    // D2 — maxMessageDatabaseId shape: returns the largest databaseId of the room (the PK of
+    //      the last-inserted row), and is scoped to the room.
+    @Test
+    fun `maxMessageDatabaseId returns room max databaseId`() = runTest {
+        seed("d2-other", 10)            // separate room — must not influence d2
+        seed("d2", 250)
+        val rowsD2 = wcdbInstance.message.getAllObjects(roomCond("d2"))
+        val expectedMax = rowsD2.maxOf { it.databaseId }
+        assertEquals(expectedMax, maxDatabaseId("d2"))
+        assertTrue(maxDatabaseId("d2") > maxDatabaseId("d2-other"))
+    }
+
+    // D3 — bounded delete: only rows with databaseId <= snapshot are deleted; rows inserted
+    //      with databaseId > snapshot (the "newer messages") are ALL preserved. Core invariant.
+    @Test
+    fun `deleteMessagesPaged with snapshot bound spares newer messages`() = runTest {
+        seed("d3", 100)                              // first 100 rows
+        val snap = maxDatabaseId("d3")               // snapshot at the 100th row's PK
+        seed("d3", 100, baseTs = 9_000L)             // 100 newer rows, databaseId > snap
+
+        deleteMessagesPaged(boundedCond("d3", snap), pageSize = 100)
+
+        // the 100 newer rows survive; none of the <=snap rows remain.
+        assertEquals(100L, messageCount(roomCond("d3")))
+        assertEquals(0L, messageCount(roomCond("d3").and(DBMessageModel.databaseId.le(snap))))
+        assertEquals(100L, messageCount(roomCond("d3").and(DBMessageModel.databaseId.gt(snap))))
+    }
+
+    // D4 — KEY framework-assumption + convergence regression: insert MORE rows in the middle of
+    //      the delete window. New rows get databaseId > snapshot (autoincrement monotonic), so
+    //      they fall outside the bounded condition → the loop converges and they all survive.
+    //      Reproduces the #969 bug boundary ("inserts during the delete window"): the OLD
+    //      unbounded `roomId.eq` condition would keep re-matching the flood and never converge.
+    @Test
+    fun `deleteMessagesPaged bounded converges and keeps inserts during delete`() = runTest {
+        seed("d4", 100)
+        val snap = maxDatabaseId("d4")
+        // Simulate concurrent inserts arriving during the delete window: 150 newer rows.
+        seed("d4", 150, baseTs = 9_000L)
+
+        deleteMessagesPaged(boundedCond("d4", snap), pageSize = 100)
+
+        // Loop converged: all <=snap rows gone, all 150 newer rows kept.
+        assertEquals(150L, messageCount(roomCond("d4")))
+        assertEquals(0L, messageCount(roomCond("d4").and(DBMessageModel.databaseId.le(snap))))
+    }
+
+    // D5 — bounded delete still cascades per-row (attachment / mention / reaction) — adding the
+    //      databaseId upper bound must not degrade the per-row MessageModel.delete() cascade.
+    @Test
+    fun `deleteMessagesPaged bounded cascades related rows`() = runTest {
+        val msgId = "d5-0"
+        wcdbInstance.message.insertObject(MessageModel().apply {
+            id = msgId; roomId = "d5"; fromWho = "s"
+            timeStamp = 1_000L; systemShowTimestamp = 1_000L; type = MessageModel.TYPE_TEXT
+        })
+        wcdbInstance.attachment.insertObject(AttachmentModel().apply { id = "d5-att"; messageId = msgId })
+        wcdbInstance.mention.insertObject(MentionModel().apply { messageId = msgId; uid = "u1"; type = 0 })
+        wcdbInstance.reaction.insertObject(ReactionModel().apply { messageId = msgId; emoji = "👍"; uid = "u1"; timeStamp = 1_000L })
+
+        val snap = maxDatabaseId("d5")
+        deleteMessagesPaged(boundedCond("d5", snap))
+
+        assertEquals(0L, messageCount(roomCond("d5")))
+        assertTrue(wcdbInstance.attachment.getAllObjects(DBAttachmentModel.messageId.eq(msgId)).isEmpty())
+        assertTrue(wcdbInstance.mention.getAllObjects(DBMentionModel.messageId.eq(msgId)).isEmpty())
+        assertTrue(wcdbInstance.reaction.getAllObjects(DBReactionModel.messageId.eq(msgId)).isEmpty())
+    }
+
+    // NOTE: the per-room delete guard (deletingRoomIds / pendingRedeleteRoomIds in DBMessageStore)
+    // is intentionally NOT unit-tested here. Earlier revisions added stand-in tests that re-created
+    // the two key-sets locally, but those only asserted java.util.concurrent
+    // ConcurrentHashMap.newKeySet add/remove semantics — a JDK guarantee, not the production wiring —
+    // so they gave false coverage (a regression in the real guard would not fail them). The guard's
+    // correctness rests on the synchronous "add before appScope.launch" ordering, verified by
+    // inspection in DBMessageStore.removeRoomAndMessages; the bounded-delete behavior it protects is
+    // covered by D3/D4/D8 against real WCDB.
+
+    // D7 — empty-room churn delete (cleanEmptyRooms / cleanupGroupLocally path): snapshot 0,
+    //      le(0) condition, paged delete is an immediate no-op with no exception.
+    @Test
+    fun `deleteMessagesPaged bounded on empty room is no-op`() = runTest {
+        val snap = maxDatabaseId("d7-empty")         // 0
+        assertEquals(0, snap)
+        deleteMessagesPaged(boundedCond("d7-empty", snap))
+        assertEquals(0L, messageCount(roomCond("d7-empty")))
+    }
+
+    // D8 — per-room scope: bounding+deleting one room must not touch another room's rows.
+    @Test
+    fun `deleteMessagesPaged bounded isolates rooms`() = runTest {
+        seed("d8-r1", 50)
+        seed("d8-r2", 50)
+        val snap1 = maxDatabaseId("d8-r1")
+        deleteMessagesPaged(boundedCond("d8-r1", snap1))
+        assertEquals(0L, messageCount(roomCond("d8-r1")))
+        assertEquals(50L, messageCount(roomCond("d8-r2")))   // r2 untouched
+    }
+
+    // D10 — full bounded room-delete flow over the whole method shape (snapshot → delete room
+    //       row → bounded paged delete), exercised end-to-end for a populated then an empty room.
+    @Test
+    fun `bounded room delete flow clears room then empty room snapshot is zero`() = runTest {
+        seed("d10", 120)
+        val snap = maxDatabaseId("d10")
+        assertTrue(snap > 0)
+        deleteMessagesPaged(boundedCond("d10", snap))
+        assertEquals(0L, messageCount(roomCond("d10")))
+
+        // Re-running on the now-empty room: snapshot collapses to 0, le(0) deletes nothing.
+        val snapAfter = maxDatabaseId("d10")
+        assertEquals(0, snapAfter)
+        deleteMessagesPaged(boundedCond("d10", snapAfter))
+        assertEquals(0L, messageCount(roomCond("d10")))
+    }
 }

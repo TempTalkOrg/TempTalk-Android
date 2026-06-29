@@ -51,6 +51,7 @@ hilt = "2.59.2"
 okhttp = "5.3.2"
 retrofit = "3.0.0"
 gson = "2.14.0"
+conscrypt = "2.5.3"
 
 # Image Loading
 glide = "5.0.7"
@@ -214,6 +215,7 @@ lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "lint
 # Network
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
+conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }

@@ -9,7 +9,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val appVersionName = "2.2.8"
+val appVersionName = "2.3.0"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -20,7 +20,7 @@ fun getCurrentDayTimestamp(): String {
 
 // F-Droid uses a fixed versionCode (official channel versionCode + 1).
 // No getTimeBasedVersionCode()/VERSION_CODE env — F-Droid builds reproducibly.
-val appVersionCode = 762504
+val appVersionCode = 782676
 val resolvedBuildTimestamp = getCurrentDayTimestamp()
 
 fun getBuildTime(): String {
@@ -264,6 +264,13 @@ dependencies {
     implementation(project(":security"))
     implementation(project(":call"))
 
+    // Bundled Conscrypt: registered as the top JSSE provider on API < 30 (see
+    // TempTalkApplication.initTlsProvider) so inner TLS uses the stream-based
+    // ConscryptEngineSocket. The platform Conscrypt there defaults to a raw-fd
+    // socket that bypasses the outer proxy tunnel (TLS-in-TLS), breaking proxy
+    // connections — including LiveKit call signaling, whose SSLSocketFactory is
+    // built internally and cannot be injected from app code.
+    implementation(libs.conscrypt.android)
     // Desugar JDK libs
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 

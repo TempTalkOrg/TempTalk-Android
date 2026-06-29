@@ -1,18 +1,13 @@
 package com.difft.android.chat.crypto
 
-import com.difft.android.network.group.CryptoDisposeReq
 import com.difft.android.network.group.GroupRepo
-import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
-import io.mockk.verify
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.difft.app.database.models.GroupMemberContactorModel
 import org.junit.After
 import org.junit.Before
 import org.junit.Ignore
@@ -34,9 +29,10 @@ import org.robolectric.annotation.Config
  * [com.difft.android.chat.common.ConversationManagerImplTest]'s ignored case
  * (line 135) and [org.difft.app.database.models.JobModelRoundTripTest].
  *
- * Tests are written end-to-end; promote to the instrumentation source set when
- * a device-backed harness is available. Each `@Test` documents the scenario it
- * covers (T#) per the design §7.1.2 plan.
+ * Only the two early-exit cases (T4/T5) that need no real DB are kept as `@Test`
+ * bodies. The WCDB-touching scenarios (T6+ / TV1–TV6) are listed as a checklist at
+ * the bottom for the instrumentation port — see the note there on why they are NOT
+ * left as empty @Test shells. Design ref: §7.1.2.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -60,14 +56,6 @@ class GroupCryptoRepoTest {
     fun tearDown() {
         unmockkAll()
     }
-
-    private fun member(uid: String, sig: String? = "sig-$uid", verify: Boolean? = null) =
-        GroupMemberContactorModel().apply {
-            this.id = uid
-            this.gid = "g1"
-            this.uidSignature = sig
-            this.signatureVerify = verify
-        }
 
     // ---------------------------------------------------------------------
     // T4–T5 — early exits
@@ -96,79 +84,41 @@ class GroupCryptoRepoTest {
     }
 
     // ---------------------------------------------------------------------
-    // T6–T11 — main verify pipeline
+    // Pending instrumentation coverage — port to the androidTest source set when a
+    // device-backed WCDB harness exists (see the class-level @Ignore for why none of
+    // these can run on the host JVM: each builds DBGroupCryptoKeysModel /
+    // DBGroupMemberContactorModel Expressions, whose clinit needs the native lib).
+    //
+    // Deliberately documented as a checklist rather than empty @Test shells: an empty
+    // body passes vacuously and would silently go green the moment the class-level
+    // @Ignore is lifted — a false-green trap. Design ref: §7.1.2.
+    //
+    // verify pipeline (verifyAllPendingForGroup / verifyAndDisposeInvalidMembers):
+    //   T6  0 pending rows        → early return, no UPDATE, no dispose
+    //   T7  all verified          → one batched UPDATE, no dispose
+    //   T8  all invalid           → no UPDATE, one dispose
+    //   T9  mixed                 → one UPDATE (verified) + one dispose (invalid uids)
+    //   T10 verifyUid throws       → caught, member counted invalid (lands in dispose req)
+    //   T11 cryptoDispose throws   → caught; UPDATE durable, never sets verify=false
+    //   T13 notify path           → verifyAndDisposeInvalidMembers writes verify=true for verified
+    //   T15 1100 verified uids    → chunked into 3 UPDATEs of [500, 500, 100]
+    //
+    // saveOrRotateRGroup version gating (Phase 0 key rotation):
+    //   TV1 no stored key         → insert incoming version, return true (no reset on first insert)
+    //   TV2 higher version        → overwrite + resetSignatureVerify(gid) (signatureVerify=NULL), return true
+    //   TV3 equal version         → skip, return false, no reset
+    //   TV4 lower version         → skip, return false (blocks stale-key regression)
+    //   TV5 getKeyVersion no row  → 0 (baseline / un-rotated)
+    //   TV6 saveRGroupIfNeeded    → version 0; existing v0 row is a skip (0 > 0 is false → idempotent)
+    //
+    // Note: the version-gate decision logic itself (the part with no WCDB dependency)
+    // IS covered on the JVM by GroupCryptoRGroupDecisionTest. The cases above are the
+    // WCDB-touching side effects (INSERT / UPDATE / dispose) that need a real DB.
+    //
+    // Removed (no longer applicable): T1–T3/T14/T17 (5s throttle dropped — caller-side
+    // fetch dedup in GroupUtil.groupsInProgress + SQL-first ordering already make repeat
+    // calls cheap), T12 (defensive `uidSignature IS NOT NULL` predicate dropped — encrypted
+    // members always carry a signature), T16 (per-call withTimeout dropped — HTTP timeout is
+    // governed by ChativeHttpClient connect/read/write seconds).
     // ---------------------------------------------------------------------
-
-    /** T6: 0 pending rows → early return, no UPDATE, no dispose. */
-    @Test
-    fun zero_pending_returns_no_update_no_dispose() = runBlocking {
-        // [stub pending query to return emptyList; assert no UPDATE, no dispose]
-    }
-
-    /** T7: All members verified → one batched UPDATE, no dispose. */
-    @Test
-    fun all_verified_one_update_no_dispose() = runBlocking {
-        // [stub 3 pending members, GroupCrypto.verifyUid returns true for all;
-        //  expect one updateValue call, zero dispose calls]
-    }
-
-    /** T8: All members invalid → no UPDATE, one dispose. */
-    @Test
-    fun all_invalid_no_update_one_dispose() = runBlocking {
-        // [stub 3 pending members, verifyUid false for all; one cryptoDispose call,
-        //  no updateValue]
-    }
-
-    /** T9: Mixed → one UPDATE (verified) + one dispose (invalid). */
-    @Test
-    fun mixed_verified_and_invalid_one_update_one_dispose() = runBlocking {
-        // [stub 4 pending, 2 verified, 2 invalid; one update + one dispose with the
-        //  invalid uids]
-    }
-
-    /** T10: A verifyUid throw must be caught and the member counted as invalid. */
-    @Test
-    fun verifyUid_exception_is_treated_as_invalid() = runBlocking {
-        // [verifyUid throws for one uid; that uid must end up in the dispose request]
-    }
-
-    /** T11: cryptoDispose throwing is caught — UPDATE is durable, never set verify=false. */
-    @Test
-    fun cryptoDispose_failure_caught_update_already_durable() = runBlocking {
-        // [verifyUid: 2 verified + 1 invalid; cryptoDispose throws;
-        //  updateValue still called for verified uids; no exception propagates]
-    }
-
-    // T12 (null-signature SQL filter) removed: per design assumption, encrypted-group
-    // members always carry uidSignature; the previous defensive `uidSignature IS NOT NULL`
-    // SQL predicate was dropped along with this case.
-
-    // ---------------------------------------------------------------------
-    // T13 — notify path regression
-    // ---------------------------------------------------------------------
-
-    /** T13: After Phase 3 refactor, verifyAndDisposeInvalidMembers writes verify=true for verified uids. */
-    @Test
-    fun notify_path_writes_verify_true_for_verified_members() = runBlocking {
-        // [call verifyAndDisposeInvalidMembers with 2 valid + 1 invalid; assert the
-        //  batch update was called with the 2 verified uids; assert dispose was called
-        //  with the 1 invalid uid]
-    }
-
-    // ---------------------------------------------------------------------
-    // T15 — chunking
-    // ---------------------------------------------------------------------
-
-    /** T15: 1100 verified uids must be split into 3 chunks of [500, 500, 100]. */
-    @Test
-    fun chunking_1100_verified_uids_into_three_updates() = runBlocking {
-        // [stub 1100 pending, all verifyUid true; assert updateValue invoked 3 times,
-        //  with chunk sizes 500, 500, 100]
-    }
-
-    // T16 (cryptoDispose per-call timeout) removed: HTTP timeout is governed by
-    // ChativeHttpClient connect/read/write seconds, not a per-call withTimeout.
-
-    @Suppress("unused")
-    private fun disposeReqOf(uids: List<String>) = CryptoDisposeReq(uids)
 }

@@ -24,7 +24,30 @@ data class Data(
     val call: CallConfig? = null,
     val domains: List<Domain>? = null,
     val services: List<Service>? = null,
-    val chatFolder: ChatFolder? = null
+    val chatFolder: ChatFolder? = null,
+    val proxy: ProxyConfigData? = null
+)
+
+/**
+ * Proxy-specific section of the global config. Drives the self-hosted-proxy
+ * routing: while the proxy is active, [TunnelDomains] is the single source of
+ * truth for BOTH the tunnel-host whitelist (which hosts go through the proxy
+ * vs direct) AND the domains each client module is forced onto. See
+ * `docs/claude/self-hosted-proxy-design.md` §7.3.
+ */
+data class ProxyConfigData(
+    val tunnelDomains: TunnelDomains? = null
+)
+
+/**
+ * Per-module domains used when the proxy is active. Each list is a set of FQDNs
+ * that the relay's `ssl_preread` whitelist must also accept (kept in sync
+ * server-side). [chat] feeds HTTP/WS host selection ([com.difft.android] URL
+ * manager); [call] feeds the meeting/call-service connection domains.
+ */
+data class TunnelDomains(
+    val chat: List<String>? = null,
+    val call: List<String>? = null
 )
 
 data class Host(
@@ -78,7 +101,10 @@ data class Group(
     val meetingWithoutRingThreshold: Double = 0.0,
     val membersMaxSize: Int = 200,
     val messageArchivingTimeOptionValues: List<Long>? = null,
-    val encryptionEnabled: Boolean = false
+    val encryptionEnabled: Boolean = false,
+    // Independent gate for the encrypted-group key reset/rotation entry.
+    // false → hide the reset entry even when encryptionEnabled is true.
+    val encryptionKeyResetEnabled: Boolean = false
 )
 
 data class Meeting(

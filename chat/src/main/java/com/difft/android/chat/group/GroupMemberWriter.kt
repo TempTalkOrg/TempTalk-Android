@@ -30,16 +30,23 @@ class GroupMemberWriter @Inject constructor() {
         }
         withContext(Dispatchers.IO) {
             try {
-                // signatureVerify is null/true two-state; WCDB-KSP reads a NULL column back as
-                // `false` (#901), which re-inserted as 0 would permanently exclude a pending
-                // member from the `signatureVerify IS NULL` re-verify query. Coerce false → null.
-                val oldVerifyMap: Map<String, Boolean?> = wcdb.groupMemberContactor
+                // Inherit the verified flag only when the member's uidSignature is UNCHANGED.
+                // On a key rotation every uidSignature is re-signed under the new pk_bind, so
+                // keying inheritance on (uid → old uidSignature) naturally drops the stale
+                // verified flag and forces re-verification against the new pk_bind — and is
+                // immune to a race with resetSignatureVerify (a concurrent refresh can't
+                // re-stamp the old `true`, because the signature no longer matches).
+                // signatureVerify is null/true two-state (WCDB-KSP reads NULL as false, #901),
+                // so only rows that are explicitly `true` are inheritance candidates.
+                val verifiedSigByUid: Map<String, String?> = wcdb.groupMemberContactor
                     .getAllObjects(DBGroupMemberContactorModel.gid.eq(gid))
-                    .associate { (it.id ?: "") to it.signatureVerify?.takeIf { v -> v } }
+                    .filter { it.signatureVerify == true }
+                    .associate { (it.id ?: "") to it.uidSignature }
 
                 serverMembers.forEach { m ->
                     val uid = m.id ?: return@forEach
-                    m.signatureVerify = oldVerifyMap[uid] // null for new uids
+                    m.signatureVerify =
+                        if (verifiedSigByUid.containsKey(uid) && verifiedSigByUid[uid] == m.uidSignature) true else null
                 }
 
                 wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq(gid))

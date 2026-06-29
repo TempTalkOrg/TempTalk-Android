@@ -173,12 +173,22 @@ internal class TlsTunnelSocket(
  * enabled, and a plain socket otherwise — so disabling the proxy restores the
  * exact default behavior. OkHttp only uses the no-arg [createSocket]; the
  * remaining overloads delegate to the platform default.
+ *
+ * @param forCall when true, the active config is read from
+ *   [ProxyConfigProvider.currentForCall] (gated by "Protect IP address in calls")
+ *   instead of [ProxyConfigProvider.current]. The call signaling client passes
+ *   `true` so calls connect DIRECT when the protection toggle is off, while the
+ *   IM plane (forCall=false) keeps tunneling.
  */
-class ProxyTunnelSocketFactory(private val provider: ProxyConfigProvider) : SocketFactory() {
+class ProxyTunnelSocketFactory(
+    private val provider: ProxyConfigProvider,
+    private val forCall: Boolean = false,
+) : SocketFactory() {
     private val default = getDefault()
 
     override fun createSocket(): Socket =
-        provider.current?.let { TlsTunnelSocket(it, provider) } ?: default.createSocket()
+        (if (forCall) provider.currentForCall else provider.current)
+            ?.let { TlsTunnelSocket(it, provider) } ?: default.createSocket()
 
     override fun createSocket(host: String?, port: Int): Socket = default.createSocket(host, port)
     override fun createSocket(host: String?, port: Int, localHost: InetAddress?, localPort: Int): Socket =
@@ -202,9 +212,13 @@ class ProxyTunnelSocketFactory(private val provider: ProxyConfigProvider) : Sock
  * deliberately does NOT fall back to system DNS on the original hostname, which
  * would defeat the tunnel's privacy invariant.
  */
-class ProxyTunnelDns(private val provider: ProxyConfigProvider) : Dns {
+class ProxyTunnelDns(
+    private val provider: ProxyConfigProvider,
+    private val forCall: Boolean = false,
+) : Dns {
     override fun lookup(hostname: String): List<InetAddress> {
-        val config = provider.current ?: return Dns.SYSTEM.lookup(hostname)
+        val config = (if (forCall) provider.currentForCall else provider.current)
+            ?: return Dns.SYSTEM.lookup(hostname)
         if (!provider.shouldTunnel(hostname)) return Dns.SYSTEM.lookup(hostname)
         return runCatching { InetAddress.getAllByName(config.host).toList() }
             .onSuccess {

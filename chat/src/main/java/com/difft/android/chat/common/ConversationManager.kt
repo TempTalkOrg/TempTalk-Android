@@ -6,6 +6,7 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.websocket.api.ConversationManager
+import com.difft.android.websocket.api.PublicKeyUpdateResult
 import com.difft.android.websocket.api.messages.GetPublicKeysReq
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 import difft.android.messageserialization.For
@@ -115,6 +116,103 @@ class ConversationManagerImpl @Inject constructor(
         L.i { "[ConversationManager] update uids=${uids.size} persisted=${models.size}" }
         return true
     }
+
+    /**
+     * Resolves For → uids and additionally reports whether the group is confirmed invalid
+     * (used to distinguish permanent vs transient failures, issue #970 ②).
+     * - [UidResolution.Resolved]: always for For.Account; For.Group fetch succeeded (status==0).
+     * - [UidResolution.Invalid]: For.Group `status != 0` (server confirms invalid) → permanent.
+     * - [UidResolution.Unresolved]: For.Group `group == null` → transient. `group == null` has **two sources**:
+     *   (a) the fetch inside `fetchAndSaveSingleGroupInfo` threw and returned null (weak network/timeout);
+     *   (b) the `groupsInProgress` concurrency guard: a second concurrent call for the same gid returns null (skipped).
+     *   Both are transient — under concurrency this round is skipped, and next round each job resolves
+     *   status!=0 → permanent exit (ARCH-CRIT-1).
+     *
+     * `status == null` (rare in theory: an old cached group without status) is conservatively treated
+     * as Resolved and proceeds to the fetch, not Invalid (only a **definite** status!=0 is permanent).
+     */
+    private sealed interface UidResolution {
+        data class Resolved(val uids: List<String>) : UidResolution
+        data object Invalid : UidResolution
+        data object Unresolved : UidResolution
+    }
+
+    private suspend fun resolveUidsWithStatus(room: For): UidResolution = when (room) {
+        is For.Account -> UidResolution.Resolved(listOf(room.id, globalServices.myId))
+        is For.Group -> {
+            val group = groupUtil.getSingleGroupInfo(room.id)  // local miss falls back to network
+            when {
+                group == null -> UidResolution.Unresolved          // fetch threw / guard skipped → transient
+                (group.status ?: 0) != 0 -> UidResolution.Invalid  // server confirms invalid → permanent
+                else -> withContext(Dispatchers.IO) {              // members is a WCDB read
+                    UidResolution.Resolved(group.members.mapNotNull { it.id })
+                }
+            }
+        }
+    }
+
+    override suspend fun updatePublicKeyInfoDataResult(room: For): PublicKeyUpdateResult {
+        // 1) Resolve uids, also obtaining the "is the group confirmed invalid" signal
+        when (val resolution = resolveUidsWithStatus(room)) {
+            is UidResolution.Invalid -> {
+                L.w { "[ConversationManager] updateResult room=${room.id} EntityInvalid (group status!=0)" }
+                return PublicKeyUpdateResult.EntityInvalid
+            }
+
+            is UidResolution.Unresolved -> {
+                L.w { "[ConversationManager] updateResult room=${room.id} Unresolved (group==null, transient)" }
+                return PublicKeyUpdateResult.Unresolved
+            }
+
+            is UidResolution.Resolved -> {
+                val uids = resolution.uids
+                if (uids.isEmpty()) {
+                    // For.Account is always non-empty; a valid group with 0 members = nobody to send to → ServerEmpty
+                    L.w { "[ConversationManager] updateResult room=${room.id} ServerEmpty (resolved 0 uids)" }
+                    return PublicKeyUpdateResult.ServerEmpty
+                }
+
+                // 2) Fetch keys, distinguishing null (network failure/body error) from empty (server says none)
+                val serverKeys: List<PublicKeyInfo>? = try {
+                    chatHttpClient.httpService
+                        .getPublicKeys((globalServices.userManager.getUserData()?.microToken ?: ""), GetPublicKeysReq(uids))
+                        .data
+                        ?.keys
+                } catch (e: Exception) {
+                    L.e { "[ConversationManager] updateResult getPublicKeys failed uids=${uids.size} err=${e.stackTraceToString()}" }
+                    return PublicKeyUpdateResult.FetchFailed  // no connection → transient
+                }
+
+                return when {
+                    serverKeys == null -> {
+                        // .data?.keys==null means HTTP body parse error/missing field = no definite answer → conservatively transient
+                        L.w { "[ConversationManager] updateResult room=${room.id} FetchFailed (server body null)" }
+                        PublicKeyUpdateResult.FetchFailed
+                    }
+
+                    serverKeys.isEmpty() -> {
+                        // Definite empty array = server says none → ServerEmpty (transient downstream)
+                        L.w { "[ConversationManager] updateResult room=${room.id} ServerEmpty uids=${uids.size}" }
+                        PublicKeyUpdateResult.ServerEmpty
+                    }
+
+                    else -> {
+                        publicKeyInfoStore.upsert(serverKeys.map { it.toModel() })
+                        L.i { "[ConversationManager] updateResult room=${room.id} Updated uids=${uids.size} persisted=${serverKeys.size}" }
+                        PublicKeyUpdateResult.Updated
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun classifyEmptyKeys(room: For): PublicKeyUpdateResult =
+        // Reuse the confirming fetch: same path for Group and Account (no special Account case).
+        // The caller (createNewOutgoingPushMessage :442) maps it: EntityInvalid → permanent;
+        // ServerEmpty/FetchFailed/Unresolved/Updated → transient (ServerEmpty's empty array is
+        // ambiguous, so retry conservatively; Updated means a key was re-fetched, retry self-heals).
+        // See the PublicKeyUpdateResult KDoc (PR #973 code-review).
+        updatePublicKeyInfoDataResult(room)
 
     override suspend fun getPublicKeyInfos(room: For): List<PublicKeyInfo> {
         val uids = resolveUids(room)

@@ -17,6 +17,8 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.data.RoomMetadata
 import com.difft.android.call.exception.DisconnectException
+import com.difft.android.call.data.CallStatisticsEvent
+import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.exception.NetworkConnectionPoorException
 import com.difft.android.call.manager.ParticipantManager
@@ -101,6 +103,7 @@ internal class RoomEventDispatcher(
     private val timerManager: TimerManager,
     private val speakerState: SpeakerStateHolder,
     private val callDataManager: CallDataManager,
+    private val statisticsLogManager: CallStatisticsLogManager,
     private val json: Json,
     private val mySelfId: String,
     private val host: RoomEventHost,
@@ -159,6 +162,9 @@ internal class RoomEventDispatcher(
                 if (event.reason != DisconnectReason.CLIENT_INITIATED) {
                     if (event.reason == DisconnectReason.RECONNECT_FAILED) {
                         roomCtl.updateCallStatus(CallStatus.RECONNECT_FAILED)
+                        statisticsLogManager.report(
+                            CallStatisticsEvent.RoomReconnectFail(errorMsg = event.reason.name)
+                        )
                     }
                     roomCtl.collectError(DisconnectException(event.reason.name))
                 } else {
@@ -362,6 +368,9 @@ internal class RoomEventDispatcher(
     }
 
     private fun onResubscriptionSettled() {
+        // reconnectCount 自增作为"重绑代"信号：不再用于 compose key（不销毁重建 renderer、不黑闪），
+        // 而是驱动 VideoRenderer 对当前 track 原地 removeRenderer+addRenderer 刷新 sink，确保全量
+        // 重连（track 可能是新对象、或底层流已替换）后新帧能恢复，避免永久卡在最后一帧。
         callUiController.incrementReconnectCount()
         participantManager.screenSharingUser.value?.let { checkRemoteUserScreenShare(it) }
     }

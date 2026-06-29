@@ -32,12 +32,16 @@ import com.difft.android.chat.R
  * @param isUpgrade true = shows Upgrade + Cancel buttons; false = shows only Cancel
  * @param onUpgrade called when user confirms upgrade
  * @param onDismiss called when sheet should be dismissed
+ * @param canReset (encrypted-info mode only) true = show the "Reset encryption key" action
+ * @param onReset called when user taps the reset action
  */
 @Composable
 fun GroupEncryptionBottomSheet(
     isUpgrade: Boolean,
     onUpgrade: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    canReset: Boolean = false,
+    onReset: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -115,6 +119,23 @@ fun GroupEncryptionBottomSheet(
                 )
             }
         } else {
+            // Interim UI — reset entry lives inside the encrypted-info sheet until
+            // the design-driven form lands. Owner/admin gated by caller via canReset.
+            if (canReset) {
+                TextButton(
+                    onClick = {
+                        onReset()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.group_crypto_reset_title),
+                        fontSize = 16.sp,
+                        color = colorResource(com.difft.android.base.R.color.t_info)
+                    )
+                }
+            }
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
@@ -122,7 +143,7 @@ fun GroupEncryptionBottomSheet(
                 Text(
                     text = stringResource(R.string.group_encrypted_info_dismiss),
                     fontSize = 16.sp,
-                    color = colorResource(com.difft.android.base.R.color.primary)
+                    color = colorResource(com.difft.android.base.R.color.t_primary)
                 )
             }
         }

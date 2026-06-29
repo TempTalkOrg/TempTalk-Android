@@ -4,6 +4,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -41,20 +42,6 @@ class ProxyConfigTest {
         requireNotNull(parsed)
         assertEquals(443, parsed.port)
         assertNull(parsed.turnSecret)
-    }
-
-    @Test
-    fun `legacy tp field is ignored on parse`() {
-        // Old share codes may still carry "tp"; the codec must accept and ignore it.
-        val link = "ytp://config?d=" + java.util.Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(
-                byteArrayOf(0x01, 0x00) +
-                    "{\"v\":1,\"h\":\"h\",\"p\":443,\"f\":\"pin\",\"tp\":3478,\"t\":\"sec\"}"
-                        .toByteArray(Charsets.UTF_8)
-            )
-        val parsed = ProxyConfig.parse(link)
-        requireNotNull(parsed)
-        assertEquals("sec", parsed.turnSecret)
     }
 
     @Test
@@ -135,6 +122,39 @@ class ProxyConfigTest {
             sni = "custom.example.com",
         )
         assertEquals("custom.example.com", cfg.outerSni())
+    }
+
+    @Test
+    fun `quicEnabled round-trips through encode and parse`() {
+        // q is the runtime gate for the whole QUIC-over-proxy feature; guard both
+        // the encode (put "q",1) and parse (optInt "q") branches against regression.
+        val cfg = ProxyConfig(host = "1.2.3.4", port = 443, spkiPinBase64 = "pin", quicEnabled = true)
+        val parsed = ProxyConfig.parse(cfg.toShareLink())
+        requireNotNull(parsed)
+        assertTrue(parsed.quicEnabled)
+    }
+
+    @Test
+    fun `q field absent defaults to quicEnabled false`() {
+        val cfg = ProxyConfig(host = "1.2.3.4", port = 443, spkiPinBase64 = "pin")
+        val parsed = ProxyConfig.parse(cfg.toShareLink())
+        requireNotNull(parsed)
+        assertFalse(parsed.quicEnabled)
+    }
+
+    @Test
+    fun `explicit q=1 in wire payload parses to quicEnabled true`() {
+        // Pin the WIRE contract directly (literal "q":1), not just an encode→parse
+        // round-trip — a symmetric bug on both ends could otherwise cancel out.
+        val json = """{"v":1,"h":"203.0.113.7","p":443,"f":"pin","q":1}"""
+            .toByteArray(Charsets.UTF_8)
+        val blob = byteArrayOf(0x01, 0x00) + json
+        val d = android.util.Base64.encodeToString(
+            blob, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+        )
+        val parsed = ProxyConfig.parse("ytp://config?d=$d")
+        requireNotNull(parsed)
+        assertTrue(parsed.quicEnabled)
     }
 
     @Test

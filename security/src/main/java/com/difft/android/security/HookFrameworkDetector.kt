@@ -78,8 +78,14 @@ internal object HookFrameworkDetector {
     /**
      * 检测当前线程调用栈中是否出现已知 Hook 包名前缀。
      */
-    fun hasSuspiciousStackTrace(): Boolean {
-        val stackTrace = Throwable().stackTrace
+    fun hasSuspiciousStackTrace(): Boolean = containsHookFrame(Throwable().stackTrace)
+
+    /**
+     * Whether the given stack trace contains a known hook-framework package prefix.
+     * Extracted so ANR-report filtering can reuse the same framework list, keeping
+     * detection and filtering aligned.
+     */
+    fun containsHookFrame(stackTrace: Array<StackTraceElement>): Boolean {
         if (stackTrace.isEmpty()) {
             return false
         }

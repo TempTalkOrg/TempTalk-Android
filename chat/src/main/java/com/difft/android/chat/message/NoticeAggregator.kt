@@ -1,6 +1,8 @@
 package com.difft.android.chat.message
 
 import difft.android.messageserialization.model.CombinedForwardMode
+import difft.android.messageserialization.model.Forward
+import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.TextMessage
 
 /**
@@ -43,9 +45,15 @@ object NoticeAggregator {
      *   2) Authors contributing more selected messages first (desc)
      *   3) Authors with the most-recent selected message first (desc by timestamp)
      *
+     * PRD v2.0 §改动3: when [selfIdLast] is supplied (the operator's own id), the
+     * operator is pinned to the END of the list regardless of the priorities above,
+     * so a mixed (self + others) selection always reads "...others, You" last. Pure
+     * self-only / pure others selections are unaffected (self-only no longer leaves a
+     * trace at all; others-only has no self to move).
+     *
      * Receiver displays the first 5 names and a locale-specific overflow suffix.
      */
-    fun computeSortedSourceAuthorIds(messages: List<ChatMessage>): List<String> {
+    fun computeSortedSourceAuthorIds(messages: List<ChatMessage>, selfIdLast: String? = null): List<String> {
         if (messages.isEmpty()) return emptyList()
         return messages
             .groupBy { it.authorId }
@@ -57,14 +65,7 @@ object NoticeAggregator {
                     latestTimestamp = group.maxOf { it.timeStamp },
                 )
             }
-            .sortedWith(
-                // PRD §5.3.4 priorities (1→2→3) + deterministic authorId tiebreaker so the
-                // wire order is stable across upstream call sites when all three priorities tie.
-                compareByDescending<AuthorAggregate> { it.isCombinedForwardSender }
-                    .thenByDescending { it.contributedCount }
-                    .thenByDescending { it.latestTimestamp }
-                    .thenBy { it.authorId }
-            )
+            .sortedWith(selfLastComparator(selfIdLast))
             .map { it.authorId }
     }
 
@@ -98,7 +99,7 @@ object NoticeAggregator {
     }
 
     /** [TextMessage] variant of [computeSortedSourceAuthorIds]. */
-    fun computeSortedSourceAuthorIdsFromTextMessages(messages: List<TextMessage>): List<String> {
+    fun computeSortedSourceAuthorIdsFromTextMessages(messages: List<TextMessage>, selfIdLast: String? = null): List<String> {
         if (messages.isEmpty()) return emptyList()
         return messages
             .groupBy { it.fromWho.id }
@@ -110,15 +111,90 @@ object NoticeAggregator {
                     latestTimestamp = group.maxOf { it.timeStamp },
                 )
             }
-            .sortedWith(
-                // PRD §5.3.4 priorities (1→2→3) + deterministic authorId tiebreaker so the
-                // wire order is stable across upstream call sites when all three priorities tie.
-                compareByDescending<AuthorAggregate> { it.isCombinedForwardSender }
-                    .thenByDescending { it.contributedCount }
-                    .thenByDescending { it.latestTimestamp }
-                    .thenBy { it.authorId }
-            )
+            .sortedWith(selfLastComparator(selfIdLast))
             .map { it.authorId }
+    }
+
+    /**
+     * PRD §5.3.4 priorities (1→2→3) + deterministic authorId tiebreaker for a stable
+     * wire order; PRD v2.0 §改动3 pins [selfIdLast] (the operator) dead last when present.
+     */
+    private fun selfLastComparator(selfIdLast: String?): Comparator<AuthorAggregate> =
+        // false < true ⇒ the operator (authorId == selfIdLast) always sorts after everyone else.
+        compareBy<AuthorAggregate> { selfIdLast != null && it.authorId == selfIdLast }
+            .thenByDescending { it.isCombinedForwardSender }
+            .thenByDescending { it.contributedCount }
+            .thenByDescending { it.latestTimestamp }
+            .thenBy { it.authorId }
+
+    // ----- PRD v2.0 §改动1/§改动2: "leave a trace" gating (ORIGINAL-author based) -----
+    // Core principle: trace ONLY when another person's ORIGINAL content leaves the conversation.
+    // Three message classes (§改动2), all judged by the ORIGINAL author (原作者), never the forwarder:
+    //   - 原生 message (no forwardContext — plain/image/file/contact): the bubble author IS the
+    //     original author.
+    //   - single-forward (forwards.size == 1): the forwarded content's original author (recurse to
+    //     the leaf); the forwarder/bubble only feeds the `from` display, never the trigger.
+    //   - Chat History (forwards.size > 1): recurse all layers to the leaf (original) authors.
+    // Forwarders at intermediate layers do NOT count — only leaf (original) messages do.
+
+    /** Recursion cap (§改动2 fallback). Beyond this depth — or on a malformed tree — default to trace. */
+    private const val MAX_FORWARD_DEPTH = 4
+
+    /**
+     * COPY gating for MULTI-SELECT (List<TextMessage>). On Android/Mac multi-select copy renders ANY
+     * forward bubble — single-forward OR combined-forward — as a `[Chat History]` placeholder (see
+     * [com.difft.android.chat.message.MessageCopyTextFormatter]); no real content leaves, so forward
+     * bubbles never count. Only a non-forward 原生 message (plain/image/file/contact) by someone else
+     * counts. (The PRD's "single-forward copy traces by original author" assumes iOS, which copies the
+     * inner text; Android's placeholder clipboard means there is nothing real to trace on multi-select.)
+     */
+    fun copyCarriesForeignContentFromTextMessages(messages: List<TextMessage>, myId: String): Boolean =
+        messages.any { it.forwardContext == null && it.fromWho.id != myId }
+
+    /**
+     * COPY gating for SINGLE long-press / derived (one [TextChatMessage]). Here the clipboard gets the
+     * REAL text (a single-forward copies its inner text via
+     * [com.difft.android.chat.message.getCopyableTextContent]; derived translate/STT copies the shown
+     * text), so it is judged by the ORIGINAL author — single-forward by the inner (original) author;
+     * a combined-forward copies nothing and never counts.
+     */
+    fun copyCarriesForeignContent(messages: List<ChatMessage>, myId: String): Boolean =
+        messages.any { !it.isCombinedForward() && carriesForeignOriginalAuthor((it as? TextChatMessage)?.forwardContext, it.authorId, myId) }
+
+    /**
+     * FORWARD gating. Judged by the ORIGINAL author for every type — 原生 by its sender, single-forward
+     * and Chat History recurse to the leaf (original) authors. Unlike copy, a Chat History is NOT a
+     * placeholder here (its inner content actually leaves on forward).
+     */
+    fun forwardCarriesForeignContentFromTextMessages(messages: List<TextMessage>, myId: String): Boolean =
+        messages.any { carriesForeignOriginalAuthor(it.forwardContext, it.fromWho.id, myId) }
+
+    /** [ChatMessage] variant of [forwardCarriesForeignContentFromTextMessages]. */
+    fun forwardCarriesForeignContent(messages: List<ChatMessage>, myId: String): Boolean =
+        messages.any { carriesForeignOriginalAuthor((it as? TextChatMessage)?.forwardContext, it.authorId, myId) }
+
+    /**
+     * True iff this message carries another person's ORIGINAL content (the trace trigger).
+     * 原生 (no forwardContext): the bubble author is the original author. single-forward / CH:
+     * recurse to the leaf (original) messages, skipping every forwarder.
+     */
+    private fun carriesForeignOriginalAuthor(forwardContext: ForwardContext?, bubbleAuthorId: String, myId: String): Boolean {
+        val forwards = forwardContext?.forwards
+        if (forwards.isNullOrEmpty()) return bubbleAuthorId != myId
+        return leafAuthorsContainForeign(forwards, myId, depth = 1)
+    }
+
+    /**
+     * Recurse to the leaf (original) authors of a forward tree; any leaf authored by someone other
+     * than [myId] → foreign. §改动2 fallback: beyond [MAX_FORWARD_DEPTH] default to foreign (true).
+     */
+    private fun leafAuthorsContainForeign(forwards: List<Forward>, myId: String, depth: Int): Boolean {
+        if (depth > MAX_FORWARD_DEPTH) return true
+        return forwards.any { fwd ->
+            val nested = fwd.forwards
+            if (nested.isNullOrEmpty()) fwd.author != myId
+            else leafAuthorsContainForeign(nested, myId, depth + 1)
+        }
     }
 }
 

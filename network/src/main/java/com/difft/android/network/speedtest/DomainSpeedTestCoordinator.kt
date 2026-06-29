@@ -4,6 +4,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.proxy.ProxyConfigProvider
 import dagger.Lazy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,7 +34,20 @@ class DomainSpeedTestCoordinator @Inject constructor(
     private val globalConfigsManager: Lazy<GlobalConfigsManager>,
     private val speedTester: DomainSpeedTester,
     private val userManager: UserManager,
+    private val proxyConfigProvider: Lazy<ProxyConfigProvider>,
 ) {
+    /**
+     * Whether the proxy is currently active. Reads the injected INSTANCE
+     * [ProxyConfigProvider.isEnabled] (which triggers `refreshFromUserDataIfChanged`)
+     * rather than the static [ProxyConfigProvider.isProxyActive] mirror: the static
+     * is only refreshed as a side effect of other components calling an instance
+     * method, so on a cold start where the proxy was enabled last session it can
+     * still read `false` before anyone refreshes it. If a speed test ran in that
+     * window it would probe LIVE hosts through the proxy client; those hosts are not
+     * on the embedded whitelist, so [shouldTunnel] would route them DIRECT and leak
+     * the real IP. The instance read self-heals that window.
+     */
+    private fun isProxyActive(): Boolean = proxyConfigProvider.get().isEnabled
     companion object {
         private const val TAG = "SpeedTest"
         private const val SERVICE_TYPE_CHAT = "chat"
@@ -93,6 +107,15 @@ class DomainSpeedTestCoordinator @Inject constructor(
         L.w { "[$TAG] getBestHostSync: no host available, returning null" }
         return null
     }
+
+    /**
+     * Returns the first host from [candidates] not marked unavailable this
+     * session, or null when all are invalidated. Used by the proxy path to keep
+     * failover (e.g. WebSocket host switching) working over the embedded host
+     * set without depending on the speed-test snapshot/ranking.
+     */
+    fun firstAvailableHost(candidates: List<String>): String? =
+        candidates.firstOrNull { it !in invalidatedHostsThisSession }
 
     /**
      * Returns all hosts ranked by latency (for HTTP retry fallback).
@@ -175,7 +198,20 @@ class DomainSpeedTestCoordinator @Inject constructor(
         periodicJob = appScope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(PERIODIC_FOREGROUND_MS)
-                runSpeedTest()
+                if (isProxyActive()) {
+                    // Proxy mode skips speed testing (all embedded hosts resolve to the
+                    // same proxy IP, so latency ranking is meaningless). But failover
+                    // still marks embedded hosts unavailable on WS failure; runSpeedTest
+                    // — the only other site that clears that set — is skipped under the
+                    // proxy, so without this periodic clear a host marked unavailable
+                    // would never be retried even after it recovers, permanently
+                    // degrading failover. Clear on the same cadence the speed test would
+                    // have cleared, giving recovered hosts a fresh chance.
+                    invalidatedHostsThisSession.clear()
+                    L.i { "[$TAG] proxy active: cleared invalidated hosts (no speed test)" }
+                } else {
+                    runSpeedTest()
+                }
             }
         }
         L.i { "[$TAG] periodic test started (foreground, interval=${PERIODIC_FOREGROUND_MS / 60_000}min)" }
@@ -196,6 +232,18 @@ class DomainSpeedTestCoordinator @Inject constructor(
     }
 
     private suspend fun runSpeedTest() {
+        // Proxy active: skip speed testing entirely. Every embedded host resolves to
+        // the same proxy IP, so probing them measures the proxy hop, not the host —
+        // the ranking is meaningless and the probes would only add load. Host
+        // failover under the proxy is handled by [firstAvailableHost] over the
+        // embedded set, with its invalidation reset on the periodic clear in
+        // [startPeriodicTest] (see B2 / light_clear). Read the fresh instance state
+        // (see [isProxyActive]) so a cold-start where the proxy is enabled is honored
+        // before any speed test would have leaked to a live host.
+        if (isProxyActive()) {
+            L.i { "[$TAG] proxy active: skip speed test" }
+            return
+        }
         if (!isTestRunning.compareAndSet(false, true)) return
         try {
             lastTestTime.set(System.currentTimeMillis())

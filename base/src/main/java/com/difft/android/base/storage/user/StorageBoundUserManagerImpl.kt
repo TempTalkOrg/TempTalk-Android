@@ -297,6 +297,7 @@ class StorageBoundUserManagerImpl @Inject constructor(
                 // material and must not survive passive logout on shared devices.
                 proxyShareLink = null,
                 proxyEnabled = false,
+                proxyProtectCallIp = false,
                 // Identity fields (`account`, `customUid`, `email`, `phoneNumber`) deliberately
                 // preserved so the re-login screen can display "logged out as <account>".
             )
@@ -322,6 +323,7 @@ class StorageBoundUserManagerImpl @Inject constructor(
                             // the same reason: the share-link embeds a TURN secret.
                             proxyShareLink = "",
                             proxyEnabled = false,
+                            proxyProtectCallIp = false,
                         )
                     }
                 }.onFailure {

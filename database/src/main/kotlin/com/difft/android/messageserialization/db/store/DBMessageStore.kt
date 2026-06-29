@@ -4,6 +4,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.tracedPerf
 import com.tencent.wcdb.base.WCDBException
 import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
@@ -12,9 +13,11 @@ import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.mapToMessageId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.difft.app.database.delete
 import org.difft.app.database.deleteMessagesPaged
+import org.difft.app.database.maxMessageDatabaseId
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBReactionModel
@@ -44,19 +47,24 @@ constructor(
         L.d { "[Message] putWhenNonExist size:${messages.size}" }
         val startTime = System.currentTimeMillis()
         try {
-            messages.forEach { message ->
-                if (!processingMessageIds.add(message.id)) {
-                    L.i { "[Message] putWhenNonExist: ${message.id} already processing, skipping" }
-                    return@forEach
-                }
-                try {
-                    val room = dbRoomStore.createRoomIfNotExist(message.forWhat)
-                    wcdb.putMessageIfNotExists(message, room.readPosition)
-                } finally {
-                    processingMessageIds.remove(message.id)
+            // #971: batch-granularity Performance trace (one start/stop per batch on the
+            // ingest thread) so p99 ingest latency is visible without per-message observer cost.
+            // Scope = the DB write only; trackRoom (a flow emit) stays outside for clean attribution.
+            tracedPerf("wcdb_put_messages_batch", mapOf("count" to messages.size.toLong())) {
+                messages.forEach { message ->
+                    if (!processingMessageIds.add(message.id)) {
+                        L.i { "[Message] putWhenNonExist: ${message.id} already processing, skipping" }
+                        return@forEach
+                    }
+                    try {
+                        val room = dbRoomStore.createRoomIfNotExist(message.forWhat)
+                        wcdb.putMessageIfNotExists(message, room.readPosition)
+                    } finally {
+                        processingMessageIds.remove(message.id)
+                    }
                 }
             }
-            // 只在入库成功后发送变更通知
+            // Notify only after a successful batch insert (an insert failure rethrows above and skips this).
             messages.groupBy { it.forWhat.id }.forEach { (roomId, _) ->
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
             }
@@ -70,6 +78,15 @@ constructor(
 
     companion object {
         private val processingMessageIds = ConcurrentHashMap.newKeySet<String>()
+
+        // #969 in-flight room deletes: a second delete for the SAME room while one is in
+        // flight would run a second paged-delete loop with its own snapshot, interleaving
+        // page deletes and double-firing trackRoom. We skip the duplicate (the in-flight
+        // loop already covers this room) and, if it was a legitimately newer delete, redeem
+        // it via pendingRedeleteRoomIds once the in-flight loop releases. Same structure as
+        // processingMessageIds above.
+        private val deletingRoomIds = ConcurrentHashMap.newKeySet<String>()
+        private val pendingRedeleteRoomIds = ConcurrentHashMap.newKeySet<String>()
     }
 
     override fun deleteMessage(messageIds: List<String>) {
@@ -87,20 +104,64 @@ constructor(
     }
 
     override fun removeRoomAndMessages(roomId: String) {
+        // #969 per-room guard: take the in-flight mark SYNCHRONOUSLY here (outside appScope.launch)
+        // so two rapid calls can't both launch before either adds — putting the add inside the
+        // coroutine would race the guard away. A duplicate while one is in flight is skipped; if it
+        // was a legitimately newer delete (new messages arrived past the in-flight snapshot), it is
+        // re-driven once via pendingRedeleteRoomIds when the in-flight loop releases (ARCH-CRIT-1).
+        if (!deletingRoomIds.add(roomId)) {
+            pendingRedeleteRoomIds.add(roomId)
+            L.i { "[Message] removeRoomAndMessages: $roomId already deleting, queuing redelete" }
+            return
+        }
         appScope.launch {
             try {
+                // Snapshot the upper bound BEFORE deleting anything, so concurrent inserts during
+                // the paged delete (room still valid + server still pushing) are NOT swept in. The
+                // match set is fixed at snapshot time (databaseId is the monotonic autoincrement PK)
+                // → the paged loop is guaranteed to converge. New messages (databaseId > snapshotMax)
+                // survive; if the room is still valid it legitimately rebuilds with only those newer
+                // messages. (#969)
+                val snapshotMax = maxMessageDatabaseId(roomId)
+
                 // Delete the room row FIRST so the conversation disappears from the list
                 // immediately — a user-initiated delete should feel instant. Then page-delete
-                // its messages. An interrupted paged delete leaves orphan messages (room gone,
-                // rows remain) — harmless: no room row to surface them; a later sweep reclaims
-                // them. Deleting messages first instead would keep the room visible for the whole
-                // paged-delete window (~100ms × pages). Orphan cleanup is a tracked follow-up. (#909)
+                // its messages. Deleting messages first instead would keep the room visible for the
+                // whole paged-delete window (~100ms × pages).
+                //
+                // Two ways message rows can outlive the room row here: an interrupted paged delete,
+                // or — new with #969 — messages that arrived past snapshotMax (deliberately preserved).
+                // If the room is still active these are reclaimed when the next incoming message
+                // re-creates the room row (the rows re-attach to the rebuilt room). Rows for a room
+                // that is NEVER re-created stay as orphans: cleanEmptyRooms only sweeps rooms that
+                // still EXIST in the room table, so it does NOT reclaim room-less message rows.
+                // True room-less orphan reclamation remains the tracked #909 follow-up.
+                //
+                // Deleting the room row does not affect the databaseId-bounded message delete below
+                // (independent tables, no FK cascade).
                 wcdb.room.deleteObjects(DBRoomModel.roomId.eq(roomId))
-                deleteMessagesPaged(DBMessageModel.roomId.eq(roomId))
+                deleteMessagesPaged(
+                    DBMessageModel.roomId.eq(roomId).and(DBMessageModel.databaseId.le(snapshotMax))
+                )
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
-                L.i { "[Message] remove room and messages success: $roomId" }
+                L.i { "[Message] remove room and messages success: $roomId (snapshotMax=$snapshotMax)" }
+            } catch (e: CancellationException) {
+                // Don't swallow cancellation — re-throw to honor structured concurrency and avoid
+                // logging a normal scope teardown as an error. The finally below still runs, so the
+                // guard is released either way. (#972 review)
+                throw e
             } catch (e: Exception) {
                 L.e { "[Message] Failed to remove room and messages: ${e.stackTraceToString()}" }
+            } finally {
+                // Always release the guard — success, exception, or cancellation — otherwise the
+                // room could never be deleted again. If a newer delete was queued while this one
+                // ran, re-drive it once: it takes a fresh snapshot covering any messages that
+                // arrived past this loop's snapshotMax. Idempotent — a no-op if the room is empty.
+                deletingRoomIds.remove(roomId)
+                if (pendingRedeleteRoomIds.remove(roomId)) {
+                    L.i { "[Message] removeRoomAndMessages: re-driving queued redelete for $roomId" }
+                    removeRoomAndMessages(roomId)
+                }
             }
         }
     }

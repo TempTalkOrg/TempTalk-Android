@@ -10,6 +10,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.android.permission.PermissionUtil
+import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
+import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.GlobalNotificationType
 import androidx.lifecycle.flowWithLifecycle
@@ -37,6 +40,42 @@ import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBRoomStore
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.difft.android.chat.common.AvatarUtil
+import com.difft.android.chat.common.GroupAvatarUtil
+import com.difft.android.chat.common.GroupAvatarView
+import com.difft.android.chat.common.LetterItem
 import com.difft.android.chat.crypto.GroupCrypto
 import com.difft.android.chat.crypto.GroupCryptoRepo
 import com.difft.android.chat.crypto.GroupKeyDistributor
@@ -44,11 +83,24 @@ import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupMemberBinding
 import com.difft.android.network.group.GroupRepo
+import com.difft.android.network.group.RotateGroupCryptoReq
 import com.difft.android.network.group.UpgradeGroupToEncryptedReq
 import com.difft.android.network.responses.MuteStatus
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
+import com.luck.picture.lib.basic.PictureSelector
+import com.luck.picture.lib.config.SelectMimeType
+import com.luck.picture.lib.config.SelectModeConfig
+import com.luck.picture.lib.entity.LocalMedia
+import com.luck.picture.lib.interfaces.OnResultCallbackListener
+import com.luck.picture.lib.language.LanguageConfig
+import com.luck.picture.lib.pictureselector.GlideEngine
+import com.luck.picture.lib.pictureselector.ImageFileCompressEngine
+import com.luck.picture.lib.pictureselector.ImageFileCropEngine
+import com.luck.picture.lib.pictureselector.PictureSelectorUtils
+import com.luck.picture.lib.utils.ToastUtils
+import util.ScreenLockUtil
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.coroutines.cancellation.CancellationException
@@ -67,7 +119,14 @@ const val KEY_GROUP_ID = "groupId"
 const val KEY_GROUP_NAME = "groupName"
 const val EXTRA_SELECTED_MEMBER_IDS = "extra_selected_member_ids"
 
+// Server status for a rotate-crypto CAS conflict (baseGroupCryptoKeyVersion stale).
+private const val STATUS_GROUP_CRYPTO_VERSION_CONFLICT = 29
+
 @AndroidEntryPoint
+// TODO interim: the reset-crypto dialog/avatar-picker/rotation logic inlined here pushed
+// this Activity over the LargeClass threshold. Extract it into a dedicated controller when
+// the design-driven reset UI lands (tracked with the interim-UI TODOs in showResetCryptoDialog).
+@Suppress("LargeClass")
 class GroupInfoActivity : BaseActivity() {
 
     val binding: ChatActivityGroupInfoBinding by viewbind()
@@ -76,8 +135,24 @@ class GroupInfoActivity : BaseActivity() {
     private var groupInfo: GroupModel? = null
     private var isMemberListExpanded = false
 
+    // Guards against concurrent / double-tap rotation: a second performResetCrypto
+    // returns early while one is already running. Cleared in the finally below.
+    @Volatile
+    private var resetInProgress = false
+
     private val groupId: String by lazy {
         intent.getStringExtra(KEY_GROUP_ID) ?: ""
+    }
+
+    // Staged avatar pick for the interim reset-crypto dialog. Compose-observable so the
+    // dialog content recomposes when a pick lands. Reset to null each time the dialog
+    // opens (see showResetCryptoDialog). Create-group model: the file is uploaded +
+    // encrypted only at confirm time, not at pick time.
+    private val resetAvatarPath = mutableStateOf<String?>(null)
+
+    // Must be an Activity field so it's registered before the Activity is STARTED.
+    private val onPicturePermissionForAvatar = registerPermission {
+        onPicturePermissionForAvatarResult(it)
     }
 
     @Inject
@@ -94,6 +169,9 @@ class GroupInfoActivity : BaseActivity() {
 
     @Inject
     lateinit var groupKeyDistributor: GroupKeyDistributor
+
+    @Inject
+    lateinit var groupAvatarUploader: GroupAvatarUploader
 
     @Inject
     lateinit var dbRoomStore: DBRoomStore
@@ -544,14 +622,451 @@ class GroupInfoActivity : BaseActivity() {
     }
 
     private fun showEncryptedGroupInfoSheet() {
+        // Reset entry gated to owner/admin, behind the group-encryption flag AND
+        // its own independent reset flag (hidden when reset flag is off).
+        val canReset = role <= GROUP_ROLE_ADMIN &&
+                globalConfigsManager.isGroupEncryptionEnabled() &&
+                globalConfigsManager.isGroupEncryptionKeyResetEnabled()
         var dialog: ComposeDialog? = null
         dialog = ComposeDialogManager.showBottomDialog(this) {
             GroupEncryptionBottomSheet(
                 isUpgrade = false,
                 onUpgrade = { },
-                onDismiss = { dialog?.dismiss() }
+                onDismiss = { dialog?.dismiss() },
+                canReset = canReset,
+                onReset = {
+                    // Prefill from the operator's view: WITH key → decrypted current name +
+                    // current avatar. WITHOUT key (can't decrypt the placeholders) → empty
+                    // name + a freshly generated default avatar, staged so it's both shown
+                    // in the dialog and uploaded on confirm.
+                    lifecycleScope.launch {
+                        val hasKey = withContext(Dispatchers.IO) { groupCryptoRepo.hasKeys(groupId) }
+                        resetAvatarPath.value = if (hasKey) {
+                            null
+                        } else {
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    generateDefaultAvatarFile(groupInfo?.members ?: emptyList())
+                                }.getOrNull()
+                            }
+                        }
+                        showResetCryptoDialog(prefillName = if (hasKey) groupInfo?.name ?: "" else "")
+                    }
+                }
             )
         }
+    }
+
+    private fun onPicturePermissionForAvatarResult(permissionState: PermissionUtil.PermissionState) {
+        when (permissionState) {
+            PermissionUtil.PermissionState.Denied -> {
+                ToastUtils.showToast(this, getString(R.string.not_granted_necessary_permissions))
+            }
+
+            PermissionUtil.PermissionState.Granted -> {
+                createResetAvatarPictureSelector()
+            }
+
+            PermissionUtil.PermissionState.PermanentlyDenied -> {
+                ComposeDialogManager.showMessageDialog(
+                    context = this,
+                    title = getString(R.string.tip),
+                    message = getString(R.string.no_permission_picture_tip),
+                    confirmText = getString(R.string.notification_go_to_settings),
+                    cancelText = getString(R.string.notification_ignore),
+                    cancelable = false,
+                    onConfirm = { PermissionUtil.launchSettings(this) },
+                    onCancel = {
+                        ToastUtils.showToast(this, getString(R.string.not_granted_necessary_permissions))
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * Picker for the interim reset dialog. Clone of [CreateGroupActivity.createPictureSelector].
+     * On result we only stage the path into [resetAvatarPath] (Compose-observable) — the
+     * upload+encrypt happens later at confirm time (create-group model). We do NOT touch any
+     * binding; the dialog content observes the state and recomposes.
+     */
+    private fun createResetAvatarPictureSelector() {
+        ScreenLockUtil.temporarilyDisabled = true
+        PictureSelector.create(this)
+            .openGallery(SelectMimeType.ofImage())
+            .setDefaultLanguage(LanguageConfig.ENGLISH)
+            .setLanguage(PictureSelectorUtils.getLanguage(this))
+            .setSelectorUIStyle(PictureSelectorUtils.getSelectorStyle(this))
+            .setImageEngine(GlideEngine.createGlideEngine())
+            .setSelectionMode(SelectModeConfig.SINGLE)
+            .isDirectReturnSingle(true)
+            .setCropEngine(ImageFileCropEngine(this, PictureSelectorUtils.getSelectorStyle(this)))
+            .setCompressEngine(ImageFileCompressEngine())
+            .forResult(object : OnResultCallbackListener<LocalMedia> {
+                override fun onResult(result: ArrayList<LocalMedia>) {
+                    if (result.isNotEmpty()) {
+                        val localMedia = result[0]
+                        resetAvatarPath.value = localMedia.compressPath ?: localMedia.realPath
+                    }
+                }
+
+                override fun onCancel() {
+                }
+            })
+    }
+
+    /**
+     * Interim reset-crypto dialog — replace with the proper design-driven form
+     * when the interaction design lands. A centered [ComposeDialogManager]
+     * message dialog with an editable avatar (staged pick) + a single name field
+     * (prefilled with the currently decrypted group name). cancelable=false so an
+     * accidental outside-tap can't dismiss a destructive key-rotation entry mid-edit,
+     * and so the dialog survives the picker round-trip.
+     */
+    // TODO interim UI — replace with proper form when design lands
+    private fun showResetCryptoDialog(prefillName: String) {
+        // Hoist the name state to the Activity so the imperative onConfirm can read
+        // the final value (the @Composable content slot re-runs on each keystroke,
+        // so we must not own the state inside it). remember{} keeps the same
+        // instance across recompositions of the content slot.
+        // prefillName is the decrypted name when the operator holds the key, else ""
+        // (no-key case shows an empty field). resetAvatarPath is pre-set by the caller
+        // (null when key is held → preview shows current avatar; a generated path
+        // otherwise → preview shows the random default).
+        val nameState = mutableStateOf(prefillName)
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = getString(R.string.group_crypto_reset_title),
+            confirmText = getString(R.string.group_crypto_reset_confirm),
+            cancelText = getString(R.string.chat_dialog_cancel),
+            showCancel = true,
+            cancelable = false,
+            // Validate before closing: a blank name must keep the dialog open (and preserve the
+            // staged avatar pick), so disable auto-dismiss and dismiss manually on valid confirm.
+            autoDismiss = false,
+            content = { ResetCryptoDialogContent(nameState) },
+            onConfirm = {
+                // Trim leading/trailing spaces, then block submit on an empty name (keep the
+                // dialog open); otherwise close and rotate with the trimmed name.
+                val name = nameState.value.trim()
+                if (name.isBlank()) {
+                    ToastUtil.showLong(R.string.group_crypto_reset_name_hint)
+                } else {
+                    dialog?.dismiss()
+                    performResetCrypto(name)
+                }
+            },
+            onCancel = { dialog?.dismiss() }
+        )
+    }
+
+    /**
+     * Editable content slot for [showResetCryptoDialog]: body line + staged-pick avatar
+     * (tap → picker) + a single name field. [nameState] is hoisted to the Activity so the
+     * imperative onConfirm can read the final value; remember{} keeps the same instance
+     * across recompositions of this slot.
+     */
+    @Composable
+    private fun ResetCryptoDialogContent(nameState: MutableState<String>) {
+        val rememberedState = remember { nameState }
+        // Observe the staged pick so the avatar recomposes after a pick lands.
+        val pickedPath by resetAvatarPath
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Body (above the editable fields): what reset does.
+            Text(
+                text = stringResource(R.string.group_crypto_reset_message),
+                fontSize = 14.sp,
+                color = colorResource(com.difft.android.base.R.color.t_secondary)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            // Editable group avatar: shows the staged pick when present, else the
+            // current group avatar (default group icon when data is null). Tapping
+            // launches the picker; the staged path is uploaded+encrypted at confirm
+            // time. cancelable=false keeps the dialog alive across the picker round-trip.
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.clickable {
+                        onPicturePermissionForAvatar.launchMultiplePermission(
+                            PermissionUtil.picturePermissions
+                        )
+                    }
+                ) {
+                    AndroidView(
+                        factory = { ctx -> GroupAvatarView(ctx) },
+                        update = { v ->
+                            val p = pickedPath
+                            if (p != null) {
+                                v.setAvatar(p)
+                            } else {
+                                v.setAvatar(groupInfo?.getDisplayAvatarData(), gid = groupId)
+                            }
+                        },
+                        modifier = Modifier.size(64.dp)
+                    )
+                    // Camera overlay (bottom-end): 24dp circle + centered 12dp camera
+                    // icon, replicating chat_activity_group_edit_info.xml. The bg is a
+                    // <shape> oval (icon fill + bg_popup stroke), which Compose
+                    // painterResource can't load — recreate it with clip/background/border.
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(colorResource(com.difft.android.base.R.color.icon))
+                            .border(
+                                2.dp,
+                                colorResource(com.difft.android.base.R.color.bg_popup),
+                                CircleShape
+                            )
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.chat_contact_camera),
+                            contentDescription = null,
+                            colorFilter = ColorFilter.tint(
+                                colorResource(com.difft.android.base.R.color.bg_popup)
+                            ),
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            // Name input — styled to match the create-group / forward inputs
+            // (forward_input_bg). 64-char cap mirrors create-group's maxLength.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        colorResource(com.difft.android.base.R.color.bg3),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                BasicTextField(
+                    value = rememberedState.value,
+                    onValueChange = { if (it.length <= 64) rememberedState.value = it },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 18.sp,
+                        color = colorResource(com.difft.android.base.R.color.t_primary)
+                    ),
+                    cursorBrush = SolidColor(colorResource(com.difft.android.base.R.color.primary)),
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
+                        if (rememberedState.value.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.group_crypto_reset_name_hint),
+                                fontSize = 18.sp,
+                                color = colorResource(com.difft.android.base.R.color.t_disable)
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * Plaintext avatar JSON to preserve when no new avatar is picked: decrypt the current
+     * [GroupModel.encryptedAvatar] with the stored K_group, so it can be re-encrypted under
+     * the fresh key. Returns null when there's no stored key or no encrypted avatar (caller
+     * then generates a default). Deliberately does NOT read [GroupModel.avatar]: that field
+     * holds the decrypted JSON only when the model came through decryptGroupFieldsIfNeeded,
+     * which getSingleGroupInfo(forceUpdate=false) skips — so for an encrypted group it can be
+     * the blank/un-decrypted cached value. Must be called from an IO thread.
+     */
+    private fun preserveCurrentAvatarJson(group: GroupModel): String? {
+        val encryptedAvatar = group.encryptedAvatar ?: return null
+        val rGroupBytes = groupCryptoRepo.getRGroupBytes(groupId) ?: return null
+        return try {
+            GroupCrypto.decryptGroupAvatar(GroupCrypto.deriveKGroup(rGroupBytes), encryptedAvatar)
+        } catch (e: Exception) {
+            L.w { "[GE] preserve avatar decrypt failed gid=$groupId: ${e.message}" }
+            null
+        }
+    }
+
+    private fun performResetCrypto(newName: String) {
+        val group = groupInfo ?: return
+        // Snapshot the staged pick now so a late dialog dismissal can't race the build.
+        val pickedAvatarPath = resetAvatarPath.value
+        if (resetInProgress) {
+            L.i { "[GE] resetCrypto already in progress gid=$groupId, ignoring re-entry" }
+            return
+        }
+        resetInProgress = true
+        ComposeDialogManager.showWait(this, "")
+
+        lifecycleScope.launch {
+            try {
+                // Resolve the new avatar's plaintext JSON ONCE — it doesn't change between CAS
+                // attempts, so the upload happens a single time and a CAS retry never re-uploads;
+                // each attempt only re-encrypts this JSON with its own fresh K_group. Resolved
+                // INSIDE try so an upload/decrypt failure still hits the catch (dismissWait) and
+                // finally (clears resetInProgress) — otherwise the wait spinner would stick and
+                // rotation would be permanently blocked.
+                //  - picked file → upload + build JSON
+                //  - else preserve the current avatar → decrypt encryptedAvatar with the stored key
+                //  - else (all-lost / no custom avatar) → generate + upload a default
+                val plaintextAvatarJson = withContext(Dispatchers.IO) {
+                    when {
+                        pickedAvatarPath != null -> groupAvatarUploader.uploadAndBuildJson(pickedAvatarPath)
+                        else -> preserveCurrentAvatarJson(group)
+                            ?: groupAvatarUploader.uploadAndBuildJson(generateDefaultAvatarFile(group.members ?: emptyList()))
+                    }
+                }
+                // One rotate attempt: force-fetch the latest group info, build the request against
+                // that fresh CAS base + current members, and call rotate-crypto. The group-info
+                // page can hold a stale cached groupCryptoKeyVersion (getSingleGroupInfo
+                // forceUpdate=false returns the DB cache, which may lag the server), so we always
+                // refetch — the CAS base must be the server's current version, per contract. On a
+                // fetch dedup (a concurrent in-flight fetch returns null) fall back to the freshest
+                // PERSISTED group (getSingleGroupInfo reads the cache the concurrent fetch just
+                // wrote), not the stale in-memory one. Returns (response, freshRGroup).
+                suspend fun attemptRotate() = withContext(Dispatchers.IO) {
+                    val freshGroup = groupUtil.fetchAndSaveSingleGroupInfo(groupId)
+                        ?: groupUtil.getSingleGroupInfo(groupId)
+                        ?: group
+                    val (request, rGroup) = buildRotateRequest(freshGroup, newName, plaintextAvatarJson)
+                    groupRepo.rotateCrypto(groupId, request) to rGroup
+                }
+                var result = attemptRotate()
+                // CAS conflict: another rotation beat our base between the fetch and the
+                // request. Re-fetch + retry exactly once (fresh base); don't loop, to avoid
+                // a rotation storm.
+                if (result.first.status == STATUS_GROUP_CRYPTO_VERSION_CONFLICT) {
+                    L.w { "[GE] rotate version conflict gid=$groupId, retrying once with fresh base" }
+                    result = attemptRotate()
+                }
+                val response = result.first
+                val newRGroup = result.second
+                ComposeDialogManager.dismissWait()
+
+                if (response.status == 0) {
+                    // Robust version: prefer the server-authoritative keyVersion. When the
+                    // server omits it, fall back to a monotonic-forward (stored+1) instead
+                    // of a flat 1, which would collide with an already-rotated generation.
+                    // setRotatedRGroup writes unconditionally regardless of the gate.
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val newVersion = response.data?.groupCryptoKeyVersion
+                                ?: (groupCryptoRepo.getKeyVersion(groupId) + 1)
+                            groupCryptoRepo.setRotatedRGroup(groupId, newRGroup, newVersion)
+                            groupKeyDistributor.distributeToGroup(groupId)
+                            groupUtil.fetchAndSaveSingleGroupInfo(groupId, true)
+                            L.i { "[GE] Reset crypto key for group $groupId v=$newVersion" }
+                        }
+                        ToastUtil.show(getString(R.string.group_crypto_reset_success))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Server rotated successfully but the local apply failed: the group
+                        // is now rotated server-side while our key state is stranded. Log
+                        // distinctly so the partial state is observable; the generic catch
+                        // below would mask it as a plain net error.
+                        L.e { "[GE] rotate succeeded server-side but local apply failed gid=$groupId: ${e.stackTraceToString()}" }
+                        ToastUtil.showLong(R.string.group_crypto_reset_failed)
+                    }
+                } else {
+                    // Already refetched + retried once above for a CAS conflict; if still
+                    // failing, just surface the error (attemptRotate refetches a fresh base
+                    // on the next manual attempt too).
+                    L.w { "[GE] Reset crypto for group $groupId failed status=${response.status}: ${response.reason}" }
+                    val reason = response.reason
+                    if (!reason.isNullOrEmpty()) {
+                        ToastUtil.showLong(reason)
+                    } else {
+                        ToastUtil.showLong(R.string.group_crypto_reset_failed)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ComposeDialogManager.dismissWait()
+                L.w { "[GroupInfoActivity] resetCrypto error: ${e.stackTraceToString()}" }
+                ToastUtil.showLong(R.string.group_crypto_reset_failed)
+            } finally {
+                resetInProgress = false
+            }
+        }
+    }
+
+    /**
+     * Build the rotate-crypto request: a fresh R_group, new derived keys, the form
+     * name re-encrypted, and all current members re-signed. Modeled on
+     * [buildUpgradeRequest] — the originator never reads the old key, so this also
+     * works when the group is in the all-members-lost state.
+     *
+     * The avatar's plaintext JSON is resolved by the caller ONCE (uploaded a single time)
+     * and passed in, so a CAS retry only re-encrypts it with the new K_group rather than
+     * re-uploading. This method just encrypts it; the rotate contract requires
+     * encryptedAvatar to be present, so the caller always supplies a non-null JSON.
+     *
+     * Must be called from IO thread.
+     * @param plaintextAvatarJson the avatar JSON to encrypt with the fresh K_group.
+     * @return Pair of (request, newRGroup) — newRGroup kept coroutine-local.
+     */
+    private fun buildRotateRequest(
+        group: GroupModel,
+        newName: String,
+        plaintextAvatarJson: String
+    ): Pair<RotateGroupCryptoReq, ByteArray> {
+        val newRGroup = GroupCrypto.generateRGroup()
+        val kGroup = GroupCrypto.deriveKGroup(newRGroup)
+        val skBind = GroupCrypto.deriveSkBind(newRGroup)
+        val pkBind = GroupCrypto.derivePkBind(newRGroup)
+
+        val name = newName.ifBlank { getString(R.string.new_group) }
+        val encryptedName = GroupCrypto.encryptGroupName(kGroup, name)
+
+        val members = group.members ?: emptyList()
+        val encryptedAvatar = GroupCrypto.encryptGroupAvatar(kGroup, plaintextAvatarJson)
+
+        val memberBindings = members.mapNotNull { member ->
+            member.id?.let { uid ->
+                GroupMemberBinding(uid, GroupCrypto.signUid(skBind, uid))
+            }
+        }
+        val pkBindBase64 = GroupCrypto.pkBindToSpkiBase64(pkBind)
+
+        val request = RotateGroupCryptoReq(
+            encryptedName = encryptedName,
+            encryptedAvatar = encryptedAvatar,
+            groupMemberVerifyPublicKey = pkBindBase64,
+            // CAS base: the current version we last saw from the server. un-rotated default 0.
+            // TODO 联调: confirm server's un-rotated groupCryptoKeyVersion value
+            baseGroupCryptoKeyVersion = group.groupCryptoKeyVersion ?: 0,
+            memberBindings = memberBindings
+        )
+        return request to newRGroup
+    }
+
+    /**
+     * Generate a default group letter avatar PNG from the current members and return
+     * its local file path. Mirrors [CreateGroupActivity.generateAvatar]'s mechanism
+     * (LetterItems from member display names, color keyed by member id).
+     * Must be called from IO thread.
+     */
+    private fun generateDefaultAvatarFile(members: List<GroupMemberContactorModel>): String {
+        val letterItems = members
+            .filter { !it.id.isNullOrEmpty() && !it.displayName.isNullOrEmpty() }
+            .take(6)
+            .map { member ->
+                val letter = ContactorUtil.getFirstLetter(member.displayName).first()
+                val color = AvatarUtil.getBgColorResId(member.id!!)
+                LetterItem(letter.uppercaseChar(), color)
+            }
+        val usedColors = letterItems.map { it.color }.toSet()
+        val availableColors = AvatarUtil.colors.filterNot { usedColors.contains(it) }
+        val backgroundColor = availableColors.randomOrNull()
+            ?: getColor(com.difft.android.base.R.color.primary)
+
+        return GroupAvatarUtil.generateAvatarFile(letterItems, backgroundColor)
+            ?: throw java.io.IOException("default_avatar_generate_failed")
     }
 
     private fun performUpgradeToEncrypted() {

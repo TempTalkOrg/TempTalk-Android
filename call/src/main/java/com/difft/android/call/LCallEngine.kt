@@ -128,11 +128,24 @@ object LCallEngine {
         return hasManualConnectionTypeOverride
     }
 
+    /**
+     * Whether HTTP/3 QUIC may be selected as the signaling transport. When the proxy is
+     * active but advertises no QUIC relay (share-code without `q`), QUIC is forced off
+     * (see [isUseQuicSignal]); selecting it would silently do nothing, so the UI must
+     * refuse the toggle instead of leaving the switch stuck ON.
+     */
+    fun isQuicSelectable(): Boolean = !ProxyConfigProvider.isProxyForCallActiveWithoutQuic
+
     fun isUseQuicSignal(): Boolean {
-        // The self-hosted proxy is a TCP TLS tunnel: QUIC/UDP can't traverse it, so
-        // whenever the proxy is active we force WSS-over-domain regardless of the
-        // user's connection-mode setting (see self-hosted-proxy design §9).
-        if (ProxyConfigProvider.isProxyActive) return false
+        // Self-hosted proxy + QUIC: only allowed when the operator runs a MASQUE-lite
+        // QUIC relay (share-code `q`), which tunnels QUIC signaling over udp/443 (see
+        // design §9.6). Without it the proxy is a TCP-only TLS tunnel that QUIC/UDP
+        // cannot traverse, so we force WSS-over-domain to avoid a dead UDP path.
+        // Single atomic read of the routing state — combining the active and quic
+        // flags as two separate loads could straddle a config change. Gated on the
+        // CALL plane: only force WSS when the proxy actually routes calls
+        // ("Protect IP address in calls" ON) but advertises no QUIC relay.
+        if (ProxyConfigProvider.isProxyForCallActiveWithoutQuic) return false
         return _connectionType.value == CONNECTION_TYPE.HTTP3_QUIC
     }
 

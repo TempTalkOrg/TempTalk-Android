@@ -124,6 +124,9 @@ class MessageActionHelper(
         /** PRD v1.0 §5.3 combined-forward mode. Default UNKNOWN; pass SUB_COMBINED_FORWARD when
          *  forwarding from inside a CF detail view (caller decides). */
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+        /** PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded message belongs to someone else
+         *  (real author). Default true keeps legacy callers tracing. */
+        carriesForeignContent: Boolean = true,
     ) {
         val utils = selectChatsUtils ?: run {
             L.w { "forwardMessage called but selectChatsUtils is null" }
@@ -143,6 +146,7 @@ class MessageActionHelper(
             sourceConversation = sourceConversation,
             sourceAuthorIds = sourceAuthorIdsOverride ?: listOf(data.authorId),
             combinedForwardMode = combinedForwardMode,
+            carriesForeignContent = carriesForeignContent,
         )
     }
 }

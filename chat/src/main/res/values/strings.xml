@@ -69,6 +69,8 @@
 
     <!-- Chat -->
     <string name="chat_chats">Chats</string>
+    <string name="chat_proxy_status">Proxy status</string>
+    <string name="chat_add_options">New chat</string>
     <string name="chat_message_input_hint">Message</string>
     <string name="chat_message_input_hint_confidential">Confidential Message</string>
     <string name="chat_message_confidential_tips">Swipe left to read, swipe right to turn pages.</string>
@@ -78,7 +80,7 @@
     <string name="chat_message_action_voice2text">Voice To text</string>
     <string name="chat_message_action_voice2text_off">Discard Convert</string>
     <string name="chat_message_action_voice2text_tip_title">Information</string>
-    <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Yelling server</string>
+    <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Quicall server</string>
     <string name="chat_message_action_voice2text_tip_ok">OK</string>
     <string name="chat_message_action_select_multiple">Select Multiple</string>
     <string name="chat_message_action_select_max_limit">Select up to 50 messages</string>
@@ -316,6 +318,7 @@
     <string name="invalid_link">Invalid Link</string>
     <string name="not_supported_link">Not supported link. Please upgrade the client and try again.</string>
     <string name="unsupported_file_type">Unsupported file type</string>
+    <string name="file_unavailable">Unable to read this file. It may have been moved or deleted.</string>
 
     <!-- Forward message -->
     <string name="forwarded_message">Forwarded Message</string>
@@ -351,7 +354,7 @@
     <string name="invite_enter_hint">Enter a 4-digit code or contact ID</string>
     <string name="invite_button_add_friend">Search</string>
     <string name="invite_copy_link">Copy Link</string>
-    <string name="invite_tips">Chat with me on Yelling %s</string>
+    <string name="invite_tips">Chat with me on Quicall %s</string>
     <string name="invite_regenerate_dialog_title">Regenerate Invite Code</string>
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
     <string name="invite_regenerate_dialog_cancel">Cancel</string>
@@ -589,6 +592,14 @@
     <string name="group_encrypted_info_dismiss">OK</string>
     <!-- System message sent to group after upgrade -->
     <string name="group_encryption_hint_message">🔒 Group info has been upgraded to end-to-end encryption</string>
+    <!-- Crypto key reset (rotate) — system message + interim reset dialog -->
+    <string name="group_crypto_reset_hint_message">🔒 Group info encryption key has been reset</string>
+    <string name="group_crypto_reset_title">Reset encryption key</string>
+    <string name="group_crypto_reset_message">After reset, group info will use a new encryption key. Confirm the group photo and name.</string>
+    <string name="group_crypto_reset_confirm">Reset</string>
+    <string name="group_crypto_reset_success">Encryption key reset</string>
+    <string name="group_crypto_reset_failed">Couldn\'t reset. Try again later.</string>
+    <string name="group_crypto_reset_name_hint">Enter a group name</string>
     <!-- Placeholder group name when key unavailable -->
     <string name="group_name_encrypted_placeholder">🔒 Group</string>
     <!-- Toast when user tries to operate without key -->
@@ -615,8 +626,10 @@
         <item quantity="one">\"%1$s\" forwarded a message from %3$s</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s</item>
     </plurals>
-    <!-- Self-only variant: used when all distinct source authors are the current
-         user, so the "from You" suffix would be redundant. -->
+    <!-- Self-only variant: used when all distinct source authors (the OUTER bubble authors) are the
+         current user, so the "from You" suffix would be redundant. PRD v2.0 keeps this — it stays
+         reachable when the outer author is me but inner content is foreign (gating uses inner authors;
+         the source list uses outer authors), so an all-self source list renders the short form. -->
     <plurals name="chat_forward_notice_self_only">
         <item quantity="one">\"%1$s\" forwarded a message</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages</item>

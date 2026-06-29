@@ -67,6 +67,15 @@ object SecurityLib {
         return HookFrameworkDetector.hasSuspiciousStackTrace()
     }
 
+    /**
+     * True when the given stack trace contains a known hook-framework package
+     * (lets ANR-report filtering reuse the same framework list).
+     */
+    @JvmStatic
+    fun checkHookStackTrace(stackTrace: Array<StackTraceElement>): Boolean {
+        return HookFrameworkDetector.containsHookFrame(stackTrace)
+    }
+
     fun terminateAppProcess(delayMillis: Long = 3000L) {
         appScope.launch(Dispatchers.Default) {
             delay(delayMillis)

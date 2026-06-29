@@ -31,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.currentCompositeKeyHash
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -95,6 +96,7 @@ fun VideoRenderer(
     scaleType: ScaleType = ScaleType.Fill,
     viewType: ViewType = ViewType.Texture,
     draggable: Boolean = true,
+    reconnectGeneration: Int = 0,
 ) {
     // Show a black box for preview.
     if (LocalView.current.isInEditMode) {
@@ -112,6 +114,9 @@ fun VideoRenderer(
         if (sourceType == Track.Source.SCREEN_SHARE) ScreenShareVisibility() else ComposeVisibility()
     }
     var boundVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    // 已绑定的"重绑代"。当 reconnectGeneration 变化（重订阅完成）时，即使 track 对象未变，
+    // 也强制对当前 track 重新 removeRenderer+addRenderer，刷新 sink 让新帧恢复。
+    var boundGeneration by remember { mutableIntStateOf(Int.MIN_VALUE) }
     var view by remember { mutableStateOf<Any?>(null) }
 
 
@@ -127,9 +132,9 @@ fun VideoRenderer(
 
     fun cleanupVideoTrack() {
         // 确保在主线程执行，避免线程安全问题
-        view?.let { renderer ->
+        (view as? VideoSink)?.let { sink ->
             try {
-                boundVideoTrack?.removeRenderer(renderer as VideoSink)
+                boundVideoTrack?.removeRenderer(sink)
             } catch (e: Exception) {
                 // 忽略已释放的 renderer 导致的异常
                 L.w { "[VideoRenderer] unbindTrack removeRenderer failed: ${e.stackTraceToString()}" }
@@ -148,9 +153,9 @@ fun VideoRenderer(
         isReleased = true
         
         // 1. 先清理 video track 的 renderer 引用
-        view?.let { renderer ->
+        (view as? VideoSink)?.let { sink ->
             try {
-                boundVideoTrack?.removeRenderer(renderer as VideoSink)
+                boundVideoTrack?.removeRenderer(sink)
             } catch (e: Exception) {
                 // 忽略已释放的 renderer 导致的异常
                 L.w { "[VideoRenderer] cleanupAllResourcesSync removeRenderer failed: ${e.stackTraceToString()}" }
@@ -226,7 +231,7 @@ fun VideoRenderer(
             return
         }
         
-        if (boundVideoTrack == videoTrack) {
+        if (boundVideoTrack == videoTrack && boundGeneration == reconnectGeneration) {
             return
         }
 
@@ -236,11 +241,13 @@ fun VideoRenderer(
                     cleanupAllResourcesSync()
                     return@withContext
                 }
-                if (boundVideoTrack == videoTrack) {
+                if (boundVideoTrack == videoTrack && boundGeneration == reconnectGeneration) {
                     return@withContext
                 }
+                // 重连重绑：先解绑旧 sink（同对象/异对象皆可），再绑到当前 track，刷新帧流。
                 cleanupVideoTrack()
                 boundVideoTrack = videoTrack
+                boundGeneration = reconnectGeneration
                 if (videoTrack != null) {
                     (view as? VideoSink)?.let { sink ->
                         try {
@@ -258,24 +265,23 @@ fun VideoRenderer(
         }
     }
 
+    // view 是本 effect 的 key：首次组合时 AndroidView 的 factory 可能尚未给 view 赋值（仍为 null），
+    // 重连重建 renderer 时该时序更易触发。用安全转换跳过 null，待 factory 设置 view（null→非空）
+    // 后本 effect 会因 key 变化自动重跑并应用 mirror，既不崩溃也不丢镜像设置。
     DisposableEffect(view, mirror) {
         when (viewType) {
-            ViewType.Texture -> (view as TextureViewRenderer).setMirror(mirror)
-            ViewType.Surface -> (view as SurfaceViewRenderer).setMirror(mirror)
-            ViewType.ScreenShare -> (view as ScreenShareSurfaceViewRenderer).setMirror(mirror)
+            ViewType.Texture -> (view as? TextureViewRenderer)?.setMirror(mirror)
+            ViewType.Surface -> (view as? SurfaceViewRenderer)?.setMirror(mirror)
+            ViewType.ScreenShare -> (view as? ScreenShareSurfaceViewRenderer)?.setMirror(mirror)
         }
         onDispose { }
     }
 
-    // And update the DisposableEffect:
-    DisposableEffect(room, videoTrack) {
-        onDispose {
-            // 同步清理所有资源，确保在 Activity 销毁前立即执行
-            // 这是防止内存泄漏的关键：必须在 DisposableEffect 中同步清理
-            cleanupAllResourcesSync()
-        }
-    }
-
+    // 注意：不要以 videoTrack 为 key 做清理。全量重连会用**新的** track 对象替换旧 track，
+    // 若 onDispose 在 track 变化时执行 cleanupAllResourcesSync()（含 release()）会黑屏、丢最后一帧。
+    // track 的 old→new 解绑/重绑统一由 `update` 的 setupVideoIfNeeded 原地完成（removeRenderer →
+    // addRenderer，不 release/clearImage）。真正的 release 只交给下面 currentCompositeKeyHash 的
+    // onDispose（renderer 真正离开 composition：participant 离开 / 通话结束）。
     DisposableEffect(currentCompositeKeyHash.toString()) {
         onDispose {
             // 同步清理所有资源，确保在 Activity 销毁前立即执行

@@ -411,6 +411,12 @@ class GroupUpdater @Inject constructor(
                 notifyContent = context.getString(R.string.group_encryption_hint_message)
             }
 
+            GroupNotifyDetailType.RotateGroupCrypto.value -> {
+                L.i { "[GroupUpdater] Group crypto key rotated, groupID: $groupID" }
+                groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
+                notifyContent = context.getString(R.string.group_crypto_reset_hint_message)
+            }
+
             else -> {
                 L.w { "[GroupUpdater] Unknown groupDetailType: $groupDetailType for group $groupID, version: $groupVersion" }
             }

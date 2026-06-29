@@ -69,9 +69,7 @@ import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlin.collections.listOf
 
 
 @Composable
@@ -88,9 +86,11 @@ fun SingleParticipantCallPage(
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
     val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
-    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
-    val isConnected = callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED
+    // RECONNECTING 与已连接同等对待：重连期保持视频/共享挂载，避免被叫整块被移出树（黑屏）。
+    val isConnected = callStatus == CallStatus.CONNECTED ||
+        callStatus == CallStatus.RECONNECTED ||
+        callStatus == CallStatus.RECONNECTING
     val remoteParticipant = participants.filterIsInstance<RemoteParticipant>().firstOrNull()
     val participantUid = remoteParticipant?.identity?.value ?: conversationId
 
@@ -154,7 +154,6 @@ fun SingleParticipantCallPage(
     if (floatingVisible) {
         OneVOneSelfVideoView(
             viewModel = viewModel,
-            room = room,
             onTap = { isSelfInMain = !isSelfInMain },
         ) {
             if (effectiveIsSelfInMain && participantUid != null) {
@@ -195,7 +194,6 @@ fun SingleParticipantCallPage(
 @Composable
 fun OneVOneSelfVideoView(
     viewModel: LCallViewModel,
-    room: Room,
     onTap: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {

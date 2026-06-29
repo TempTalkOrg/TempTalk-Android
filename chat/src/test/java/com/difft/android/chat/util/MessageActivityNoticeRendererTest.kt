@@ -64,6 +64,9 @@ class MessageActivityNoticeRendererTest {
 
     @Test
     fun `COPY count 1 — self is operator and only author — self-only variant`() {
+        // PRD v2.0: when the source list (OUTER authors) is all-self, drop the redundant "from You".
+        // Reachable e.g. when I copy my own single-forward bubble whose inner is someone else's:
+        // gating (inner author) traces it, but the source list (outer author = me) → short form.
         val result = MessageActivityNoticeRenderer.render(
             operatorId = myId, myId = myId,
             notice = MessageActivityNoticeData(Type.COPY, listOf(myId), 1),

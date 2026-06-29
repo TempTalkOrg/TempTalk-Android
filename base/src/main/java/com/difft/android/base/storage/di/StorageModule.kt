@@ -32,6 +32,7 @@ import com.difft.android.base.storage.schema.UserAuthData
 import com.difft.android.base.storage.schema.UserAuthDataSerializer
 import com.google.crypto.tink.Aead
 import com.google.crypto.tink.KeyTemplates
+import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import dagger.Module
@@ -192,6 +193,6 @@ internal object StorageModule {
             .withMasterKeyUri(keystoreUri)
             .build()
             .keysetHandle
-        return keysetHandle.getPrimitive(Aead::class.java)
+        return keysetHandle.getPrimitive(RegistryConfiguration.get(), Aead::class.java)
     }
 }

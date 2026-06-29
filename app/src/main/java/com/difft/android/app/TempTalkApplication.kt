@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.fragment.app.FragmentActivity
@@ -23,6 +24,7 @@ import com.difft.android.base.storage.user.StorageBoundUserManagerImpl
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
+import org.difft.app.database.DbHealth
 import org.difft.app.database.wcdb
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
@@ -76,7 +78,15 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
 @HiltAndroidApp
-class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")), AppForegroundObserver.Listener {
+class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")), AppForegroundObserver.Listener, androidx.work.Configuration.Provider {
+    // On-demand WorkManager init: WorkManagerInitializer is disabled in the manifest, so this lets
+    // WorkManager self-initialize lazily if a still-merged component (e.g. SystemForegroundService)
+    // calls getInstance(), instead of crashing. Never invoked on the normal startup path.
+    override val workManagerConfiguration: androidx.work.Configuration
+        get() = androidx.work.Configuration.Builder()
+            .setMinimumLoggingLevel(android.util.Log.WARN)
+            .build()
+
     @Inject
     lateinit var userManager: UserManager
 
@@ -118,6 +128,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     @Inject
     lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
 
+    @Inject
+    lateinit var conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>
+
+    @Inject
+    lateinit var processExitProbe: com.difft.android.base.monitor.ProcessExitProbe
+
     // 追踪当前 resumed 的 Activity
     private var currentResumedActivity: WeakReference<FragmentActivity>? = null
 
@@ -136,6 +152,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init log", this::initLog)
             .addBlocking("init Logger", this::initializeLogging)
+            .addBlocking("init tls provider", this::initTlsProvider)
             .addBlocking("init SecurityCheck") {
                 startTracerPidMonitor()
                 checkDebuggerAndHook()
@@ -164,7 +181,14 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             // below can fast-skip a corrupt DB via wcdb.dbCorrupted. Best-effort ordering, NOT a
             // barrier — consumer-side safety (runCatching in ContactRemarkCache.preload, the
             // soft-fail catches in job storage) is what guarantees correctness.
-            .addNonBlocking("probe db health") { wcdb.probeHealthy() }
+            .addNonBlocking("probe db health") {
+                // #971: verify synchronous=NORMAL reached the write handle right after the health
+                // probe — same off-main startup task, only when the probe reports healthy (skips a
+                // known-corrupt DB). Soft-fails internally; never blocks startup.
+                if (wcdb.probeHealthy() == DbHealth.HEALTHY) {
+                    wcdb.verifySynchronousApplied()
+                }
+            }
             .addNonBlocking("sweep stale sending messages", this::sweepStaleSendingMessages)
             .addNonBlocking("begin job loop") { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking("init call engine") { initCallEngine() }
@@ -173,6 +197,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addNonBlocking("init contactor") { ContactorUtil.init() }
             .addNonBlocking("init global configs") { initGlobalConfigs() }
             .addNonBlocking("init coordinator") { coordinator.get().initialize() }
+            // Already on Dispatchers.IO per AppStartup; single runBlocking bridge, no re-dispatch.
+            .addNonBlocking("probe process exit reasons") {
+                @Suppress("BanRunBlockingOutsideTests")
+                runBlocking { processExitProbe.probe() }
+            }
             .execute()
 
         L.i { "[AppStartup] application onCreate() took " + (System.currentTimeMillis() - AppStartup.getApplicationStartTime()) + " ms" }
@@ -279,6 +308,46 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         LogHelper.init(this)
     }
 
+    /**
+     * On Android 10 / API 29 and below, the platform (APEX) Conscrypt creates
+     * raw-fd TLS sockets (`*FileDescriptorSocket`). Layered over the self-hosted
+     * proxy's outer TLS tunnel (TLS-in-TLS), they write the inner ClientHello on
+     * the underlying RAW fd, bypassing the outer encryption — the proxy resets it
+     * ("Broken pipe"). API 30+ already defaults to the stream-based engine socket.
+     *
+     * Registering the bundled Conscrypt as the top JSSE provider and enabling
+     * engine sockets by default makes every default-provider TLS consumer (OkHttp,
+     * HttpsURLConnection, and crucially LiveKit's internally-built signaling
+     * SSLSocketFactory, which app code cannot inject) use the stream-based socket,
+     * so the proxy tunnel works. Scoped to API < 30; API 30+ is left untouched.
+     *
+     * Best-effort and fail-safe: if Conscrypt fails to load (e.g. unsupported ABI)
+     * we keep the platform default — proxy on that device simply stays broken,
+     * which is no worse than before this change.
+     */
+    private fun initTlsProvider() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return
+        runCatching {
+            // Build the bundled provider first so a failure (e.g. UnsatisfiedLinkError
+            // on an unsupported ABI) can never leave us having already removed an
+            // existing provider. removeProvider only targets a previously inserted
+            // bundled "Conscrypt"; the platform provider registers as "AndroidOpenSSL".
+            // insertProviderAt returns -1 (no exception) on a name clash, so we verify
+            // the actual slot instead of assuming success.
+            val bundledProvider = org.conscrypt.Conscrypt.newProvider()
+            java.security.Security.removeProvider("Conscrypt")
+            val position = java.security.Security.insertProviderAt(bundledProvider, 1)
+            org.conscrypt.Conscrypt.setUseEngineSocketByDefault(true)
+            if (position == 1) {
+                L.i { "[Proxy][tls] bundled Conscrypt registered as top JSSE provider (API ${Build.VERSION.SDK_INT}), engine-socket default ON" }
+            } else {
+                L.w { "[Proxy][tls] bundled Conscrypt insertProviderAt returned $position (expected 1), API ${Build.VERSION.SDK_INT}" }
+            }
+        }.onFailure {
+            L.w(it) { "[Proxy][tls] failed to register bundled Conscrypt provider: ${it.javaClass.simpleName}: ${it.message}" }
+        }
+    }
+
     private fun initNotification() {
         messageNotificationUtil.get().checkAndCreateNotificationChannels()
     }
@@ -304,6 +373,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 globalConfigsManager.get().onAppStateChanged(isForeground = true)
                 messageArchiveManager.get().onAppStateChanged(isForeground = true)
                 coordinator.get().startPeriodicTest(isForeground = true)
+                // Full conversation-config refetch on foreground (covers background drift); throttled internally.
+                conversationSettingsManager.get().syncConversationSettings()
             }
         }
     }
@@ -583,6 +654,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             } else if (isUCropMissingParametersCrash(throwable)) {
                 L.w { "[CrashFilter] Suppressed UCrop missing parameters crash from abnormal device" }
                 android.os.Process.killProcess(android.os.Process.myPid())
+            } else if (isFinalizerWatchdogTimeout(thread, throwable)) {
+                // Daemon-thread timeout, not a main-thread crash: swallow it. The watchdog thread
+                // dies but the process keeps running, so don't report and don't kill the process.
+                L.w { "[CrashFilter] Suppressed FinalizerWatchdogDaemon timeout: ${throwable.message}" }
             } else {
                 previousHandler?.uncaughtException(thread, throwable)
             }
@@ -615,6 +690,20 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             it.className == "com.yalantis.ucrop.UCropMultipleActivity" &&
                 it.methodName == "initCropFragments"
         }
+    }
+
+    /**
+     * Android's FinalizerWatchdogDaemon throws TimeoutException when a finalize() takes >10s.
+     * Triggered by OEM background-freeze: wall-clock keeps advancing while the frozen process
+     * can't schedule the finalizer thread, so the watchdog misfires on resume. The blamed object
+     * (e.g. WCDB winq Expression, which only releases native memory via finalize() — no close API)
+     * is just the queue head, not the real cause. Normal foreground devices never hit this.
+     * Equivalent to disabling the watchdog, but without hidden-API reflection (blocked on API 28+).
+     */
+    private fun isFinalizerWatchdogTimeout(thread: Thread, throwable: Throwable): Boolean {
+        if (thread.name != "FinalizerWatchdogDaemon") return false
+        if (throwable !is java.util.concurrent.TimeoutException) return false
+        return throwable.message?.contains("finalize() timed out") == true
     }
 
     private fun initCallEngine() {
@@ -678,4 +767,5 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         if (BuildConfig.DEBUG) return
         SecurityLib.startTracerPidMonitor()
     }
+
 }

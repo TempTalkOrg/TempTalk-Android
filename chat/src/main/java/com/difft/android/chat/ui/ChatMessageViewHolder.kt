@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewTreeObserver
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -24,6 +23,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
+import com.difft.android.base.utils.windowWidthPx
 import com.difft.android.base.utils.getLifecycleOwner
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
@@ -36,6 +36,7 @@ import com.difft.android.chat.databinding.ChatItemChatMessageListNotifyBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextMineBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextOthersBinding
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.isAttachmentMessage
@@ -213,10 +214,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
         private val quoteThumbnail: ImageView
             get() = if (isMine) mineBinding!!.quoteThumbnail else othersBinding!!.quoteThumbnail
-
-        // Pending pre-draw listener for quote-zone dynamic width; held so the recycle path can
-        // remove a still-pending listener (H4 — prevents OnPreDrawListener accumulation on rebind).
-        private var quotePreDrawListener: ViewTreeObserver.OnPreDrawListener? = null
 
         // 单条转发消息的信息头（时间+来源）
         private val forwardInfoZone: View
@@ -482,67 +479,26 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 quoteText.text = message.quote?.text
                 quoteZone.setOnClickListener { message.quote?.let { onQuoteClicked(it) } }
 
+                // Cap the wrap_content text column so a long caption ellipsizes instead of pushing
+                // the trailing thumbnail past the bubble's max width. Reserve the thumbnail width
+                // when an attachment preview shows (mirrors iOS measureSize).
+                val bubbleMaxWidth = (containerWidth.takeIf { it > 0 } ?: quoteText.windowWidthPx()) - 70.dp
+                val hasAttachment = message.quote?.attachments?.isNotEmpty() == true
+                // chrome = stripe + margins (+48 for thumbnail and its margin when shown)
+                val textMaxWidth = (bubbleMaxWidth - if (hasAttachment) 75.dp else 27.dp).coerceAtLeast(40.dp)
+                quoteAuthor.maxWidth = textMaxWidth
+                quoteText.maxWidth = textMaxWidth
+
                 bindQuoteThumbnail(quoteThumbnail, message.quote!!, forWhat)
-                setupQuoteZoneDynamicWidth(contentContainer, quoteZone, quoteText, quoteThumbnail)
             } else {
                 quoteZone.visibility = View.GONE
                 clearQuoteThumbnail()
             }
         }
 
-        /**
-         * Sets the quote-zone dynamic width via a self-removing pre-draw listener (H4).
-         * Resizes the quote zone to right-align the thumbnail; for text-only quotes the resize is
-         * visually inert (the zone has no background), so it runs unconditionally.
-         */
-        private fun setupQuoteZoneDynamicWidth(
-            contentContainer: View,
-            quoteZone: View,
-            quoteText: View,
-            quoteThumbnail: View? = null,
-        ) {
-            // H4: drop any listener left over from a prior bind on this recycled holder before adding a new one.
-            quotePreDrawListener?.let { contentContainer.viewTreeObserver.removeOnPreDrawListener(it) }
-            val vto = contentContainer.viewTreeObserver
-            var preDrawCount = 0
-            val listener = object : ViewTreeObserver.OnPreDrawListener {
-                override fun onPreDraw(): Boolean {
-                    preDrawCount++
-                    val thumbnailWidth = quoteThumbnail
-                        ?.takeIf { it.visibility == View.VISIBLE }
-                        ?.let { it.width + 8.dp } ?: 0
-                    val frameWidth = contentContainer.width
-                    if (frameWidth > 0 && quoteText.width > 0) {
-                        computeQuoteZoneWidth(
-                            frameWidth, quoteText.width, thumbnailWidth, quoteThumbnail?.isVisible == true
-                        )?.let {
-                            quoteZone.layoutParams.width = it
-                            quoteZone.requestLayout()
-                        }
-                        contentContainer.viewTreeObserver.removeOnPreDrawListener(this) // H4: self-remove after the pass
-                        quotePreDrawListener = null
-                    } else if (preDrawCount >= MAX_PRE_DRAW) {
-                        contentContainer.viewTreeObserver.removeOnPreDrawListener(this) // H4: bounded fallback removal
-                        quotePreDrawListener = null
-                    }
-                    return true
-                }
-            }
-            quotePreDrawListener = listener
-            vto.addOnPreDrawListener(listener)
-        }
-
-        /**
-         * Recycle entry point: clears the thumbnail ImageView (delegates to the top-level fn) and
-         * removes any still-pending pre-draw listener so a recycled-before-draw holder leaves none
-         * registered on the shared contentContainer (H4).
-         */
+        /** Recycle entry point: clears the thumbnail ImageView (delegates to the top-level fn). */
         fun clearQuoteThumbnail() {
             clearQuoteThumbnail(quoteThumbnail)
-            quotePreDrawListener?.let {
-                contentContainer.viewTreeObserver.removeOnPreDrawListener(it)
-                quotePreDrawListener = null
-            }
         }
 
         private fun bindForwardView(message: TextChatMessage, contactorCache: MessageContactsCacheUtil, shouldSaveToPhotos: Boolean) {
@@ -1017,13 +973,20 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         textView.setOnLongClickListener {
             Util.copyToClipboard(textView.context, content)
             val conv = sourceMessage.forWhat
-            if (conv != null && sourceMessage.authorId.isNotEmpty()) {
+            // PRD v2.0 §改动2: derived text (translate / STT) is real content; trace only if it
+            // belongs to someone else, judged by the ORIGINAL author (single-forward → inner author),
+            // consistent with the main copy paths.
+            val myId = globalServices.myId
+            if (conv != null && sourceMessage.authorId.isNotEmpty() &&
+                NoticeAggregator.copyCarriesForeignContent(listOf(sourceMessage), myId)
+            ) {
                 // PRD §5.1: derived-content copy (translate / STT) is NOT visible inside CF detail
                 // per spec → mode is always UNKNOWN. Pass explicitly to keep reviewer awareness.
                 ApplicationDependencies.getActivityNoticeDispatcher()
                     .dispatchCopyNotice(
                         sourceConversation = conv,
                         sourceAuthorIds = listOf(sourceMessage.authorId),
+                        myId = myId,
                         messageCount = 1,
                         combinedForwardMode = CombinedForwardMode.UNKNOWN,
                     )
@@ -1104,9 +1067,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 // capture neither `this` nor any ViewHolder field. The Message class exposes only the thin
 // `quoteThumbnail` accessor + a `clearQuoteThumbnail()` recycle entry that delegates here.
 // ============================================================================
-
-/** Upper bound on pre-draw passes before [setupQuoteZoneDynamicWidth]'s listener force-removes itself. */
-private const val MAX_PRE_DRAW = 3
 
 /**
  * Monotonic per-bind recycle token source. A per-bind unique token (instead of `quote.id`, the
@@ -1240,14 +1200,4 @@ internal fun clearQuoteThumbnail(imageView: ImageView) {
     if (imageView.isHostActivityAlive()) Glide.with(imageView).clear(imageView)
     imageView.setImageDrawable(null)
     imageView.visibility = View.GONE
-}
-
-/**
- * Pure arithmetic slice of [ChatMessageViewHolder.Message.setupQuoteZoneDynamicWidth] (test anchor L14).
- * Returns the target quote-zone width (`frameW - 16dp`) when the frame is wider than its content
- * (`textW + thumbW`, the +8dp margin already folded into `thumbW`), else `null` (leave unchanged).
- */
-internal fun computeQuoteZoneWidth(frameW: Int, textW: Int, thumbW: Int, thumbVisible: Boolean): Int? {
-    val contentWidth = textW + if (thumbVisible) thumbW else 0
-    return if (frameW > contentWidth) frameW - 16.dp else null
 }

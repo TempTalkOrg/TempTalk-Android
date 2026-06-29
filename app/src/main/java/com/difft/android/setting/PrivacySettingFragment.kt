@@ -11,7 +11,6 @@ import com.difft.android.R
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivityPrivacySettingBinding
@@ -82,9 +81,7 @@ class PrivacySettingFragment : Fragment() {
             ScreenLockSettingActivity.startActivity(requireActivity())
         }
 
-        // Proxy entry is only available in insider builds
-        binding.llUseProxy.visibility =
-            if (globalServices.environmentHelper.isInsiderChannel()) View.VISIBLE else View.GONE
+        binding.llUseProxy.visibility = View.VISIBLE
         binding.clUseProxy.setOnClickListener {
             ProxySettingsActivity.startActivity(requireActivity())
         }

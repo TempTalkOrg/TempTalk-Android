@@ -12,6 +12,7 @@ import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobmanager.impl.NetworkConstraint
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
+import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import org.whispersystems.signalservice.internal.push.SyncMessageKt
 import org.whispersystems.signalservice.internal.push.receiptMessage
@@ -94,11 +95,17 @@ class PushReadReceiptSendJob @AssistedInject constructor(
                 sendReceiptToSender,
                 sendSyncToSelf
             )
+        } catch (e: NoValidRecipientKeysException) {
+            // issue #970 ②: invalid group / account deregistered → permanent. Intentionally swallowed
+            // so the job leaves the queue without retrying; a read receipt needs no failure surface.
+            // Logged at W (apart from the generic E) so production can confirm "stopped permanently".
+            L.w { "[Message][PushReadReceiptSendJob] permanent failure, dropping job -> target=$recipientId, RetryCount: $runAttempt" }
         } catch (e: Exception) {
+            // Everything else keeps its normal path: rethrow so BaseJob maps it via onShouldRetry
+            // (IOException → retry; otherwise → Result.failure + onFailure). This also avoids
+            // swallowing CancellationException / ServerRejectedException as a silent success.
             L.e { "[Message][PushReadReceiptSendJob] send read receipt message exception -> ${e.stackTraceToString()}" }
-            if (onShouldRetry(e)) {
-                throw e
-            }
+            throw e
         }
     }
 

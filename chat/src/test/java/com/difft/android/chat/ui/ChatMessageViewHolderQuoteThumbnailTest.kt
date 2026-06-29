@@ -8,7 +8,6 @@ import androidx.fragment.app.FragmentActivity
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextMineBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextOthersBinding
-import com.difft.android.base.utils.dp
 import com.difft.android.chat.messages.TestScopeApplication
 import com.difft.android.chat.util.isHostActivityAlive
 import difft.android.messageserialization.For
@@ -36,8 +35,8 @@ import org.robolectric.annotation.Config
  *
  * **Screenshot tier downgraded to view-state assertions (documented, per [com.difft.android.chat.contacts.ContactItemSubtitleTest]
  * precedent):** `:chat` has NO View/XML Roborazzi harness — the only screenshot infra is Compose-based.
- * These tests invoke the REAL production top-level functions (`bindQuoteThumbnail`, `clearQuoteThumbnail`,
- * `computeQuoteZoneWidth`) against the REAL inflated list-item layouts and assert on the resulting
+ * These tests invoke the REAL production top-level functions (`bindQuoteThumbnail`, `clearQuoteThumbnail`)
+ * against the REAL inflated list-item layouts and assert on the resulting
  * `quoteThumbnail` view state (visibility / ScaleType / drawable resource via `shadowOf`). Visual parity
  * vs difft #5127 is verified by code review (no pixel baseline).
  *
@@ -379,41 +378,7 @@ class ChatMessageViewHolderQuoteThumbnailTest {
         assertEquals(View.GONE, iv.visibility)
     }
 
-    // ---- L14: computeQuoteZoneWidth pure arithmetic --------------------------------------
-
-    @Test
-    fun `L14 computeQuoteZoneWidth returns frame minus 16dp when wider than content`() {
-        // frame wider than text+thumb (thumb visible) → resize to frame - 16dp.
-        val frame = 1000
-        val result = computeQuoteZoneWidth(frameW = frame, textW = 300, thumbW = 100, thumbVisible = true)
-        assertEquals(frame - 16.dp, result)
-    }
-
-    @Test
-    fun `L14 computeQuoteZoneWidth returns null when content as wide as frame`() {
-        // text+thumb >= frame → leave unchanged (null).
-        val result = computeQuoteZoneWidth(frameW = 300, textW = 300, thumbW = 100, thumbVisible = true)
-        assertNull(result)
-    }
-
-    @Test
-    fun `L14 computeQuoteZoneWidth ignores thumb width when not visible`() {
-        // thumbVisible=false → only textW counts; frame(350) > text(300) → resize.
-        val result = computeQuoteZoneWidth(frameW = 350, textW = 300, thumbW = 1000, thumbVisible = false)
-        assertEquals(350 - 16.dp, result)
-    }
-
-    // ---- L15: OnPreDrawListener does not accumulate across rebinds (H4) ------------------
-    // setupQuoteZoneDynamicWidth is a private Message-instance method whose listener self-removes;
-    // direct invocation requires a fully-constructed Message ViewHolder (ContentBinder + callbacks).
-    // The self-removal contract is verified at the arithmetic boundary (L14) plus the recycle-path
-    // removal in the Message class. A full ViewHolder-driven listener-count assertion needs
-    // instrumentation (real layout pass) and is @Ignore-d here.
-
-    @Test
-    @Ignore("Needs a fully-wired Message ViewHolder + real layout pass; verify via instrumentation.")
-    fun `L15 pre-draw listener does not accumulate across N rebinds`() {
-        // Inflate ViewHolder, bind a quote, drive a measure/layout pass, rebind N times;
-        // assert contentContainer.viewTreeObserver has no accumulated OnPreDrawListener.
-    }
+    // ---- L14: removed — quote-zone sizing is now standard wrap_content + maxWidth ----------
+    // The former weight(0dp) + OnPreDrawListener remeasure hack (computeQuoteZoneWidth /
+    // setupQuoteZoneDynamicWidth) is gone; sizing is plain layout now, verified on-device.
 }

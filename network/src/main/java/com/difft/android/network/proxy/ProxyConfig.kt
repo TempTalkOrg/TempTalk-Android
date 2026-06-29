@@ -42,6 +42,14 @@ data class ProxyConfig(
      * self-hosted share code, never hardcoded into the APK.
      */
     val turnSecret: String? = null,
+    /**
+     * Whether this proxy operator runs a MASQUE-lite QUIC relay (udp/443) so that
+     * QUIC/HTTP-3 call signaling can also be tunneled (share-code field `q`, see
+     * design §9.6). When false (default, and for all legacy proxies), proxy mode
+     * forces WSS-over-domain for signaling; QUIC stays disabled to avoid a dead
+     * UDP path. The outer QUIC hop is SPKI-pinned to the same [spkiPinBase64].
+     */
+    val quicEnabled: Boolean = false,
 ) {
     /**
      * Non-empty decoy SNI for the OUTER handshake.
