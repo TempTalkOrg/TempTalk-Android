@@ -2,8 +2,8 @@ package com.difft.android.app.startup
 
 import android.app.Application
 import android.content.Context
-import androidx.core.content.edit
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.dependencies.ApplicationDependencyProvider
 import dagger.hilt.android.EntryPointAccessors
 
@@ -15,8 +15,7 @@ import dagger.hilt.android.EntryPointAccessors
  *
  * Two operations are performed here, both part of the SQLCipher-removal effort:
  * - [cleanupLegacySqlCipherArtifacts] — deletes the two legacy DB files
- *   (`signal-key-value.db` from PR 1, `signal-jobmanager.db` from PR 2) and
- *   the SharedPreferences SQLCipher secret keys.
+ *   (`signal-key-value.db` from PR 1, `signal-jobmanager.db` from PR 2).
  * - [sweepStaleSendingMessages] — flips orphaned `message.sendType == Sending`
  *   rows to `SentFailed` so the UI surfaces the retry button.
  *
@@ -25,15 +24,13 @@ import dagger.hilt.android.EntryPointAccessors
  */
 
 /**
- * Deletes the two legacy SQLCipher database files and removes the
- * SharedPreferences SQLCipher secret keys that are no longer referenced after
- * PR 1 + PR 2 land.
+ * Deletes the two legacy SQLCipher database files that are no longer referenced
+ * after PR 1 + PR 2 land.
  *
  * No idempotency flag — `Context.deleteDatabase()` returns `false` on a
- * non-existent file with no I/O cost beyond an inode stat (sub-millisecond),
- * and `SharedPreferences.edit { remove(absentKey) }` is a no-op against
- * already-empty state. Running on every cold start is cheaper than maintaining
- * a one-shot flag in `UserData`.
+ * non-existent file with no I/O cost beyond an inode stat (sub-millisecond).
+ * Running on every cold start is cheaper than maintaining a one-shot flag in
+ * `UserData`.
  *
  * Logging:
  * - `L.i` only when at least one file was actually present and deleted (signals
@@ -51,15 +48,6 @@ fun cleanupLegacySqlCipherArtifacts(ctx: Context) {
                     "signal-jobmanager.db=$jobDbDeleted"
             }
         }
-        // Remove SQLCipher secret keys (set by the deleted DatabaseSecretProvider).
-        // Default-SP path matches `TextSecurePreferences.java:97`
-        // (`PreferenceManager.getDefaultSharedPreferences`); inlined here so `:app`
-        // does not need the `androidx.preference` dependency.
-        ctx.getSharedPreferences("${ctx.packageName}_preferences", Context.MODE_PRIVATE)
-            .edit {
-                remove("pref_database_encrypted_secret")
-                remove("pref_database_unencrypted_secret")
-            }
     } catch (e: Exception) {
         // Non-fatal: worst case the old DB stays on disk until user reinstalls.
         // Don't crash startup over cleanup.
@@ -94,4 +82,18 @@ fun sweepStaleSendingMessages(app: Application) {
         .fromApplication(app, ApplicationDependencyProvider.DepsEntryPoint::class.java)
         .wcdbJobStorage()
     wcdbJobStorage.sweepStaleSendingMessages()
+}
+
+/**
+ * Cold-start fallback sweep for the plaintext image temps PictureSelector's pick → crop → compress
+ * pipeline leaves behind: UCrop output in `files/Pictures/CROP_*.jpg` and Luban compression output
+ * in `cache/luban_disk_cache/`. Avatar flows already delete their own crop output the moment picking
+ * finishes ([AvatarPickTempCleaner.deleteCropTemp]); this sweep clears the compressed copies (only
+ * removable once the flow is done) plus any residue left by a crash mid-flow or an older build.
+ *
+ * Called from `AppStartup.addNonBlocking`, which dispatches on `Dispatchers.IO`. Non-fatal and
+ * self-guarded — leftover files cost only a few KB and never affect correctness.
+ */
+fun sweepAvatarCropTemp(ctx: Context) {
+    AvatarPickTempCleaner.sweepPickTempDirs(ctx)
 }

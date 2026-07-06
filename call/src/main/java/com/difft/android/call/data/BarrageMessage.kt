@@ -42,8 +42,3 @@ data class TextBubbleMessage(
     val durationMillis: Long, // 展示持续时间
     val id: Long = System.currentTimeMillis() // 唯一标识
 )
-
-enum class BubbleAnimationState {
-    Start,
-    End
-}

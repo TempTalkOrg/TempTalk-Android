@@ -5,23 +5,23 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.net.Uri
+import androidx.core.net.toUri
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.R
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.util.FlashLightBlinker
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -32,10 +32,10 @@ import javax.inject.Singleton
 class CriticalAlertManager @Inject constructor(
     @param:ApplicationContext
     private val context: Context,
-    private val gson: Gson,
     private val criticalAlertStateManager: CriticalAlertStateManager,
     private val activityProvider: ActivityProvider,
     private val inComingCallStateManager: InComingCallStateManager,
+    private val userManager: UserManager,
     ) {
     // JVM 锁替代协程 Mutex，使 stop 操作可同步调用而无需 launch 协程。
     // 严格只用于状态变更（微秒级），永不在持锁状态下执行 Ringtone 的 IPC。
@@ -76,18 +76,19 @@ class CriticalAlertManager @Inject constructor(
         }
     }
     companion object {
-        // Critical Alert 持久化存储相关常量
-        private const val SP_KEY_CRITICAL_ALERT_INFOS = "SP_KEY_CRITICAL_ALERT_INFOS"
         private const val CRITICAL_ALERT_RETENTION_DAYS = 7L // 7天清理一次
     }
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     /**
      * Critical Alert 通知信息数据类
      * 存储每个会话的通知ID列表和最后更新时间戳
      */
+    @Serializable
     data class CriticalAlertInfo(
         val notificationIds: List<Int>,
-        val timestamp: Long // 最后更新时间，用于判断是否过期
+        val timestamp: Long
     )
 
 
@@ -101,35 +102,34 @@ class CriticalAlertManager @Inject constructor(
     }
 
     /**
-     * 从 SharedPrefsUtil 读取 Critical Alert 通知信息
+     * 从 UserManager 内存快照读取 Critical Alert 通知信息
      * @return Map<hashCode, CriticalAlertInfo>
      */
     @Synchronized
     private fun loadCriticalAlertInfos(): MutableMap<String, CriticalAlertInfo> {
         return try {
-            val json = SharedPrefsUtil.getString(SP_KEY_CRITICAL_ALERT_INFOS)
-            if (json.isNullOrEmpty()) {
+            val raw = userManager.getUserData()?.criticalAlertInfos
+            if (raw.isNullOrEmpty()) {
                 mutableMapOf()
             } else {
-                val type = object : TypeToken<Map<String, CriticalAlertInfo>>() {}.type
-                gson.fromJson<Map<String, CriticalAlertInfo>>(json, type)?.toMutableMap() ?: mutableMapOf()
+                json.decodeFromString<Map<String, CriticalAlertInfo>>(raw).toMutableMap()
             }
         } catch (e: Exception) {
-            L.e { "[Call] CriticalAlertManager Failed to load critical alert infos: ${e.message}" }
+            L.e { "[Call] CriticalAlertManager Failed to load critical alert infos: ${e.stackTraceToString()}" }
             mutableMapOf()
         }
     }
 
     /**
-     * 保存 Critical Alert 通知信息到 SharedPrefsUtil
+     * 保存 Critical Alert 通知信息到 UserManager (与 [loadCriticalAlertInfos] 配对)。
      */
     @Synchronized
     private fun saveCriticalAlertInfos(infos: Map<String, CriticalAlertInfo>) {
         try {
-            val json = gson.toJson(infos)
-            SharedPrefsUtil.putString(SP_KEY_CRITICAL_ALERT_INFOS, json)
+            val encoded = json.encodeToString(infos)
+            userManager.update { criticalAlertInfos = encoded }
         } catch (e: Exception) {
-            L.e { "[Call] CriticalAlertManager Failed to save critical alert infos: ${e.message}" }
+            L.e { "[Call] CriticalAlertManager Failed to save critical alert infos: ${e.stackTraceToString()}" }
         }
     }
 
@@ -260,7 +260,7 @@ class CriticalAlertManager @Inject constructor(
 
             try {
                 val ringtoneUri =
-                    Uri.parse("android.resource://${context.packageName}/${R.raw.critical_alert}")
+                    "android.resource://${context.packageName}/${R.raw.critical_alert}".toUri()
                 val ringtone = RingtoneManager.getRingtone(context, ringtoneUri)?.apply {
                     audioAttributes = AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)

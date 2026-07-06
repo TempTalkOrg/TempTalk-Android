@@ -11,7 +11,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    tools:ignore="InconsistentLayout">
 
     <!-- NavigationRail for large screens -->
     <LinearLayout
@@ -65,7 +66,11 @@
         app:layout_constraintStart_toEndOf="@id/navigation_rail_container"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- List pane: fixed 360dp width (recommended for large screens) -->
+    <!--
+        List pane: initial width 360dp (Material 3 two-pane recommendation).
+        Resized at runtime by IndexActivity.applyListPaneWidth() based on user drag
+        (DualPaneRatioUtil ratio), large-font 50/50 split, or default fallback.
+    -->
     <FrameLayout
         android:id="@+id/list_pane"
         android:layout_width="360dp"
@@ -83,17 +88,8 @@
 
     </FrameLayout>
 
-    <!-- Divider between list and detail panes -->
-    <View
-        android:id="@+id/divider_pane"
-        android:layout_width="0.5dp"
-        android:layout_height="0dp"
-        android:background="@color/line"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@id/list_pane"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Detail pane: fills remaining space -->
+    <!-- Detail pane: directly follows list_pane (no divider in between).
+         The draggable divider overlays the boundary as a separate floating view below. -->
     <FrameLayout
         android:id="@+id/detail_pane"
         android:layout_width="0dp"
@@ -101,7 +97,7 @@
         android:background="@color/bg1"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@id/divider_pane"
+        app:layout_constraintStart_toEndOf="@id/list_pane"
         app:layout_constraintTop_toTopOf="parent">
 
         <!-- Placeholder for detail content -->
@@ -122,7 +118,24 @@
 
     </FrameLayout>
 
-    <!-- Dual-pane layout: list_pane (360dp fixed) + detail_pane (remaining space) -->
+    <!--
+        Draggable divider between list and detail panes — floating overlay.
+        24dp wide visually centered on list_pane's right edge via marginStart="-12dp",
+        so it overlaps 12dp into each pane without consuming layout space.
+        Touches only active in the vertical center band (DraggableDividerView).
+        Declared LAST in XML for highest z-order so touches reach it before the panes.
+        Drag is wired up in IndexActivity.setupDualPaneDivider().
+    -->
+    <com.difft.android.views.DraggableDividerView
+        android:id="@+id/divider_pane"
+        android:layout_width="24dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="-12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/list_pane"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Dual-pane layout: list_pane (runtime-sized) + detail_pane (remaining space) + draggable overlay divider -->
 
     <!-- Hidden views for compatibility with default layout (needed for ViewBinding) -->
     <View

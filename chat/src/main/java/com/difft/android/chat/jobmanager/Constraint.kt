@@ -1,7 +1,6 @@
 package com.difft.android.chat.jobmanager
 
 import android.app.job.JobInfo
-import androidx.annotation.RequiresApi
 
 interface Constraint {
 
@@ -9,7 +8,6 @@ interface Constraint {
 
     fun getFactoryKey(): String
 
-    @RequiresApi(26)
     fun applyToJobInfo(jobInfoBuilder: JobInfo.Builder)
 
     /**

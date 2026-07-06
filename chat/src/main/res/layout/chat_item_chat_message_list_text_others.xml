@@ -103,10 +103,9 @@
                 android:background="@drawable/chat_msg_quote_flag" />
 
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
@@ -129,6 +128,25 @@
                     android:textSize="12sp"
                     tools:text="LV FLV FLV FLV FLV LV FLV FLV FLV FLV LV FLV FLV FLV FLV LV FLV FLV FLV FLV " />
             </LinearLayout>
+
+            <!-- Weighted filler: stays 0 while the row wraps to content (bubble grows to the quote),
+                 and absorbs the slack when ChatMessageContainerView stretches the row, right-aligning
+                 the thumbnail to the bubble edge. -->
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/quoteThumbnail"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:importantForAccessibility="no"
+                android:scaleType="centerCrop"
+                android:visibility="gone"
+                tools:src="@tools:sample/avatars"
+                tools:visibility="visible" />
 
         </LinearLayout>
 
@@ -301,6 +319,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
+            android:importantForAccessibility="no"
             android:minWidth="13dp"
             android:minHeight="13dp"
             android:src="@drawable/chat_message_action_voice2text_server_tip"

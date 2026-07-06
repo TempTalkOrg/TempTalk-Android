@@ -22,13 +22,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
@@ -56,7 +56,7 @@ fun DeNoiseModeSelector(
                 .fillMaxWidth()
                 .height(55.dp)
                 .background(
-                    color = colorResource(id = com.difft.android.base.R.color.gray_600),
+                    color = DifftTheme.colors.backgroundQuaternary,
                     shape = RoundedCornerShape(size = 8.dp)
                 )
                 .clickable { expanded = true }
@@ -71,7 +71,7 @@ fun DeNoiseModeSelector(
                     lineHeight = 24.sp,
                     fontFamily = FontFamily.Default,
                     fontWeight = FontWeight(400),
-                    color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                    color = DifftTheme.colors.textPrimary,
                 )
             )
 
@@ -86,13 +86,13 @@ fun DeNoiseModeSelector(
                         lineHeight = 20.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
-                        color = colorResource(id = com.difft.android.base.R.color.t_secondary_night),
+                        color = DifftTheme.colors.textSecondary,
                     )
                 )
                 Icon(
                     painter = painterResource(id = R.drawable.call_btn_tabler_chevron_right),
                     contentDescription = null,
-                    tint = colorResource(id = com.difft.android.base.R.color.t_secondary_night),
+                    tint = DifftTheme.colors.textSecondary,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -101,15 +101,15 @@ fun DeNoiseModeSelector(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(colorResource(id = com.difft.android.base.R.color.gray_600))
+            modifier = Modifier.background(DifftTheme.colors.backgroundQuaternary)
         ) {
             DropdownMenuItem(
                 text = {
                     Text(
                         text = ResUtils.getString(R.string.call_denoise_mode_standard),
                         color = if (currentMode == AudioModule.RNNOISE)
-                            colorResource(id = com.difft.android.base.R.color.primary)
-                        else colorResource(id = com.difft.android.base.R.color.t_primary_night)
+                            DifftTheme.colors.primary
+                        else DifftTheme.colors.textPrimary
                     )
                 },
                 onClick = {
@@ -122,8 +122,8 @@ fun DeNoiseModeSelector(
                     Text(
                         text = ResUtils.getString(R.string.call_denoise_mode_enhanced),
                         color = if (currentMode == AudioModule.DEEP_FILTER_NET)
-                            colorResource(id = com.difft.android.base.R.color.primary)
-                        else colorResource(id = com.difft.android.base.R.color.t_primary_night)
+                            DifftTheme.colors.primary
+                        else DifftTheme.colors.textPrimary
                     )
                 },
                 onClick = {

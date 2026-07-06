@@ -5,23 +5,18 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.TextUtils
-import android.widget.ProgressBar
-import android.widget.TextView
+import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
 import com.auth0.android.jwt.JWT
 import com.difft.android.app.startup.needsIdentityKeyRelogin
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.LinkDataEntity
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.ValidatorUtil
-import com.difft.android.base.widget.ComposeDialog
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupChatPopupActivity
@@ -29,14 +24,16 @@ import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatPopupActivity
 import com.difft.android.login.LoginActivity
 import com.difft.android.chat.util.NotificationTrampolineActivity
+import com.difft.android.ui.DatabaseRecoveryScreen
 import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.tencent.wcdb.core.Database
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.difft.app.database.DatabaseRecoveryPreferences
-import org.difft.app.database.WCDB.Companion.DATABASE_NAME
+import org.difft.app.database.DatabaseRecoveryState
+import org.difft.app.database.DbHealth
+import org.difft.app.database.WCDB
+import org.difft.app.database.wcdb
 import util.ScreenLockUtil
 import javax.inject.Inject
 
@@ -49,9 +46,27 @@ class MainActivity : BaseActivity() {
     @Inject
     lateinit var logoutManager: LogoutManager
 
-    @Inject
-    lateinit var recoveryPreferences: DatabaseRecoveryPreferences
+    /**
+     * Recovery circuit-breaker. Bounds consecutive recovery attempts so a permanently
+     * unrecoverable DB (dead Keystore, persistently failing delete) terminates in a
+     * logout instead of an infinite recovery loop. Backed by a standalone
+     * SharedPreferences file — independent of the (possibly corrupt) WCDB main DB.
+     */
+    private val recoveryState by lazy { DatabaseRecoveryState(this) }
 
+    /**
+     * Re-entry guard: a second [processIntent] (e.g. from [onNewIntent]) must NOT
+     * launch a second concurrent recovery — two coroutines racing
+     * `retrieve`/`close`/`delete` on the same handle can crash natively.
+     */
+    @Volatile
+    private var recoveryInProgress = false
+
+    /**
+     * Option Y (no splash library): onCreate does NOT call setContent. The window
+     * shows the launch theme's background until the IO integrity probe decides what
+     * to render — keeping the main thread free of any DB call during onCreate.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         processIntent()
@@ -64,7 +79,24 @@ class MainActivity : BaseActivity() {
     }
 
     private fun processIntent() {
+        // Re-entry guard: if recovery is already running, a re-delivered intent must
+        // not start a second recovery coroutine on the same DB handle.
+        if (recoveryInProgress) {
+            L.w { "[MainActivity][DBRecovery] processIntent ignored: recovery in progress" }
+            return
+        }
         lifecycleScope.launch {
+            // 1. DB integrity FIRST — off main thread. A corrupt DB routes to recovery
+            //    before any auth/identity/routing work.
+            if (!checkDatabaseIntegrity()) {
+                showRecoveryUI()
+                return@launch
+            }
+            // Healthy DB → clear any accumulated recovery attempts so a normal launch
+            // never lets the circuit-breaker count drift upward.
+            recoveryState.reset()
+
+            // 2. Healthy DB → existing routing, still off-main for token/identity reads.
             val state = withContext(Dispatchers.IO) {
                 val loggedIn = verifyLocalToken()
                 // Identity-key consistency guard — only meaningful if logged in.
@@ -75,9 +107,7 @@ class MainActivity : BaseActivity() {
                 } else {
                     false
                 }
-                val recovery = if (loggedIn) recoveryPreferences.isRecoveryNeeded() else false
-
-                StartupState(loggedIn, identityMissing, recovery)
+                StartupState(loggedIn, identityMissing)
             }
 
             when {
@@ -85,7 +115,7 @@ class MainActivity : BaseActivity() {
                     startActivity(Intent(this@MainActivity, LoginActivity::class.java))
                     finish()
                 }
-                // Identity-key branch runs BEFORE recovery — recovering WCDB is meaningless
+                // Identity-key branch runs BEFORE routing — recovering WCDB is meaningless
                 // if the identity keys are gone (decrypt would still fail).
                 state.needsIdentityRelogin -> {
                     L.w { "[MainActivity] logged in but identity key missing, forcing passive re-login" }
@@ -93,8 +123,7 @@ class MainActivity : BaseActivity() {
                     logoutManager.doLogoutWithoutRemoveData()
                     // doLogoutWithoutRemoveData() eventually calls Process.killProcess; code below never runs.
                 }
-                state.needsRecovery -> performDatabaseRecovery()
-                // Popup branch runs only after auth + identity-key + recovery checks pass.
+                // Popup branch runs only after integrity + auth + identity-key checks pass.
                 // EXTRA_OPEN_POPUP is set by NotificationTrampolineActivity but MainActivity is
                 // exported=true, so any installed app can forge it (issue #758). Auth is gated
                 // above; tryOpenPopupChat re-validates id format. Falls back to deeplink path
@@ -115,17 +144,16 @@ class MainActivity : BaseActivity() {
     private data class StartupState(
         val isLoggedIn: Boolean,
         val needsIdentityRelogin: Boolean,
-        val needsRecovery: Boolean,
     )
 
     private fun verifyLocalToken(): Boolean {
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (userManager.getUserData()?.baseAuth ?: "")
         if (TextUtils.isEmpty(basicAuth)) {
             return false
         }
 
         val account = userManager.getUserData()?.account
-        val token = SecureSharedPrefsUtil.getToken()
+        val token = (userManager.getUserData()?.microToken ?: "")
 
         // Inconsistent state: basicAuth present but account/token missing (partial logout,
         // migration edge). Treat as unauthenticated — this is a security gate (issue #758).
@@ -202,65 +230,157 @@ class MainActivity : BaseActivity() {
     }
 
     /**
-     * Perform database recovery.
+     * Probe DB integrity off the main thread. Delegates to [wcdb.probeHealthy] (the
+     * single owner of the PRAGMA probe + all catch logic; it also sets `wcdb.dbCorrupted`).
      */
-    private suspend fun performDatabaseRecovery() {
-        var messageDialog: ComposeDialog? = null
-        var progressBar: ProgressBar? = null
-        var messageText: TextView? = null
+    private suspend fun checkDatabaseIntegrity(): Boolean = withContext(Dispatchers.IO) {
+        // A brand-new install or a logged-out user has no DB file. Treat absence as
+        // HEALTHY: probing would force-create a fresh (empty) encrypted DB and, on a
+        // broken Keystore, would trap an already-logged-out user on the recovery screen.
+        // The normal login/identity/routing flow handles the no-DB case correctly.
+        if (!getDatabasePath(WCDB.DATABASE_NAME).exists()) {
+            L.i { "[MainActivity][DBRecovery] no DB file present, treating as healthy" }
+            return@withContext true
+        }
+        wcdb.probeHealthy() == DbHealth.HEALTHY
+    }
 
-        try {
-            messageDialog = ComposeDialogManager.showMessageDialog(
-                context = this@MainActivity,
-                title = getString(R.string.database_recovery_title),
-                message = "",
-                cancelable = false,
-                showCancel = false,
-                layoutId = R.layout.view_database_recovery_progress,
-                onViewCreated = { view ->
-                    progressBar = view.findViewById<ProgressBar>(R.id.pb_recovery_progress)
-                    messageText = view.findViewById<TextView>(R.id.tv_recovery_message)
-                    progressBar?.progress = 0
-                    messageText?.text = getString(R.string.database_recovery_progress, 0)
-                }
-            )
-
-            withContext(Dispatchers.IO) {
-                val path = getDatabasePath(DATABASE_NAME).absolutePath
-                val database = Database(path)
-
-                database.retrieve { percentage, _ ->
-                    val progress = (percentage * 100).toInt()
-                    val message = getString(R.string.database_recovery_progress, progress)
-
-                    Handler(Looper.getMainLooper()).post {
-                        if (percentage >= 1.0) {
-                            messageDialog?.dismiss()
-                            recoveryPreferences.clearRecoveryFlag()
-                            navigateToIndexActivity()
-                        } else {
-                            progressBar?.progress = progress
-                            messageText?.text = message
-                        }
-                    }
-                    true
-                }
-            }
-        } catch (e: Exception) {
-            L.e { "[MainActivity] Database recovery exception: ${e.stackTraceToString()}" }
-            messageDialog?.dismiss()
-
-            val failureCount = recoveryPreferences.getRecoveryFailureCount()
-
-            if (failureCount >= 3) {
-                ToastUtil.showLong(getString(R.string.database_recovery_failed))
-                logoutManager.doLogout()
-            } else {
-                recoveryPreferences.incrementRecoveryFailureCount()
-                ToastUtil.showLong(getString(R.string.database_recovery_retry_tip, failureCount + 1))
-                navigateToIndexActivity()
+    /**
+     * Render the full-screen recovery UI (Compose) and kick off recovery.
+     */
+    private fun showRecoveryUI() {
+        // Authoritative re-entry guard. showRecoveryUI() always runs on the main thread
+        // (setContent requires it) and is the single funnel into recovery, so this
+        // check-then-set is atomic: two concurrent processIntent() coroutines that both
+        // passed the early `recoveryInProgress` check (set happens after their IO probe)
+        // still serialize here — only the first starts recovery, the second bails out.
+        if (recoveryInProgress) {
+            L.w { "[MainActivity][DBRecovery] showRecoveryUI ignored: recovery already in progress" }
+            return
+        }
+        recoveryInProgress = true
+        L.i { "[MainActivity][DBRecovery] showing recovery UI" }
+        setContent {
+            DifftTheme {
+                DatabaseRecoveryScreen()
             }
         }
+        performRecovery()
+    }
+
+    /**
+     * Try backup-restore first; restart on success (poisoned lazy singletons must be
+     * re-created). On failure, fall through to a destructive reset + resync + restart.
+     *
+     * Circuit-breaker: the attempt count is incremented BEFORE any recovery work. Once
+     * it exceeds [DatabaseRecoveryState.MAX_RECOVERY_ATTEMPTS] the DB is treated as
+     * permanently unrecoverable (dead Keystore / failing storage) and we terminate the
+     * loop with a logout instead of retrying forever.
+     */
+    private fun performRecovery() = lifecycleScope.launch(Dispatchers.IO) {
+        // recoveryInProgress is already set by showRecoveryUI() on the main thread.
+        val attempt = recoveryState.incrementAndGet()
+        if (attempt > DatabaseRecoveryState.MAX_RECOVERY_ATTEMPTS) {
+            L.e { "[MainActivity][DBRecovery] giving up after $attempt attempts, forcing logout" }
+            wcdb.markCorrupted()
+            withContext(Dispatchers.Main) {
+                ToastUtil.showLong(getString(R.string.db_recovery_unrecoverable_message))
+                logoutManager.doLogout()
+            }
+            return@launch
+        }
+
+        L.i { "[MainActivity][DBRecovery] starting recovery attempt=$attempt" }
+        if (tryBackupRecovery()) {
+            withContext(Dispatchers.Main) { restartApp() }
+            return@launch
+        }
+        resetDatabaseAndResync()
+    }
+
+    /**
+     * Attempt WCDB auto-backup recovery on the cipher-configured singleton handle.
+     *
+     * ARCH-CRIT-2: `retrieve()` returning a score > 0 (fraction of data repaired) is the
+     * SOLE success criterion — recovering some data beats wiping everything. The
+     * post-retrieve `SELECT 1` is a diagnostic-only smoke check wrapped in [runCatching]
+     * — a throw there must NOT downgrade a successful restore to "failed" (which would
+     * trigger the destructive wipe and permanently destroy a recoverable backup).
+     */
+    private fun tryBackupRecovery(): Boolean = try {
+        // retrieve() returns a fraction in [0,1]: the percentage of data repaired.
+        // <= 0 means recovery failed; > 0 means we recovered at least some data
+        // (better than wiping everything). REUSES the cipher-configured singleton handle.
+        val score = wcdb.db.retrieve(null)
+        if (score > 0) {
+            runCatching { wcdb.db.execute("SELECT 1") }
+                .onFailure { L.w { "[MainActivity][DBRecovery] post-retrieve smoke check threw (non-fatal, restore kept): ${it.message}" } }
+            L.i { "[MainActivity][DBRecovery] backup recovery ok score=$score" }
+            true
+        } else {
+            L.w { "[MainActivity][DBRecovery] no backup material (score=$score)" }
+            false
+        }
+    } catch (e: Exception) {
+        L.w { "[MainActivity][DBRecovery] backup recovery (retrieve) failed: ${e.message}" }
+        false
+    }
+
+    /**
+     * Delete the corrupt DB and reset the server-resync gates, then restart.
+     *
+     * RACE-2: flip `wcdb.dbCorrupted = true` (via [WCDB.markCorrupted]) BEFORE `close()`
+     * so any straggler background consumer fast-skips the closing handle.
+     *
+     * The three resync gates (`syncedContactsV4` / `syncedGroupAndMembers` /
+     * `directoryVersionForContactors`) live in `app_state` (DataStore), NOT the WCDB main
+     * DB, so wiping the DB does not reset them — we set them explicitly so IndexActivity
+     * re-pulls contacts + groups. NOTE: local message history + already-received media are
+     * permanently lost by the wipe (the server message queue is ephemeral, no backfill).
+     */
+    private suspend fun resetDatabaseAndResync() {
+        wcdb.markCorrupted() // RACE-2: flip flag BEFORE close()
+        // Decouple close from delete: when the Keystore cipher is dead, touching
+        // `wcdb.db` rethrows the cached key exception, so close() can throw. If close
+        // and delete shared a try, that throw would skip the delete and the corrupt
+        // file would never be removed. deleteDatabaseFile() goes through
+        // context.deleteDatabase() and does NOT touch the db handle, so it must run
+        // unconditionally regardless of close()'s outcome.
+        runCatching { wcdb.db.close() }
+            .onFailure { L.w { "[MainActivity][DBRecovery] db close failed (continuing to delete): ${it.message}" } }
+        wcdb.deleteDatabaseFile()
+        try {
+            userManager.update {
+                syncedContactsV4 = false          // force ContactorUtil.fetchAndSaveContactors re-pull
+                syncedGroupAndMembers = false      // force GroupUtil.syncAllGroupAndAllGroupMembers re-pull
+                directoryVersionForContactors = 0  // reset the directory cursor so the version gate can't skip the pull
+            }
+            L.i { "[MainActivity][DBRecovery] reset done; sync flags cleared (contacts/groups/dirVersion)" }
+        } catch (e: Exception) {
+            L.e { "[MainActivity][DBRecovery] reset failed: ${e.stackTraceToString()}" }
+        }
+        withContext(Dispatchers.Main) {
+            ToastUtil.showLong(getString(R.string.db_recovery_resync_message))
+            restartApp()
+        }
+    }
+
+    /**
+     * Restart the process to reinitialize all lazy singletons with fresh DB handles.
+     *
+     * Uses `FLAG_ACTIVITY_NEW_TASK or FLAG_ACTIVITY_CLEAR_TASK` (issue #725 §9.5): on
+     * API ≥ 24 a `startActivity` from some contexts with `CLEAR_TASK` alone throws.
+     */
+    private fun restartApp() {
+        L.i { "[MainActivity][DBRecovery] restarting app" }
+        // getLaunchIntentForPackage may return null; passing null to startActivity throws
+        // NPE and would skip exit(0), leaving a zombie process with poisoned singletons.
+        // Guard the relaunch but ALWAYS kill the process (issue #725 §9.5 semantics).
+        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        intent?.let { launchIntent -> runCatching { startActivity(launchIntent) }.onFailure { e -> L.w { "[MainActivity][DBRecovery] relaunch failed: ${e.message}" } } }
+        Runtime.getRuntime().exit(0)
     }
 
     /**

@@ -3,7 +3,6 @@ package com.luck.picture.lib.dialog;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.text.TextUtils;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -66,14 +65,9 @@ public class AlbumListPopWindow extends PopupWindow {
                 dismiss();
             }
         });
-        getContentView().findViewById(R.id.rootView).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (SdkVersionUtils.isMinM()) {
-                    dismiss();
-                }
-            }
-        });
+        // rootView click-to-dismiss was a pre-M vestige (guarded by SDK_INT < M,
+        // unreachable at minSdk 26). Dismiss is handled by setOutsideTouchable(true)
+        // + the windMask click listener above.
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -119,13 +113,9 @@ public class AlbumListPopWindow extends PopupWindow {
         if (getAlbumList() == null || getAlbumList().size() == 0) {
             return;
         }
-        if (SdkVersionUtils.isN()) {
-            int[] location = new int[2];
-            anchor.getLocationInWindow(location);
-            showAtLocation(anchor, Gravity.NO_GRAVITY, 0, location[1] + anchor.getHeight());
-        } else {
-            super.showAsDropDown(anchor);
-        }
+        // isN() (SDK_INT == N/24) is always false at minSdk 26 — the showAtLocation
+        // workaround branch was dead; always use the standard showAsDropDown.
+        super.showAsDropDown(anchor);
         isDismiss = false;
         if (windowStatusListener != null) {
             windowStatusListener.onShowPopupWindow();

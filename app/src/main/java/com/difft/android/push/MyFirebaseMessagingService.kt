@@ -2,8 +2,7 @@ package com.difft.android.push
 
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
@@ -23,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.difft.android.chat.messages.EnvelopToMessageProcessor
+import com.difft.android.chat.messages.EnvelopeProcessResult
+import com.difft.android.chat.messages.reportPermanentDrop
 import com.difft.android.chat.util.MessageNotificationUtil
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
@@ -40,7 +41,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             L.i { "[fcm] onMessageReceived notification:${remoteMessage.notification?.title} ${remoteMessage.notification?.body} data:${remoteMessage.data.keys.joinToString(",")}" }
             val customContent = remoteMessage.data["custom_content"]
             if (!TextUtils.isEmpty(customContent)) {
-                val pushCustomContent = Gson().fromJson(customContent, PushCustomContent::class.java)
+                val pushCustomContent = entryPoint.gson.fromJson(customContent, PushCustomContent::class.java)
 
                 L.d { "[fcm] onMessageReceived pushCustomContent:${pushCustomContent}" }
                 L.i { "[fcm] onMessageReceived locKey:${pushCustomContent?.locKey}" }
@@ -59,7 +60,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             // 主动拉取和处理消息
             entryPoint.pendingMessageHelper.schedulePendingMessageWork()
         } catch (e: Exception) {
-            L.i { "[fcm] onMessageReceived error - $e , ${remoteMessage.data}" }
+            L.i { "[fcm] onMessageReceived error - $e" }
         }
     }
 
@@ -117,17 +118,43 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
                     val envelopToMessageProcessor = entryPoint.envelopToMessageProcessor
 
-                    val messageResult = serviceEnvelope?.let { envelopToMessageProcessor.process(it, "fcm") }
-                    if (messageResult != null) {
-                        L.i { "[fcm] Processing message success:${messageResult.message.timeStamp} shouldShowNotification:${messageResult.shouldShowNotification}" }
-                        if (messageResult.shouldShowNotification) {
-                            SharedPrefsUtil.getInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM).let {
-                                SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, it + 1)
+                    val processRes = serviceEnvelope?.let { envelopToMessageProcessor.process(it, "fcm") }
+                    when (processRes) {
+                        is EnvelopeProcessResult.Success -> {
+                            val messageResult = processRes.result
+                            if (messageResult != null) {
+                                L.i { "[fcm] Processing message success:${messageResult.message.timeStamp} shouldShowNotification:${messageResult.shouldShowNotification}" }
+                                if (messageResult.shouldShowNotification) {
+                                    // Atomic increment (issue #725 §9.6): UserManager.update serializes
+                                    // the read-modify-write under its writeMutex, so concurrent FCM
+                                    // pushes can't race the way the legacy `getInt`+`putInt` pair did.
+                                    entryPoint.userManager.update { unreadMsgNum += 1 }
+                                    entryPoint.messageNotificationUtil.showNotificationSuspend(baseContext, messageResult.message, messageResult.conversation)
+                                }
+                            } else {
+                                L.w { "[fcm] Processing message success result is null" }
                             }
-                            entryPoint.messageNotificationUtil.showNotificationSuspend(baseContext, messageResult.message, messageResult.conversation)
                         }
-                    } else {
-                        L.w { "[fcm] Processing message result is null" }
+                        is EnvelopeProcessResult.PermanentFailure -> {
+                            reportPermanentDrop(
+                                processRes.reason,
+                                processRes.cause,
+                                serviceEnvelope!!.timestamp,
+                                tag = "fcm",
+                            )
+                        }
+                        is EnvelopeProcessResult.TransientFailure -> {
+                            // FCM is best-effort: don't enqueue here. The same
+                            // envelope arrives via WebSocket / pending-message
+                            // pull, where FailedMessageProcessor owns the retry.
+                            L.w {
+                                "[fcm] Transient failure (not enqueueing; WebSocket path owns retries) " +
+                                    "ts=${serviceEnvelope!!.timestamp}: ${processRes.cause.stackTraceToString()}"
+                            }
+                        }
+                        null -> {
+                            L.w { "[fcm] Processing message result is null (envelope deserialization failed)" }
+                        }
                     }
                 } catch (e: Exception) {
                     L.w { "[fcm] Processing message envelope error: ${e.stackTraceToString()}" }
@@ -136,11 +163,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         } ?: run {
             L.w { "[fcm] Processing message pushCustomContent.msg is null" }
-            handleMessageProcessingError(entryPoint, pushCustomContent)
+            appScope.launch(Dispatchers.IO) {
+                handleMessageProcessingError(entryPoint, pushCustomContent)
+            }
         }
     }
 
-    private fun handleMessageProcessingError(entryPoint: EntryPoint, pushCustomContent: PushCustomContent) {
+    private suspend fun handleMessageProcessingError(entryPoint: EntryPoint, pushCustomContent: PushCustomContent) {
         // 检查某些通知类型不显示通知
         if (pushCustomContent.notifyType == NOTIFY_TYPE_CALL_HANGUP) {
             L.i { "[fcm] notifyType: ${pushCustomContent.notifyType}, skip notification" }
@@ -165,6 +194,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 entryPoint.messageNotificationUtil.showNotificationOfPush(baseContext, target)
                 L.i { "[fcm] Successfully showed fallback notification for target: $target" }
             } ?: L.w { "[fcm] Invalid target type, cannot show notification" }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.e { "[fcm] Failed to show fallback notification: ${e.stackTraceToString()}" }
         }
@@ -180,7 +211,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // If you want to send messages to this application instance or
         // manage this apps subscriptions on the server side, send the
         // FCM registration token to your app server.
-        if (!TextUtils.isEmpty(SecureSharedPrefsUtil.getBasicAuth())) {
+        if (!TextUtils.isEmpty((globalServices.userManager.getUserData()?.baseAuth ?: ""))) {
             sendRegistrationToServer(token)
         }
     }
@@ -198,5 +229,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val envelopToMessageProcessor: EnvelopToMessageProcessor
         val pendingMessageHelper: PendingMessageHelper
         val pushUtil: PushUtil
+        val userManager: UserManager
+        val gson: Gson
     }
 }

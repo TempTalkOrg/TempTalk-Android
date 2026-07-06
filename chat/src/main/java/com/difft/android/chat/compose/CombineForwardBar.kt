@@ -49,7 +49,7 @@ import com.difft.android.chat.R
 fun CombineForwardBar(
     @PreviewParameter(StateSelectMessageModelDataProvider::class) stateData: SelectMessageState,
     onForwardClick: () -> Unit = {},
-    onCombineClick: () -> Unit = {},
+    onCopyClick: () -> Unit = {},
     onSaveClick: () -> Unit = {},
     onRecallClick: () -> Unit = {}
 ) {
@@ -84,7 +84,9 @@ fun CombineForwardBar(
                 .padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            // Forward Icon
+            // Forward Icon — single selection forwards one message; multi-selection
+            // bundles the selected messages into one combined-forward container
+            // (decided in ChatMessageViewModel.onForwardClick by selection count).
             IconWithText(
                 iconPainter = painterResource(R.drawable.ic_chat_pinned_manage_forward),
                 text = stringResource(R.string.chat_message_action_forward),
@@ -93,12 +95,12 @@ fun CombineForwardBar(
                 modifier = Modifier.weight(1f)  // Use weight to distribute space
             )
 
-            // Combine & Forward Icon
+            // Copy Icon — reuses the long-press menu copy icon
             IconWithText(
-                iconPainter = painterResource(R.drawable.chat_message_action_select_multiple),
-                text = stringResource(R.string.chat_message_action_combine_forward),
-                isEnabled = state.selectedMessageIds.size > 1,
-                onClick = onCombineClick,
+                iconPainter = painterResource(R.drawable.chat_message_action_copy),
+                text = stringResource(R.string.chat_message_action_copy),
+                isEnabled = state.selectedMessageIds.isNotEmpty(),
+                onClick = onCopyClick,
                 modifier = Modifier.weight(1f)
             )
 

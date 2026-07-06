@@ -3,6 +3,41 @@ package com.difft.android.websocket.api
 import difft.android.messageserialization.For
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 
+/**
+ * Result of a /keys fetch. The send path uses it to distinguish **permanent** failures
+ * (stop retrying) from **transient** ones (keep retrying, don't kill weak-network sends).
+ * See issue #970 ②.
+ *
+ * Permanent (→ NoValidRecipientKeysException): **only** [EntityInvalid] (group status != 0,
+ * reliable and unambiguous).
+ * Transient (→ IOException): [ServerEmpty], [FetchFailed], [Unresolved].
+ * Success: [Updated].
+ *
+ * Note: [ServerEmpty] is **transient**, not permanent — an empty array is ambiguous (the entity
+ * may be gone, or a valid recipient's keys may not have propagated yet / a transient server
+ * blank), so retry conservatively to avoid dropping messages/group keys (PR #973 code-review).
+ */
+sealed interface PublicKeyUpdateResult {
+    /** Server returned a non-empty key set and it was upserted. */
+    data object Updated : PublicKeyUpdateResult
+
+    /**
+     * Fetch succeeded but the server returned an **empty array** (entity missing / valid group
+     * with 0 members) → **transient** (retryable). Ambiguous: the keys may simply not have
+     * propagated yet, so retry conservatively rather than dropping permanently.
+     */
+    data object ServerEmpty : PublicKeyUpdateResult
+
+    /** The fetch itself failed (network/timeout/body-parse error, no definite answer) → transient, retryable. */
+    data object FetchFailed : PublicKeyUpdateResult
+
+    /** The target group is confirmed invalid (`GroupModel.status != 0`) → permanent. */
+    data object EntityInvalid : PublicKeyUpdateResult
+
+    /** Group info not yet resolved (fetch threw / groupsInProgress concurrency guard skipped → group==null) → transient, retryable. */
+    data object Unresolved : PublicKeyUpdateResult
+}
+
 interface ConversationManager {
 
     // ---- For-keyed: pre-flight + default reads. Facade resolves For → uids internally. ----
@@ -27,6 +62,32 @@ interface ConversationManager {
      * Internally delegates to [updatePublicKeyInfoData] after resolution.
      */
     suspend fun updatePublicKeyInfoData(room: For): Boolean
+
+    /**
+     * The split-signal (null/empty) variant of [updatePublicKeyInfoData]. Used **only** by the
+     * send path ([NewSignalServiceMessageSender.createNewOutgoingPushMessage], its sole
+     * return-value read site) to separate "server confirms no key / group invalid" (permanent)
+     * from "network failure / not yet synced" (transient), stopping the infinite retry of orphan
+     * receipts to invalid groups (issue #970 ②).
+     *
+     * Implemented **independently** of the old Boolean overload (no mutual delegation): the
+     * Boolean overload keeps its original lightweight semantics, so the ~7 call sites that ignore
+     * its return value don't pay for an extra group resolution.
+     */
+    suspend fun updatePublicKeyInfoDataResult(room: For): PublicKeyUpdateResult
+
+    /**
+     * Makes one confirming decision for the "public keys all empty after filtering" ambiguity
+     * (called by [NewSignalServiceMessageSender] when `hasPublicKeyInfoData=true` but filtering
+     * leaves nothing).
+     *
+     * Reuses [updatePublicKeyInfoDataResult] for one confirming fetch (same path for Group and
+     * Account). The caller maps the result: only `EntityInvalid` → permanent; `ServerEmpty`
+     * (ambiguous empty array), `FetchFailed`, `Unresolved`, and `Updated` (re-fetched a key) →
+     * transient (let the job retry / self-heal). The fetch runs once on the exception branch only,
+     * off the hot path, so it does not cause churn.
+     */
+    suspend fun classifyEmptyKeys(room: For): PublicKeyUpdateResult
 
     // ---- uid-keyed: ONLY for retry-branch narrowing where server response gives uid list ----
 

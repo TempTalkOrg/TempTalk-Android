@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import com.difft.android.base.utils.windowWidthPx
 import com.difft.android.chat.R
 
 class ChatMessageContainerView @JvmOverloads constructor(
@@ -30,60 +31,90 @@ class ChatMessageContainerView @JvmOverloads constructor(
         // First measure to get initial sizes
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
 
-        // Time wrapper holds icon + cl_message_time; used for margin adjustments
-        val timeWrapper = findViewById<View>(R.id.ll_time_wrapper) ?: return
-        if (timeWrapper.visibility != VISIBLE) return
+        // Time wrapper holds icon + cl_message_time; used for margin adjustments.
+        // Guarded (not early-return) so the quote trailing-align below always runs.
+        val timeWrapper = findViewById<View>(R.id.ll_time_wrapper)
+        if (timeWrapper != null && timeWrapper.visibility == VISIBLE) {
+            val clMessageTime = findViewById<View>(R.id.cl_message_time)
+            val icon = findViewById<View>(R.id.iv_confidential_icon)
+            var timeViewWidth = if (clMessageTime != null && clMessageTime.isVisible) clMessageTime.measuredWidth else 0
+            // Confidential icon visible: fixed offset covers icon(22) + gap(3) + margin(8) + buffer(7)
+            if (icon != null && icon.isVisible) {
+                timeViewWidth += 40.dp
+            }
 
-        val clMessageTime = findViewById<View>(R.id.cl_message_time)
-        val icon = findViewById<View>(R.id.iv_confidential_icon)
-        var timeViewWidth = if (clMessageTime != null && clMessageTime.visibility == VISIBLE) clMessageTime.measuredWidth else 0
-        // Confidential icon visible: fixed offset covers icon(22) + gap(3) + margin(8) + buffer(7)
-        if (icon != null && icon.visibility == VISIBLE) {
-            timeViewWidth += 40.dp
-        }
+            if (timeViewWidth > 0) {
+                // Calculate the maximum possible width for content
+                val effectiveMaxWidth = calculateEffectiveMaxWidth()
 
-        if (timeViewWidth == 0) return
+                // Determine if we need time view below based on the last visible content view
+                var needsExtraBottomSpace = false
+                var needsRemeasure = false
 
-        // Calculate the maximum possible width for content
-        val effectiveMaxWidth = calculateEffectiveMaxWidth()
+                // Check reactions view if visible
+                val reactionsView = findViewById<View>(R.id.reactions_view)
+                if (reactionsView?.visibility == VISIBLE && reactionsView is FlowLayout) {
+                    needsExtraBottomSpace = shouldPlaceTimeBelowReactions(reactionsView, timeViewWidth, effectiveMaxWidth)
+                    needsRemeasure = adjustReactionsPadding(reactionsView, needsExtraBottomSpace, timeViewWidth)
+                } else {
+                    // Check text view if no reactions
+                    val contentFrame = findViewById<View>(R.id.contentFrame)
+                    if (contentFrame?.visibility == VISIBLE) {
+                        val textView = contentFrame.findViewById<TextView>(R.id.textView)
+                        textView?.let { tv ->
+                            needsExtraBottomSpace = shouldPlaceTimeBelowText(tv, timeViewWidth, effectiveMaxWidth)
+                            needsRemeasure = adjustTextPadding(tv, needsExtraBottomSpace, timeViewWidth)
+                        }
+                    }
+                }
 
-        // Determine if we need time view below based on the last visible content view
-        var needsExtraBottomSpace = false
-        var needsRemeasure = false
+                // Adjust time wrapper margin based on needsExtraBottomSpace
+                val timeParams = timeWrapper.layoutParams as? MarginLayoutParams
+                timeParams?.let { params ->
+                    val newMarginTop = if (needsExtraBottomSpace) 0 else (-26).dp
+                    if (params.topMargin != newMarginTop) {
+                        params.topMargin = newMarginTop
+                        // Don't call setLayoutParams() — params is already the same reference,
+                        // and setLayoutParams() triggers requestLayout() which can cause
+                        // re-entrant layout issues on Android 16.
+                        needsRemeasure = true
+                    }
+                }
 
-        // Check reactions view if visible
-        val reactionsView = findViewById<View>(R.id.reactions_view)
-        if (reactionsView?.visibility == VISIBLE && reactionsView is FlowLayout) {
-            needsExtraBottomSpace = shouldPlaceTimeBelowReactions(reactionsView, timeViewWidth, effectiveMaxWidth)
-            needsRemeasure = adjustReactionsPadding(reactionsView, needsExtraBottomSpace, timeViewWidth)
-        } else {
-            // Check text view if no reactions
-            val contentFrame = findViewById<View>(R.id.contentFrame)
-            if (contentFrame?.visibility == VISIBLE) {
-                val textView = contentFrame.findViewById<TextView>(R.id.textView)
-                textView?.let { tv ->
-                    needsExtraBottomSpace = shouldPlaceTimeBelowText(tv, timeViewWidth, effectiveMaxWidth)
-                    needsRemeasure = adjustTextPadding(tv, needsExtraBottomSpace, timeViewWidth)
+                // Re-measure if we made any changes
+                if (needsRemeasure) {
+                    super.onMeasure(widthMeasureSpec, heightMeasureSpec)
                 }
             }
         }
 
-        // Adjust time wrapper margin based on needsExtraBottomSpace
-        val timeParams = timeWrapper.layoutParams as? MarginLayoutParams
-        timeParams?.let { params ->
-            val newMarginTop = if (needsExtraBottomSpace) 0 else (-26).dp
-            if (params.topMargin != newMarginTop) {
-                params.topMargin = newMarginTop
-                // Don't call setLayoutParams() — params is already the same reference,
-                // and setLayoutParams() triggers requestLayout() which can cause
-                // re-entrant layout issues on Android 16.
-                needsRemeasure = true
-            }
-        }
+        // After all measure passes: stretch the quote row to the bubble's content width so its
+        // trailing weighted spacer right-aligns the thumbnail (matches desktop). The quote row keeps
+        // wrap_content layout params, so its intrinsic width still grew the bubble above; here we only
+        // widen it to the already-decided width (never beyond), so the bubble never grows from this.
+        alignQuoteThumbnailToTrailing()
+    }
 
-        // Re-measure if we made any changes
-        if (needsRemeasure) {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    /**
+     * Right-aligns the quote thumbnail to the bubble's content width. After the bubble width is
+     * settled, the quote row is wrap_content and left-packed; re-measuring it at the full content
+     * width lets its weighted spacer push the thumbnail to the trailing edge. Re-runs on every
+     * measure pass, so an async-loaded thumbnail (reverse-lookup) is handled without stale state:
+     * the load flips the thumbnail GONE->VISIBLE, which itself requests a layout, so the next pass
+     * runs the stretch. Text-only quotes (thumbnail GONE) have nothing to align, so skip the work.
+     */
+    private fun alignQuoteThumbnailToTrailing() {
+        val quoteThumbnail = findViewById<View>(R.id.quoteThumbnail) ?: return
+        if (quoteThumbnail.visibility != VISIBLE) return
+        val quoteZone = findViewById<View>(R.id.quoteZone) ?: return
+        if (quoteZone.visibility != VISIBLE) return
+        val lp = quoteZone.layoutParams as? MarginLayoutParams ?: return
+        val target = measuredWidth - paddingLeft - paddingRight - lp.leftMargin - lp.rightMargin
+        if (target > quoteZone.measuredWidth) {
+            quoteZone.measure(
+                MeasureSpec.makeMeasureSpec(target, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(quoteZone.measuredHeight, MeasureSpec.EXACTLY)
+            )
         }
     }
 
@@ -220,9 +251,11 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 }
             }
 
-            // Use containerWidth if set, otherwise fallback to displayMetrics
-            val displayWidth = resources.displayMetrics.widthPixels
-            val availableWidth = if (containerWidth > 0) containerWidth else displayWidth
+            // Use containerWidth if set, otherwise fallback to current Activity window bounds.
+            // displayMetrics.widthPixels gives the device display, not the current app window —
+            // on foldables in dual-pane / multi-window this overshoots. windowWidthPx() returns
+            // the actual window width (see PR #580 for the same fix pattern).
+            val availableWidth = if (containerWidth > 0) containerWidth else windowWidthPx()
 
             // Get our own margins
             val ourParams = layoutParams as? MarginLayoutParams
@@ -240,7 +273,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
 
         // Fallback calculation if parent info is not available
-        val screenWidth = if (containerWidth > 0) containerWidth else resources.displayMetrics.widthPixels
+        val screenWidth = if (containerWidth > 0) containerWidth else windowWidthPx()
         // Account for typical margins: 40dp on one side + 8-12dp on the other
         val marginsDp = 60
         val marginsPixels = (marginsDp * resources.displayMetrics.density).toInt()

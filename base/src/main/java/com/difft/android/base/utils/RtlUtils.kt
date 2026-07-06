@@ -1,7 +1,7 @@
 package com.difft.android.base.utils
 
-import android.text.TextUtils
 import android.view.View
+import androidx.core.text.layoutDirection
 import java.util.Locale
 
 /**
@@ -14,6 +14,6 @@ import java.util.Locale
 object RtlUtils {
 
     fun isRtl(): Boolean {
-        return TextUtils.getLayoutDirectionFromLocale(Locale.getDefault()) == View.LAYOUT_DIRECTION_RTL
+        return Locale.getDefault().layoutDirection == View.LAYOUT_DIRECTION_RTL
     }
 }

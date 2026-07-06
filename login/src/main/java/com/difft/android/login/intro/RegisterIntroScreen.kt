@@ -71,7 +71,7 @@ fun RegisterIntroScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DifftTheme.colors.backgroundSetting)
+            .background(DifftTheme.colors.bg)
             .systemBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {

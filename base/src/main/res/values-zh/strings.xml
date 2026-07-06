@@ -3,6 +3,7 @@
     <string name="confidential_preview_tip">查看后，消息将消失</string>
     <string name="chat_message_attachment">[附件]</string>
     <string name="chat_message_image">[图片]</string>
+    <string name="chat_message_gif">[Gif]</string>
     <string name="chat_message_video">[视频]</string>
     <string name="chat_message_audio">[语音]</string>
     <string name="chat_message_contact_card">[个人名片]</string>
@@ -28,4 +29,10 @@
     <string name="DateUtils_millis_short">毫秒</string>
 
     <string name="widget_chat_heder_loading">加载中…</string>
+
+    <!-- Network certificate validation failure (possible man-in-the-middle attack) warning -->
+    <string name="net_risk_warning_title">网络风险警告</string>
+    <string name="net_risk_warning_message">应用可能正遭受中间人攻击！</string>
+    <string name="net_risk_warning_ignore">忽略</string>
+    <string name="net_risk_warning_quit">退出</string>
 </resources>

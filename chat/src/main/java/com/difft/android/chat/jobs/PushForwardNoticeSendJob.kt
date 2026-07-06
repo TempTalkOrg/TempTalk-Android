@@ -93,6 +93,7 @@ class PushForwardNoticeSendJob @AssistedInject constructor(
             scene = noticeData.scene.toProtoEnum()
             sourceAuthorIds.addAll(noticeData.sourceAuthorIds)
             messageCount = noticeData.messageCount
+            combinedForwardMode = noticeData.combinedForwardMode.toProtoEnum()
             conversation = conversationId {
                 when (val src = target) {
                     is For.Group -> groupId = ByteString.copyFrom(src.id.transformGroupIdFromLocalToServer())

@@ -34,7 +34,7 @@ class TestActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 TestScreen(
                     onNavigateBack = { finish() },
                     onCreateGroups = { memberIds, count ->
@@ -59,9 +59,6 @@ class TestActivity : BaseActivity() {
                     },
                     onBackupDatabase = {
                         wcdb.testBackupManually()
-                    },
-                    onSendRecoveryEvent = {
-                        wcdb.testRecoveryEvent()
                     },
                     onDialogTest = {
                         DialogTestActivity.startActivity(this@TestActivity)

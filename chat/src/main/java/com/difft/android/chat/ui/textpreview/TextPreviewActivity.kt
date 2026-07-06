@@ -13,13 +13,16 @@ import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.R
+import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.databinding.ActivityTextPreviewBinding
 import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.chat.ui.messageaction.TextSelectionManager
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Mention
 import com.difft.android.chat.util.Util
@@ -36,10 +39,26 @@ class TextPreviewActivity : BaseActivity() {
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
 
+    @Inject
+    lateinit var activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
+
     private val binding: ActivityTextPreviewBinding by viewbind()
     private var fullText: String = ""
     private var mentions: List<Mention>? = null
     private var forwardContext: ForwardContext? = null
+
+    // Source-message context for emitting copy/forward notices to the originating conversation.
+    private var sourceAuthorId: String? = null
+    private var sourceConversation: difft.android.messageserialization.For? = null
+
+    // PRD v1.0 §5.3 combined-forward mode of the source message. UNKNOWN for main-conv messages
+    // (Phase 4); Phase 5 will set SUB_COMBINED_FORWARD when launched from a CF detail view.
+    private var sourceCombinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN
+
+    // PRD v2.0 §改动2: whether the source message carries another person's ORIGINAL content (computed
+    // by the launcher via NoticeAggregator). Text preview always copies/forwards REAL text, so the
+    // trigger is by original author — single-forward → its inner author, not the forwarder.
+    private var sourceCarriesForeign: Boolean = false
     
     // Custom text selection
     private var textSelectionManager: TextSelectionManager? = null
@@ -54,6 +73,9 @@ class TextPreviewActivity : BaseActivity() {
     private var touchDownTime = 0L
     private var isLongPressTriggered = false
     private var isDraggingSelection = false
+    // True for the lifetime of a gesture whose ACTION_DOWN landed on the floating close button.
+    // Such gestures bypass all custom selection handling so the button behaves like a normal view.
+    private var touchStartedOnCloseButton = false
     private var selectionAnchor = 0  // Fixed point during drag-to-select
     private val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
     private val touchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop.toFloat() }
@@ -75,8 +97,25 @@ class TextPreviewActivity : BaseActivity() {
         @Suppress("DEPRECATION")
         forwardContext = intent.getSerializableExtra(EXTRA_FORWARD_CONTEXT) as? ForwardContext
 
+        sourceAuthorId = intent.getStringExtra(EXTRA_SOURCE_AUTHOR_ID)
+        val convId = intent.getStringExtra(EXTRA_SOURCE_CONVERSATION_ID)
+        sourceConversation = convId?.let {
+            when (intent.getIntExtra(EXTRA_SOURCE_CONVERSATION_TYPE, 0)) {
+                1 -> difft.android.messageserialization.For.Group(it)
+                else -> difft.android.messageserialization.For.Account(it)
+            }
+        }
+        sourceCarriesForeign = intent.getBooleanExtra(EXTRA_SOURCE_CARRIES_FOREIGN, false)
+        sourceCombinedForwardMode = intent.getStringExtra(EXTRA_SOURCE_COMBINED_FORWARD_MODE)
+            ?.let { runCatching { CombinedForwardMode.valueOf(it) }.getOrNull() }
+            ?: CombinedForwardMode.UNKNOWN
+
         setupTextView()
         setupOverlay()
+
+        // Floating close button: dispatchTouchEvent routes gestures starting on it straight to
+        // super (see touchStartedOnCloseButton), so this click fires without disturbing selection.
+        binding.cvClose.setOnClickListener { finish() }
     }
 
     private fun setupTextView() {
@@ -107,12 +146,35 @@ class TextPreviewActivity : BaseActivity() {
             )
         }
         
-        // Add overlay to root view
-        val rootView = findViewById<ViewGroup>(android.R.id.content)
-        rootView.addView(overlayContainer)
+        // Add the selection overlay to our own layout root, inserted just *below* the floating
+        // close button, so the selection highlight / drag handles never paint over the button.
+        // (Adding it to android.R.id.content would stack the whole overlay above this layout —
+        // including the button — hiding the button during selection.) Selection geometry uses
+        // screen coordinates, so re-parenting here does not affect handle/highlight positioning.
+        val root = binding.root as ViewGroup
+        root.addView(overlayContainer, root.indexOfChild(binding.cvClose))
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Hand the entire gesture to the normal view hierarchy when it starts on the close button,
+        // so its click (and press feedback) work and none of the long-press / drag-to-select logic
+        // below ever runs for it. Gestures starting elsewhere are unaffected, so dragging a text
+        // selection across the button does not trigger it.
+        // Use actionMasked so pointer-index bits in multi-touch events don't defeat the comparisons.
+        val maskedAction = ev.actionMasked
+        if (maskedAction == MotionEvent.ACTION_DOWN) {
+            touchStartedOnCloseButton = isTouchOnCloseButton(ev)
+            // Drop any long-press left posted by a prior gesture whose terminal event was missed,
+            // so it can't fire selection UI while we are routing the close tap.
+            if (touchStartedOnCloseButton) cancelLongPress()
+        }
+        if (touchStartedOnCloseButton) {
+            if (maskedAction == MotionEvent.ACTION_UP || maskedAction == MotionEvent.ACTION_CANCEL) {
+                touchStartedOnCloseButton = false
+            }
+            return super.dispatchTouchEvent(ev)
+        }
+
         when (ev.action) {
             MotionEvent.ACTION_DOWN -> {
                 touchDownX = ev.rawX
@@ -226,6 +288,20 @@ class TextPreviewActivity : BaseActivity() {
         return rect.contains(ev.rawX.toInt(), ev.rawY.toInt())
     }
     
+    private fun isTouchOnCloseButton(ev: MotionEvent): Boolean {
+        val button = binding.cvClose
+        if (button.visibility != View.VISIBLE) return false
+        val location = IntArray(2)
+        button.getLocationOnScreen(location)
+        val rect = Rect(
+            location[0],
+            location[1],
+            location[0] + button.width,
+            location[1] + button.height
+        )
+        return rect.contains(ev.rawX.toInt(), ev.rawY.toInt())
+    }
+
     private fun isTouchOnPopup(ev: MotionEvent): Boolean {
         val bounds = selectionPopup?.getPopupBounds() ?: return false
         return bounds.contains(ev.rawX.toInt(), ev.rawY.toInt())
@@ -590,27 +666,63 @@ class TextPreviewActivity : BaseActivity() {
     
     private fun copySelectedText() {
         val text = textSelectionManager?.getSelectedText() ?: return
+        if (text.isEmpty()) {
+            dismissSelection()
+            return
+        }
         Util.copyToClipboard(this, text)
+        // PRD §4.1: emit copy notice on successful clipboard write (count=1).
+        // PRD §5.3: mode is the source message's mode (UNKNOWN in Phase 4 main-conv,
+        // SUB_COMBINED_FORWARD in Phase 5 CF-detail launches).
+        val author = sourceAuthorId
+        val conv = sourceConversation
+        // PRD v2.0 §改动2: partial-text copy is real content; trace only if it belongs to someone
+        // else, judged by the ORIGINAL author (single-forward → inner author), computed by the launcher.
+        if (!author.isNullOrEmpty() && conv != null && sourceCarriesForeign) {
+            activityNoticeDispatcher.dispatchCopyNotice(
+                sourceConversation = conv,
+                sourceAuthorIds = listOf(author),
+                myId = globalServices.myId,
+                messageCount = 1,
+                combinedForwardMode = sourceCombinedForwardMode,
+            )
+        }
         dismissSelection()
     }
-    
+
     private fun forwardSelectedText() {
         val text = textSelectionManager?.getSelectedText() ?: return
         val isFullSelect = textSelectionManager?.isFullSelection() == true
-        
-        // If select all and has forward context, forward as original message
+        // Both full-select and partial-text paths emit FORWARD_NOTICE (PRD §5).
+        // Mode mirrors the source message's mode (Phase 5 sets SUB_COMBINED_FORWARD when
+        // launched from CF detail; default UNKNOWN for main-conv launches).
+        val authorIds = sourceAuthorId?.let { listOf(it) }
+        // PRD v2.0 §改动2: trace by ORIGINAL author (single-forward → inner author), computed by the launcher.
+        val carriesForeignContent = sourceCarriesForeign
+
         if (isFullSelect && forwardContext != null) {
             selectChatsUtils.showChatSelectAndSendDialog(
                 this,
                 text,
                 null,
                 null,
-                listOf(forwardContext!!)
+                listOf(forwardContext!!),
+                sourceConversation = sourceConversation,
+                sourceAuthorIds = authorIds,
+                combinedForwardMode = sourceCombinedForwardMode,
+                carriesForeignContent = carriesForeignContent,
             )
         } else {
-            selectChatsUtils.showChatSelectAndSendDialog(this, text)
+            selectChatsUtils.showChatSelectAndSendDialog(
+                this,
+                text,
+                sourceConversation = sourceConversation,
+                sourceAuthorIds = authorIds,
+                combinedForwardMode = sourceCombinedForwardMode,
+                carriesForeignContent = carriesForeignContent,
+            )
         }
-        
+
         dismissSelection()
     }
     
@@ -624,8 +736,7 @@ class TextPreviewActivity : BaseActivity() {
         cancelLongPress()
         dismissSelection()
         overlayContainer?.let { container ->
-            val rootView = findViewById<ViewGroup>(android.R.id.content)
-            rootView?.removeView(container)
+            (container.parent as? ViewGroup)?.removeView(container)
         }
         overlayContainer = null
         super.onDestroy()
@@ -635,18 +746,56 @@ class TextPreviewActivity : BaseActivity() {
         private const val EXTRA_TEXT = "extra_text"
         private const val EXTRA_MENTIONS = "extra_mentions"
         private const val EXTRA_FORWARD_CONTEXT = "extra_forward_context"
+        private const val EXTRA_SOURCE_AUTHOR_ID = "extra_source_author_id"
+        private const val EXTRA_SOURCE_CONVERSATION_ID = "extra_source_conversation_id"
+        private const val EXTRA_SOURCE_CONVERSATION_TYPE = "extra_source_conversation_type"
+        // Wire as enum.name String — CombinedForwardMode is not Parcelable.
+        private const val EXTRA_SOURCE_COMBINED_FORWARD_MODE = "extra_source_combined_forward_mode"
+        // PRD v2.0 §改动2: precomputed "carries another person's original content" flag (original-author based).
+        private const val EXTRA_SOURCE_CARRIES_FOREIGN = "extra_source_carries_foreign"
         private const val SHORT_TEXT_THRESHOLD = 200
 
+        /** @param sourceMessage Optional source message; when null, no copy/forward notice fires. */
         fun start(
             context: Context,
             text: String,
             mentions: List<Mention>? = null,
-            forwardContext: ForwardContext? = null
+            forwardContext: ForwardContext? = null,
+            sourceMessage: com.difft.android.chat.message.TextChatMessage? = null,
         ) {
             val intent = Intent(context, TextPreviewActivity::class.java).apply {
                 putExtra(EXTRA_TEXT, text)
                 mentions?.let { putExtra(EXTRA_MENTIONS, ArrayList(it)) }
                 forwardContext?.let { putExtra(EXTRA_FORWARD_CONTEXT, it) }
+                sourceMessage?.let { msg ->
+                    val conv = msg.forWhat
+                    if (conv != null) {
+                        // PRD §5 / Phase 5: sourceAuthorOverride is set on inner CF sub-messages
+                        // so the outer CF-sender is reported as the notice author. Phase 4
+                        // main-conv messages have override=null → fall back to authorId.
+                        putExtra(EXTRA_SOURCE_AUTHOR_ID, msg.sourceAuthorOverride ?: msg.authorId)
+                        putExtra(EXTRA_SOURCE_CONVERSATION_ID, conv.id)
+                        putExtra(EXTRA_SOURCE_CONVERSATION_TYPE, conv.typeValue)
+                        // sourceMode null on main-conv messages → UNKNOWN over the wire.
+                        putExtra(
+                            EXTRA_SOURCE_COMBINED_FORWARD_MODE,
+                            (msg.sourceMode ?: CombinedForwardMode.UNKNOWN).name,
+                        )
+                        // PRD v2.0 §改动2: text preview always copies/forwards REAL text → judge the
+                        // trigger by ORIGINAL author (single-forward → inner author), consistent with
+                        // the main copy/forward paths (the bubble author still feeds `from`).
+                        // One flag gates both copy and forward here: TextPreviewActivity only opens for
+                        // text/long-text (non-CF) messages, and for non-CF the copy and forward gating
+                        // coincide (copyCarriesForeignContent == forwardCarriesForeignContent). They only
+                        // diverge for a combined-forward (copy = placeholder/false, forward = recurse),
+                        // which cannot reach this screen. Revisit (split into copy/forward flags) if a CF
+                        // ever opens here.
+                        putExtra(
+                            EXTRA_SOURCE_CARRIES_FOREIGN,
+                            NoticeAggregator.forwardCarriesForeignContent(listOf(msg), globalServices.myId),
+                        )
+                    }
+                }
             }
             context.startActivity(intent)
         }

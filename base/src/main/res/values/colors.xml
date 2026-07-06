@@ -51,8 +51,8 @@
     <color name="bg5" tools:ignore="ResourceName">#181A20</color>
     <color name="border" tools:ignore="ResourceName">#2B3139</color>
 
-    <color name="bg.setting" tools:ignore="ResourceName">#FAFAFA</color>
-    <color name="bg.setting.item" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bg" tools:ignore="ResourceName">#FAFAFA</color>
+    <color name="bg.elevated" tools:ignore="ResourceName">#FFFFFF</color>
 
     <color name="login_logo_color" tools:ignore="ResourceName">#181A20</color>
 

@@ -89,9 +89,30 @@ data class Attachment(
     }
 }
 
+/** Bitmask flag on [Attachment.flags], aligned with proto AttachmentPointer.Flags.GIF. */
+const val FLAG_GIF = 4
+
 fun Attachment.isImage(): Boolean {
     return this.contentType.contains("image")
 }
+
+/**
+ * Whether this attachment is an animated GIF/WebP (as opposed to a static image).
+ *
+ * Reads the authoritative [FLAG_GIF] bit set by the sender; falls back to the MIME type for
+ * legacy / cross-client messages that never set the flag (an un-flagged `image/gif` is treated as
+ * animated). An un-flagged `image/webp` cannot be classified from MIME alone, so it stays static
+ * ("[Image]") per the missing-flag convention. Bitwise read only — does NOT collide with the voice
+ * `flags == 1` check.
+ */
+fun Attachment.isAnimatedImage(): Boolean = isAnimatedImage(flags, contentType)
+
+/**
+ * Raw-value predicate backing [Attachment.isAnimatedImage], so callers holding only the primitive
+ * `flags`/`contentType` (e.g. [QuotedAttachment]) can share the exact same classification.
+ */
+fun isAnimatedImage(flags: Int, contentType: String): Boolean =
+    (flags and FLAG_GIF) != 0 || contentType.trim() == "image/gif"
 
 fun Attachment.isVideo(): Boolean {
     return this.contentType.contains("video")
@@ -112,6 +133,25 @@ fun Attachment.isAudioFile(): Boolean {
 fun Attachment.isLongText(): Boolean {
     return this.contentType == CONTENT_TYPE_LONG_TEXT
 }
+
+/**
+ * Whether this attachment is kept **encrypted at rest** (only the `.encrypt` ciphertext on disk,
+ * decrypted on demand) instead of being decrypted to a plaintext file on download.
+ *
+ * Single source of truth for the download decision and consumer read paths. As of the P4 change
+ * this covers **all** attachment types (aligning with Signal's uniform encrypt-at-rest model), so
+ * no plaintext attachment ever touches disk:
+ * - audio messages (voice) / audio files: decrypted to memory bytes and played (no plaintext file)
+ * - images: read via EncryptedAttachmentProvider
+ * - video: played/seeked on demand via EncryptedAttachmentProvider's seekable proxy fd (API26+)
+ * - long text: read fully into memory on demand via EncryptedAttachmentProvider (sequential pipe)
+ * - generic files (documents / archives / apk / octet-stream): opened / shared / saved / copied via
+ *   the decrypting content uri (seekable proxy fd for external apps); never read from a plaintext file
+ *
+ * NOTE: [com.difft.android.chat.media.LegacyPlaintextAttachmentMigration.keepEncryptedAtRest] mirrors
+ * this on the DB model and MUST be kept in sync (and the migration version bumped) when this changes.
+ */
+fun Attachment.keepEncryptedAtRest(): Boolean = true
 
 enum class AttachmentStatus(val code: Int) {
     LOADING(2),

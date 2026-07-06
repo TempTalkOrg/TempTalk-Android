@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.AppStateKeys
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 import com.difft.android.chat.util.DeviceProperties
 import com.difft.android.chat.util.ForegroundServiceUtil
 import com.difft.android.chat.websocket.monitor.WebSocketHealthMonitor
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -73,7 +75,7 @@ class MessageServiceManager @Inject constructor(
      **/
     fun startService() {
         // 1. Enable keep-alive (only modify service layer state)
-        userManager.update { keepAliveEnabled = true }
+        setKeepAlive(true)
 
         // 2. Register keep-alive mechanism (AlarmManager)
         scheduleAlarmCheck()
@@ -96,7 +98,7 @@ class MessageServiceManager @Inject constructor(
         ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
 
         // 2. Disable keep-alive (only modify service layer state)
-        userManager.update { keepAliveEnabled = false }
+        setKeepAlive(false)
 
         // 3. Cancel keep-alive mechanism
         cancelAlarmCheck()
@@ -118,11 +120,23 @@ class MessageServiceManager @Inject constructor(
         ForegroundServiceUtil.stopService(MessageForegroundService::class.java)
 
         // 2. Disable keep-alive (don't modify autoStartMessageService, preserve user intent)
-        userManager.update { keepAliveEnabled = false }
+        setKeepAlive(false)
 
         // 3. Cancel keep-alive mechanism
         cancelAlarmCheck()
         L.i { "[MessageService] Keep-alive mechanism cancelled due to FCM available" }
+    }
+
+    /**
+     * Persist the keep-alive flag and mirror it to a Crashlytics custom key.
+     *
+     * Centralizes the two writes (UserData + custom key) at every change point so they
+     * can never drift. The custom key is stable context (last-value-wins): on a crash it
+     * tells us whether the keep-alive mechanism was active. Crashlytics call is fail-safe.
+     */
+    private fun setKeepAlive(enabled: Boolean) {
+        userManager.update { keepAliveEnabled = enabled }
+        runCatching { FirebaseCrashlytics.getInstance().setCustomKey(AppStateKeys.KEEP_ALIVE_ENABLED.name, enabled) }
     }
 
     /**

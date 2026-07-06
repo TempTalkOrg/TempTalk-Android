@@ -1,5 +1,7 @@
 package com.difft.android.chat.contacts.contactsremark
 
+import com.difft.android.base.utils.globalServices
+
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -9,11 +11,11 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.common.upload.ContactAvatarUploader
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.databinding.ChatActivityContactRemarkBinding
@@ -168,7 +170,7 @@ class ContactSetRemarkActivity : BaseActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(
                             conversation = contactId,
                             remark = encryptedRemark
@@ -231,7 +233,7 @@ class ContactSetRemarkActivity : BaseActivity() {
                 }
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(
                             conversation = contactId,
                             remarkAvatar = encrypted
@@ -244,6 +246,8 @@ class ContactSetRemarkActivity : BaseActivity() {
                         ContactorUtil.updateRemarkAvatar(contactId, encrypted)
                     }
                     refreshContactAndRender()
+                    // Rendered from server data now — drop the plaintext compress/crop temp.
+                    AvatarPickTempCleaner.deleteUploadedTemp(this@ContactSetRemarkActivity, filePath)
                 } else {
                     L.w { "[ContactSetRemark] save avatar failed status=${result.status} reason=${result.reason} uid=$contactId" }
                     showErrorToast(result.reason)
@@ -325,6 +329,8 @@ class ContactSetRemarkActivity : BaseActivity() {
                 override fun onResult(result: ArrayList<LocalMedia>) {
                     val media = result.firstOrNull() ?: return
                     val path = media.compressPath ?: media.realPath ?: return
+                    // Upload uses compressPath/realPath; drop the plaintext crop output immediately.
+                    AvatarPickTempCleaner.deleteCropTemp(media, keepPath = path)
                     onAvatarPicked(path)
                 }
 
@@ -368,7 +374,7 @@ class ContactSetRemarkActivity : BaseActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(
                             conversation = contactId,
                             remarkAvatar = ""

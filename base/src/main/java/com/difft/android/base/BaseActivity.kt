@@ -1,6 +1,7 @@
 package com.difft.android.base
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +27,7 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        applyOrientationPolicy()
         // Enable edge-to-edge before super.onCreate()
         if (shouldEnableEdgeToEdge()) {
             setupEdgeToEdge()
@@ -118,4 +120,47 @@ abstract class BaseActivity : AppCompatActivity() {
         super.onDestroy()
         L.i { "[BaseActivity]${javaClass.name} Activity onDestroy" }
     }
+
+    /**
+     * Single source of truth for screen orientation across all activities:
+     *   - Phones (sw < 600dp): lock SCREEN_ORIENTATION_PORTRAIT.
+     *   - Tablets / unfolded foldables (sw ≥ 600dp): SCREEN_ORIENTATION_UNSPECIFIED
+     *     so the user can rotate freely (drives the dual-pane layout on rotation).
+     *
+     * Done at runtime instead of `android:screenOrientation` in the manifest so
+     * that large-screen devices which don't honor AOSP 16+'s sw≥600dp exemption
+     * (HarmonyOS NEXT on Huawei foldables, older AOSP, some OEM ROMs) still rotate.
+     * Tradeoff: with no manifest orientation the splash window follows the device,
+     * so a phone launched while held landscape briefly rotates to portrait — rare
+     * (auto-rotate is off by default and launchers stay portrait), and worth it to
+     * keep foldables flicker-free in their common unfolded-landscape posture.
+     */
+    private fun applyOrientationPolicy() {
+        if (!shouldApplyOrientationPolicy()) return
+        val target = if (resources.getBoolean(R.bool.force_portrait_orientation)) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        if (requestedOrientation == target) return
+        try {
+            requestedOrientation = target
+            L.i { "[BaseActivity] orient set cls=${javaClass.simpleName} swDp=${resources.configuration.smallestScreenWidthDp} target=$target" }
+        } catch (e: IllegalStateException) {
+            // API 26 (Android 8.0) throws "Only fullscreen activities can request
+            // orientation" for translucent activities. Harmless — they inherit the
+            // underlying activity's orientation. Fixed by AOSP in API 27.
+            L.w { "[BaseActivity] orient set skipped cls=${javaClass.simpleName}: ${e.message}" }
+        }
+    }
+
+    /**
+     * Override to false to opt out — for Activities that must stay portrait
+     * on all sizes, or manage orientation themselves (camera, PiP, etc.).
+     * When false, BaseActivity leaves `requestedOrientation` untouched.
+     *
+     * Note: invoked before `super.onCreate()` — overrides must return a constant.
+     * Hilt-injected fields and `savedInstanceState` are not yet available here.
+     */
+    protected open fun shouldApplyOrientationPolicy(): Boolean = true
 }

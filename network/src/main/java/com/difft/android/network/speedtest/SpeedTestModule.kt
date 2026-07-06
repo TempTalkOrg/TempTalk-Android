@@ -2,6 +2,9 @@ package com.difft.android.network.speedtest
 
 import android.content.Context
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
+import com.difft.android.network.proxy.ProxyConfigProvider
+import com.difft.android.network.proxy.ProxyTunnelDns
+import com.difft.android.network.proxy.ProxyTunnelSocketFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -33,7 +36,8 @@ object SpeedTestModule {
     @Provides
     @Singleton
     fun provideSpeedTestClient(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        proxyConfigProvider: ProxyConfigProvider
     ): OkHttpClient {
         val sslCreator = OfficialSSLSocketFactoryCreator(context)
         val connectionSpec = ConnectionSpec.Builder(ConnectionSpec.RESTRICTED_TLS)
@@ -42,6 +46,10 @@ object SpeedTestModule {
 
         return OkHttpClient.Builder()
             .sslSocketFactory(sslCreator.socketFactory, sslCreator.trustManager)
+            // Route probes through the proxy when enabled so they cannot leak a
+            // direct connection; no-op (system DNS + plain socket) when disabled.
+            .dns(ProxyTunnelDns(proxyConfigProvider))
+            .socketFactory(ProxyTunnelSocketFactory(proxyConfigProvider))
             .connectionSpecs(listOf(connectionSpec))
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)

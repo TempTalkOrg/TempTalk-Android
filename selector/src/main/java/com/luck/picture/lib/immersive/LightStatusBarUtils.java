@@ -1,8 +1,6 @@
 package com.luck.picture.lib.immersive;
 
-import android.annotation.TargetApi;
 import android.app.Activity;
-import android.os.Build;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -21,9 +19,7 @@ import java.lang.reflect.Method;
 public class LightStatusBarUtils {
     public static void setLightStatusBarAboveAPI23(Activity activity, boolean isMarginStatusBar
             , boolean isMarginNavigationBar, boolean isTransStatusBar, boolean dark) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            setLightStatusBar(activity, isMarginStatusBar, isMarginNavigationBar, isTransStatusBar, dark);
-        }
+        setLightStatusBar(activity, isMarginStatusBar, isMarginNavigationBar, isTransStatusBar, dark);
     }
 
     public static void setLightStatusBar(Activity activity, boolean dark) {
@@ -109,55 +105,52 @@ public class LightStatusBarUtils {
         return result;
     }
 
-    @TargetApi(11)
     private static void setAndroidNativeLightStatusBar(Activity activity, boolean isMarginStatusBar
             , boolean isMarginNavigationBar, boolean isTransStatusBar, boolean isDarkStatusBarIcon) {
 
         try {
             if (isTransStatusBar) {
                 Window window = activity.getWindow();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    if (isMarginStatusBar && isMarginNavigationBar) {
-                        //5.0版本及以上
-                        if (isDarkStatusBarIcon && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                    | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-                        } else {
-                            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-                        }
-                    } else if (!isMarginStatusBar && !isMarginNavigationBar) {
-
-                        if (isDarkStatusBarIcon && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-//                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                    | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-                        } else {
-                            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-//                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-                        }
-
-
-                    } else if (!isMarginStatusBar && isMarginNavigationBar) {
-                        if (isDarkStatusBarIcon && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                    | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-                        } else {
-                            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-                        }
-
-
+                if (isMarginStatusBar && isMarginNavigationBar) {
+                    //5.0版本及以上
+                    if (isDarkStatusBarIcon) {
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
                     } else {
-                        //留出来状态栏 不留出来导航栏 没找到办法。。
-                        return;
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
                     }
+                } else if (!isMarginStatusBar && !isMarginNavigationBar) {
+
+                    if (isDarkStatusBarIcon) {
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+//                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                    } else {
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+//                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+                    }
+
+
+                } else if (!isMarginStatusBar && isMarginNavigationBar) {
+                    if (isDarkStatusBarIcon) {
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                    } else {
+                        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+                    }
+
+
+                } else {
+                    //留出来状态栏 不留出来导航栏 没找到办法。。
+                    return;
                 }
             } else {
                 View decor = activity.getWindow().getDecorView();
-                if (isDarkStatusBarIcon && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (isDarkStatusBarIcon) {
                     decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
                 } else {
                     // We want to change tint color to white again.
@@ -173,20 +166,17 @@ public class LightStatusBarUtils {
 
     private static void initStatusBarStyle(Activity activity, boolean isMarginStatusBar
             , boolean isMarginNavigationBar) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            if (isMarginStatusBar && isMarginNavigationBar) {
-                activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-            } else if (!isMarginStatusBar && !isMarginNavigationBar) {
-                activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-            } else if (!isMarginStatusBar && isMarginNavigationBar) {
+        if (isMarginStatusBar && isMarginNavigationBar) {
+            activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        } else if (!isMarginStatusBar && !isMarginNavigationBar) {
+            activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        } else if (!isMarginStatusBar && isMarginNavigationBar) {
 
-                activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-            } else {
-                //留出来状态栏 不留出来导航栏 没找到办法。。
-            }
+            activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        } else {
+            //留出来状态栏 不留出来导航栏 没找到办法。。
         }
-
     }
 }

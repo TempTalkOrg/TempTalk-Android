@@ -1,5 +1,6 @@
 package com.difft.android.chat.call
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -101,6 +102,8 @@ class UserMeetingAttendeeAdapter(
     inner class HeaderViewHolder(private val binding: AttendeeListHeaderBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
+        // Header subtitle is " - $groupName"; the " - " separator is not translatable copy.
+        @SuppressLint("SetTextI18n")
         fun bind(title: String, groupName: String?) {
             binding.headerTextView.text = title
             if (!groupName.isNullOrEmpty()) {
@@ -159,6 +162,8 @@ class UserMeetingAttendeeAdapter(
         }
     }
 
+    // Concatenates a localized host-prefix with email/uid identifier; suppress is for the identifier concat only.
+    @SuppressLint("SetTextI18n")
     private fun setupEmailOrUid(
         emailTextView: TextView,
         roleInString: String?,
@@ -166,7 +171,7 @@ class UserMeetingAttendeeAdapter(
         uid: String?
     ) {
         val hostPrefix = if (roleInString == Attendee.HOST) {
-            "Host・"
+            emailTextView.context.getString(R.string.attendee_host_prefix)
         } else {
             ""
         }

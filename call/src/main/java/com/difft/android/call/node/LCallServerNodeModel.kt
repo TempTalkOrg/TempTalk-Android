@@ -11,12 +11,16 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.connect.DefaultGlobalConfigCallServiceUrlsReader
 import com.difft.android.call.connect.MeetingConnectionPlanner
 import com.difft.android.call.data.ServerNode
+import com.difft.android.network.proxy.ProxyConfigProvider
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class LCallServerNodeModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class LCallServerNodeModel @Inject constructor(application: Application) : AndroidViewModel(application) {
 
     val serverUrlConnected = LCallEngine.serverUrlConnected
 
@@ -56,7 +60,7 @@ class LCallServerNodeModel(application: Application) : AndroidViewModel(applicat
             _isLoading.value = true
             LCallManager.fetchCallServiceUrlAndCache()
             val serviceUrls = LCallManager.getCachedServiceUrls()
-                ?: DefaultGlobalConfigCallServiceUrlsReader.read(getApplication())
+                ?: embeddedServiceUrlsFallbackOrNull()
             if (serviceUrls != null) {
                 val nodes = buildServerNodes(serviceUrls)
                 _serverNodes.value = nodes
@@ -79,8 +83,21 @@ class LCallServerNodeModel(application: Application) : AndroidViewModel(applicat
         LCallManager.getCachedServiceUrls()?.let { return it }
         runCatching { LCallManager.ensureCallServiceUrlsForCall(timeoutMs = 10_000L) }
             .getOrNull()?.let { return it }
-        return DefaultGlobalConfigCallServiceUrlsReader.read(getApplication())
+        return embeddedServiceUrlsFallbackOrNull()
     }
+
+    /**
+     * Embedded `serviceUrls` fallback for the node-list display — gated OFF while
+     * the proxy is active. Under the proxy the call domain comes solely from
+     * `proxy.tunnelDomains.call` (via [LCallManager.getCachedServiceUrls] /
+     * [LCallManager.ensureCallServiceUrlsForCall]); the embedded `serviceUrls`
+     * block is a separate source that can drift from the tunnel-host whitelist,
+     * so we never surface it as a node while proxied (mirrors
+     * `CallConnectionCoordinator.embeddedServiceUrlsFallbackOrNull`).
+     */
+    private fun embeddedServiceUrlsFallbackOrNull(): ServiceUrls? =
+        if (ProxyConfigProvider.isProxyActiveForCall) null
+        else DefaultGlobalConfigCallServiceUrlsReader.read(getApplication())
 
     private fun buildServerNodes(serviceUrls: ServiceUrls): List<ServerNode> {
         val nodes = mutableListOf<ServerNode>()

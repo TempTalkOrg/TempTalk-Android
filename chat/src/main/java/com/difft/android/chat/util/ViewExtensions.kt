@@ -7,14 +7,16 @@ import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.graphics.withSave
 import androidx.core.view.doOnNextLayout
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.findFragment
 import androidx.lifecycle.Lifecycle
 
 var View.visible: Boolean
   get() {
-    return this.visibility == View.VISIBLE
+    return this.isVisible
   }
   set(value) {
     this.visibility = if (value) View.VISIBLE else View.GONE
@@ -84,10 +86,11 @@ fun View.layoutIn(parent: View) {
 }
 
 fun View.drawAsTopItemDecoration(canvas: Canvas, parent: View, child: View, offset: Int = 0) {
-  canvas.save()
-  val left = parent.left
-  val top = child.y.toInt() - height - offset
-  canvas.translate(left.toFloat(), top.toFloat())
-  draw(canvas)
-  canvas.restore()
+  val viewHeight = height
+  canvas.withSave {
+    val left = parent.left
+    val top = child.y.toInt() - viewHeight - offset
+    translate(left.toFloat(), top.toFloat())
+    draw(this)
+  }
 }

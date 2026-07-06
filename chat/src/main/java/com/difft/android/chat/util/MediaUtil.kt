@@ -227,7 +227,7 @@ object MediaUtil {
     //        return dimens;
     //    }
     fun isMms(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == "application/mms"
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == "application/mms"
     }
 
     @JvmStatic
@@ -262,36 +262,36 @@ object MediaUtil {
     }
 
     fun isVideo(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' }.startsWith("video/")
+        return !TextUtils.isEmpty(contentType) && contentType.trim().startsWith("video/")
     }
 
     fun isVcard(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == VCARD
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == VCARD
     }
 
     @JvmStatic
     fun isGif(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == "image/gif"
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == "image/gif"
     }
 
     @JvmStatic
     fun isJpegType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_JPEG
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_JPEG
     }
 
     @JvmStatic
     fun isHeicType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_HEIC
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_HEIC
     }
 
     @JvmStatic
     fun isHeifType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_HEIF
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_HEIF
     }
 
     @JvmStatic
     fun isAvifType(contentType: String): Boolean {
-        return !TextUtils.isEmpty(contentType) && contentType.trim { it <= ' ' } == IMAGE_AVIF
+        return !TextUtils.isEmpty(contentType) && contentType.trim() == IMAGE_AVIF
     }
 
     fun isFile(attachment: Attachment): Boolean {
@@ -334,6 +334,23 @@ object MediaUtil {
 
     fun isImageOrVideoType(contentType: String?): Boolean {
         return isImageType(contentType) || isVideoType(contentType)
+    }
+
+    /**
+     * String-resource label for a media item with no text body (used by quote previews), keyed by
+     * contentType + flags — animated gif / image / video / audio, else generic attachment. Takes the
+     * raw `flags`/`contentType` (not a model type) so both [difft.android.messageserialization.model.Attachment]
+     * and [difft.android.messageserialization.model.QuotedAttachment] callers can share it. The gif
+     * branch reads [difft.android.messageserialization.model.FLAG_GIF] so it stays consistent with the
+     * conversation preview ([org.difft.app.database.previewContent]).
+     */
+    @androidx.annotation.StringRes
+    fun quoteTypeLabelRes(contentType: String?, flags: Int): Int = when {
+        contentType != null && isImageType(contentType) && difft.android.messageserialization.model.isAnimatedImage(flags, contentType) -> com.difft.android.chat.R.string.chat_message_gif
+        isImageType(contentType) -> com.difft.android.chat.R.string.chat_message_image
+        isVideoType(contentType) -> com.difft.android.chat.R.string.chat_message_video
+        isAudioType(contentType) -> com.difft.android.chat.R.string.chat_message_audio
+        else -> com.difft.android.chat.R.string.chat_message_attachment
     }
 
     fun isStorySupportedType(contentType: String): Boolean {
@@ -497,6 +514,61 @@ object MediaUtil {
     //        VIEW_ONCE,
     //        DOCUMENT
     //    }
+
+    /**
+     * Same as [getMediaWidthAndHeight] but reads through a [uri] (e.g. the decrypting
+     * [com.difft.android.chat.media.EncryptedAttachmentProvider] content uri). Use this when the
+     * plaintext file is not on disk (encrypted-at-rest) — `BitmapFactory.decodeFile` would fail and
+     * the caller would fall back to a default aspect ratio, leaving the bubble mis-sized.
+     */
+    fun getMediaWidthAndHeight(context: Context, uri: Uri, mimeType: String): Pair<Int, Int> {
+        var width = 0
+        var height = 0
+        if (isImageType(mimeType)) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeStream(input, null, options)
+                    width = options.outWidth
+                    height = options.outHeight
+                }
+            } catch (e: Exception) {
+                L.w { "[MediaUtil] decode bounds from uri failed: ${e.stackTraceToString()}" }
+            }
+            // EXIF must be read from a fresh stream (decodeStream above consumed the first one).
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val orientation = ExifInterface(input).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+                    )
+                    when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90,
+                        ExifInterface.ORIENTATION_ROTATE_270,
+                        ExifInterface.ORIENTATION_TRANSPOSE,
+                        ExifInterface.ORIENTATION_TRANSVERSE -> {
+                            val temp = width
+                            width = height
+                            height = temp
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                L.w { "[MediaUtil] read EXIF from uri failed: ${e.message}" }
+            }
+        } else if (isVideoType(mimeType)) {
+            val mmr = MediaMetadataRetriever()
+            try {
+                mmr.setDataSource(context, uri)
+                width = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                height = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            } catch (e: Exception) {
+                L.w { "[MediaUtil] video size from uri failed: ${e.message}" }
+            } finally {
+                mmr.release()
+            }
+        }
+        return width to height
+    }
 
     fun getMediaWidthAndHeight(filePath: String, mimeType: String): Pair<Int, Int> {
         var width = 0

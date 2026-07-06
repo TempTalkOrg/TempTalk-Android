@@ -8,10 +8,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.call.CallData
+import kotlinx.coroutines.launch
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
@@ -126,7 +126,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
                 } else {
                     flow {
                         val result = callService.checkCall(
-                            SecureSharedPrefsUtil.getToken(),
+                            (globalServices.userManager.getUserData()?.microToken ?: ""),
                             callData.roomId
                         )
                         emit(callData to result)
@@ -266,8 +266,9 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         binding.buttonJoinCall.text = ResUtils.getString(R.string.call_join)
         binding.buttonJoinCall.setOnClickListener {
             L.i { "[Call] ChatHeaderCallFragment onclick button joinCall roomId:${callData.roomId}" }
-            LCallManager.joinCall(requireActivity(), callData) { status ->
-                if(!status) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                val status = LCallManager.joinCall(requireActivity(), callData)
+                if (!status) {
                     L.e { "[Call] ChatHeaderCallFragment join call failed." }
                     ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
                 }

@@ -23,6 +23,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import org.difft.app.database.search
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.chat.common.GroupAvatarUtil
 import com.difft.android.chat.common.LetterItem
@@ -216,6 +217,9 @@ class CreateGroupActivity : BaseActivity() {
                         L.i { "[GE] Created group $gid encrypted=${rGroup != null}" }
                         GroupChatContentActivity.startActivity(this@CreateGroupActivity, gid)
                     }
+                    // Group created with the avatar uploaded — drop the plaintext compress/crop
+                    // temp (no-op for generated random-avatar files or gallery originals).
+                    AvatarPickTempCleaner.deleteUploadedTemp(this@CreateGroupActivity, mAvatarFilePath)
                     setResult(RESULT_OK)
                     finish()
                 } else if (result.status == 10125) {
@@ -459,6 +463,8 @@ class CreateGroupActivity : BaseActivity() {
                     if (result.isNotEmpty()) {
                         val localMedia = result[0]
                         mAvatarFilePath = localMedia.compressPath ?: localMedia.realPath
+                        // Upload uses compressPath/realPath; drop the plaintext crop output immediately.
+                        AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = mAvatarFilePath)
                         binding.groupAvatar.setAvatar(mAvatarFilePath ?: "")
                     }
                 }

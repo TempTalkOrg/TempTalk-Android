@@ -3,9 +3,9 @@ package com.difft.android.chat.util
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -55,7 +55,7 @@ class AppIconBadgeManager @Inject constructor(
             putInt("badgenumber", badgeCount)
         }
         context.contentResolver.call(
-            Uri.parse("content://com.huawei.android.launcher.settings/badge/"),
+            "content://com.huawei.android.launcher.settings/badge/".toUri(),
             "change_badge",
             null,
             bundle

@@ -52,7 +52,6 @@ fun TestScreen(
     onSendMessageToSingleGroup: (count: Int) -> Unit,
     onCorruptDatabase: () -> Unit,
     onBackupDatabase: () -> Unit,
-    onSendRecoveryEvent: () -> Unit,
     onDialogTest: () -> Unit
 ) {
     var memberIds by remember { mutableStateOf("") }
@@ -88,7 +87,7 @@ fun TestScreen(
                     )
                 }
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
+                HorizontalDivider(color = DifftTheme.colors.bg)
 
                 // Create Groups
                 TestRowItem(
@@ -106,7 +105,7 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
+                HorizontalDivider(color = DifftTheme.colors.bg)
 
                 // Send Message to Single Group
                 TestRowItem(
@@ -124,7 +123,7 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
+                HorizontalDivider(color = DifftTheme.colors.bg)
 
                 // Send Message to All Groups
                 TestRowItem(
@@ -132,7 +131,7 @@ fun TestScreen(
                     onClick = onSendMessageToAllGroups
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
+                HorizontalDivider(color = DifftTheme.colors.bg)
 
                 // Disband Groups
                 TestRowItem(
@@ -148,18 +147,11 @@ fun TestScreen(
                     onClick = onCorruptDatabase
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
+                HorizontalDivider(color = DifftTheme.colors.bg)
 
                 TestRowItem(
                     title = "Manual Backup Database",
                     onClick = onBackupDatabase
-                )
-
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
-
-                TestRowItem(
-                    title = "Send Recovery Event",
-                    onClick = onSendRecoveryEvent
                 )
             }
 
@@ -195,7 +187,7 @@ private fun TestSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(DifftTheme.colors.backgroundSettingItem)
+                .background(DifftTheme.colors.bgElevated)
         ) {
             content()
         }
@@ -351,7 +343,6 @@ private fun TestScreenPreview() {
             onSendMessageToSingleGroup = {},
             onCorruptDatabase = {},
             onBackupDatabase = {},
-            onSendRecoveryEvent = {},
             onDialogTest = {}
         )
     }
@@ -385,7 +376,7 @@ private fun TestSectionPreview() {
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.backgroundSetting)
+                HorizontalDivider(color = DifftTheme.colors.bg)
 
                 TestRowItem(
                     title = "Send Message to All Groups",
@@ -407,7 +398,7 @@ private fun NumberInputFieldPreview() {
     DifftTheme {
         Row(
             modifier = Modifier
-                .background(DifftTheme.colors.backgroundSettingItem)
+                .background(DifftTheme.colors.bgElevated)
                 .padding(DifftTheme.spacing.insetLarge),
             horizontalArrangement = Arrangement.spacedBy(DifftTheme.spacing.inlineMedium)
         ) {

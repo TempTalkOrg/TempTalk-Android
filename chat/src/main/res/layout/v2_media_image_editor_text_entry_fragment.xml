@@ -42,6 +42,7 @@
             android:layout_height="48dp"
             android:layout_marginEnd="16dp"
             android:background="@drawable/circle_tintable_padded"
+            android:importantForAccessibility="no"
             android:padding="12dp"
             app:backgroundTint="@color/transparent_black_40"
             app:layout_constraintBottom_toBottomOf="parent"

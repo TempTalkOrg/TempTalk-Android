@@ -68,6 +68,7 @@
                     android:layout_width="16dp"
                     android:layout_height="16dp"
                     android:layout_marginStart="4dp"
+                    android:importantForAccessibility="no"
                     android:src="@drawable/chat_ic_official_bot_badge"
                     android:visibility="gone"
                     app:layout_constraintBottom_toBottomOf="@id/textview_label"

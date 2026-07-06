@@ -85,7 +85,7 @@ fun BarrageInputOverlay(
                 .fillMaxWidth()
                 .displayCutoutPadding()
                 .padding(bottom = with(density) { imeBottomPadding.toDp() })
-                .background(DifftTheme.colors.backgroundSettingItem)
+                .background(DifftTheme.colors.bgElevated)
                 .clickable(enabled = false) {}
         ) {
             TextField(

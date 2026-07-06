@@ -1,0 +1,179 @@
+# Detekt configuration for TempTalk Android (issue #723).
+#
+# Scope: coroutine / threading anti-patterns + a handful of free built-in checks.
+# Style, naming, comments rulesets are intentionally OFF — we rely on Claude
+# review + future ktlint integration for those.
+#
+# See docs/claude/detekt-coroutine-rules.md for the full rationale.
+# Update config/detekt/baseline-README.md when adding new baselined violations.
+
+# ────────────────────────────────────────────────────────────────────
+# Custom rules — issue #723 scope. These are the rules that mattered for
+# the ContactorUtil / LoginViewModel ANR class (see #718 / #722).
+# ────────────────────────────────────────────────────────────────────
+difft-coroutines:
+  active: true
+
+  BanRunBlockingOutsideTests:
+    active: true
+    # Test code legitimately uses runBlocking (e.g., runBlocking { runTest ... }).
+    # YAML excludes are the canonical mechanism in Detekt 2.0 — in-code
+    # virtualFilePath checks return only the file name (detekt#6965).
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
+  BlockingWcdbInSuspend:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
+  BlockingSharedPrefsInSuspend:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
+  # Guards against the #910 read-receipt regression: a WCDB prepareSelect() chain
+  # missing .select(...) compiles but NPEs at runtime (Select.fields null).
+  PrepareSelectMissingSelect:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
+  # Guards the #914 footgun: WCDB conflict inserts (insertOrReplace*/insertOrIgnore*)
+  # resolve ON CONFLICT on the PRIMARY KEY. On a databaseId-auto-increment-PK table,
+  # a batch of fresh models (all databaseId=0) collapses into one row — silent data
+  # loss. Default-deny: flagged on any wcdb accessor not on the natural-key-PK
+  # allowlist (maintained in UnsafeWcdbConflictInsert.NATURAL_KEY_PK_ACCESSORS).
+  UnsafeWcdbConflictInsert:
+    active: true
+    excludes:
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/testFixtures/**'
+
+  # LifecycleScopeBlockingCall deliberately OFF in PR 1.
+  # Initial scan flagged 234 lambdas; ~95% were legitimate non-blocking suspend
+  # work (flow collect, simple state updates, etc.). Without lambda-body
+  # blocking-API detection, this rule produces too many false positives to be
+  # useful — baseline would bury real signal. Follow-up: refine the rule to
+  # only flag lambdas whose body contains a known-blocking call, then re-enable.
+  LifecycleScopeBlockingCall:
+    active: false
+
+# ────────────────────────────────────────────────────────────────────
+# Built-in coroutines rules — free, high-signal.
+# Reference: https://detekt.dev/docs/rules/coroutines
+# ────────────────────────────────────────────────────────────────────
+coroutines:
+  active: true
+  GlobalCoroutineUsage:
+    active: true
+  RedundantSuspendModifier:
+    active: true
+  SleepInsteadOfDelay:
+    active: true
+  SuspendFunWithCoroutineScopeReceiver:
+    active: true
+  SuspendFunSwallowedCancellation:
+    active: true
+  # InjectDispatcher deliberately OFF: our codebase has too many ad-hoc
+  # `Dispatchers.IO` literals; enabling would explode the baseline. Revisit
+  # if we adopt dispatcher-injection conventions project-wide.
+  InjectDispatcher:
+    active: false
+
+# ────────────────────────────────────────────────────────────────────
+# Performance rules — cheap defensive defaults.
+# ────────────────────────────────────────────────────────────────────
+performance:
+  active: true
+  ForEachOnRange:
+    active: true
+  UnnecessaryTemporaryInstantiation:
+    active: true
+  SpreadOperator:
+    active: true
+
+# ────────────────────────────────────────────────────────────────────
+# Complexity thresholds — aligns with CLAUDE.md ("NO files >500 lines").
+# Initial baseline expected to be sizable (~30 entries); cleanup is
+# long-term tech debt, not blocking.
+# Note: Detekt 2.0 renamed `threshold` properties — see allowedLines,
+# allowedFunctionParameters, allowedConstructorParameters.
+# ────────────────────────────────────────────────────────────────────
+complexity:
+  active: true
+  LargeClass:
+    active: true
+    allowedLines: 500       # ← matches CLAUDE.md hard rule
+  LongMethod:
+    active: true
+    allowedLines: 100       # lenient initial value; tighten later
+  LongParameterList:
+    active: true
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 10
+  # Explicitly disable noisy default complexity rules — not in #723 scope.
+  # Revisit individually if any provides high-signal value later.
+  # Valid rule keys (per detekt 2.0.0-alpha.3): CognitiveComplexMethod,
+  # ComplexCondition, ComplexInterface, CyclomaticComplexMethod,
+  # LabeledExpression, LargeClass, LongMethod, LongParameterList,
+  # MethodOverloading, NamedArguments, NestedBlockDepth, NestedScopeFunctions,
+  # ReplaceSafeCallChainWithRun, StringLiteralDuplication, TooManyFunctions.
+  TooManyFunctions:
+    active: false           # Default threshold 11 is too aggressive for our codebase
+  CyclomaticComplexMethod:
+    active: false           # Subjective, adds noise without action
+  CognitiveComplexMethod:
+    active: false
+  NestedBlockDepth:
+    active: false
+  NestedScopeFunctions:
+    active: false
+  ComplexCondition:
+    active: false
+  ComplexInterface:
+    active: false
+  MethodOverloading:
+    active: false
+  StringLiteralDuplication:
+    active: false
+  LabeledExpression:
+    active: false
+  ReplaceSafeCallChainWithRun:
+    active: false
+  NamedArguments:
+    active: false
+
+# ────────────────────────────────────────────────────────────────────
+# Disabled rulesets — out of scope for this initiative.
+# Style / naming / comments are deliberately handled by Claude review +
+# future ktlint integration, not by Detekt.
+# Note: `formatting` is a separate detekt plugin (ktlint-wrapper); not
+# loaded, so no config entry needed here.
+# ────────────────────────────────────────────────────────────────────
+style:
+  active: false
+
+naming:
+  active: false
+
+comments:
+  active: false
+
+empty-blocks:
+  active: false
+
+exceptions:
+  active: false
+
+potential-bugs:
+  active: false

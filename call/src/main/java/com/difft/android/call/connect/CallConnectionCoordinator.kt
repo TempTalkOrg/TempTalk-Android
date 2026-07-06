@@ -1,11 +1,15 @@
 package com.difft.android.call.connect
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import androidx.core.net.toUri
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.CertValidationFailureDetector
+import com.difft.android.base.network.NetworkRiskNotifier
+import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.base.utils.ResUtils.getString
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallEngine
@@ -15,11 +19,13 @@ import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallTlsProvider
 import com.difft.android.call.data.CONNECTION_TYPE
 import com.difft.android.call.data.CallStatus
+
 import com.difft.android.call.data.ServerNode
 import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.exception.ServerConnectionException
 import com.difft.android.call.exception.StartCallException
+import com.difft.android.call.manager.CallStatisticsLogManager
 import io.livekit.android.room.RoomException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +61,7 @@ internal class CallConnectionCoordinator(
     private val appContext: Context,
     private val roomCtl: CallRoomController,
     private val callTlsProvider: CallTlsProvider,
+    private val statisticsLogManager: CallStatisticsLogManager,
 ) {
 
     /**
@@ -65,6 +72,34 @@ internal class CallConnectionCoordinator(
     @Volatile
     var isRetryUrlConnecting: Boolean = false
         private set
+
+    /**
+     * Embedded `serviceUrls` (bundled `default_global_config.json`) as a
+     * last-ditch connection fallback — but ONLY while the proxy is OFF.
+     *
+     * Under the proxy the call domain MUST come from `proxy.tunnelDomains.call`
+     * (surfaced via [LCallManager.ensureCallServiceUrlsForCall] /
+     * [LCallManager.getCachedServiceUrls], which synthesize from it), because
+     * that is the single source the tunnel-host whitelist is derived from. The
+     * embedded `serviceUrls` block is a SEPARATE source that a live
+     * `tunnelDomains.call` override can drift from; connecting to a
+     * non-whitelisted call domain would route DIRECT and leak the real IP. So we
+     * fail closed here (return `null`) instead of falling back.
+     */
+    private fun embeddedServiceUrlsFallbackOrNull(): ServiceUrls? =
+        if (ProxyConfigProvider.isProxyActiveForCall) null
+        else DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
+
+    /**
+     * Call media TLS pins trust to the chative CA; a certificate validation failure on any
+     * connect attempt (failover or user-initiated manual switch) is a possible MITM attack,
+     * so surface it to the shared [NetworkRiskNotifier].
+     */
+    private fun reportCertRiskIfNeeded(t: Throwable, serverHost: String) {
+        if (CertValidationFailureDetector.isCertValidationFailure(t)) {
+            NetworkRiskNotifier.onCertValidationFailed("call:$serverHost")
+        }
+    }
 
     /**
      * Failover & retry strategy:
@@ -88,22 +123,32 @@ internal class CallConnectionCoordinator(
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
-        val appToken = SecureSharedPrefsUtil.getToken()
+        val appToken = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (appToken.isEmpty()) {
             L.e { "[Call] CallConnectionCoordinator app token is null" }
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
+        if (roomCtl.isProxyActiveWithoutTurn()) {
+            L.w { "[Call] blocked: proxy active without TURN, media would expose client IP" }
+            failWith(StartCallException(getString(R.string.call_proxy_turn_required_tip)))
+            return false
+        }
 
         var serviceUrls: ServiceUrls? = LCallManager.ensureCallServiceUrlsForCall()
-            ?: DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
+            ?: embeddedServiceUrlsFallbackOrNull()
 
         if (serviceUrls == null) {
             failWith(StartCallException(getString(R.string.call_params_url_exception_tip)))
             return false
         }
 
+        statisticsLogManager.setRoomLocalId(roomCtl.room.localId)
+
         var failureCount = 0
+        var hadQuicFailure = false
+        var hadPrimaryFailure = false
+        var lastFailedErrorMsg = ""
         isRetryUrlConnecting = true
         for (phase in 0 until 3) {
             if (phase == 1) {
@@ -112,7 +157,7 @@ internal class CallConnectionCoordinator(
                 serviceUrls = LCallManager.getCachedServiceUrls() ?: serviceUrls
             } else if (phase == 2) {
                 delay(5_000L)
-                serviceUrls = DefaultGlobalConfigCallServiceUrlsReader.read(appContext) ?: serviceUrls
+                serviceUrls = embeddedServiceUrlsFallbackOrNull() ?: serviceUrls
             }
 
             val su = serviceUrls ?: break
@@ -130,7 +175,7 @@ internal class CallConnectionCoordinator(
                     "[Call] meeting connect phase=$phase ${idx + 1}/${attempts.size} url=${att.connectUrl} quic=${att.useQuic}"
                 }
 
-                var transientFailure = false
+                var transientErrorMsg: String? = null
                 var terminalError: Throwable? = null
                 roomCtl.connect(
                     att.serverHost,
@@ -144,9 +189,10 @@ internal class CallConnectionCoordinator(
                     L.e { "[Call] connect exception url=${att.connectUrl} err=${t}" }
                     when (t) {
                         is SocketTimeoutException, is RoomException.ConnectTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
+                            reportCertRiskIfNeeded(t, att.serverHost)
                             LCallEngine.reportConnectionFailure(att.connectUrl)
                             roomCtl.room.disconnect()
-                            transientFailure = true
+                            transientErrorMsg = "${t.javaClass.simpleName}: ${t.message.orEmpty()}"
                         }
                         is RoomException.NoAuthException, is RoomException.StartCallException, is StartCallException -> {
                             terminalError = StartCallException(t.message)
@@ -157,21 +203,31 @@ internal class CallConnectionCoordinator(
                     }
                 }
 
-                if (!transientFailure && terminalError == null) {
+                if (transientErrorMsg == null && terminalError == null) {
                     LCallEngine.setConnectedServerUrl(att.connectUrl)
+                    reportChannelDowngradeIfNeeded(att, hadQuicFailure, hadPrimaryFailure, lastFailedErrorMsg)
                     isRetryUrlConnecting = false
                     return true
                 }
+
+                val errorMsg = terminalError?.let { "${it.javaClass.simpleName}: ${it.message.orEmpty()}" }
+                    ?: transientErrorMsg.orEmpty()
+                reportConnectFail(att, errorMsg)
+
                 terminalError?.let { err ->
                     isRetryUrlConnecting = false
                     failWith(err)
                     return false
                 }
 
+                if (att.useQuic) hadQuicFailure = true
+                if (att.nodeType == ConnectionAttempt.NODE_TYPE_PRIMARY) hadPrimaryFailure = true
+                lastFailedErrorMsg = errorMsg
+
                 failureCount++
                 if (failureCount == 6) {
                     L.w {
-                        "[Call] meeting connect transient failures exceeded 5 (count=$failureCount, phase=$phase, lastUrl=${att.connectUrl}); analytics/report TODO"
+                        "[Call] meeting connect transient failures exceeded 5 (count=$failureCount, phase=$phase, lastUrl=${att.connectUrl})"
                     }
                 }
                 isRetryUrlConnecting = idx < attempts.lastIndex || phase < 2
@@ -202,9 +258,14 @@ internal class CallConnectionCoordinator(
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
             return false
         }
-        val appToken = SecureSharedPrefsUtil.getToken()
+        val appToken = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (appToken.isEmpty()) {
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
+            return false
+        }
+        if (roomCtl.isProxyActiveWithoutTurn()) {
+            L.w { "[Call] manualSwitch blocked: proxy active without TURN, media would expose client IP" }
+            failWith(StartCallException(getString(R.string.call_proxy_turn_required_tip)))
             return false
         }
         val normalizedUrl = MeetingConnectionPlanner.normalizeConnectUrl(serverUrl) ?: run {
@@ -245,6 +306,7 @@ internal class CallConnectionCoordinator(
             when (e) {
                 is SocketTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
                     L.e { "[Call] manualSwitch transient url=$connectUrl err=${e.message}" }
+                    reportCertRiskIfNeeded(e, serverHost)
                     LCallEngine.reportConnectionFailure(connectUrl)
                     roomCtl.room.disconnect()
                     failWith(ServerConnectionException(getString(R.string.call_connect_timeout_tip)))
@@ -267,6 +329,20 @@ internal class CallConnectionCoordinator(
     fun resolveManualConnectUrl(node: ServerNode?, useQuicSignal: Boolean): String? {
         val n = node ?: return null
         return if (useQuicSignal) {
+            // QUIC-over-proxy (MASQUE-lite, §9.6): the relay forwards by the tunnel's
+            // CONNECT target host, which must be a DOMAIN to match its suffix allowlist
+            // (an IP literal would be denied). Under a proxy QUIC relay, connect via the
+            // node domain ONLY; if the node has no domain, refuse (return null) rather
+            // than fall through to QUIC-by-IP — that would always be denied by the relay
+            // whitelist. Mirrors MeetingConnectionPlanner.appendNodeAttempts (skip node).
+            if (ProxyConfigProvider.isProxyForCallQuicEnabled) {
+                return if (n.domain.isNotBlank())
+                    MeetingConnectionPlanner.normalizeConnectUrl(n.domain)
+                else {
+                    L.w { "[Call] proxy-QUIC but node '${n.name}' has no domain; refusing QUIC-by-IP" }
+                    null
+                }
+            }
             val ip = n.addrs.firstOrNull { it.isNotBlank() }?.trim()
             when {
                 !ip.isNullOrEmpty() -> MeetingConnectionPlanner.normalizeConnectUrl(ip)
@@ -309,11 +385,12 @@ internal class CallConnectionCoordinator(
             LCallEngine.serverNodeSelected,
             LCallEngine.connectionType,
         ) { node, connectionType -> node to connectionType }
-            .collect { (selectedNode, connectionType) ->
+            .collect { (selectedNode, _) ->
                 val status = roomCtl.callStatus.value
                 if (status != CallStatus.CONNECTED && status != CallStatus.RECONNECTED) return@collect
 
-                val useQuicSignal = connectionType == CONNECTION_TYPE.HTTP3_QUIC
+                // Honors the proxy QUIC→WSS override centrally (see LCallEngine.isUseQuicSignal).
+                val useQuicSignal = LCallEngine.isUseQuicSignal()
                 val connectionTypeChanged = roomCtl.isUseQuicSignal() != useQuicSignal
                 if (selectedNode == null && !connectionTypeChanged) return@collect
 
@@ -326,15 +403,7 @@ internal class CallConnectionCoordinator(
                         "[call] manualSwitchReconnect rejected: only self in room, node=${selectedNode?.name} useQuic=$useQuicSignal"
                     }
                     showToast(getString(R.string.call_server_node_switch_forbid_only_self))
-                    if (connectionTypeChanged) {
-                        LCallEngine.setSelectedConnectMode(
-                            if (roomCtl.isUseQuicSignal()) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET,
-                            fromUserSelection = false,
-                        )
-                    }
-                    if (selectedNode != null) {
-                        LCallEngine.resetSelectedServerNode()
-                    }
+                    rollbackManualSwitch(selectedNode, connectionTypeChanged)
                     return@collect
                 }
 
@@ -344,13 +413,14 @@ internal class CallConnectionCoordinator(
                     L.w {
                         "[call] manualSwitchReconnect no effective url, node=${targetNode?.name} useQuic=$useQuicSignal"
                     }
+                    showToast(getString(R.string.call_server_node_switch_unavailable))
+                    rollbackManualSwitch(selectedNode, connectionTypeChanged)
                     return@collect
                 }
                 L.i {
                     "[call] manualSwitchReconnect node=${targetNode?.name} useQuic=$useQuicSignal effective=$effective"
                 }
                 roomCtl.updateCallStatus(CallStatus.SWITCHING_SERVER)
-                roomCtl.room.disconnect()
 
                 val body = StartCallRequestBody(
                     callIntent.callType,
@@ -360,10 +430,43 @@ internal class CallConnectionCoordinator(
                     roomId = roomIdGetter(),
                 )
                 val joinCallParams = createStartCallParams(body)
+                // disconnect() is a blocking call; under an active proxy the tunnel
+                // socket close performs a TLS close_notify network write. The combine
+                // collector runs on the (Main) viewModelScope, so disconnecting here
+                // directly would do network I/O on the main thread
+                // (NetworkOnMainThreadException). Run it on IO, right before the
+                // reconnect, so ordering is preserved.
                 scope.launch(Dispatchers.IO) {
+                    // Guard with runCatching so an unexpected disconnect() failure
+                    // can't abort the coroutine and leave the call stuck in
+                    // SWITCHING_SERVER (or cancel the parent scope) — reconnect must
+                    // always be attempted. Mirrors CallRoomController.disconnectAndRelease().
+                    runCatching { roomCtl.room.disconnect() }
+                        .onFailure { L.w { "[call] manualSwitchReconnect disconnect failed, proceeding to reconnect: ${it.message}" } }
                     connectToRoomManualSwitch(effective, joinCallParams, useQuicSignal)
                 }
             }
+    }
+
+    /**
+     * Rolls engine state back to the currently-active transport / node after a manual
+     * switch that cannot take effect (rejected up-front or no reachable URL). Mirrors the
+     * connection-mode/node reset that the "only self in room" guard performs, so the
+     * controlled UI reflects the still-live connection instead of a stale toggle.
+     *
+     * Must be called BEFORE any reconnect is attempted: it reads [CallRoomController.isUseQuicSignal]
+     * which `connect()` overwrites with the attempted value before the handshake completes.
+     */
+    private fun rollbackManualSwitch(selectedNode: ServerNode?, connectionTypeChanged: Boolean) {
+        if (connectionTypeChanged) {
+            LCallEngine.setSelectedConnectMode(
+                if (roomCtl.isUseQuicSignal()) CONNECTION_TYPE.HTTP3_QUIC else CONNECTION_TYPE.WEB_SOCKET,
+                fromUserSelection = false,
+            )
+        }
+        if (selectedNode != null) {
+            LCallEngine.resetSelectedServerNode()
+        }
     }
 
     fun inferConnectedNode(): ServerNode? {
@@ -451,5 +554,21 @@ internal class CallConnectionCoordinator(
         val selectedDomain = LCallEngine.serverNodeSelected.value?.domain?.trim().orEmpty()
         if (selectedDomain.isNotEmpty()) return selectedDomain
         return cached?.primary?.domain?.trim().orEmpty()
+    }
+
+    private fun reportConnectFail(att: ConnectionAttempt, errorMsg: String) {
+        statisticsLogManager.reportConnectFail(att.connectUrl, att.serverHost, att.useQuic, att.nodeType, errorMsg)
+    }
+
+    private fun reportChannelDowngradeIfNeeded(
+        successAtt: ConnectionAttempt,
+        hadQuicFailure: Boolean,
+        hadPrimaryFailure: Boolean,
+        lastFailedErrorMsg: String,
+    ) {
+        statisticsLogManager.reportChannelDowngradeIfNeeded(
+            successAtt.connectUrl, successAtt.serverHost, successAtt.useQuic, successAtt.nodeType,
+            hadQuicFailure, hadPrimaryFailure, lastFailedErrorMsg,
+        )
     }
 }

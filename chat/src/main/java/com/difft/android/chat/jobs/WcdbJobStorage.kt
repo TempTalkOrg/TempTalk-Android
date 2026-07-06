@@ -231,7 +231,7 @@ class WcdbJobStorage @Inject constructor(
     @WorkerThread
     fun getAllJobSpecs(): List<JobSpec> = try {
         wcdb.jobSpec.prepareSelect()
-            .select(*DBJobSpecModel.INSTANCE.allBindingFields())
+            .select(*DBJobSpecModel.allBindingFields())
             .orderBy(
                 OrderingTerm(DBJobSpecModel.createTime).order(Order.Asc),
                 OrderingTerm(DBJobSpecModel.jobSpecId).order(Order.Asc)

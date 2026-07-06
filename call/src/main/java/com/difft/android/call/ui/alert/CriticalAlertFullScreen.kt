@@ -30,16 +30,19 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.R
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 
 
@@ -115,7 +118,9 @@ fun CriticalAlertFullScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))  // 背景遮罩
+            .background(Color.Black.copy(alpha = 0.45f))
+            .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+            .testTag("critical_alert_root")
     ) {
         Box(
             modifier = Modifier
@@ -137,7 +142,6 @@ fun CriticalAlertFullScreen(
                 ) {
                     AnimatedCssPoliceLightBar(modifier = Modifier.matchParentSize())
 
-                    // 右上角关闭按钮
                     Icon(
                         painter = painterResource(id = com.difft.android.call.R.drawable.close),
                         contentDescription = "Close critical alert",
@@ -146,6 +150,7 @@ fun CriticalAlertFullScreen(
                             .align(Alignment.TopEnd)
                             .padding(12.dp)
                             .size(18.dp)
+                            .testTag("critical_alert_close_btn")
                             .clickable { onCloseClick() }
                     )
 
@@ -170,7 +175,7 @@ fun CriticalAlertFullScreen(
                         lineHeight = 20.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
-                        color = colorResource(R.color.t_primary_night),
+                        color = DifftTheme.colors.textPrimary,
                         textAlign = TextAlign.Center,
                     )
                 )
@@ -185,18 +190,18 @@ fun CriticalAlertFullScreen(
                         lineHeight = 16.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
-                        color = colorResource(R.color.t_secondary_night),
+                        color = DifftTheme.colors.textSecondary,
                         textAlign = TextAlign.Center,
                     )
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Join button
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF3D73F5))
+                        .testTag("critical_alert_join_btn")
                         .clickable { onJoinClick() }
                         .padding(vertical = 10.dp, horizontal = 30.dp)
                 ) {

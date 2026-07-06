@@ -10,6 +10,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.chat.common.TextTruncationUtil
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.isLongTextAttachment
 import difft.android.messageserialization.model.Mention
 
 /**
@@ -54,6 +55,7 @@ class MessageActionCoordinator(
         fun onDeleteSaved(message: TextChatMessage)
         fun onRecall(message: TextChatMessage)
         fun onMoreInfo(message: TextChatMessage)
+        fun onFavoriteGif(message: TextChatMessage)
         fun onDismiss()
     }
     
@@ -161,15 +163,21 @@ class MessageActionCoordinator(
             // Setup selection menu callbacks
             popup.setSelectionMenuCallbacks(object : MessageActionPopup.SelectionMenuCallbacks {
                 override fun onCopy() {
-                    val selectedText = textSelectionManager?.getSelectedText() ?: ""
+                    // Pass null (not "") when nothing is actually selected so the listener's
+                    // null-check correctly distinguishes "full-message copy" vs "partial
+                    // copy". Selection menu mode normally always has a selection, but
+                    // textSelectionManager can be in a transient detached state; treat that
+                    // as null instead of silently copying an empty string and toasting "Copied".
+                    val selectedText = resolveSelectionForFullMessage(currentMessage)
                     currentMessage?.let { msg ->
                         actionListener?.onCopy(msg, selectedText)
                     }
                     dismiss()
                 }
-                
+
                 override fun onForward() {
-                    val selectedText = textSelectionManager?.getSelectedText() ?: ""
+                    // Same null-vs-empty discipline as onCopy above.
+                    val selectedText = resolveSelectionForFullMessage(currentMessage)
                     currentMessage?.let { msg ->
                         actionListener?.onForward(msg, selectedText)
                     }
@@ -335,7 +343,38 @@ class MessageActionCoordinator(
      */
     val message: TextChatMessage?
         get() = currentMessage
-    
+
+    /**
+     * Resolve the selected text to pass to copy/forward.
+     *
+     * A long-text bubble only renders a truncated preview (capped at maxLines) followed by a
+     * "Read more" span; the complete body lives in the attachment file, not in the TextView.
+     * When the user's selection runs to the end of that preview (i.e. it includes "Read more"),
+     * the intent is "the whole message", but getSelectedText() can only return the truncated
+     * preview. Returning null here routes such selections to the full-message path
+     * (copyMessageContent / forwardMessage), which reads the full text from the attachment.
+     * Genuine partial selections (that stop before the end) still forward/copy just the snippet.
+     */
+    private fun resolveSelectionForFullMessage(message: TextChatMessage?): String? {
+        val selectedText = textSelectionManager?.getSelectedText()?.takeIf { it.isNotEmpty() }
+        if (selectedText == null) return null
+        if (message?.isLongTextAttachment() == true && selectionReachesTextEnd()) {
+            return null
+        }
+        return selectedText
+    }
+
+    /**
+     * True when the current selection extends to the end of the bubble text — for long-text
+     * bubbles the trailing "Read more" span always sits at the very end, so a selection whose
+     * end reaches the text length necessarily includes it.
+     */
+    private fun selectionReachesTextEnd(): Boolean {
+        val manager = textSelectionManager ?: return false
+        val length = currentTextView?.text?.length ?: return false
+        return manager.hasSelection() && manager.getSelectionEnd() >= length
+    }
+
     private fun createPopupCallbacks(): MessageActionPopup.Callbacks {
         return object : MessageActionPopup.Callbacks {
             override fun onReactionSelected(emoji: String, isRemove: Boolean) {
@@ -377,6 +416,7 @@ class MessageActionCoordinator(
             MessageAction.Type.DELETE_SAVED -> actionListener?.onDeleteSaved(message)
             MessageAction.Type.RECALL -> actionListener?.onRecall(message)
             MessageAction.Type.MORE_INFO -> actionListener?.onMoreInfo(message)
+            MessageAction.Type.FAVORITE_GIF -> actionListener?.onFavoriteGif(message)
             MessageAction.Type.MORE -> { /* Handled by popup internally */ }
             MessageAction.Type.SELECT_ALL -> { /* Handled by TextSelectionPopup */ }
             MessageAction.Type.RESEND,

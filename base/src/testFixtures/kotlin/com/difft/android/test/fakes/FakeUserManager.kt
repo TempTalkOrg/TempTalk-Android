@@ -25,12 +25,10 @@ class FakeUserManager(
 
     companion object {
         const val TEST_USER_ID = "test-user-001"
-        const val TEST_PASSWORD = "test-password"
         const val TEST_BASE_AUTH = "dGVzdC11c2VyLTAwMTp0ZXN0LXBhc3N3b3Jk"
 
         val DEFAULT_USER_DATA = UserData(
             account = TEST_USER_ID,
-            password = TEST_PASSWORD,
             baseAuth = TEST_BASE_AUTH,
             email = "test@temptalk.org"
         )

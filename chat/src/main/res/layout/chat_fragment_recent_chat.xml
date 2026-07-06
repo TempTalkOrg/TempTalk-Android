@@ -27,11 +27,27 @@
             android:id="@+id/add_options"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
+            android:contentDescription="@string/chat_add_options"
             android:padding="16dp"
             android:src="@mipmap/chat_add_options"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/t.primary" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_proxy_status"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/chat_proxy_status"
+            android:paddingStart="16dp"
+            android:paddingEnd="0dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/chat_ic_proxy_shield_checking"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/add_options"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:visibility="visible" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

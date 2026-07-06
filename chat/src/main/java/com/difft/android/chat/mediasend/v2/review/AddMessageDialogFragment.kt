@@ -7,7 +7,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
+import com.difft.android.base.utils.utf8Substring
+import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
 import com.difft.android.chat.databinding.V2MediaAddMessageDialogFragmentBinding
 import com.difft.android.chat.components.KeyboardEntryDialogFragment
 import com.difft.android.chat.components.ViewBinderDelegate
@@ -25,8 +28,18 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 
-        binding.content.addAMessageInput.addTextChangedListener(afterTextChanged = {
-            viewModel.setMessage(it?.toString())
+        binding.content.addAMessageInput.addTextChangedListener(afterTextChanged = { editable ->
+            val text = editable?.toString().orEmpty()
+            val utf8Size = text.toByteArray(Charsets.UTF_8).size
+            if (utf8Size > MAX_TEXT_FILE_SIZE) {
+                val truncated = text.utf8Substring(MAX_TEXT_FILE_SIZE)
+                ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
+                binding.content.addAMessageInput.setText(truncated)
+                binding.content.addAMessageInput.setSelection(binding.content.addAMessageInput.text?.length ?: 0)
+                viewModel.setMessage(truncated)
+            } else {
+                viewModel.setMessage(text)
+            }
         })
 
         binding.content.addAMessageInput.setText(requireArguments().getCharSequence(ARG_INITIAL_TEXT))

@@ -1,26 +1,24 @@
 package com.difft.android.call.manager
 
-import android.content.Context
-import android.content.SharedPreferences
-import androidx.core.content.edit
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.base.call.ServiceUrlDataV2
 import com.difft.android.base.call.ServiceUrls
+import com.difft.android.base.call.UrlInfo
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.storage.SecureConfigStore
+import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.base.utils.appScope
+import com.difft.android.call.data.CallStatisticsEvent
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.components.SingletonComponent
+import com.difft.android.network.proxy.ProxyConfigProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -36,40 +34,20 @@ import javax.inject.Singleton
  */
 @Singleton
 class CallServiceUrlManager @Inject constructor(
-    @ApplicationContext private val appContext: Context,
+    private val statisticsLogManager: dagger.Lazy<CallStatisticsLogManager>,
+    @ChativeHttpClientModule.Call private val callHttpClient: dagger.Lazy<ChativeHttpClient>,
+    private val secureConfigStore: SecureConfigStore,
+    private val proxyConfigProviderLazy: dagger.Lazy<ProxyConfigProvider>,
+    private val globalConfigsManagerLazy: dagger.Lazy<IGlobalConfigsManager>,
 ) {
 
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        @ChativeHttpClientModule.Call
-        fun callHttpClient(): ChativeHttpClient
-    }
-
     private val callHttpService: LCallHttpService by lazy {
-        EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance)
-            .callHttpClient()
-            .getService(LCallHttpService::class.java)
+        callHttpClient.get().getService(LCallHttpService::class.java)
     }
 
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
-    }
-
-    private val prefs: SharedPreferences by lazy {
-        val start = System.currentTimeMillis()
-        EncryptedSharedPreferences.create(
-            appContext,
-            PREFS_FILE_NAME,
-            MasterKey.Builder(appContext)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        ).also {
-            L.i { "[Call] CallServiceUrlManager EncryptedSharedPreferences init took ${System.currentTimeMillis() - start}ms" }
-        }
     }
 
     private val lock = Any()
@@ -89,10 +67,49 @@ class CallServiceUrlManager @Inject constructor(
 
     private val foregroundRefreshMinIntervalMs = 20 * 60 * 1000L
 
+    /**
+     * Synthesizes a [ServiceUrls] from the proxy call tunnel domains
+     * (`proxy.tunnelDomains.call`, live-preferred + embedded fallback). While the
+     * proxy is active, call connections are forced onto these domains so the call
+     * domain stays inside the relay's `ssl_preread` whitelist.
+     *
+     * Only the DOMAIN is needed: under the proxy, the meeting connection planner
+     * connects by domain (WSS, or QUIC-over-proxy when the relay advertises `q`),
+     * never by IP — so no `addrs` are synthesized. The first domain becomes
+     * [ServiceUrls.primary]; the rest become [ServiceUrls.fallback]. Returns
+     * `null` when no proxy call domain is configured (callers then fail closed
+     * rather than connect direct).
+     */
+    private fun proxyServiceUrls(): ServiceUrls? {
+        val domains = globalConfigsManagerLazy.get().getProxyTunnelCallDomains()
+        val primaryDomain = domains.firstOrNull() ?: return null
+        return ServiceUrls(
+            config_version = 0,
+            fallback = domains.drop(1).map { UrlInfo(addrs = emptyList(), domain = it, region = "") },
+            primary = UrlInfo(addrs = emptyList(), domain = primaryDomain, region = ""),
+            ttl = 0,
+        )
+    }
+
+    /**
+     * Loads the persisted [CallServiceUrlDiskState] from [SecureConfigStore] into the
+     * in-memory cache. Must be invoked under [lock].
+     *
+     * **`runBlocking` bridge rationale**: the public surface of this class includes
+     * non-suspend accessors ([getCachedServiceUrls]) and sync `synchronized(lock) { ... }`
+     * blocks inside suspend methods. The DataStore is pre-warmed by `StoragePreloader`
+     * at application startup (issue #725 Task 2), so `.first()` returns from the
+     * in-memory cache without blocking on disk I/O. The bridge sits inside an
+     * already-IO-bound caller (every public method dispatches to [Dispatchers.IO]
+     * before touching this method) — see issue #725 design §3.7.
+     */
+    @Suppress("BanRunBlockingOutsideTests")
     private fun loadFromDiskLocked() {
         if (loadedFromDisk) return
-        val raw = prefs.getString(PREFS_KEY_STATE, null)
-        memState = if (raw.isNullOrBlank()) {
+        val raw = runBlocking(Dispatchers.IO) {
+            secureConfigStore.callServiceUrlStateV3Flow.first()
+        }
+        memState = if (raw.isBlank()) {
             null
         } else {
             try {
@@ -105,49 +122,41 @@ class CallServiceUrlManager @Inject constructor(
         loadedFromDisk = true
     }
 
+    /**
+     * Persists [state] via [SecureConfigStore] and updates [memState]. Must be invoked
+     * under [lock]. Same `runBlocking` bridge rationale as [loadFromDiskLocked].
+     */
+    @Suppress("BanRunBlockingOutsideTests")
     private fun persistLocked(state: CallServiceUrlDiskState) {
-        prefs.edit { putString(PREFS_KEY_STATE, json.encodeToString(state)) }
+        val encoded = json.encodeToString(state)
+        runBlocking(Dispatchers.IO) {
+            secureConfigStore.saveCallServiceUrlStateV3(encoded)
+        }
         memState = state
     }
 
-    private fun mergeWithRemote(
-        local: CallServiceUrlDiskState?,
+    private fun buildStateFromRemote(
+        previous: CallServiceUrlDiskState?,
         remote: ServiceUrls,
         serverTimestamp: Long?,
     ): CallServiceUrlDiskState {
-        val remoteVersion = remote.config_version
-        val localVersion = local?.configVersion() ?: -1
         val now = System.currentTimeMillis()
         val expiresAt = computeExpiresAtMillis(serverTimestamp, remote.ttl)
+        val remoteStored = remote.toStored()
 
-        return when {
-            localVersion > remoteVersion -> {
-                L.w {
-                    "[Call] CallServiceUrlManager remote config_version ($remoteVersion) < local ($localVersion), keep local"
-                }
-                local?.copy(
-                    expiresAtMillis = expiresAt,
-                    lastFetchedAtMillis = now,
-                ) ?: CallServiceUrlDiskState(
-                    expiresAtMillis = expiresAt,
-                    lastFetchedAtMillis = now,
-                    serviceUrls = remote.toStored(),
-                )
-            }
-            localVersion == remoteVersion && local != null -> {
-                local.copy(
-                    expiresAtMillis = expiresAt,
-                    lastFetchedAtMillis = now,
-                )
-            }
-            else -> {
-                CallServiceUrlDiskState(
-                    expiresAtMillis = expiresAt,
-                    lastFetchedAtMillis = now,
-                    serviceUrls = remote.toStored(),
-                )
+        if (previous?.serviceUrls != null && previous.serviceUrls != remoteStored) {
+            L.i {
+                "[Call] CallServiceUrlManager serviceUrls changed: " +
+                    "version ${previous.configVersion()} → ${remote.config_version}, " +
+                    "region ${previous.serviceUrls.primary?.region} → ${remoteStored.primary?.region}"
             }
         }
+
+        return CallServiceUrlDiskState(
+            expiresAtMillis = expiresAt,
+            lastFetchedAtMillis = now,
+            serviceUrls = remoteStored,
+        )
     }
 
     /** Collects connection endpoint strings from structured config (order: primary → fallback). */
@@ -175,10 +184,7 @@ class CallServiceUrlManager @Inject constructor(
     /**
      * Triggered on app foreground from [ProcessLifecycleOwner] / [util.AppForegroundObserver],
      * i.e. on the **main thread**. The whole body is dispatched to [Dispatchers.IO] because the
-     * throttle check itself touches disk: [loadFromDiskLocked] lazily initializes
-     * [EncryptedSharedPreferences], which performs Android Keystore load + AES256_GCM master key
-     * derivation on first access (see the init-took log below) and subsequently a GCM-decrypted
-     * `prefs.getString(...)`. Keeping this off main avoids cold-start jank / potential ANR.
+     * throttle check itself touches the DataStore on first access via [loadFromDiskLocked].
      */
     fun onAppForegrounded() {
         appScope.launch(Dispatchers.IO) {
@@ -205,6 +211,15 @@ class CallServiceUrlManager @Inject constructor(
      * preventing use of expired configuration as valid.
      */
     suspend fun ensureServiceUrlsForCall(timeoutMs: Long = 15_000L): ServiceUrls? {
+        // Proxy active for calls: hard-switch to the proxy call tunnel domains (no
+        // live fetch, no fallback) so the call domain stays whitelist-aligned with
+        // the relay. Gated on isEnabledForCall ("Protect IP address in calls") so
+        // calls fall back to live URLs (direct) when the toggle is off. Read the
+        // injected instance (not the static mirror) so the cold-start refresh
+        // self-heals before warmUp.
+        if (proxyConfigProviderLazy.get().isEnabledForCall) {
+            return proxyServiceUrls()
+        }
         val snapshot = synchronized(lock) {
             loadFromDiskLocked()
             memState
@@ -255,7 +270,7 @@ class CallServiceUrlManager @Inject constructor(
     }
 
     private suspend fun doFetchAndCache(): List<String> {
-        val token = SecureSharedPrefsUtil.getToken()
+        val token = (globalServices.userManager.getUserData()?.microToken ?: "")
         if (token.isEmpty()) {
             return synchronized(lock) {
                 loadFromDiskLocked()
@@ -266,6 +281,12 @@ class CallServiceUrlManager @Inject constructor(
             val response = callHttpService.getServiceUrlV2(token)
             if (response.status != 0 || response.data == null) {
                 L.e { "[Call] CallServiceUrlManager getServiceUrlV2 failed status=${response.status}" }
+                statisticsLogManager.get().report(
+                    CallStatisticsEvent.ConfigRefreshFail(
+                        errorCode = response.status.toString(),
+                        errorMsg = response.reason.orEmpty(),
+                    )
+                )
                 return synchronized(lock) {
                     loadFromDiskLocked()
                     connectionEndpointsFromState(memState)
@@ -298,21 +319,27 @@ class CallServiceUrlManager @Inject constructor(
      */
     private fun mergeAndPersist(data: ServiceUrlDataV2, serverTimestamp: Long?): CallServiceUrlDiskState {
         val remote = data.serviceUrls
-        return synchronized(lock) {
+        val result = synchronized(lock) {
             loadFromDiskLocked()
             if (remote == null) {
                 L.w { "[Call] CallServiceUrlManager serviceUrls body null" }
                 memState ?: CallServiceUrlDiskState()
             } else {
-                val merged = mergeWithRemote(memState, remote, serverTimestamp)
+                val merged = buildStateFromRemote(memState, remote, serverTimestamp)
                 persistLocked(merged)
                 merged
             }
         }
+        return result
     }
 
     /** Current in-memory/disk [ServiceUrls] (no expiration check), used to read refresh results after failover. */
     fun getCachedServiceUrls(): ServiceUrls? {
+        // Proxy active for calls: keep parity with ensureServiceUrlsForCall — read the
+        // proxy call tunnel domains so failover paths don't fall back to live URLs.
+        if (proxyConfigProviderLazy.get().isEnabledForCall) {
+            return proxyServiceUrls()
+        }
         synchronized(lock) {
             loadFromDiskLocked()
             return memState?.serviceUrls?.toServiceUrls()
@@ -320,9 +347,6 @@ class CallServiceUrlManager @Inject constructor(
     }
 
     companion object {
-        private const val PREFS_FILE_NAME = "secure_global_config"
-        private const val PREFS_KEY_STATE = "call_service_url_state_v3"
-
         private const val FAILURE_REFRESH_MIN_INTERVAL_MS = 30_000L
         private const val COALESCE_WINDOW_MS = 5_000L
         private val FALLBACK_HARDCODED_URLS = emptyList<String>()

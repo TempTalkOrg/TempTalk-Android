@@ -5,6 +5,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.websocket.api.messages.DetailMessageType
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.messages.SendMessageResult
+import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
 import com.difft.android.websocket.api.push.exceptions.UnregisteredUserException
 import com.difft.android.websocket.api.services.NewMessagingService
@@ -421,9 +422,27 @@ class NewSignalServiceMessageSender @Inject constructor(
         timestamp: Long,
     ): NewOutgoingPushMessage {
         if (conversationManager.hasPublicKeyInfoData(room).not()) {
-            if (!conversationManager.updatePublicKeyInfoData(room)) {
-                throw IOException("Failed to update public key info data")
-            }
+            // issue #970 ②: only "group invalid" (EntityInvalid = server group status != 0,
+            // reliable and unambiguous) is permanent (stop retrying). ServerEmpty (HTTP200 +
+            // non-null body but an empty keys array) is an **ambiguous** signal — the entity may
+            // be gone, or a valid recipient's keys may not have propagated yet (new group) /
+            // a transient server blank — so it is **transient** (IOException, retry self-heals),
+            // avoiding permanent loss of recoverable messages/group keys (PR #973 code-review).
+            // Network failure / not yet synced are likewise transient. Invalid-group churn is
+            // closed by EntityInvalid, not by ServerEmpty.
+            when (conversationManager.updatePublicKeyInfoDataResult(room)) {
+                PublicKeyUpdateResult.Updated -> { /* ok, fallthrough */ }
+
+                PublicKeyUpdateResult.EntityInvalid ->
+                    throw NoValidRecipientKeysException(
+                        "recipient keys unavailable (group invalid, status != 0) room=${room.id}"
+                    )
+
+                PublicKeyUpdateResult.ServerEmpty,
+                PublicKeyUpdateResult.FetchFailed,
+                PublicKeyUpdateResult.Unresolved ->
+                    throw IOException("Failed to update public key info data (transient) room=${room.id}")
+            }.exhaustive  // expression form → a new PublicKeyUpdateResult variant is a compile error, not a silent fallthrough
         } else {
             L.i { "[Message] public key info is ready" }
         }
@@ -437,9 +456,23 @@ class NewSignalServiceMessageSender @Inject constructor(
             }
 
         if (publicKeyInfos.isEmpty()) {
-            val error = "No valid public key info available after filtering (all identityKeys were empty)"
-            L.e { error }
-            throw IOException(error)
+            // Reached here: has=true (cache claims present) but everything filtered out, or
+            // has=false then update=Updated but the read came back empty. Re-confirm entity
+            // status: only EntityInvalid (group status != 0) → permanent; ServerEmpty (empty
+            // array, possibly a valid recipient not yet propagated) and the rest are all treated
+            // as transient, letting the job retry / self-heal (PR #973 code-review).
+            when (conversationManager.classifyEmptyKeys(room)) {
+                PublicKeyUpdateResult.EntityInvalid ->
+                    throw NoValidRecipientKeysException(
+                        "no valid public key info after filtering, group invalid (status != 0) room=${room.id}"
+                    )
+
+                PublicKeyUpdateResult.Updated,
+                PublicKeyUpdateResult.ServerEmpty,
+                PublicKeyUpdateResult.FetchFailed,
+                PublicKeyUpdateResult.Unresolved ->
+                    throw IOException("No valid public key info available after filtering (transient) room=${room.id}")
+            }.exhaustive  // expression form → a missing arm for a future variant is a compile error here too
         }
 
         val msgType = getMsgType(content)
@@ -841,4 +874,109 @@ class NewSignalServiceMessageSender @Inject constructor(
             forwardNoticeSync = message
         }
     }
+
+    /**
+     * Sends a [MessageActivityNotice] proto (Phase 1 schema; current type: COPY).
+     * Mirrors [sendForwardNoticeMessage] 1:1 — primary send + optional syncContent
+     * piggyback for 1v1-to-other so all of my own devices see the notice with the
+     * same `systemShowTimestamp` (avoids cross-device drift; see PR #705 fix).
+     *
+     * sendTimestamp/sendSyncToSelf/syncContent semantics are identical to
+     * forward notice; see that function's doc for the three-way alignment rationale.
+     */
+    suspend fun sendActivityNoticeMessage(
+        recipient: For,
+        room: For,
+        message: SignalServiceProtos.MessageActivityNotice,
+        sendSyncToSelf: Boolean,
+        sendTimestamp: Long
+    ): SendMessageResult {
+        L.i { "[Message] [$sendTimestamp] Sending an activity notice message to ${recipient.id} (sync=$sendSyncToSelf)" }
+        val primaryContent = contentCreator.createFrom(message)
+
+        val syncContent: String? = if (sendSyncToSelf && recipient is For.Account) {
+            if (conversationManager.hasPublicKeyInfoData(room).not()) {
+                L.i { "[Message] sendActivityNoticeMessage: updating public key info for room ${room.id}" }
+                conversationManager.updatePublicKeyInfoData(room)
+            }
+            generateActivityNoticeSyncContent(message, room)
+        } else {
+            null
+        }
+
+        val result = sendMessage(
+            recipient,
+            room,
+            sendTimestamp,
+            primaryContent,
+            false,
+            Optional.empty(),
+            Optional.empty(),
+            null,
+            syncContent
+        )
+        L.i { "[Message] sendActivityNoticeMessage success=${result.isSuccess()} syncCarried=${syncContent != null}" }
+        return result
+    }
+
+    /**
+     * Build the encrypted base64 `syncContent` payload for an activity notice —
+     * mirrors [generateForwardNoticeSyncContent] but wraps
+     * `Content.syncMessage.activityNoticeSync`.
+     */
+    private suspend fun generateActivityNoticeSyncContent(
+        message: SignalServiceProtos.MessageActivityNotice,
+        room: For
+    ): String? {
+        return try {
+            val syncMessageContent = createMultiDeviceActivityNoticeContent(message)
+
+            val publicKeyInfos = conversationManager.getPublicKeyInfos(room)
+            val myPublicKey = publicKeyInfos.firstOrNull { it.uid == localAddress.id }?.identityKey
+            if (myPublicKey.isNullOrBlank()) {
+                L.w { "[Message] generateActivityNoticeSyncContent: my public key not found in room ${room.id}, skip syncContent" }
+                return null
+            }
+
+            val encryptedMessage = messageEncryptor.encryptOneToOneMessage(
+                syncMessageContent.toByteArray(),
+                myPublicKey
+            )
+
+            val encryptedMessageContent = encryptContent {
+                version = MESSAGE_CURRENT_VERSION
+                cipherText = ByteString.copyFrom(encryptedMessage.cipherText)
+                eKey = ByteString.copyFrom(encryptedMessage.eKey)
+                identityKey = ByteString.copyFrom(encryptedMessage.identityKey)
+                signedEKey = ByteString.copyFrom(encryptedMessage.signedEKey)
+            }
+
+            Base64.encodeBytes(
+                byteArrayOf(
+                    intsToByteHigh(MESSAGE_CURRENT_VERSION, MESSAGE_MINIMUM_SUPPORTED_VERSION)
+                ) + encryptedMessageContent.toByteArray()
+            )
+        } catch (e: Exception) {
+            L.e { "[Message] generateActivityNoticeSyncContent failed: ${e.stackTraceToString()}" }
+            null
+        }
+    }
+
+    /**
+     * SyncMessage-wrapped Content for 1v1-to-other activity-notice self-sync.
+     * Mirrors [createMultiDeviceForwardNoticeContent].
+     */
+    internal fun createMultiDeviceActivityNoticeContent(
+        message: SignalServiceProtos.MessageActivityNotice
+    ): Content = content {
+        syncMessage = syncMessage {
+            activityNoticeSync = message
+        }
+    }
 }
+
+/**
+ * Forces a `when` to be evaluated as an expression so the compiler enforces exhaustiveness
+ * over sealed subjects (a missing arm becomes a compile error, not a silent statement fallthrough).
+ */
+private val <T> T.exhaustive: T get() = this

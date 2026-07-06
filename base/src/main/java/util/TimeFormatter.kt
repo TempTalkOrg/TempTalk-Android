@@ -73,6 +73,27 @@ object TimeFormatter {
         return SimpleDateFormat(pattern, currentLocale).format(calendar.time)
     }
 
+    /**
+     * Full date+time header used for multi-select copy output (PRD §3.2).
+     *
+     * Format (locale-aware):
+     * - en: "May 8, 2026 at 14:30"
+     * - zh: "2026年5月8日 14:30"
+     *
+     * Always 24-hour ("HH:mm") regardless of system 12/24h preference. The
+     * copied text crosses devices and apps, so the formatter must be
+     * deterministic and not vary by reader's local 12h setting.
+     */
+    fun formatCopyHeaderTime(language: String, timestamp: Long): String {
+        val locale = Locale(language)
+        val pattern = if (language == Locale.CHINA.language) {
+            "yyyy年M月d日 HH:mm"
+        } else {
+            "MMM d, yyyy 'at' HH:mm"
+        }
+        return SimpleDateFormat(pattern, locale).format(timestamp)
+    }
+
     // 判断是否是同一天
     private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
         return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR)

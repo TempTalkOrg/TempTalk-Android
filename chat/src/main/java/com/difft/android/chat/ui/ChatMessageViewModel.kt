@@ -35,12 +35,16 @@ import com.difft.android.chat.speech2text.SpeechToTextManager
 import com.difft.android.chat.translate.TranslateManager
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
+import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.BaseResponse
 import com.google.mlkit.nl.translate.TranslateLanguage
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.difft.android.chat.message.NoticeAggregator
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.ForwardNoticeData
@@ -74,14 +78,17 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.difft.app.database.convertToMessageModel
+import org.difft.app.database.forEachMessagePaged
 import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.getMessageById
+import org.difft.app.database.putMessageIfNotExists
 import org.difft.app.database.delete
 import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.getReadInfoList
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.ReadInfoModel
 import org.difft.app.database.updateGroupMembersReadPosition
@@ -91,6 +98,32 @@ import com.difft.android.chat.jobs.create
 import util.TimeFormatter
 import javax.inject.Inject
 
+/**
+ * Per-sender read-receipt accumulator used while paging in-range messages in
+ * [ChatMessageViewModel.sendReadRecipient]. Holds a reference to that sender's current max
+ * message (a handful of refs) plus its read-message `timeStamp`s — never the full message
+ * objects en masse. (#909 #5)
+ */
+internal data class SenderReadReceiptAcc(
+    var maxMessage: MessageModel,
+    val timeStamps: MutableList<Long>
+)
+
+/**
+ * One per-sender read-receipt Job to emit: the recipient, the (possibly chunked) timestamp
+ * list it carries, and the max message whose tuple becomes the Job's [ReadPosition]. The
+ * dispatch decision (which Jobs to emit) is computed by
+ * [ChatMessageViewModel.planReadReceiptJobs] so the large-group skip + chunking branch can be
+ * unit-tested without WCDB / the Job factory. (#909 #5, T18)
+ */
+internal data class ReadReceiptJobPlan(
+    val recipientId: String,
+    val timeStamps: List<Long>,
+    val maxMessage: MessageModel
+)
+
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @HiltViewModel(assistedFactory = ChatMessageViewModelFactory::class)
 class ChatMessageViewModel @AssistedInject constructor(
     @Assisted
@@ -104,6 +137,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val translateManager: dagger.Lazy<TranslateManager>,
     private val speechToTextManager: dagger.Lazy<SpeechToTextManager>,
     private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
+    private val activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val callDataManager: CallDataManager
 ) : ViewModel(),
@@ -231,6 +265,11 @@ class ChatMessageViewModel @AssistedInject constructor(
                 _chatMessageListUIState.value = it
             }.launchIn(viewModelScope)
 
+        // PRD §5 recall cleanup: rely on the wcdb query in onCopyClick to drop
+        // deleted/recalled ids — not on chatMessagesStateFlow, which only carries
+        // a paginated window (max 60 messages) and would mis-evict ids scrolled
+        // out of view.
+
         viewModelScope.launch(Dispatchers.IO) {
             initLoadMessage(jumpMessageTimeStamp)
             // Initial load of read info
@@ -281,14 +320,23 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
+
+    /**
+     * Optimistic add: persist the sent message off-main then append it to the list so it renders
+     * instantly, bypassing JobManager scheduling + the throttled observer re-query. Goes through
+     * putMessageIfNotExists so onAdded() finds the row and skips — no duplicate child rows (#997).
+     */
     fun addOneMessage(message: TextMessage) {
-        _chatMessageListUIState.value?.chatMessages?.lastOrNull()?.systemShowTimestamp?.let {
-            if (message.systemShowTimestamp < it) {
-                message.systemShowTimestamp = it + 1
+        viewModelScope.launch(Dispatchers.IO) {
+            _chatMessageListUIState.value?.chatMessages?.lastOrNull()?.systemShowTimestamp?.let {
+                if (message.systemShowTimestamp < it) {
+                    message.systemShowTimestamp = it + 1
+                }
             }
+            wcdb.putMessageIfNotExists(message)
+            val messageModel = wcdb.getMessageById(message.id) ?: return@launch
+            this@ChatMessageViewModel.addOneMessage(messageModel)
         }
-        val messageModel = wcdb.convertToMessageModel(message)
-        this.addOneMessage(messageModel)
     }
 
     fun setChatUIData(data: ChatUIData) {
@@ -347,7 +395,8 @@ class ChatMessageViewModel @AssistedInject constructor(
             val callData = callDataManager.getCallDataByConversationId(forWhat.id)
             if (callData != null) {
                 L.i { "[call] Joining existing call with roomId:${callData.roomId}" }
-                LCallManager.joinCall(activity.applicationContext, callData) { status ->
+                viewModelScope.launch {
+                    val status = LCallManager.joinCall(activity.applicationContext, callData)
                     if (!status) {
                         L.e { "[Call] startCall join call failed." }
                         ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
@@ -446,6 +495,56 @@ class ChatMessageViewModel @AssistedInject constructor(
     companion object {
         private const val AUTO_DELETE_DELAY = 3000L
         private const val MAX_SELECT_LIMIT = 50
+
+        /**
+         * Max read-message timestamps carried by a single read-receipt Job. A sender whose
+         * in-range timestamp list exceeds this is split across multiple Jobs sharing the same
+         * [ReadPosition]. Prevents the #909 OOM from relocating into Job `Data` serialization
+         * (a single 1000-long LongArray ≈ 8KB payload — safe). (#909 TP4)
+         */
+        const val MAX_TIMESTAMPS_PER_RECEIPT = 1000
+
+        /**
+         * Folds [msg] into the per-sender accumulator [perSender], updating that sender's
+         * running max message and appending its `timeStamp`. Pure (no DB / no I/O) so it can be
+         * unit-tested by feeding a message sequence directly. (#909 #5)
+         */
+        internal fun accumulateReadReceipt(
+            perSender: HashMap<String, SenderReadReceiptAcc>,
+            msg: MessageModel
+        ) {
+            val sender = msg.fromWho ?: ""
+            val acc = perSender[sender]
+            if (acc == null) {
+                perSender[sender] = SenderReadReceiptAcc(msg, mutableListOf(msg.timeStamp))
+            } else {
+                acc.timeStamps += msg.timeStamp
+                if (msg.systemShowTimestamp > acc.maxMessage.systemShowTimestamp) acc.maxMessage = msg
+            }
+        }
+
+        /**
+         * Computes the per-sender read-receipt Jobs to emit for an accumulated [perSender] map.
+         * - Large group ([isLargeGroup] true): returns empty — no per-sender receipts are sent
+         *   (only the sync job, emitted by the caller, runs). (#909 #5 large-group branch)
+         * - Otherwise: one plan per sender, with that sender's timestamp list split into chunks
+         *   of at most [chunkCap] so a single Job never serializes an unbounded LongArray. All
+         *   chunks for a sender share the same max message ⇒ same [ReadPosition]. (#909 TP4)
+         *
+         * Pure (no DB / no Job factory) so the dispatch + chunking branch is unit-testable. (T18)
+         */
+        internal fun planReadReceiptJobs(
+            perSender: Map<String, SenderReadReceiptAcc>,
+            isLargeGroup: Boolean,
+            chunkCap: Int = MAX_TIMESTAMPS_PER_RECEIPT
+        ): List<ReadReceiptJobPlan> {
+            if (isLargeGroup) return emptyList()
+            return perSender.flatMap { (recipientId, acc) ->
+                acc.timeStamps.chunked(chunkCap).map { chunk ->
+                    ReadReceiptJobPlan(recipientId, chunk, acc.maxMessage)
+                }
+            }
+        }
     }
 
     fun emojiReaction(emojiEvent: EmojiReactionEvent) {
@@ -603,7 +702,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         readInfoList: List<ReadInfoModel>
     ): ChatMessageListUIState {
         // 1. 先批量查询消息发送者的联系人信息（generateMessageTwo需要用于设置nickname）
-        val senderIds = chatMessageListBehavior.messageList.map { it.fromWho }.distinct()
+        val senderIds = chatMessageListBehavior.messageList.mapNotNull { it.fromWho }.distinct()
         val members = withContext(Dispatchers.IO) {
             wcdb.getContactorsFromAllTable(senderIds)
         }
@@ -727,69 +826,84 @@ class ChatMessageViewModel @AssistedInject constructor(
 
             val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat)
             if (currentReadPosition > lastReadPosition) {
-                val messages = wcdb.message.getAllObjects(
-                    DBMessageModel.roomId.eq(forWhat.id)
-                        .and(DBMessageModel.fromWho.notEq(globalServices.myId))
-                        .and(DBMessageModel.systemShowTimestamp.between(lastReadPosition, currentReadPosition))
-                )
+                // #909 #5: page the in-range messages instead of loading them all. Peak memory
+                // is one page + per-sender max-message refs + the timestamp longs, never the
+                // whole match set of full MessageModel objects.
+                val rangeCond = DBMessageModel.roomId.eq(forWhat.id)
+                    .and(DBMessageModel.fromWho.notEq(globalServices.myId))
+                    .and(DBMessageModel.systemShowTimestamp.between(lastReadPosition, currentReadPosition))
 
-                if (messages.isEmpty()) {
+                val perSender = HashMap<String, SenderReadReceiptAcc>()
+                var globalMax: MessageModel? = null
+                forEachMessagePaged(rangeCond) { msg ->
+                    accumulateReadReceipt(perSender, msg)
+                    if (globalMax == null || msg.systemShowTimestamp > globalMax!!.systemShowTimestamp) globalMax = msg
+                }
+
+                if (perSender.isEmpty()) {
                     L.i { "[${forWhat.id}] No messages to send read receipt for" }
                     return@withContext
                 }
 
-                val groupedMessages = messages.groupBy { it.fromWho }
-
                 // 1. 小群/单聊：为每个发送者创建Job发送已读回执 大群：跳过这一步
-                if (!isLargeGroup) {
-                    groupedMessages.forEach { (contactId, senderMessages) ->
-                        L.i { "[${forWhat.id}] Creating read receipt job for $contactId, messages=${senderMessages.size}" }
-                        val maxMessage = senderMessages.maxBy { it.systemShowTimestamp }
-                        val readPosition = ReadPosition(
-                            forWhat.id.takeIf { forWhat is For.Group },
-                            maxMessage.timeStamp,
-                            maxMessage.systemShowTimestamp,
-                            maxMessage.notifySequenceId,
-                            maxMessage.sequenceId
-                        )
-                        ApplicationDependencies.getJobManager().add(
-                            pushReadReceiptSendJobFactory.create(
-                                recipientId = contactId,
-                                forWhat = forWhat,
-                                messageTimeStamps = senderMessages.map { it.timeStamp },
-                                readPosition = readPosition,
-                                messageMode = 0,
-                                sendReceiptToSender = true,   // 小群发送已读回执
-                                sendSyncToSelf = false        // 统一在最后发送同步消息
-                            )
-                        )
-                    }
-                } else {
+                // #909 #5/TP4: dispatch + chunk decision is computed by the pure
+                // planReadReceiptJobs (large group ⇒ empty; otherwise one plan per chunk).
+                val receiptJobPlans = planReadReceiptJobs(perSender, isLargeGroup)
+                if (isLargeGroup) {
                     L.i { "[${forWhat.id}] Large group: skipping read receipt jobs, will only send sync message" }
+                }
+                receiptJobPlans.forEach { plan ->
+                    L.i { "[${forWhat.id}] Creating read receipt job for ${plan.recipientId}, messages=${plan.timeStamps.size}" }
+                    val maxMessage = plan.maxMessage
+                    val readPosition = ReadPosition(
+                        forWhat.id.takeIf { forWhat is For.Group },
+                        maxMessage.timeStamp,
+                        maxMessage.systemShowTimestamp,
+                        maxMessage.notifySequenceId,
+                        maxMessage.sequenceId
+                    )
+                    ApplicationDependencies.getJobManager().add(
+                        pushReadReceiptSendJobFactory.create(
+                            recipientId = plan.recipientId,
+                            forWhat = forWhat,
+                            messageTimeStamps = plan.timeStamps,
+                            readPosition = readPosition,
+                            messageMode = 0,
+                            sendReceiptToSender = true,   // 小群发送已读回执
+                            sendSyncToSelf = false        // 统一在最后发送同步消息
+                        )
+                    )
                 }
 
                 // 2. 统一发送一次同步消息（无论是否大群）
                 // 从所有消息中找到时间戳最大的消息，用于同步已读位置
-                val syncMaxMessage = messages.maxBy { it.systemShowTimestamp }
-                val syncReadPosition = ReadPosition(
-                    forWhat.id.takeIf { forWhat is For.Group },
-                    syncMaxMessage.timeStamp,
-                    syncMaxMessage.systemShowTimestamp,
-                    syncMaxMessage.notifySequenceId,
-                    syncMaxMessage.sequenceId
-                )
-                L.i { "[${forWhat.id}] Creating sync-only job to sync read position to self's other devices, maxTimestamp=${syncMaxMessage.systemShowTimestamp}" }
-                ApplicationDependencies.getJobManager().add(
-                    pushReadReceiptSendJobFactory.create(
-                        recipientId = syncMaxMessage.fromWho,
-                        forWhat = forWhat,
-                        messageTimeStamps = listOf(syncMaxMessage.timeStamp),
-                        readPosition = syncReadPosition,
-                        messageMode = 0,
-                        sendReceiptToSender = false,  // 不发已读回执
-                        sendSyncToSelf = true          // 只发同步消息
+                val syncMaxMessage = globalMax!!  // non-null: perSender non-empty ⇒ globalMax set
+                val syncRecipientId = syncMaxMessage.fromWho
+                if (syncRecipientId == null) {
+                    // Anomalous (system/corrupt message as the max anchor): a job persisted with an
+                    // empty recipientId would survive restart and dispatch to a non-existent recipient.
+                    L.w { "[${forWhat.id}] sync-only read-position job skipped: max message ${syncMaxMessage.timeStamp} has null fromWho" }
+                } else {
+                    val syncReadPosition = ReadPosition(
+                        forWhat.id.takeIf { forWhat is For.Group },
+                        syncMaxMessage.timeStamp,
+                        syncMaxMessage.systemShowTimestamp,
+                        syncMaxMessage.notifySequenceId,
+                        syncMaxMessage.sequenceId
                     )
-                )
+                    L.i { "[${forWhat.id}] Creating sync-only job to sync read position to self's other devices, maxTimestamp=${syncMaxMessage.systemShowTimestamp}" }
+                    ApplicationDependencies.getJobManager().add(
+                        pushReadReceiptSendJobFactory.create(
+                            recipientId = syncRecipientId,
+                            forWhat = forWhat,
+                            messageTimeStamps = listOf(syncMaxMessage.timeStamp),
+                            readPosition = syncReadPosition,
+                            messageMode = 0,
+                            sendReceiptToSender = false,  // 不发已读回执
+                            sendSyncToSelf = true          // 只发同步消息
+                        )
+                    )
+                }
             } else {
                 L.i { "[${forWhat.id}] Read recipient already sent at position: $lastReadPosition, no need to resend." }
             }
@@ -912,97 +1026,98 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
+    /**
+     * Multi-select → Forward. The "Combine & Forward" entry was merged into "Forward":
+     * a single selected message is forwarded on its own (Scene.SINGLE, preserving
+     * chat-history nesting / shared-contact / attachment), while a multi-selection is
+     * always bundled into ONE combined-forward container (Scene.COMBINED). The old
+     * per-message one-by-one path (Scene.ONE_BY_ONE) is no longer produced here; the
+     * enum value + proto mapping stay for wire compatibility with peers/older clients.
+     *
+     * PRD §5.3.4: priority-sort authors (CF sender → count desc → ts desc → authorId asc);
+     * messageCount = selected message count (a CF bubble counts as 1).
+     */
     fun onForwardClick() = viewModelScope.launch(Dispatchers.IO) {
         val loadedMessages =
             wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray()))
                 .map { it.convertToTextMessage() }
+        if (loadedMessages.isEmpty()) {
+            resetSelectMessageState()
+            return@launch
+        }
 
-        val forwardContexts = loadedMessages.mapNotNull {
-            val message = it
-            val content: String?
-            var forwardContext: ForwardContext? = null
-            if (!message.sharedContact.isNullOrEmpty()) {
-                content = ""
+        val myId = globalServices.myId
+        val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
+        // PRD v2.0 §改动3: pin the operator (myId) last in the source list.
+        val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId)
+        // PRD v2.0 §改动1/§改动2 条件①④: forward leaves a trace only if it carries someone else's
+        // real message (CF judged by inner authors). The forward ACTION still proceeds either way.
+        val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
+
+        val (forwardContexts, scene) = if (loadedMessages.size == 1) {
+            // Single selection → forward the one message as its own message.
+            val message = loadedMessages.first()
+            // Local val enables smart-cast in the != null branch (forwardContext is a
+            // mutable property, so it cannot be smart-cast directly).
+            val nestedForward = message.forwardContext
+            val singleContext: ForwardContext? = if (!message.sharedContact.isNullOrEmpty()) {
                 val sharedContactId = message.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
                 val sharedContactName = message.sharedContact?.getOrNull(0)?.name?.displayName
-                forwardContext = ForwardContext(null, false, sharedContactId, sharedContactName)
-            } else if (message.forwardContext != null) {
-                content = ResUtils.getString(R.string.chat_history)
-
-                forwardContext = message.forwardContext?.apply {
+                ForwardContext(null, false, sharedContactId, sharedContactName)
+            } else if (nestedForward != null) {
+                nestedForward.apply {
                     this.forwards?.forEach { forward ->
                         if (!forward.attachments.isNullOrEmpty()) {
-                            forward.attachments =
-                                forward.attachments?.subList(0, 1)
+                            forward.attachments = forward.attachments?.subList(0, 1)
                         }
                     }
                 }
             } else {
-                content = if (message.isAttachmentMessage()) {
-                    ResUtils.getString(R.string.chat_message_attachment)
-                } else {
-                    it.toString()
-                }
-                forwardContext = ForwardContext(mutableListOf<Forward>().apply {
+                ForwardContext(mutableListOf<Forward>().apply {
                     this.add(
                         Forward(
-                            it.timeStamp,
+                            message.timeStamp,
                             0,
-                            it.forWhat is For.Group,
-                            it.fromWho.id,
+                            message.forWhat is For.Group,
+                            message.fromWho.id,
                             message.text,
                             message.attachments,
                             null,
                             message.mentions,
-                            it.systemShowTimestamp
+                            message.systemShowTimestamp
                         )
                     )
-                }, it.forWhat is For.Group)
+                }, message.forWhat is For.Group)
             }
-            forwardContext
+            listOfNotNull(singleContext) to ForwardNoticeData.Scene.SINGLE
+        } else {
+            // Multi-select → bundle selected messages into ONE combined-forward container.
+            val combinedContext = ForwardContext(loadedMessages.map { message ->
+                Forward(
+                    message.timeStamp,
+                    0,
+                    message.forWhat is For.Group,
+                    message.fromWho.id,
+                    if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
+                    message.attachments,
+                    message.forwardContext?.forwards,
+                    message.mentions,
+                    message.systemShowTimestamp
+                )
+            }, forWhat is For.Group)
+            listOfNotNull(combinedContext) to ForwardNoticeData.Scene.COMBINED
         }
-        // Multi-select → Forward (one-by-one): each selected message is forwarded as its
-        // own message; Scene.ONE_BY_ONE is displayed as "saved/forwarded N messages" style
-        // in the notice renderer.
-        // One author entry per user-selected message (outer message, not nested).
-        // Pass the raw list — sendForwardNotice dedups for the authors display list
-        // but uses size as the message count.
+
         forwardMultiMessage.value = ForwardContextData(
             "",
             forwardContexts,
-            ForwardNoticeData.Scene.ONE_BY_ONE,
+            scene,
             forWhat,
-            sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+            sourceAuthorIds = sortedAuthorIds,
+            messageCount = loadedMessages.size,
+            combinedForwardMode = mode,
+            carriesForeignContent = carriesForeignContent,
         )
-        resetSelectMessageState()
-    }
-
-    fun onCombineClick() = viewModelScope.launch(Dispatchers.IO) {
-        val loadedMessages = wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray())).map { it.convertToTextMessage() }
-        val forwardContext = ForwardContext(loadedMessages.map {
-            val message = it
-            Forward(
-                it.timeStamp,
-                0,
-                it.forWhat is For.Group,
-                it.fromWho.id,
-                if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
-                message.attachments,
-                message.forwardContext?.forwards,
-                message.mentions,
-                it.systemShowTimestamp
-            )
-        }, forWhat is For.Group)
-        // Multi-select → Combine & Forward: selected messages are bundled into ONE
-        // forwarded container; Scene.COMBINED drives "forwarded N messages (combined)" text.
-        forwardMultiMessage.value =
-            ForwardContextData(
-                "",
-                listOfNotNull(forwardContext),
-                ForwardNoticeData.Scene.COMBINED,
-                forWhat,
-                sourceAuthorIds = loadedMessages.map { it.fromWho.id }
-            )
         resetSelectMessageState()
     }
 
@@ -1014,18 +1129,130 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
     }
 
+    /**
+     * Multi-select → Copy: format the selected messages and write to the clipboard
+     * inside the ViewModel coroutine (uses [application] context), THEN enqueue the
+     * copy notice. PRD §4.1 requires the trace notice be emitted only after a
+     * successful copy — writing the clipboard inline (rather than via a SharedFlow
+     * + Fragment collector) eliminates the race where the Fragment could be detached
+     * before the collector fires, leaving the clipboard empty while the notice goes
+     * out to peers.
+     *
+     * Order: messages are sorted by display position in the conversation (PRD §3.6),
+     * not by the user's selection order.
+     *
+     * Author names: passed through the message contacts cache with the remark-free
+     * accessor — PRD §3.3 mandates the author's own name in clipboard text (the
+     * trace system message uses remark-name; see Phase 4).
+     */
+    fun onCopyClick() = viewModelScope.launch(Dispatchers.IO) {
+        val selectedIds = selectMessagesState.value.selectedMessageIds
+        if (selectedIds.isEmpty()) return@launch
+        val loadedMessages = wcdb.message
+            .getAllObjects(DBMessageModel.id.`in`(*selectedIds.toTypedArray()))
+            .map { it.convertToTextMessage() }
+            .sortedBy { it.systemShowTimestamp }
+        if (loadedMessages.isEmpty()) return@launch
+
+        // Pre-warm name resolver for all authors + shared-contact uids in one batch
+        val authorIds = loadedMessages.map { it.fromWho.id }.toSet()
+        contactorCache.loadContactors(authorIds)
+
+        val formatted = com.difft.android.chat.message.MessageCopyTextFormatter.format(
+            messages = loadedMessages,
+            nameResolver = { uid ->
+                contactorCache.getContactor(uid)?.getDisplayNameWithoutRemarkForUI()
+                    ?: uid.formatBase58Id()
+            },
+            context = com.difft.android.base.utils.application,
+            language = java.util.Locale.getDefault().language,
+        )
+        if (formatted.isBlank()) return@launch
+
+        // Clipboard write + toast on main thread (Toast.show requires main looper).
+        // Inline write guarantees PRD §4.1: notice is enqueued ONLY after the
+        // clipboard write succeeds in this coroutine — no lifecycle-cancellable
+        // collector indirection between the format and the notice.
+        kotlinx.coroutines.withContext(Dispatchers.Main) {
+            com.difft.android.chat.util.Util.copyToClipboard(
+                com.difft.android.base.utils.application,
+                formatted,
+            )
+        }
+
+        // PRD §4: emit copy notice into the source conversation. Android's multi-select
+        // is single-source, so all selected messages share forWhat as the source.
+        // PRD v2.0 §改动1 条件①④⑤: only leave a trace when the clipboard actually carries
+        // another person's real content. A selection that is all-self, or only placeholder
+        // bubbles (Chat History / single forward / contact card), leaks nothing real.
+        val myId = globalServices.myId
+        if (NoticeAggregator.copyCarriesForeignContentFromTextMessages(loadedMessages, myId)) {
+            // PRD §5.3: derive mode + sorted authors (isSubContext=false — multi-select copy
+            // is always main-conv); §改动3 pins the operator (myId) last in the source list.
+            val mode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
+            val sortedAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId)
+            activityNoticeDispatcher.dispatchCopyNotice(
+                sourceConversation = forWhat,
+                sourceAuthorIds = sortedAuthorIds,
+                myId = myId,
+                messageCount = loadedMessages.size,
+                combinedForwardMode = mode,
+            )
+        }
+
+        resetSelectMessageState()
+    }
+
+    /**
+     * Entry point for emitting a copy notice from the single-message paths
+     * (single long-press copy / partial text-selection copy / derived-content copy).
+     * Caller invokes this only AFTER the clipboard write actually succeeded (PRD §4.1).
+     *
+     * PRD §5.3: this single-message path is invoked from main-conv surfaces; mode defaults to
+     * UNKNOWN. Caller may override via [combinedForwardMode] when the source message originated
+     * from a CF detail view (Phase 5 wiring through transient `sourceMode`).
+     */
+    fun sendCopyNotice(
+        sourceMessages: List<TextChatMessage>,
+        combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+    ) {
+        if (sourceMessages.isEmpty()) return
+        // PRD v2.0 §改动1/§改动2 条件①⑤: trace only when the clipboard carries another person's
+        // real content. A self message, or a placeholder bubble (Chat History / single forward /
+        // contact card copies as a bracketed placeholder), leaks nothing real.
+        val myId = globalServices.myId
+        if (!NoticeAggregator.copyCarriesForeignContent(sourceMessages, myId)) return
+        activityNoticeDispatcher.dispatchCopyNotice(
+            sourceConversation = forWhat,
+            sourceAuthorIds = sourceMessages.map { it.authorId },
+            myId = myId,
+            messageCount = sourceMessages.size,
+            combinedForwardMode = combinedForwardMode,
+        )
+    }
+
     fun onSaveSelectedMessages() = viewModelScope.launch(Dispatchers.IO) {
         val loadedMessages = wcdb.message.getAllObjects(DBMessageModel.id.`in`(*selectMessagesState.value.selectedMessageIds.toTypedArray())).map { it.convertToTextMessage() }
+        // PRD §5.3: derive mode from main-conv selection (isSubContext=false).
+        val saveMode = NoticeAggregator.computeCombinedForwardModeFromTextMessages(loadedMessages, isSubContext = false)
+        val myId = globalServices.myId
+        // PRD v2.0 §改动1/§改动2 条件①④: save-to-notes leaves a trace only if it moves someone
+        // else's real message out of the conversation. The save ACTION proceeds either way.
+        val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
         if (loadedMessages.size == 1 && loadedMessages.firstOrNull()?.sharedContact != null) {
             val sharedContactId = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
             val sharedContactName = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.name?.displayName
+            // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
             saveMultiMessageToNote.value =
                 ForwardContextData(
                     "",
                     listOf(ForwardContext(emptyList(), false, sharedContactId, sharedContactName)),
                     ForwardNoticeData.Scene.SAVE_TO_NOTES,
                     forWhat,
-                    sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId),
+                    messageCount = loadedMessages.size,
+                    combinedForwardMode = saveMode,
+                    carriesForeignContent = carriesForeignContent,
                 )
         } else {
             val forwardContext = ForwardContext(loadedMessages.map {
@@ -1042,13 +1269,17 @@ class ChatMessageViewModel @AssistedInject constructor(
                     it.systemShowTimestamp
                 )
             }, forWhat is For.Group)
+            // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
             saveMultiMessageToNote.value =
                 ForwardContextData(
                     "",
                     listOfNotNull(forwardContext),
                     ForwardNoticeData.Scene.SAVE_TO_NOTES,
                     forWhat,
-                    sourceAuthorIds = loadedMessages.map { it.fromWho.id }
+                    sourceAuthorIds = NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages(loadedMessages, selfIdLast = myId),
+                    messageCount = loadedMessages.size,
+                    combinedForwardMode = saveMode,
+                    carriesForeignContent = carriesForeignContent,
                 )
         }
         resetSelectMessageState()
@@ -1074,11 +1305,22 @@ data class ForwardContextData(
     val forwardContexts: List<ForwardContext>,
     val scene: ForwardNoticeData.Scene,
     val sourceConversation: For,   // Source conversation (where the forwarded messages originally lived). forwardNotice will be posted here.
-    // Authors of the user-selected messages, NOT de-duplicated and preserving selection order.
-    // One entry per selected message: a plain message contributes its author; a combined-forward
-    // message contributes only the outer author (the uploader), NOT the inner/nested authors.
-    // sendForwardNotice uses this list as the authoritative source for count and authors,
-    // bypassing the ambiguity that arises when a combined-forward message's nested `forwards`
-    // would otherwise be flat-mapped into multiple entries.
-    val sourceAuthorIds: List<String>
+    // Authors of the user-selected messages. PRD §5.3.4: deduped and priority-sorted via
+    // NoticeAggregator.computeSortedSourceAuthorIdsFromTextMessages — CF senders first,
+    // then by contributed count desc, then latest timestamp desc, then authorId asc.
+    // For notice count semantics, use [messageCount] (NOT sourceAuthorIds.size).
+    val sourceAuthorIds: List<String>,
+    // PRD §5.3: explicit selected-message count (one per user-selected outer message;
+    // a combined-forward bubble counts as 1). Decoupled from sourceAuthorIds.size so
+    // the author list can be deduped+sorted independently.
+    val messageCount: Int,
+    // PRD v1.0 §5.3 combined-forward mode derived from the selected messages by the ViewModel
+    // (single source of truth; UI fragment just plumbs through to SelectChatsUtils).
+    val combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
+    // PRD v2.0 §改动1/§改动2 条件①④: whether the selection includes another person's real message
+    // (by original author — CF/single-forward judged by recursing to the leaf authors). Drives
+    // whether a forward/save notice fires. Callers SHOULD always compute and pass this explicitly via
+    // NoticeAggregator.forwardCarriesForeignContent*; the `true` default exists only for legacy/share
+    // entry points that cannot compute it (conservative: trace rather than silently miss).
+    val carriesForeignContent: Boolean = true,
 )

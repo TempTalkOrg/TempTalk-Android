@@ -1,44 +1,56 @@
 [versions]
 # Kotlin
 kotlin = "2.3.0"
-kotlinMetadataJvm = "2.3.0"
-kotlinCoroutine = "1.10.2"
+kotlinCoroutine = "1.11.0"
+# KSP — 2.3.9 is the confirmed-good floor: it is the AGP-9-built-in-Kotlin-aware
+# release. Earlier 2.3.x (e.g. 2.3.0) hard-fail at configuration with
+# "KSP is not compatible with AGP's built-in Kotlin". KSP2 uses standalone
+# versioning (just 2.3.9, no <kotlin>-<ksp> suffix). Stays on Kotlin 2.3.x —
+# do NOT bump Kotlin.
+ksp = "2.3.9"
 
 # Android
 compileSdk = "36"
 targetSdk = "36"
 minSdk = "26"
 jvmTarget = "17"
-androidGradlePlugin = "8.13.2"
+androidGradlePlugin = "9.2.0"
+# AGP 9 dropped the implicit NDK fallback; an explicit version is required for llvm-strip. Pinned to a runner-installed NDK (detail in PR #896 / ensure-ndk action).
+ndk = "27.0.12077973"
 
 # AndroidX
-androidxCore = "1.17.0"
+androidxCore = "1.18.0"
 androidxAppcompat = "1.7.1"
 androidxConstraintlayout = "2.2.1"
-androidxActivity = "1.12.3"
+androidxActivity = "1.13.0"
 androidxFragment = "1.8.9"
 androidxLifecycle = "2.10.0"
-androidxNavigation = "2.9.7"
-androidxWork = "2.11.1"
+androidxNavigation = "2.9.8"
+androidxWork = "2.11.2"
 androidxPreference = "1.2.1"
 androidxSqlite = "2.6.2"
 androidxWindow = "1.5.1"
 
 # Compose
-composeBom = "2026.01.01"
-composeActivity = "1.12.3"
+composeBom = "2026.05.01"
+composeActivity = "1.13.0"
 composeConstraintlayout = "1.1.1"
 
 # Material
-material = "1.11.0"
+material = "1.14.0"
 
 # Hilt
-hilt = "2.58"
+# 2.59+ adds AGP 9 support to HiltGradlePlugin (2.59 "Support AGP 9 in
+# HiltGradlePlugin"); 2.59.1 fixes compile errors with android.enableJetifier=true
+# (this project sets it); 2.59.2 fixes slow incremental HiltSyncTask under AGP 9.
+# 2.58 throws "Could not find the Android Gradle Plugin (AGP) base extension"
+# once android.newDsl defaults to true (AGP 9 built-in-Kotlin migration).
+hilt = "2.59.2"
 
 # Firebase
-firebaseBom = "34.12.0"
+firebaseBom = "34.13.0"
 firebaseGoogleServices = "4.4.4"
-firebaseCrashlyticsPlugin = "3.0.6"
+firebaseCrashlyticsPlugin = "3.0.7"
 firebasePerfPlugin = "2.0.2"
 
 # Google Play Services
@@ -48,19 +60,26 @@ playServicesAuthApiPhone = "18.3.0"
 # Network
 okhttp = "5.3.2"
 retrofit = "3.0.0"
-gson = "2.13.2"
+gson = "2.14.0"
+conscrypt = "2.5.3"
+bouncycastle = "1.84"
 
 # Image Loading
-glide = "4.16.0"
-lottie = "5.2.0"
+glide = "5.0.7"
+lottie = "6.7.1"
 
 # UI
-circleImage = "3.0.1"
+circleImage = "3.1.0"
 binding = "1.2.0"
 keyboardVisibilityEvent = "3.0.0-RC3"
 
 # Refresh Layout
-smartRefreshLayout = "2.1.0"
+# 3.0.0-alpha: first fully-androidx release (2.1.1 referenced android.support.*,
+# requiring jetifier). Only published version past 2.1.1. Alpha tag, but it's a
+# self-contained pull-to-refresh widget and the API we use is stable across
+# 2.x→3.0. Bump to 3.0.0 stable when released (watch
+# github.com/scwang90/SmartRefreshLayout/releases) — may carry API changes.
+smartRefreshLayout = "3.0.0-alpha"
 
 # Picture Selector
 pictureSelector = "v3.11.2"
@@ -70,57 +89,72 @@ jna = "5.14.0"
 signalAndroid = "0.86.5"
 
 # Jackson
-jacksonDatabind = "2.21.2"
-jacksonModuleKotlin = "2.21.2"
+jacksonDatabind = "2.21.4"
+jacksonModuleKotlin = "2.21.4"
 
 # Other Libraries
 jwtdecode = "2.0.2"
 annimonStream = "1.2.2"
 junit = "4.13.2"
 protobuf = "3.25.5"
-protobufPlugin = "0.9.6"
-libPhoneNumber = "9.0.23"
+# 0.10.0 makes the plugin AGP 9 compatible (PR #797). 0.9.6 casts the Android
+# extension to the legacy BaseExtension, which AGP 9 newDsl no longer provides
+# ("Cannot cast ... LibraryExtensionImpl ... to ... BaseExtension").
+protobufPlugin = "0.10.0"
+libPhoneNumber = "9.0.31"
 androidSvg = "1.4"
-okio = "3.16.4"
+okio = "3.17.0"
 reflections = "0.10.2"
 leakcanary = "2.14"
 securityCrypto = "1.1.0"
+datastore = "1.2.1"
+tink = "1.21.0"
 wcdb = "2.1.15"
-zxing = "1.3.8"
-timber = "4.7.1"
-slf4j = "1.7.32"
-logback = "2.0.1"
+cameraX = "1.4.2"
+zxingCore = "3.5.4"
+timber = "5.0.1"
+slf4j = "2.0.18"
+logback = "3.0.0"
 
 # Additional Libraries from modules
 desugarJdkLibs = "2.1.5"
 
 accompanistSystemuicontroller = "0.36.0"
-coil = "3.3.0"
+coil = "3.4.0"
 accompanistPermissions = "0.37.3"
-livekitAndroid = "2.24.1.6"
-denoiseFilter = "1.1.0"
-kotlinxSerializationCore = "1.10.0"
-kotlinxSerializationJson = "1.10.0"
-robolectric = "4.14.1"
-mockk = "1.13.16"
-turbine = "1.2.0"
-roborazzi = "1.59.0"
+livekitAndroid = "2.24.1.12"
+denoiseFilter = "1.1.1"
+kotlinxSerializationCore = "1.11.0"
+kotlinxSerializationJson = "1.11.0"
+robolectric = "4.16.1"
+mockk = "1.14.9"
+turbine = "1.2.1"
+roborazzi = "1.63.0"
 legacySupportV4 = "1.0.0"
-media3Common = "1.4.1"
-media3Exoplayer = "1.4.1"
-media3Ui = "1.4.1"
+media3 = "1.10.1"
 mlkitTranslate = "17.0.3"
 languageDetector = "0.6"
-isoparser = "1.9.41"
-mp4parserStreaming = "1.9.39"
-mp4parserMuxer = "1.9.39"
+isoparser = "1.9.56"
+mp4parserStreaming = "1.9.56"
+mp4parserMuxer = "1.9.56"
 anrwatchdog = "1.4.0"
 profileinstaller = "1.4.1"
 
-[libraries]
+# Static analysis
+# Detekt 2.0.0-alpha.3 chosen over 1.23.8 stable because:
+#   - Project uses Kotlin 2.3.0; Detekt 1.23.8 only supports up to Kotlin 2.0.21
+#   - 2.0.0-alpha.3 (released 2026-04) explicitly supports Kotlin 2.3
+#   - Custom rule API is stable enough across 1.23 → 2.0 migration
+# Revisit when Detekt 2.0 stable ships.
+detekt = "2.0.0-alpha.3"
 
-# Kotlin
-kotlin-metadata-jvm = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", version.ref = "kotlinMetadataJvm" }
+# Android Lint (custom checks) — pinned to AGP-matching version.
+# AGP 8.13.2 → Lint 31.13.2 (convention: lint version = AGP version + 23.0.0 major).
+# Bump together with androidGradlePlugin to stay ABI-compatible with the Lint
+# runtime the IDE / build tool ships.
+lint = "32.2.0"
+
+[libraries]
 
 # AndroidX Core
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -147,12 +181,13 @@ androidx-navigation-ui-ktx = { module = "androidx.navigation:navigation-ui-ktx",
 # AndroidX WorkManager
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "androidxWork" }
 
-# AndroidX Test
-androidx-test-junit = { module = "androidx.test.ext:junit", version = "1.3.0" }
-androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version = "3.7.0" }
-
 # Material
-kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+# kotlin-test-junit (not bare kotlin-test): under AGP 9 built-in Kotlin the KGP
+# auto-selection of a kotlin-test framework adapter is gone, so kotlin.test.Test
+# no longer resolves to JUnit ("Unresolved reference 'Test'"). The -junit adapter
+# transitively includes kotlin-test and binds kotlin.test.* to JUnit 4 (the
+# project's test runner), keeping all existing `import kotlin.test.*` working.
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
 
 # Compose
@@ -160,7 +195,7 @@ compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeB
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
-compose-foundation-version = { module = "androidx.compose.foundation:foundation", version = "1.10.2" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
@@ -188,9 +223,24 @@ firebase-messaging-ktx = { module = "com.google.firebase:firebase-messaging" }
 play-services-base = { module = "com.google.android.gms:play-services-base", version.ref = "playServices" }
 play-services-auth-api-phone = { module = "com.google.android.gms:play-services-auth-api-phone", version.ref = "playServicesAuthApiPhone" }
 
+# Detekt (custom rules module)
+detekt-api = { module = "dev.detekt:detekt-api", version.ref = "detekt" }
+# Reserved for future unit-test re-enablement once Detekt 2.0 stable lands —
+# currently the detekt-test 2.0.0-alpha.3 + Kotlin 2.3.0 combination has an
+# internal-ABI mismatch (StandaloneProjectFactory). See detekt-rules/build.gradle.kts.
+detekt-test = { module = "dev.detekt:detekt-test", version.ref = "detekt" }
+kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
+
+# Android Lint (custom checks module)
+lint-api = { module = "com.android.tools.lint:lint-api", version.ref = "lint" }
+lint-checks = { module = "com.android.tools.lint:lint-checks", version.ref = "lint" }
+lint-tests = { module = "com.android.tools.lint:lint-tests", version.ref = "lint" }
+
 # Network
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
+conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }
@@ -199,7 +249,12 @@ gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 
 # Image Loading
 glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
-glide-compiler = { module = "com.github.bumptech.glide:compiler", version = "4.13.2" }
+# Glide's KSP annotation processor — follows the glide version ref.
+glide-ksp = { module = "com.github.bumptech.glide:ksp", version.ref = "glide" }
+# zjupure webp decoder — animated-WebP support across all API levels via @GlideModule.
+# Glide 5's built-in AnimatedImageDecoder is unreliable for WebP in lists (bumptech
+# #5176/#5477), so we keep this. Built for 4.16 but runs unchanged on Glide 5.0.7.
+glide-webpdecoder = { module = "com.github.zjupure:webpdecoder", version = "2.7.4.16.0" }
 lottie = { module = "com.airbnb.android:lottie", version.ref = "lottie" }
 
 # UI Components
@@ -235,7 +290,15 @@ android-svg = { module = "com.caverock:androidsvg-aar", version.ref = "androidSv
 reflections = { module = "org.reflections:reflections", version.ref = "reflections" }
 leakcanary = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
-zxing = { module = "com.github.bingoogolapple.BGAQRCode-Android:zxing", version.ref = "zxing" }
+datastore = { module = "androidx.datastore:datastore", version.ref = "datastore" }
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
+kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinxSerializationCore" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraX" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cameraX" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "cameraX" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "cameraX" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxingCore" }
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-android = { module = "com.github.tony19:logback-android", version.ref = "logback" }
@@ -267,9 +330,9 @@ roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = 
 roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
 roborazzi-junit-rule = { module = "io.github.takahirom.roborazzi:roborazzi-junit-rule", version.ref = "roborazzi" }
 legacy-support-v4 = { module = "androidx.legacy:legacy-support-v4", version.ref = "legacySupportV4" }
-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3Common" }
-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3Exoplayer" }
-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3Ui" }
+media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
+media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
+media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkitTranslate" }
 language-detector = { module = "com.optimaize.languagedetector:language-detector", version.ref = "languageDetector" }
 isoparser = { module = "org.mp4parser:isoparser", version.ref = "isoparser" }
@@ -294,6 +357,7 @@ compose = [
     "compose-viewmodel",
     "compose-constraintlayout",
     "compose-runtime-livedata",
+    "androidx-lifecycle-runtime-compose",
     "hilt-navigation-compose"
 ]
 
@@ -302,11 +366,6 @@ compose-debug = [
     "compose-ui-tooling",
     "compose-ui-tooling-preview",
     "compose-ui-test-manifest"
-]
-
-# Compose Test
-compose-test = [
-    "compose-ui-test-junit4"
 ]
 
 # AndroidX Lifecycle
@@ -359,8 +418,9 @@ smart-refresh = [
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 android-library = { id = "com.android.library", version.ref = "androidGradlePlugin" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+# KSP replaces kapt for all annotation processing (Hilt, WCDB, Glide). KSP 2.3.9
+# is AGP-9-built-in-Kotlin-aware; earlier 2.3.x reject the built-in Kotlin.
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 google-services = { id = "com.google.gms.google-services", version.ref = "firebaseGoogleServices" }
@@ -370,3 +430,4 @@ navigation-safeargs = { id = "androidx.navigation.safeargs.kotlin", version.ref 
 protobuf-plugin = { id = "com.google.protobuf", version.ref = "protobufPlugin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }

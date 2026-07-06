@@ -2,20 +2,36 @@ package com.difft.android.app
 
 import android.app.Activity
 import android.app.NotificationManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.ui.graphics.Color
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import com.difft.android.base.log.LogHelper
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.NetworkRiskNotifier
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.storage.PendingLastUseTime
+import com.difft.android.base.storage.StoragePreloader
+import com.difft.android.base.storage.di.AppStateDataStore
+import com.difft.android.base.storage.user.StorageBoundUserManagerImpl
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
+import org.difft.app.database.DbHealth
+import org.difft.app.database.wcdb
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
@@ -52,6 +68,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.signal.libsignal.protocol.logging.SignalProtocolLogger
@@ -67,12 +85,31 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
 @HiltAndroidApp
-class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")), AppForegroundObserver.Listener {
+class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")), AppForegroundObserver.Listener, androidx.work.Configuration.Provider {
+    // On-demand WorkManager init: WorkManagerInitializer is disabled in the manifest, so this lets
+    // WorkManager self-initialize lazily if a still-merged component (e.g. SystemForegroundService)
+    // calls getInstance(), instead of crashing. Never invoked on the normal startup path.
+    override val workManagerConfiguration: androidx.work.Configuration
+        get() = androidx.work.Configuration.Builder()
+            .setMinimumLoggingLevel(android.util.Log.WARN)
+            .build()
+
     @Inject
     lateinit var userManager: UserManager
 
     @Inject
     lateinit var environmentHelper: EnvironmentHelper
+
+    @Inject
+    lateinit var storagePreloader: StoragePreloader
+
+    @Inject
+    lateinit var pendingLastUseTime: PendingLastUseTime
+
+    // @field: is required so Hilt sees the qualifier on the Java field, not the Kotlin property.
+    @Inject
+    @field:AppStateDataStore
+    lateinit var appStateDataStore: DataStore<Preferences>
 
     @Inject
     lateinit var globalConfigsManager: dagger.Lazy<GlobalConfigsManager>
@@ -98,6 +135,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     @Inject
     lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
 
+    @Inject
+    lateinit var conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>
+
+    @Inject
+    lateinit var processExitProbe: com.difft.android.base.monitor.ProcessExitProbe
+
     // 追踪当前 resumed 的 Activity
     private var currentResumedActivity: WeakReference<FragmentActivity>? = null
 
@@ -116,6 +159,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init log", this::initLog)
             .addBlocking("init Logger", this::initializeLogging)
+            .addBlocking("init tls provider", this::initTlsProvider)
             .addBlocking("init SecurityCheck") {
                 startTracerPidMonitor()
                 checkDebuggerAndHook()
@@ -124,6 +168,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 ApplicationDependencies.init(this, ApplicationDependencyProvider(this))
                 AppForegroundObserver.begin()
             }
+            .addBlocking("init Storage", this::initStorageLayer)
             .addBlocking("init UserData", this::initUserData)
             .addBlocking("init theme", this::initAppTheme)
             .addBlocking("lifecycle-observer") {
@@ -132,15 +177,40 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
             .addBlocking("installCrashFilter", this::installCrashFilter)
-            .addNonBlocking(this::cleanupLegacySqlCipherArtifacts)
-            .addNonBlocking(this::sweepStaleSendingMessages)
-            .addNonBlocking { ApplicationDependencies.getJobManager().beginJobLoop() }
-            .addNonBlocking { initCallEngine() }
-            .addNonBlocking { cleanupStaleCallNotification() }
-            .addNonBlocking { monitorMainThreadBlocking() }
-            .addNonBlocking { ContactorUtil.init() }
-            .addNonBlocking { initGlobalConfigs() }
-            .addNonBlocking { coordinator.get().initialize() }
+            .addNonBlocking("reapply locale") {
+                // Refresh the Application's Configuration with the user locale so legacy
+                // callers that read `application.resources` directly see the right locale.
+                LanguageUtils.getLanguage(this@TempTalkApplication)
+                LanguageUtils.reapplyLocaleToAppResources(this@TempTalkApplication)
+            }
+            .addNonBlocking("cleanup legacy sqlcipher", this::cleanupLegacySqlCipherArtifacts)
+            .addNonBlocking("sweep avatar crop temp", this::sweepAvatarCropTemp)
+            // Probe DB health early (off main, individually guarded) so DB-touching consumers
+            // below can fast-skip a corrupt DB via wcdb.dbCorrupted. Best-effort ordering, NOT a
+            // barrier — consumer-side safety (runCatching in ContactRemarkCache.preload, the
+            // soft-fail catches in job storage) is what guarantees correctness.
+            .addNonBlocking("probe db health") {
+                // #971: verify synchronous=NORMAL reached the write handle right after the health
+                // probe — same off-main startup task, only when the probe reports healthy (skips a
+                // known-corrupt DB). Soft-fails internally; never blocks startup.
+                if (wcdb.probeHealthy() == DbHealth.HEALTHY) {
+                    wcdb.verifySynchronousApplied()
+                }
+            }
+            .addNonBlocking("sweep stale sending messages", this::sweepStaleSendingMessages)
+            .addNonBlocking("begin job loop") { ApplicationDependencies.getJobManager().beginJobLoop() }
+            .addNonBlocking("init call engine") { initCallEngine() }
+            .addNonBlocking("cleanup stale call notification") { cleanupStaleCallNotification() }
+            .addNonBlocking("monitor main thread blocking") { monitorMainThreadBlocking() }
+            .addNonBlocking("init contactor") { ContactorUtil.init() }
+            .addNonBlocking("init global configs") { initGlobalConfigs() }
+            .addNonBlocking("observe network risk") { observeNetworkRiskWarning() }
+            .addNonBlocking("init coordinator") { coordinator.get().initialize() }
+            // Already on Dispatchers.IO per AppStartup; single runBlocking bridge, no re-dispatch.
+            .addNonBlocking("probe process exit reasons") {
+                @Suppress("BanRunBlockingOutsideTests")
+                runBlocking { processExitProbe.probe() }
+            }
             .execute()
 
         L.i { "[AppStartup] application onCreate() took " + (System.currentTimeMillis() - AppStartup.getApplicationStartTime()) + " ms" }
@@ -153,6 +223,16 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Cover the case where the system reclaims memory before onActivityStopped fires.
+        if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            appScope.launch {
+                pendingLastUseTime.flush(appStateDataStore)
+            }
+        }
     }
 
     override fun attachBaseContext(context: Context) {
@@ -174,6 +254,67 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         com.difft.android.app.startup.cleanupLegacySqlCipherArtifacts(applicationContext)
     }
 
+    private fun sweepAvatarCropTemp() {
+        com.difft.android.app.startup.sweepAvatarCropTemp(applicationContext)
+    }
+
+    /**
+     * Bridge the background-thread MITM signal ([NetworkRiskNotifier]) to the foreground UI.
+     * When a warning is raised while an Activity is resumed we show it immediately here;
+     * if none is resumed yet, [onActivityResumed] retries once the app returns to foreground.
+     */
+    private fun observeNetworkRiskWarning() {
+        appScope.launch {
+            NetworkRiskNotifier.warningPending.collect { pending ->
+                if (!pending) return@collect
+                withContext(Dispatchers.Main) {
+                    currentResumedActivity?.get()?.let { showNetworkRiskWarningIfNeeded(it) }
+                }
+            }
+        }
+    }
+
+    /** Must run on the main thread. Shows the MITM warning once, reusing the shared dialog. */
+    private fun showNetworkRiskWarningIfNeeded(activity: FragmentActivity) {
+        if (!NetworkRiskNotifier.warningPending.value || NetworkRiskNotifier.isDialogShowing) return
+        if (activity.isFinishing || activity.isDestroyed) return
+
+        NetworkRiskNotifier.markDialogShown()
+        // If the host Activity is destroyed before the user decides (e.g. a config change tears
+        // down the ComposeView), re-arm so the next foreground Activity re-shows the warning.
+        activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                owner.lifecycle.removeObserver(this)
+                NetworkRiskNotifier.onDialogDismissed()
+            }
+        })
+        ComposeDialogManager.showMessageDialog(
+            context = activity,
+            title = activity.getString(com.difft.android.base.R.string.net_risk_warning_title),
+            message = activity.getString(com.difft.android.base.R.string.net_risk_warning_message),
+            // "Quit" is the highlighted primary action (safer default than ignoring the risk).
+            confirmText = activity.getString(com.difft.android.base.R.string.net_risk_warning_quit),
+            cancelText = activity.getString(com.difft.android.base.R.string.net_risk_warning_ignore),
+            showCancel = true,
+            cancelable = false,
+            confirmButtonColor = Color(ContextCompat.getColor(activity, com.difft.android.base.R.color.primary)),
+            onConfirm = { quitApp(activity) },
+            onCancel = { NetworkRiskNotifier.ignoreForSession() },
+            onDismiss = { NetworkRiskNotifier.onDialogDismissed() }
+        )
+    }
+
+    private fun quitApp(activity: Activity) {
+        NetworkRiskNotifier.onDialogDismissed()
+        try {
+            activity.finishAffinity()
+        } catch (e: Exception) {
+            L.w { "[NetworkRisk] finishAffinity failed: ${e.message}" }
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
+        kotlin.system.exitProcess(0)
+    }
+
     /**
      * Flip stale `message.sendType == Sending` rows to `SentFailed` via
      * [com.difft.android.app.startup.sweepStaleSendingMessages].
@@ -188,13 +329,37 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     /**
-     * Initialize user data cache (inMemoryUserData) from EncryptedSharedPreferences.
-     * This prevents ANR when multiple threads try to access SecureSharedPrefsUtil concurrently.
-     * Uses timeout (2s) to prevent ANR on extremely slow devices - falls back to lazy init if timeout.
+     * Warms up the three DataStores (`secure_user`, `secure_config`, `app_state`) so
+     * subsequent reads hit memory. Also primes the [PendingLastUseTime] holder so the
+     * very first screen-lock check reads the persisted value. Bounded at 2 s.
+     */
+    private fun initStorageLayer() {
+        val job = async(Dispatchers.IO) {
+            storagePreloader.preload()
+            pendingLastUseTime.loadInitial(appStateDataStore)
+        }
+        // Startup-only 2s bounded block; design承重墙 per #722. Without warm caches
+        // here, downstream `userManager.getUserData()` etc. would all need
+        // dispatcher wrappers at dozens of call sites.
+        @Suppress("BanRunBlockingOutsideTests")
+        val ok = runBlocking { withTimeoutOrNull(2000) { job.await() } }
+        if (ok == null) L.w { "[Startup] initStorageLayer timed out at 2s — first-use may hit cold cache" }
+    }
+
+    /**
+     * Composes the in-memory [UserData] snapshot from `secure_user.pb` + `app_state.preferences_pb`
+     * via [StorageBoundUserManagerImpl.warmUp]. Falls back to [UserManager.getUserData] lazy-load
+     * if the impl type doesn't match (should not happen in production). Bounded at 2 s.
      */
     private fun initUserData() {
-        val job = async(Dispatchers.IO) { userManager.getUserData() }
-        runBlocking { withTimeoutOrNull(2000) { job.await() } }
+        val job = async(Dispatchers.IO) {
+            (userManager as? StorageBoundUserManagerImpl)?.warmUp()
+                ?: userManager.getUserData()
+        }
+        // Startup-only 2s bounded block; design承重墙 per #722.
+        @Suppress("BanRunBlockingOutsideTests")
+        val ok = runBlocking { withTimeoutOrNull(2000) { job.await() } }
+        if (ok == null) L.w { "[Startup] initUserData timed out at 2s — snapshot may be empty until next access" }
     }
 
     private fun initAppTheme() {
@@ -213,6 +378,46 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         LogHelper.init(this)
     }
 
+    /**
+     * On Android 10 / API 29 and below, the platform (APEX) Conscrypt creates
+     * raw-fd TLS sockets (`*FileDescriptorSocket`). Layered over the self-hosted
+     * proxy's outer TLS tunnel (TLS-in-TLS), they write the inner ClientHello on
+     * the underlying RAW fd, bypassing the outer encryption — the proxy resets it
+     * ("Broken pipe"). API 30+ already defaults to the stream-based engine socket.
+     *
+     * Registering the bundled Conscrypt as the top JSSE provider and enabling
+     * engine sockets by default makes every default-provider TLS consumer (OkHttp,
+     * HttpsURLConnection, and crucially LiveKit's internally-built signaling
+     * SSLSocketFactory, which app code cannot inject) use the stream-based socket,
+     * so the proxy tunnel works. Scoped to API < 30; API 30+ is left untouched.
+     *
+     * Best-effort and fail-safe: if Conscrypt fails to load (e.g. unsupported ABI)
+     * we keep the platform default — proxy on that device simply stays broken,
+     * which is no worse than before this change.
+     */
+    private fun initTlsProvider() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return
+        runCatching {
+            // Build the bundled provider first so a failure (e.g. UnsatisfiedLinkError
+            // on an unsupported ABI) can never leave us having already removed an
+            // existing provider. removeProvider only targets a previously inserted
+            // bundled "Conscrypt"; the platform provider registers as "AndroidOpenSSL".
+            // insertProviderAt returns -1 (no exception) on a name clash, so we verify
+            // the actual slot instead of assuming success.
+            val bundledProvider = org.conscrypt.Conscrypt.newProvider()
+            java.security.Security.removeProvider("Conscrypt")
+            val position = java.security.Security.insertProviderAt(bundledProvider, 1)
+            org.conscrypt.Conscrypt.setUseEngineSocketByDefault(true)
+            if (position == 1) {
+                L.i { "[Proxy][tls] bundled Conscrypt registered as top JSSE provider (API ${Build.VERSION.SDK_INT}), engine-socket default ON" }
+            } else {
+                L.w { "[Proxy][tls] bundled Conscrypt insertProviderAt returned $position (expected 1), API ${Build.VERSION.SDK_INT}" }
+            }
+        }.onFailure {
+            L.w(it) { "[Proxy][tls] failed to register bundled Conscrypt provider: ${it.javaClass.simpleName}: ${it.message}" }
+        }
+    }
+
     private fun initNotification() {
         messageNotificationUtil.get().checkAndCreateNotificationChannels()
     }
@@ -221,21 +426,39 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         globalConfigsManager.get().getAndSaveGlobalConfigs(this)
     }
 
+    // Serializes onForeground/onBackground bodies so the IO-pool dispatch order matches
+    // the upstream main-thread invocation order from AppForegroundObserver.
+    private val fgBgMutex = Mutex()
+
+    // Body runs on appScope (IO). Do not touch UI directly here; wrap in withContext(Main).
+    // Deferred from main to avoid first-time Hilt Lazy<>.get() resolution + L.i flush blocking
+    // ANRWatchDog (issue 433594181bc9db4301347d9a9da209c6).
     override fun onForeground() {
-        recordLastUseTime()
-        scheduleGrayConfigUpdateCheck()
-        LCallManager.restoreIncomingCallScreenIfActive()
-        LCallManager.onAppForegroundedForCallServiceUrls()
-        globalConfigsManager.get().onAppStateChanged(isForeground = true)
-        messageArchiveManager.get().onAppStateChanged(isForeground = true)
-        coordinator.get().startPeriodicTest(isForeground = true)
+        appScope.launch {
+            fgBgMutex.withLock {
+                recordLastUseTime()
+                scheduleGrayConfigUpdateCheck()
+                LCallManager.restoreIncomingCallScreenIfActive()
+                LCallManager.onAppForegroundedForCallServiceUrls()
+                globalConfigsManager.get().onAppStateChanged(isForeground = true)
+                messageArchiveManager.get().onAppStateChanged(isForeground = true)
+                coordinator.get().startPeriodicTest(isForeground = true)
+                // Full conversation-config refetch on foreground (covers background drift); throttled internally.
+                conversationSettingsManager.get().syncConversationSettings()
+            }
+        }
     }
 
+    // Mirror of onForeground: body runs on appScope (IO). Same constraints apply.
     override fun onBackground() {
-        recordLastUseTimeJob?.cancel()
-        globalConfigsManager.get().onAppStateChanged(isForeground = false)
-        messageArchiveManager.get().onAppStateChanged(isForeground = false)
-        coordinator.get().startPeriodicTest(isForeground = false)
+        appScope.launch {
+            fgBgMutex.withLock {
+                recordLastUseTimeJob?.cancel()
+                globalConfigsManager.get().onAppStateChanged(isForeground = false)
+                messageArchiveManager.get().onAppStateChanged(isForeground = false)
+                coordinator.get().startPeriodicTest(isForeground = false)
+            }
+        }
     }
 
     /**
@@ -291,6 +514,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                     // 刷新截屏状态（根据屏幕锁决定）
                     SecureModeUtil.refreshByScreenLock(activity)
+
+                    // 网络层在后台线程检测到证书失败时只置位标志；待前台 Activity 可用再弹窗
+                    showNetworkRiskWarningIfNeeded(activity)
                 }
 
                 // 原有的 Call 反馈逻辑
@@ -319,8 +545,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                 // 从前台进入后台：计数从 1 变为 0
                 if (startedActivityCount == 0) {
-                    L.d { "[ScreenLock] App entered background" }
                     onAppBackground()
+                    appScope.launch {
+                        pendingLastUseTime.flush(appStateDataStore)
+                    }
                 }
             }
 
@@ -334,6 +562,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
 
+    @Volatile
     private var recordLastUseTimeJob: kotlinx.coroutines.Job? = null
 
     private fun recordLastUseTime() {
@@ -343,9 +572,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             while (true) {
                 try {
                     if (PasscodeUtil.needRecordLastUseTime) {
-                        userManager.update {
-                            this.lastUseTime = System.currentTimeMillis()
-                        }
+                        pendingLastUseTime.record(System.currentTimeMillis())
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -465,8 +692,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 4. 超时检查
+        val lastUseTime = pendingLastUseTime.current()
         val isTimeout = userData.passcodeTimeout == 0 ||
-                System.currentTimeMillis() - userData.lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
+                System.currentTimeMillis() - lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
 
         if (!isTimeout) {
             L.d { "[ScreenLock] Skip: not timeout yet" }
@@ -502,6 +730,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             } else if (isUCropMissingParametersCrash(throwable)) {
                 L.w { "[CrashFilter] Suppressed UCrop missing parameters crash from abnormal device" }
                 android.os.Process.killProcess(android.os.Process.myPid())
+            } else if (isFinalizerWatchdogTimeout(thread, throwable)) {
+                // Daemon-thread timeout, not a main-thread crash: swallow it. The watchdog thread
+                // dies but the process keeps running, so don't report and don't kill the process.
+                L.w { "[CrashFilter] Suppressed FinalizerWatchdogDaemon timeout: ${throwable.message}" }
             } else {
                 previousHandler?.uncaughtException(thread, throwable)
             }
@@ -536,6 +768,20 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
     }
 
+    /**
+     * Android's FinalizerWatchdogDaemon throws TimeoutException when a finalize() takes >10s.
+     * Triggered by OEM background-freeze: wall-clock keeps advancing while the frozen process
+     * can't schedule the finalizer thread, so the watchdog misfires on resume. The blamed object
+     * (e.g. WCDB winq Expression, which only releases native memory via finalize() — no close API)
+     * is just the queue head, not the real cause. Normal foreground devices never hit this.
+     * Equivalent to disabling the watchdog, but without hidden-API reflection (blocked on API 28+).
+     */
+    private fun isFinalizerWatchdogTimeout(thread: Thread, throwable: Throwable): Boolean {
+        if (thread.name != "FinalizerWatchdogDaemon") return false
+        if (throwable !is java.util.concurrent.TimeoutException) return false
+        return throwable.message?.contains("finalize() timed out") == true
+    }
+
     private fun initCallEngine() {
         LCallEngine.init(this, this, environmentHelper)
     }
@@ -568,12 +814,19 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                     // skip reporting to reduce noise
                     if (!AppForegroundObserver.isForegrounded()) return@setANRListener
 
+                    val mainThreadStack = anrError.cause?.stackTrace
+                    // Hook frameworks (lhook/Xposed/...) instrument the main thread and block it
+                    // themselves; only seen on rooted/emulator farms, pollutes Vitals. These classes
+                    // aren't in our APK, so real devices never load them -> false positives ≈ 0.
+                    // Reuse HookFrameworkDetector's list so detection and filtering stay aligned.
+                    if (mainThreadStack != null && SecurityLib.checkHookStackTrace(mainThreadStack)) {
+                        return@setANRListener
+                    }
+
                     val anrException = Exception("ANR(${threshold}ms)_main_thread_blocking - ${anrError.message}")
                     // Use main thread's actual blocking stack trace for Crashlytics grouping,
                     // so events are grouped by real blocking location instead of this lambda
-                    anrError.cause?.stackTrace?.let { mainThreadStack ->
-                        anrException.stackTrace = mainThreadStack
-                    }
+                    mainThreadStack?.let { anrException.stackTrace = it }
                     anrException.initCause(anrError)
 
                     FirebaseCrashlytics.getInstance().recordException(anrException)
@@ -612,4 +865,5 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         if (BuildConfig.DEBUG) return
         SecurityLib.startTracerPidMonitor()
     }
+
 }

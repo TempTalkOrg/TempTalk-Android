@@ -42,9 +42,11 @@ import com.difft.android.chat.recent.RoomViewData.Type
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.messageserialization.db.store.ConversationUtils
 import com.difft.android.messageserialization.db.store.DBRoomStore
+import com.difft.android.base.activity.ActivityType
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
+import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
@@ -100,6 +102,9 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var callDataManagerLazy: Lazy<CallDataManager>
+
+    @Inject
+    lateinit var proxyConfigProvider: ProxyConfigProvider
 
     private lateinit var binding: ChatFragmentRecentChatBinding
     private var popupWindow: PopupWindow? = null
@@ -426,6 +431,9 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
         ConversationUtils.isConversationListVisible = true
 
+        // Proxy toggle may have changed in settings while we were away — re-gate the shield.
+        updateProxyStatusIcon()
+
         recentChatViewModel.retrieveCallingList()
 
         // Restore selected state for dual-pane mode
@@ -495,6 +503,48 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 popupItemList
             )
         }
+        binding.ivProxyStatus.setOnClickListener {
+            startActivity(
+                Intent(
+                    requireContext(),
+                    globalServices.activityProvider.getActivityClass(ActivityType.PROXY_SETTINGS)
+                )
+            )
+        }
+    }
+
+    /** Last observed IM WebSocket state; drives the proxy shield colour. */
+    private var lastWebSocketState: WebSocketConnectionState? = null
+
+    /**
+     * Refreshes the toolbar proxy shield (proxy design — homepage status icon).
+     * Gated by [ProxyConfigProvider.isEnabled]: hidden while the proxy is off.
+     * When on, the IM WebSocket state drives three distinct shields (traffic is
+     * tunnelled, so a live connection == connected through the proxy):
+     *  - CONNECTED            → GREEN  (connected through proxy)
+     *  - CONNECTING / unknown → GREY, no mark (checking / connecting in progress)
+     *  - otherwise            → GREY + ✕ (unavailable / not connected)
+     *
+     * A neutral mark-less shield is used for the in-progress state so the "✕"
+     * cannot be misread as "failed" while the connection is still being established.
+     */
+    private fun updateProxyStatusIcon() {
+        // View-lifecycle guard: getView() is null before onCreateView and after
+        // onDestroyView, and binding is assigned in onCreateView — so a non-null
+        // view guarantees a live binding. (this::binding.isInitialized is useless
+        // here: the lateinit binding is never nulled, so it stays true after detach.)
+        if (view == null) return
+        if (!proxyConfigProvider.isEnabled) {
+            binding.ivProxyStatus.visibility = View.GONE
+            return
+        }
+        binding.ivProxyStatus.visibility = View.VISIBLE
+        val icon = when (lastWebSocketState) {
+            WebSocketConnectionState.CONNECTED -> R.drawable.chat_ic_proxy_shield_connected
+            WebSocketConnectionState.CONNECTING, null -> R.drawable.chat_ic_proxy_shield_checking
+            else -> R.drawable.chat_ic_proxy_shield_unavailable
+        }
+        binding.ivProxyStatus.setImageResource(icon)
     }
 
     private fun checkDevices() {
@@ -581,6 +631,8 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             .distinctUntilChanged()
             .onEach { state ->
                 L.i { "[ws][RecentChatFragment] chat webSocketConnectionState changed:$state" }
+                lastWebSocketState = state
+                updateProxyStatusIcon()
                 when (state) {
                     WebSocketConnectionState.DISCONNECTED,
                     WebSocketConnectionState.FAILED,
@@ -626,7 +678,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     ComposeDialogManager.showWait(requireActivity())
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.leaveGroup(group.gid, AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
+                            groupRepo.leaveGroup(group.gid ?: "", AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
                         }
                         if (!response.isSuccess()) {
                             ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
@@ -657,7 +709,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     ComposeDialogManager.showWait(requireActivity())
                     try {
                         val response = withContext(Dispatchers.IO) {
-                            groupRepo.deleteGroup(group.gid)
+                            groupRepo.deleteGroup(group.gid ?: "")
                         }
                         if (!response.isSuccess()) {
                             ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
@@ -734,17 +786,17 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
             if (groupData != null) {
                 val (group, role) = groupData
-                    if (role == GROUP_ROLE_OWNER) {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
-                            disbandGroup(group)
-                            popupWindow?.dismiss()
-                        })
-                    } else {
-                        add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
-                            leaveGroup(group)
-                            popupWindow?.dismiss()
-                        })
-                    }
+                if (role == GROUP_ROLE_OWNER) {
+                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        disbandGroup(group)
+                        popupWindow?.dismiss()
+                    })
+                } else {
+                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
+                        leaveGroup(group)
+                        popupWindow?.dismiss()
+                    })
+                }
             }
             add(
                 ChativePopupView.Item(

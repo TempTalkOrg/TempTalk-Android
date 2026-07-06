@@ -12,6 +12,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
+import androidx.core.content.withStyledAttributes
 import com.difft.android.base.R
 
 class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocusChangeListener {
@@ -25,18 +26,17 @@ class VerifyCodeView : FrameLayout, TextWatcher, View.OnKeyListener, View.OnFocu
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs) {
         mContext = context
         LayoutInflater.from(context).inflate(R.layout.uikit_verify_code, this)
-        val typedArray = context.obtainStyledAttributes(attrs, R.styleable.uikit_verify_code)
-        var title = typedArray.getString(R.styleable.uikit_verify_code_verifyTitle) ?: ""
-//        var errorTip = typedArray.getString(R.styleable.uikit_verify_code_verifyErrorTip) ?: ""
-        var hide = typedArray.getBoolean(R.styleable.uikit_verify_code_hideInput, false)
-        var canDirectInput = typedArray.getBoolean(R.styleable.uikit_verify_code_canDirectInput, true)
+        context.withStyledAttributes(attrs, R.styleable.uikit_verify_code) {
+//            var errorTip = getString(R.styleable.uikit_verify_code_verifyErrorTip) ?: ""
+            var hide = getBoolean(R.styleable.uikit_verify_code_hideInput, false)
+            var canDirectInput = getBoolean(R.styleable.uikit_verify_code_canDirectInput, true)
 
-//        verifyCodeErrorTip = findViewById(R.id.tv_verify_code_error_tip)
-//        verifyCodeTitle = findViewById(R.id.tv_verify_code_title)
-//        verifyCodeTitle.text = title
-//        tv_verify_code_error_tip.text = errorTip
-        initView(hide, canDirectInput)
-        typedArray.recycle()
+//            verifyCodeErrorTip = findViewById(R.id.tv_verify_code_error_tip)
+//            verifyCodeTitle = findViewById(R.id.tv_verify_code_title)
+//            verifyCodeTitle.text = title
+//            tv_verify_code_error_tip.text = errorTip
+            initView(hide, canDirectInput)
+        }
     }
 
     private fun initView(hide: Boolean, canDirectInput: Boolean) {

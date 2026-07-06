@@ -22,10 +22,10 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.login.databinding.ActivityContactProfileSettingBinding
 import com.difft.android.login.viewmodel.ContactProfileSettingViewModel
@@ -84,7 +84,7 @@ class ContactProfileSettingFragment : Fragment() {
     }
 
     val token: String by lazy {
-        SecureSharedPrefsUtil.getToken()
+        (userManager.getUserData()?.microToken ?: "")
     }
 
     @Inject
@@ -113,6 +113,9 @@ class ContactProfileSettingFragment : Fragment() {
             if (selectedMedia.isNotEmpty()) {
                 val localMedia = selectedMedia[0]
                 mAvatarFilePath = localMedia.compressPath ?: localMedia.realPath
+                // Remove the plaintext crop output (files/Pictures/CROP_*.jpg) right away —
+                // upload/preview use compressPath/realPath, never the crop file.
+                AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = mAvatarFilePath)
                 binding.ivAvatar.setAvatar(mAvatarFilePath ?: "")
             }
         }
@@ -304,6 +307,9 @@ class ContactProfileSettingFragment : Fragment() {
 
                 Status.SUCCESS -> {
                     binding.btnDone.isLoading = false
+                    // Avatar is on the server now — drop the plaintext compress/crop temp
+                    // used for upload (no-op for random-avatar files or gallery originals).
+                    context?.let { ctx -> AvatarPickTempCleaner.deleteUploadedTemp(ctx, mAvatarFilePath) }
                     if (from == FROM_REGISTER || from == FROM_SIGN_UP) {
                         gotoIndexActivity()
                     }

@@ -2,6 +2,7 @@ package com.difft.android.call
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -30,6 +31,7 @@ import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.ui.CallContent
 import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.call.util.ViewUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -156,6 +158,13 @@ internal fun LCallActivity.configureWindow() {
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
     allowOnLockScreen()
+    ViewUtil.hideNavigationBar(window)
+    @Suppress("DEPRECATION")
+    window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
+        if (visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION == 0) {
+            ViewUtil.hideNavigationBar(window)
+        }
+    }
 }
 
 internal fun LCallActivity.initializeView() {
@@ -164,13 +173,24 @@ internal fun LCallActivity.initializeView() {
         CallWaitDialogUtil.show(this)
     }
     lifecycleScope.launch {
-        withContext(Dispatchers.Default) {
-            viewModel.room
+        // Phase B can throw if a release races in mid-wiring (fail-loud room getter). Catch it so the
+        // dismiss below ALWAYS runs — otherwise the wait dialog would stick on screen forever.
+        val wiringOk = withContext(Dispatchers.Default) {
+            runCatching { viewModel.startRoomDependentWiring() }
+                .onFailure { L.w(it) { "[Call] startRoomDependentWiring aborted (release in flight)" } }
+                .isSuccess
         }
         withContext(Dispatchers.Main) {
             CallWaitDialogUtil.dismiss()
+            // Read the room once, defensively: if wiring aborted or the room was released, finish
+            // gracefully instead of feeding a released room into setContent.
+            val room = if (wiringOk) runCatching { viewModel.room }.getOrNull() else null
+            if (room == null) {
+                L.i { "[Call] initView: room unavailable (release in flight), finishing" }
+                finish()
+                return@withContext
+            }
             setContent {
-                val room = viewModel.room
                 val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
                 CallContent(
                     room = room,
@@ -211,6 +231,7 @@ internal fun LCallActivity.initializePictureInPictureManager() {
     pictureInPictureManager = PictureInPictureManager(
         activity = this,
         lifecycle = lifecycle,
+        scope = lifecycleScope,
         onPipModeChanged = { isInPipMode ->
             viewModel.callUiController.setPipModeEnabled(isInPipMode)
             onGoingCallStateManager.setIsInPipMode(isInPipMode)

@@ -11,8 +11,6 @@ import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.SecureSharedPrefsUtil
-import com.difft.android.base.utils.SharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sampleAfterFirst
@@ -204,7 +202,7 @@ class RecentChatViewModel @Inject constructor(
         L.d { "[Call] RecentChatViewModel retrieveCallingList" }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
+                val response = callService.getCallingList((globalServices.userManager.getUserData()?.microToken ?: ""))
                 if(response.status == 0) {
                     L.d { "[Call] RecentChatViewModel retrieve calling list from server: ${response.status}, ${response.data?.calls}" }
                     val joinAbleCalls = response.data?.calls
@@ -314,7 +312,7 @@ class RecentChatViewModel @Inject constructor(
                         .getHttpClient()
                         .httpService
                         .fetchConversationSet(
-                            SecureSharedPrefsUtil.getBasicAuth(),
+                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             setting
                         )
                 }
@@ -333,7 +331,7 @@ class RecentChatViewModel @Inject constructor(
 
     suspend fun activateDevice(): BaseResponse<Any> {
         return chatHttpClient.get().getService(HttpService::class.java)
-            .activateDevice(SecureSharedPrefsUtil.getBasicAuth())
+            .activateDevice((globalServices.userManager.getUserData()?.baseAuth ?: ""))
     }
 
     /**
@@ -361,7 +359,9 @@ class RecentChatViewModel @Inject constructor(
             ComposeDialogManager.dismissWait()
 
             delay(1000)
-            SharedPrefsUtil.putInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM, 0)
+            // Zero-reset on the same field the FCM increment path uses, so
+            // "mark all as read" reliably zeroes the badge count.
+            globalServices.userManager.update { unreadMsgNum = 0 }
             appIconBadgeManager.get().updateAppIconBadgeNum(0)
             messageNotificationUtil.get().cancelAllNotifications()
         }

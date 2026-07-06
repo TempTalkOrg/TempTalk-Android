@@ -11,7 +11,6 @@ import com.difft.android.R
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivityPrivacySettingBinding
@@ -29,6 +28,7 @@ import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.util.KeyHelper
 import com.difft.android.chat.crypto.IdentityKeyUtil
 import com.difft.android.chat.cryptonew.EncryptionDataManager
+import com.difft.android.chat.gif.favorite.FavoriteWriteRepository
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,6 +58,12 @@ class PrivacySettingFragment : Fragment() {
     @Inject
     lateinit var encryptionDataManager: EncryptionDataManager
 
+    @Inject
+    lateinit var proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider
+
+    @Inject
+    lateinit var favoriteWriteRepo: FavoriteWriteRepository
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -77,6 +83,11 @@ class PrivacySettingFragment : Fragment() {
     private fun initView() {
         binding.clScreenLock.setOnClickListener {
             ScreenLockSettingActivity.startActivity(requireActivity())
+        }
+
+        binding.llUseProxy.visibility = View.VISIBLE
+        binding.clUseProxy.setOnClickListener {
+            ProxySettingsActivity.startActivity(requireActivity())
         }
 
         binding.clRenewIdentityKey.visibility = View.VISIBLE
@@ -115,6 +126,17 @@ class PrivacySettingFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateProxyStatus()
+    }
+
+    private fun updateProxyStatus() {
+        _binding?.tvProxyStatus?.setText(
+            if (proxyConfigProvider.isEnabled) R.string.proxy_status_on else R.string.proxy_status_off
+        )
+    }
+
     private fun renewIdentityKey() {
         ComposeDialogManager.showWait(requireContext(), "")
         val registrationId = KeyHelper.generateRegistrationId(false)
@@ -131,7 +153,7 @@ class PrivacySettingFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    loginRepo.renewIdentityKey(SecureSharedPrefsUtil.getBasicAuth(), JsonUtil.toJson(requestBody))
+                    loginRepo.renewIdentityKey((userManager.getUserData()?.baseAuth ?: ""), JsonUtil.toJson(requestBody))
                 }
                 ComposeDialogManager.dismissWait()
                 if (!isAdded || view == null) return@launch
@@ -146,9 +168,22 @@ class PrivacySettingFragment : Fragment() {
                         this.aciIdentityKeyGenTime = currentTimeMillis
                     }
 
+                    // Re-wrap the favorites key under the new identity while the old private key is
+                    // still available, so linked devices (e.g. desktop) can recover the favorites
+                    // list after they re-link with the rotated identity. Best-effort: a failure here
+                    // must not fail the identity reset itself.
+                    try {
+                        favoriteWriteRepo.rewrapOnMasterKeyRotation(
+                            currentIdentityKeyPair.privateKey.serialize(),
+                            newIdentityKeyPair.privateKey.serialize()
+                        )
+                    } catch (e: Exception) {
+                        L.w { "[PrivacySetting] favorites rewrap after identity reset failed: ${e.message}" }
+                    }
+
                     // 更新UI显示新的身份密钥创建时间
                     ResUtils.getString(R.string.settings_new_key_time_format).let {
-                        val timeFormat = SimpleDateFormat(it)
+                        val timeFormat = SimpleDateFormat(it, Locale.ENGLISH)
                         val date = Date(currentTimeMillis)
                         timeFormat.format(date).let {
                             val timeTips = getString(R.string.settings_new_key_time_info, it)

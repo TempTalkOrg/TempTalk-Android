@@ -21,7 +21,11 @@ import com.difft.android.network.responses.AuthToken
 import com.difft.android.network.responses.ContactsDataResponse
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.network.responses.CriticalAlertResponse
+import com.difft.android.network.responses.DeletedRecordDto
 import com.difft.android.network.responses.GetConversationSetResponseBody
+import com.difft.android.network.responses.FavoritesPutRequest
+import com.difft.android.network.responses.FavoritesResponse
+import com.difft.android.network.responses.GifListResponse
 import com.difft.android.network.responses.GrayConfigData
 import com.difft.android.network.responses.PendingMessageResponse
 import com.difft.android.network.responses.SpeechToTextResponse
@@ -77,6 +81,26 @@ interface HttpService {
 
     @DELETE("v3/friend/{uid}")
     suspend fun fetchDeleteContact(
+        @Path("uid") uid: String,
+        @Header("Authorization") token: String
+    ): BaseResponse<Any>
+
+    /**
+     * Fetch the weak-contact pending-removal set (bare array, unpaged, 15-day window).
+     * serverTimestamp comes from the outer BaseResponse.
+     * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
+     */
+    @GET("v3/friend/deletedRecords")
+    suspend fun fetchDeletedRecords(
+        @Header("Authorization") token: String
+    ): BaseResponse<List<DeletedRecordDto>>
+
+    /**
+     * Remove a weak contact immediately. Idempotent; on success the server pushes changeType=1 to sync other devices.
+     * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
+     */
+    @DELETE("v3/friend/deletedRecords/{uid}")
+    suspend fun deleteDeletedRecord(
         @Path("uid") uid: String,
         @Header("Authorization") token: String
     ): BaseResponse<Any>
@@ -206,4 +230,51 @@ interface HttpService {
         @Header("Authorization") token: String,
         @Body req: GrayCheckRequestBody
     ): BaseResponse<List<GrayConfigData>?>
+
+    /**
+     * GIF trending list. Full URL is supplied via [url] (built from UrlManager.gifs +
+     * "v1/gifs/trending") so the request rides the `/gifs/` proxy host. The `/gifs/` route
+     * requires token auth, so the JWT (microToken) is passed explicitly via [token]; the
+     * HeaderInterceptor's baseAuth fallback (Basic) is rejected by this route (401).
+     */
+    @GET
+    suspend fun getGifsTrending(
+        @Header("Authorization") token: String,
+        @Url url: String,
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int,
+        @Query("next") next: String?,
+        @Query("rating") rating: String? = null
+    ): BaseResponse<GifListResponse>
+
+    /** GIF search list. Full URL via [url] (UrlManager.gifs + "v1/gifs/search"). Token auth like trending. */
+    @GET
+    suspend fun getGifsSearch(
+        @Header("Authorization") token: String,
+        @Url url: String,
+        @Query("q") q: String?,
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int,
+        @Query("next") next: String?,
+        @Query("rating") rating: String? = null
+    ): BaseResponse<GifListResponse>
+
+    /**
+     * GIF favorites (zero-knowledge). Full URL via [url] (UrlManager.gifs + "v1/gifs/favorites")
+     * so it rides the `/gifs/` proxy host. Token auth (JWT/microToken) via [token]: this route
+     * rejects the Basic baseAuth fallback with 401.
+     */
+    @GET
+    suspend fun getFavorites(
+        @Header("Authorization") token: String,
+        @Url url: String
+    ): BaseResponse<FavoritesResponse>
+
+    /** Optimistic-lock PUT of the whole favorites list. URL via UrlManager.gifs + "v1/gifs/favorites". Token auth. */
+    @PUT
+    suspend fun putFavorites(
+        @Header("Authorization") token: String,
+        @Url url: String,
+        @Body body: FavoritesPutRequest
+    ): BaseResponse<FavoritesResponse>
 }

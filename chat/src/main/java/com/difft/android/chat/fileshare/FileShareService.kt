@@ -1,5 +1,6 @@
 package com.difft.android.chat.fileshare
 
+import android.annotation.SuppressLint
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -45,6 +46,10 @@ class FileShareRepo @Inject constructor() {
         .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3) // 指定TLS版本为TLS 1.2  TLS 1.3
         .build()
 
+    // OSS uploads/downloads target object-storage URLs (pre-signed) that are
+    // outside our auth domain — ChativeHttpClient's HeaderInterceptor would
+    // inject auth headers the OSS provider rejects.
+    @SuppressLint("ChativeHttpClientRequired")
     private var ossClient = OkHttpClient.Builder()
         .connectTimeout(TimeUnit.SECONDS.toMillis(30), TimeUnit.MILLISECONDS)
         .readTimeout(TimeUnit.SECONDS.toMillis(300), TimeUnit.MILLISECONDS)

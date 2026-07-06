@@ -1,9 +1,11 @@
 package com.difft.android.network.speedtest
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
+import com.difft.android.network.ServiceUrlResolver
 import com.difft.android.network.config.GlobalConfigsManager
+import com.difft.android.network.proxy.ProxyConfigProvider
 import dagger.Lazy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,12 +33,24 @@ import javax.inject.Singleton
 @Singleton
 class DomainSpeedTestCoordinator @Inject constructor(
     private val globalConfigsManager: Lazy<GlobalConfigsManager>,
-    private val speedTester: DomainSpeedTester
+    private val speedTester: DomainSpeedTester,
+    private val userManager: UserManager,
+    private val proxyConfigProvider: Lazy<ProxyConfigProvider>,
 ) {
+    /**
+     * Whether the proxy is currently active. Reads the injected INSTANCE
+     * [ProxyConfigProvider.isEnabled] (which triggers `refreshFromUserDataIfChanged`)
+     * rather than the static [ProxyConfigProvider.isProxyActive] mirror: the static
+     * is only refreshed as a side effect of other components calling an instance
+     * method, so on a cold start where the proxy was enabled last session it can
+     * still read `false` before anyone refreshes it. If a speed test ran in that
+     * window it would probe LIVE hosts through the proxy client; those hosts are not
+     * on the embedded whitelist, so [shouldTunnel] would route them DIRECT and leak
+     * the real IP. The instance read self-heals that window.
+     */
+    private fun isProxyActive(): Boolean = proxyConfigProvider.get().isEnabled
     companion object {
         private const val TAG = "SpeedTest"
-        private const val SP_KEY_BEST_HOST = "sp_speed_test_success_host"
-        private const val SERVICE_TYPE_CHAT = "chat"
 
         private const val THROTTLE_MS = 30_000L
         private const val INITIAL_DELAY_MS = 10_000L
@@ -50,11 +64,15 @@ class DomainSpeedTestCoordinator @Inject constructor(
     private val isTestRunning = AtomicBoolean(false)
     private val wsConsecutiveFailures = AtomicInteger(0)
 
+    @Volatile
     private var periodicJob: Job? = null
 
     fun initialize() {
         L.i { "[$TAG] initialize" }
         appScope.launch(Dispatchers.IO) {
+            // StoragePreloader pre-warms the global config before this 10s-delayed
+            // first run, so getNewGlobalConfigs() resolves synchronously from
+            // memory/assets and getChatHostsFromConfig() is non-empty (design MED-1).
             delay(INITIAL_DELAY_MS)
             runSpeedTest()
         }
@@ -72,8 +90,9 @@ class DomainSpeedTestCoordinator @Inject constructor(
             return snapshotResult.host
         }
 
-        // Level 2: persisted best host from last speed test
-        val persisted = SharedPrefsUtil.getString(SP_KEY_BEST_HOST)
+        // Level 2: persisted best host from last speed test.
+        // Synchronous lookup via UserManager's in-memory snapshot — no I/O.
+        val persisted = userManager.getUserData()?.bestHost
         if (!persisted.isNullOrBlank() && persisted !in invalidatedHostsThisSession) {
             L.i { "[$TAG] getBestHostSync: using persisted host=$persisted" }
             return persisted
@@ -91,6 +110,15 @@ class DomainSpeedTestCoordinator @Inject constructor(
         L.w { "[$TAG] getBestHostSync: no host available, returning null" }
         return null
     }
+
+    /**
+     * Returns the first host from [candidates] not marked unavailable this
+     * session, or null when all are invalidated. Used by the proxy path to keep
+     * failover (e.g. WebSocket host switching) working over the embedded host
+     * set without depending on the speed-test snapshot/ranking.
+     */
+    fun firstAvailableHost(candidates: List<String>): String? =
+        candidates.firstOrNull { it !in invalidatedHostsThisSession }
 
     /**
      * Returns all hosts ranked by latency (for HTTP retry fallback).
@@ -162,6 +190,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
      * Starts or stops periodic speed tests based on app foreground state.
      * Foreground: test every 30 minutes. Background: stop testing.
      */
+    @Synchronized
     fun startPeriodicTest(isForeground: Boolean) {
         periodicJob?.cancel()
         if (!isForeground) {
@@ -172,7 +201,20 @@ class DomainSpeedTestCoordinator @Inject constructor(
         periodicJob = appScope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(PERIODIC_FOREGROUND_MS)
-                runSpeedTest()
+                if (isProxyActive()) {
+                    // Proxy mode skips speed testing (all embedded hosts resolve to the
+                    // same proxy IP, so latency ranking is meaningless). But failover
+                    // still marks embedded hosts unavailable on WS failure; runSpeedTest
+                    // — the only other site that clears that set — is skipped under the
+                    // proxy, so without this periodic clear a host marked unavailable
+                    // would never be retried even after it recovers, permanently
+                    // degrading failover. Clear on the same cadence the speed test would
+                    // have cleared, giving recovered hosts a fresh chance.
+                    invalidatedHostsThisSession.clear()
+                    L.i { "[$TAG] proxy active: cleared invalidated hosts (no speed test)" }
+                } else {
+                    runSpeedTest()
+                }
             }
         }
         L.i { "[$TAG] periodic test started (foreground, interval=${PERIODIC_FOREGROUND_MS / 60_000}min)" }
@@ -181,6 +223,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
     /**
      * Resets all in-memory state. Called on logout before app restart.
      */
+    @Synchronized
     fun resetSession() {
         periodicJob?.cancel()
         snapshot.set(emptyList())
@@ -192,6 +235,18 @@ class DomainSpeedTestCoordinator @Inject constructor(
     }
 
     private suspend fun runSpeedTest() {
+        // Proxy active: skip speed testing entirely. Every embedded host resolves to
+        // the same proxy IP, so probing them measures the proxy hop, not the host —
+        // the ranking is meaningless and the probes would only add load. Host
+        // failover under the proxy is handled by [firstAvailableHost] over the
+        // embedded set, with its invalidation reset on the periodic clear in
+        // [startPeriodicTest] (see B2 / light_clear). Read the fresh instance state
+        // (see [isProxyActive]) so a cold-start where the proxy is enabled is honored
+        // before any speed test would have leaked to a live host.
+        if (isProxyActive()) {
+            L.i { "[$TAG] proxy active: skip speed test" }
+            return
+        }
         if (!isTestRunning.compareAndSet(false, true)) return
         try {
             lastTestTime.set(System.currentTimeMillis())
@@ -214,7 +269,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
 
             val best = results.firstOrNull { it.isAvailable }
             if (best != null) {
-                SharedPrefsUtil.putString(SP_KEY_BEST_HOST, best.host)
+                userManager.update { bestHost = best.host }
             }
             L.i { "[$TAG] speed test completed, best=${best?.host} (${best?.latencyMs}ms), all=$results" }
         } finally {
@@ -222,11 +277,19 @@ class DomainSpeedTestCoordinator @Inject constructor(
         }
     }
 
-    private fun getChatHostsFromConfig(): List<String> {
-        return globalConfigsManager.get().getNewGlobalConfigs()
-            ?.data?.hosts
-            ?.filter { it.servTo == SERVICE_TYPE_CHAT }
-            ?.mapNotNull { it.name?.takeIf { name -> name.isNotBlank() } }
-            .orEmpty()
-    }
+    /**
+     * Chat speed-test host pool, resolved from the `services` + `domains` model
+     * via [ServiceUrlResolver] (same source as the URL path resolver, so the
+     * speed-test pool and routed URLs never diverge). No legacy
+     * `hosts(servTo==chat)` fallback: the assets default config always carries
+     * services + domains, so there is no reachable "hosts-but-no-services" state,
+     * and mixing models would let failover hit a host the server has retired.
+     * Returns empty when unresolved; the empty case is
+     * logged once at each decision point ([runSpeedTest] / [getBestHostSync]),
+     * not here — this shared accessor stays silent to avoid hot-path log spam.
+     */
+    private fun getChatHostsFromConfig(): List<String> =
+        ServiceUrlResolver.resolve(
+            globalConfigsManager.get().getNewGlobalConfigs()?.data, ServiceUrlResolver.SERVICE_NAME_CHAT
+        )?.hosts.orEmpty()
 }

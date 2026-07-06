@@ -7,6 +7,7 @@
         android:id="@+id/ivPicture"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:importantForAccessibility="no"
         android:scaleType="centerCrop" />
 
     <com.luck.picture.lib.widget.MediumBoldTextView

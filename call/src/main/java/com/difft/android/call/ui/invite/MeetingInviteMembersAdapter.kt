@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -126,7 +127,7 @@ class MeetingInviteMembersAdapter(
                 itemView.context.getColor(android.R.color.white)
             )
             // 设置圆形背景
-            textViewAvatarLetter.background = itemView.context.getDrawable(R.drawable.bg_circle_avatar)
+            textViewAvatarLetter.background = AppCompatResources.getDrawable(itemView.context, R.drawable.bg_circle_avatar)
                 ?: android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.OVAL
                     setColor(itemView.context.getColor(com.difft.android.base.R.color.primary))

@@ -1,6 +1,7 @@
 package com.difft.android.chat.messages
 
 import android.content.Context
+import android.os.SystemClock
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
@@ -11,7 +12,9 @@ import com.difft.android.call.LCallManager
 import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
+import com.difft.android.base.utils.weakcontact.WeakContactClock
 import com.difft.android.chat.contacts.ContactsUpdater
+import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupUpdater
 import com.difft.android.chat.message.LocalMessageCreator
@@ -30,6 +33,7 @@ import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
+import com.difft.android.websocket.api.util.toKotlinDataOrNull
 import com.difft.android.websocket.api.util.toKotlinEnum
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
@@ -54,11 +58,15 @@ import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.delete
 import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.isGroupMember
+import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.wcdb
+import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.MessageNotificationUtil
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -67,6 +75,8 @@ import javax.inject.Singleton
  * Takes data about a decrypted message, transforms it into user-presentable data, and writes that
  * data to our data stores.
  */
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class MessageContentProcessor @Inject constructor(
     @param:ApplicationContext
@@ -84,9 +94,9 @@ class MessageContentProcessor @Inject constructor(
     private val localMessageCreator: LocalMessageCreator,
     private val groupCryptoRepo: com.difft.android.chat.crypto.GroupCryptoRepo,
     private val groupUtil: com.difft.android.chat.group.GroupUtil,
+    private val weakContactReconciler: WeakContactReconciler,
+    private val gson: Gson,
 ) {
-
-    private var tag: String = ""
 
     /**
      * Given the details about a message decryption, this will insert the proper message content into
@@ -98,23 +108,23 @@ class MessageContentProcessor @Inject constructor(
      */
     suspend fun process(content: SignalServiceDataClass, tag: String): Message? {
         L.i { "[Message][${tag}] process message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
-        this.tag = tag
-        return handleMessage(content)
+        return handleMessage(content, tag)
     }
 
-    private suspend fun handleMessage(content: SignalServiceDataClass): Message? {
+    private suspend fun handleMessage(content: SignalServiceDataClass, tag: String): Message? {
         if (content.signalCustomNotifyMessage != null) {
-            handleNotifyMessage(content)
+            handleNotifyMessage(content, tag)
         } else if (content.signalServiceContent != null) {
             val serviceContent: SignalServiceProtos.Content = content.signalServiceContent ?: return null
             if (serviceContent.hasGroupKeyMessage()) {
                 return handleGroupKeyMessage(content)
             } else if (serviceContent.hasNotifyMessage()) {
-                return handleClientNotifyMessage(content)
+                return handleClientNotifyMessage(content, tag)
             } else if (serviceContent.hasDataMessage()) {
                 return handleDataMessage(
                     content,
-                    isSyncMessage = false
+                    isSyncMessage = false,
+                    tag = tag,
                 )
             } else if (serviceContent.hasSyncMessage()) {
                 if (content.senderId != globalServices.myId) {
@@ -124,7 +134,8 @@ class MessageContentProcessor @Inject constructor(
                 if (serviceContent.syncMessage.hasSent()) {
                     return handleDataMessage(
                         content,
-                        isSyncMessage = true
+                        isSyncMessage = true,
+                        tag = tag,
                     )
                 } else if (serviceContent.syncMessage.readCount > 0) {
                     L.i { "[Message][${tag}] process sync read message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
@@ -156,6 +167,12 @@ class MessageContentProcessor @Inject constructor(
                             messageStore.updateMessageReadTime(forWhat.id, firstReadMessage.timestamp)
                         }
                     }
+                } else if (serviceContent.syncMessage.hasActivityNoticeSync()) {
+                    // Place ahead of forwardNoticeSync so that if both fields are
+                    // mistakenly populated, the new generic channel wins. In normal
+                    // operation only one is set per envelope by the sender.
+                    L.i { "[Message][${tag}] process activity notice sync -> timestamp:${content.signalServiceEnvelope.timestamp}" }
+                    return handleActivityNoticeSync(content, serviceContent.syncMessage.activityNoticeSync, tag)
                 } else if (serviceContent.syncMessage.hasForwardNoticeSync()) {
                     L.i { "[Message][${tag}] process forward notice sync -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                     return handleForwardNoticeSync(content, serviceContent.syncMessage.forwardNoticeSync, tag)
@@ -167,6 +184,17 @@ class MessageContentProcessor @Inject constructor(
                 L.i { "[Message][${tag}] process call message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 LCallManager.removePendingMessage(content.signalServiceEnvelope.source, content.signalServiceEnvelope.timestamp.toString())
                 lCallManagerProvider.get().handleCallMessage(content)
+            } else if (serviceContent.hasActivityNotice()) {
+                // Place ahead of forwardNotice — same rationale as the sync branch
+                // above: prefer the generic channel if both fields are populated.
+                L.i { "[Message][${tag}] process activity notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
+                return handleActivityNoticeMessage(
+                    content = content,
+                    activityNotice = serviceContent.activityNotice,
+                    operatorId = content.signalServiceEnvelope.source,
+                    conversation = content.conversation,
+                    tag = tag
+                )
             } else if (serviceContent.hasForwardNotice()) {
                 L.i { "[Message][${tag}] process forward notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 return handleForwardNoticeMessage(
@@ -189,8 +217,9 @@ class MessageContentProcessor @Inject constructor(
      * Delegates the "resolve names → render showContent → persist NotifyMessage"
      * pipeline to [LocalMessageCreator.createForwardNoticeMessage].
      *
-     * Uses the function parameter [tag] for logging — `this.tag` is a mutable
-     * `var` and may be overwritten by a concurrent call on the @Singleton.
+     * Uses the function parameter [tag] for logging — this class is a
+     * @Singleton, so logging through a parameter (vs. a class-level field)
+     * keeps concurrent callers' tags from racing.
      */
     private suspend fun handleForwardNoticeMessage(
         content: SignalServiceDataClass,
@@ -235,7 +264,8 @@ class MessageContentProcessor @Inject constructor(
             // Protocol-violation degrade: coerce to >= 1 so plurals always renders.
             // Do NOT raise to authorIds.size — a peer could craft a payload with
             // messageCount=1 and 100 authors to inflate the displayed count.
-            messageCount = maxOf(1, forwardNotice.messageCount)
+            messageCount = maxOf(1, forwardNotice.messageCount),
+            combinedForwardMode = forwardNotice.combinedForwardMode.toKotlinEnum(),
         )
         L.i {
             "[Message][${tag}] handle forward notice -> operator=$operatorId, " +
@@ -284,9 +314,99 @@ class MessageContentProcessor @Inject constructor(
         )
     }
 
+    /**
+     * Handle a top-level `Content.activityNotice` (primary path: from peer / group /
+     * self-as-NTS). Self-sync uses [handleActivityNoticeSync].
+     *
+     * Mirrors [handleForwardNoticeMessage] 1:1; differences:
+     *   - Parses payload via [toKotlinDataOrNull] so unknown / TYPEDATA_NOT_SET
+     *     oneof cases drop silently with a warn log (forward-compat: future activity
+     *     types on the wire that this client doesn't know about must NOT render as
+     *     an unrelated type — design doc §3.1 rule 1+2).
+     *   - Delegates to [LocalMessageCreator.createActivityNoticeMessage] for the
+     *     "resolve names → render showContent → persist NotifyMessage" pipeline.
+     */
+    private suspend fun handleActivityNoticeMessage(
+        content: SignalServiceDataClass,
+        activityNotice: SignalServiceProtos.MessageActivityNotice,
+        operatorId: String,
+        conversation: For,
+        tag: String
+    ): Message? {
+        val envelop = content.signalServiceEnvelope
+
+        val noticeData = activityNotice.toKotlinDataOrNull()
+            ?: run {
+                L.w {
+                    "[Message][${tag}] activityNotice unknown/unset typeData_case=${activityNotice.typeDataCase}, drop"
+                }
+                return null
+            }
+
+        // Cross-conversation injection guard (group case): if resolved conversation
+        // is a group, verify the envelope sender is actually a member. Without this,
+        // a peer could craft payload.conversation.groupId pointing at any group the
+        // victim is in and inject a fake "X copied your messages" system message via
+        // a 1v1 envelope. Same defense as forward notice (PR #683).
+        if (conversation is For.Group) {
+            val senderId = envelop.source
+            if (!wcdb.isGroupMember(conversation.id, senderId)) {
+                L.w {
+                    "[Message][${tag}] activityNotice group=${conversation.id} " +
+                        "envelope.source=$senderId is NOT a member of that group, " +
+                        "drop (cross-conversation injection attempt)"
+                }
+                return null
+            }
+        }
+
+        L.i {
+            "[Message][${tag}] handle activity notice -> operator=$operatorId, " +
+                "conversation=${conversation.id}, type=${noticeData.type}, " +
+                "count=${noticeData.messageCount}, authors=${noticeData.sourceAuthorIds.size}"
+        }
+        return localMessageCreator.createActivityNoticeMessage(
+            operatorId = operatorId,
+            forWhat = conversation,
+            noticeData = noticeData,
+            systemShowTimestamp = envelop.systemShowTimestamp.takeIf { it > 0 } ?: envelop.timestamp,
+            timestamp = envelop.timestamp,
+            sourceDevice = envelop.sourceDevice
+        )
+    }
+
+    /**
+     * Handle a self-sync `SyncMessage.activityNoticeSync`. The outer dispatcher has
+     * already verified `senderId == myId`. Mirrors [handleForwardNoticeSync]:
+     * drops with a warn log if `conversation` is missing/empty, otherwise delegates
+     * to [handleActivityNoticeMessage] with operatorId=myId.
+     */
+    private suspend fun handleActivityNoticeSync(
+        content: SignalServiceDataClass,
+        activityNotice: SignalServiceProtos.MessageActivityNotice,
+        tag: String
+    ): Message? {
+        val conv = activityNotice.takeIf { it.hasConversation() }?.conversation
+        val hasValidConv = conv != null && (
+            conv.hasGroupId() || (conv.hasNumber() && conv.number.isNotEmpty())
+        )
+        if (!hasValidConv) {
+            L.w { "[Message][${tag}] activityNoticeSync missing or empty conversation, drop" }
+            return null
+        }
+        return handleActivityNoticeMessage(
+            content = content,
+            activityNotice = activityNotice,
+            operatorId = globalServices.myId,
+            conversation = content.conversation,
+            tag = tag
+        )
+    }
+
     private suspend fun handleDataMessage(
         content: SignalServiceDataClass,
-        isSyncMessage: Boolean
+        isSyncMessage: Boolean,
+        tag: String,
     ): Message? {
         val (envelop, _, _) = content
         val message = if (isSyncMessage) content.signalServiceContent?.syncMessage?.sent?.message else content.signalServiceContent?.dataMessage
@@ -303,9 +423,10 @@ class MessageContentProcessor @Inject constructor(
 
             // Fallback: extract R_group from group message if present
             if (message.hasGroup() && message.group.hasGroupRootKey()) {
-                val saved = groupCryptoRepo.saveRGroupIfNeeded(
+                val saved = groupCryptoRepo.saveOrRotateRGroup(
                     content.conversation.id,
-                    message.group.groupRootKey.toByteArray()
+                    message.group.groupRootKey.toByteArray(),
+                    message.group.keyVersion // absent proto field defaults to 0
                 )
                 if (saved) {
                     L.i { "[GE] Fallback key extracted from group message for ${content.conversation.id}" }
@@ -324,7 +445,8 @@ class MessageContentProcessor @Inject constructor(
             message,
             fromWho,
             body,
-            isSyncMessage
+            isSyncMessage,
+            tag,
         )
     }
 
@@ -334,6 +456,7 @@ class MessageContentProcessor @Inject constructor(
         fromWho: For,
         messageBody: String,
         isSyncMessage: Boolean,
+        tag: String,
     ): Message? {
         L.i {
             "[Message][${tag}] handle text message -> " +
@@ -468,12 +591,26 @@ class MessageContentProcessor @Inject constructor(
         if (message.hasQuote()) {
             L.d { "[Message][${tag}] Found quote in handle text message" }
             val quoteMessage = message.quote
-            val quotedAttachments: List<QuotedAttachment> = ArrayList()
+            val quotedAttachments = quoteMessage.attachmentsList.map { protoQa ->
+                val thumbnailAttachment = if (protoQa.hasThumbnail()) {
+                    createQuoteThumbnailAttachment(protoQa.thumbnail)
+                } else null
+                QuotedAttachment(
+                    contentType = protoQa.contentType,
+                    fileName = protoQa.fileName,
+                    thumbnail = thumbnailAttachment,
+                    flags = protoQa.flags
+                )
+            }
             var text = quoteMessage.text
             if (TextUtils.isEmpty(quoteMessage.text)) {
-                text = context.getString(R.string.chat_message_attachment)
+                // No quote body (typical for media quotes from iOS/Mac) → show a precise type label
+                // (gif/image/video/audio) instead of a generic "[Attachment]", matching the conversation
+                // preview (MessageModel.previewContent).
+                val qa = quotedAttachments.firstOrNull()
+                text = context.getString(MediaUtil.quoteTypeLabelRes(qa?.contentType, qa?.flags ?: 0))
             }
-            quote = Quote(quoteMessage.id, quoteMessage.author, text, quotedAttachments)
+            quote = Quote(quoteMessage.id, quoteMessage.author, text, quotedAttachments.ifEmpty { null })
         }
         var forwardContext: ForwardContext? = null
         if (message.hasForwardContext()) {
@@ -572,7 +709,7 @@ class MessageContentProcessor @Inject constructor(
             var receiverIds: String? = null
             if (content.senderId == globalServices.myId && content.conversation is For.Group) {
                 val receiverIdList = wcdb.groupMemberContactor.getAllObjects(DBGroupMemberContactorModel.gid.eq(content.conversation.id)).map { it.id } - globalServices.myId
-                receiverIds = globalServices.gson.toJson(receiverIdList)
+                receiverIds = gson.toJson(receiverIdList)
             }
 
             if (content.senderId != globalServices.myId) {
@@ -613,13 +750,21 @@ class MessageContentProcessor @Inject constructor(
         val gid = groupKeyMessage.groupId.toByteArray().transformGroupIdFromServerToLocal()
         val rGroup = groupKeyMessage.groupRootKey.toByteArray()
         L.i { "[GE] Received GroupKeyMessage for group $gid from ${content.senderId}" }
-        groupCryptoRepo.saveRGroupIfNeeded(gid, rGroup)
-        // Always refresh to ensure decrypted fields are up to date
-        groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
+        val saved = groupCryptoRepo.saveOrRotateRGroup(
+            gid,
+            rGroup,
+            groupKeyMessage.keyVersion // absent proto field defaults to 0
+        )
+        if (saved) {
+            // Key just arrived or rotated — refresh group info so decrypted
+            // name/avatar are re-derived with the new K_group. Stale/older keys
+            // are skipped (saved=false) and need no refresh.
+            groupUtil.fetchAndSaveSingleGroupInfo(gid, true)
+        }
         return null // Not displayed in UI
     }
 
-    private suspend fun handleClientNotifyMessage(signalServiceDataClass: SignalServiceDataClass): Message? {
+    private suspend fun handleClientNotifyMessage(signalServiceDataClass: SignalServiceDataClass, tag: String): Message? {
         val notifyMessage = signalServiceDataClass.signalServiceContent?.notifyMessage
         L.i { "[Message][${tag}] handleClientNotifyMessage -> timestamp:${signalServiceDataClass.messageId}" }
         if (notifyMessage != null) {
@@ -628,7 +773,8 @@ class MessageContentProcessor @Inject constructor(
     }
 
     private suspend fun handleNotifyMessage(
-        content: SignalServiceDataClass
+        content: SignalServiceDataClass,
+        tag: String,
     ) {
         val (envelop, _, notifyMessageContent) = content
         if (notifyMessageContent != null) {
@@ -649,7 +795,7 @@ class MessageContentProcessor @Inject constructor(
                 // Type 4: muteStatus, blockStatus, confidentialMode
                 message.data?.conversation?.let {
                     kotlin.runCatching {
-                        val notifyConversation = Gson().fromJson(it.toString(), NotifyConversation::class.java)
+                        val notifyConversation = gson.fromJson(it.toString(), NotifyConversation::class.java)
                         // 批量更新配置到数据库
                         dbRoomStore.updateConversationSettings(
                             roomId = notifyConversation.conversation,
@@ -748,6 +894,35 @@ class MessageContentProcessor @Inject constructor(
                 // 本地生成 critical alert 文本消息
                 createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice)
 
+            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_WEAK_CONTACT) {
+                val data = message.data
+                val uid = data?.uid
+                if (uid.isNullOrEmpty()) {
+                    L.w { "[Message][${tag}] weakContact missing uid, skip. changeType=${data?.changeType}" }
+                    return
+                }
+                if (data.serverTimestamp > 0L) {
+                    WeakContactClock.update(data.serverTimestamp, SystemClock.elapsedRealtime())
+                }
+                L.i { "[Message][${tag}] weakContact notify uid=$uid changeType=${data.changeType} reason=${data.reason} expireTime=${data.expireTime}" }
+                when (data.changeType) {
+                    0 -> {
+                        val snapshot = ContactorModel().also {
+                            it.id = uid
+                            it.name = data.name
+                            it.avatar = data.avatar
+                        }
+                        // Prefer the explicit deleteTime from the server; fall back to serverTimestamp
+                        // when notify=25 omits it (keeps parity with the deletedRecords API path).
+                        val deleteTime = data.deleteTime.takeIf { it > 0 } ?: data.serverTimestamp
+                        weakContactReconciler.enterWeak(uid, data.expireTime, data.reason, deleteTime, snapshot)
+                    }
+                    // ct=1 = real removal (expiry / immediate / cross-device); friend restore comes via directory action=0.
+                    1 -> weakContactReconciler.removeWeak(uid)
+
+                    else -> L.w { "[Message][${tag}] weakContact unknown changeType=${data.changeType} uid=$uid" }
+                }
+
             } else {
                 L.w { "[Message][${tag}] Unknown notifyType: ${message.notifyType}, timestamp: ${envelop.timestamp}" }
             }
@@ -818,6 +993,32 @@ class MessageContentProcessor @Inject constructor(
         attachmentPath,
         AttachmentStatus.LOADING.code
     )
+
+    /**
+     * Maps a quote's inline thumbnail [SignalServiceProtos.AttachmentPointer] to a domain
+     * [Attachment] for preview. The thumbnail travels inside the quote proto, so this carries
+     * no crypto material (key/digest = null) and no local file (path = null); status is SUCCESS
+     * because the inline bytes are immediately renderable. Empty/absent bytes collapse to
+     * thumbnail=null, size=0 so the renderer falls back to a type icon.
+     */
+    internal fun createQuoteThumbnailAttachment(pointer: SignalServiceProtos.AttachmentPointer): Attachment {
+        val thumbBytes = pointer.thumbnail?.toByteArray()?.takeIf { it.isNotEmpty() }
+        return Attachment(
+            id = "",
+            authorityId = 0L,
+            contentType = pointer.contentType,
+            key = null,
+            size = thumbBytes?.size ?: 0,
+            thumbnail = thumbBytes,
+            digest = null,
+            fileName = pointer.fileName.takeIf { pointer.hasFileName() },
+            flags = pointer.flags,
+            width = pointer.width,
+            height = pointer.height,
+            path = null,
+            status = AttachmentStatus.SUCCESS.code
+        )
+    }
 
     private fun updateDisappearingTime(forWhat: For, messageExpiry: Int, messageClearAnchor: Long) {
         messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor)

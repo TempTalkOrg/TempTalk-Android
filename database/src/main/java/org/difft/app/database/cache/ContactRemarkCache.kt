@@ -100,35 +100,56 @@ object ContactRemarkCache {
      * groupMemberContactor stubs (non-friend); contactor wins on conflict. Rows
      * with gid="someGroup" are intentionally skipped — they're treated as stale
      * once the cache becomes the read source of truth.
+     *
+     * Callers MUST invoke this from a `Dispatchers.IO`-bound coroutine
+     * (e.g., wrapped in `withContext(Dispatchers.IO)` at the call site).
      */
+    @Suppress("BlockingWcdbInSuspend")
     suspend fun preload() {
+        // Fast-skip a known-corrupt DB so we neither touch a doomed handle nor race
+        // MainActivity's recovery (close/delete). See WCDB.dbCorrupted.
+        if (wcdb.dbCorrupted) {
+            L.w { "[ContactRemarkCache] preload skipped: db marked corrupt" }
+            return
+        }
+
         val gen = generation
         val start = System.currentTimeMillis()
 
-        val fromContactor = wcdb.contactor.getAllObjects(
-            DBContactorModel.remark.notNull().and(DBContactorModel.remark.notEq(""))
-                .or(DBContactorModel.remarkAvatar.notNull().and(DBContactorModel.remarkAvatar.notEq("")))
-        ).associate {
-            it.id to ContactRemarkInfo(
-                remark = it.remark.orNullIfEmpty(),
-                remarkAvatar = it.remarkAvatar.orNullIfEmpty(),
-            )
-        }
-
-        val fromGMemberStub = wcdb.groupMemberContactor.getAllObjects(
-            DBGroupMemberContactorModel.gid.eq("")
-                .and(
-                    DBGroupMemberContactorModel.remark.notNull().and(DBGroupMemberContactorModel.remark.notEq(""))
-                        .or(DBGroupMemberContactorModel.remarkAvatar.notNull().and(DBGroupMemberContactorModel.remarkAvatar.notEq("")))
+        // This runs on a no-CEH SupervisorJob child (ContactorUtil.coroutineScope) that
+        // escapes the AppStartup task-body guard — an uncaught WCDBException here would
+        // crash the process. runCatching is the mandatory correctness floor: on a corrupt
+        // DB the read fails soft (cache stays empty), recovery is driven by MainActivity.
+        val fromDb = runCatching {
+            val fromContactor = wcdb.contactor.getAllObjects(
+                DBContactorModel.remark.notNull().and(DBContactorModel.remark.notEq(""))
+                    .or(DBContactorModel.remarkAvatar.notNull().and(DBContactorModel.remarkAvatar.notEq("")))
+            ).associate {
+                it.id to ContactRemarkInfo(
+                    remark = it.remark.orNullIfEmpty(),
+                    remarkAvatar = it.remarkAvatar.orNullIfEmpty(),
                 )
-        ).associate {
-            it.id to ContactRemarkInfo(
-                remark = it.remark.orNullIfEmpty(),
-                remarkAvatar = it.remarkAvatar.orNullIfEmpty(),
-            )
-        }
+            }
 
-        val fromDb = fromGMemberStub + fromContactor
+            val fromGMemberStub = wcdb.groupMemberContactor.getAllObjects(
+                DBGroupMemberContactorModel.gid.eq("")
+                    .and(
+                        DBGroupMemberContactorModel.remark.notNull().and(DBGroupMemberContactorModel.remark.notEq(""))
+                            .or(DBGroupMemberContactorModel.remarkAvatar.notNull().and(DBGroupMemberContactorModel.remarkAvatar.notEq("")))
+                    )
+            ).mapNotNull { member ->
+                val memberId = member.id ?: return@mapNotNull null
+                memberId to ContactRemarkInfo(
+                    remark = member.remark.orNullIfEmpty(),
+                    remarkAvatar = member.remarkAvatar.orNullIfEmpty(),
+                )
+            }.toMap()
+
+            fromGMemberStub + fromContactor
+        }.getOrElse { e ->
+            L.e { "[ContactRemarkCache] preload DB read failed (cache left empty): ${e.stackTraceToString()}" }
+            return
+        }
 
         var aborted = false
         // `fromDb + current` keeps any concurrent put/putAll values fresher than DB.

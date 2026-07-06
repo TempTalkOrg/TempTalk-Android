@@ -3,6 +3,7 @@ package com.difft.android.chat.mediasend.v2
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.WorkerThread
+import androidx.core.net.toUri
 import com.luck.picture.lib.entity.LocalMedia
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,7 +51,7 @@ class MediaSelectionRepository(context: Context) {
     fun deleteBlobs(media: List<LocalMedia>) {
         media
             .map(LocalMedia::getRealPath)
-            .forEach { MyBlobProvider.getInstance().delete(Uri.parse(it)) }
+            .forEach { MyBlobProvider.getInstance().delete(it.toUri()) }
     }
 
     fun cleanUp(selectedMedia: List<LocalMedia>) {
@@ -67,7 +68,7 @@ class MediaSelectionRepository(context: Context) {
         val modelsToRender: MutableMap<LocalMedia, MediaTransform> = mutableMapOf()
 
         selectedMedia.forEach {
-            val state = stateMap[Uri.parse(it.realPath)]
+            val state = stateMap[it.realPath.toUri()]
             if (state is ImageEditorFragment.Data) {
                 modelsToRender[it] = ImageEditorModelRenderMediaTransform(state.readModel(), null, quality)
             }

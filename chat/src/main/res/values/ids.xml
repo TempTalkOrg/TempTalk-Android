@@ -2,4 +2,7 @@
 <resources>
     <!-- Tag ID to store message id for checking if view has been recycled -->
     <item name="tag_truncation_message_id" type="id"/>
+    <!-- Tag ID stamped on the quote thumbnail ImageView so a late async reverse-lookup result can
+         verify the view was not rebound to a different quote before it returned. -->
+    <item name="quote_thumbnail_job" type="id"/>
 </resources>

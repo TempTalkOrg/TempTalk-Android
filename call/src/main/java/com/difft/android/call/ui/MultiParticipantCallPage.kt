@@ -1,5 +1,6 @@
 package com.difft.android.call.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
@@ -35,27 +36,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.globalServices
-import com.difft.android.call.LCallUiConstants
+import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.data.BarrageMessageConfig
-import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
-import com.difft.android.call.ui.barrage.BarrageMessageView
+import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.ui.screenshare.ScreenSharingView
+import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MultiParticipantCallPage(
@@ -80,9 +85,41 @@ fun MultiParticipantCallPage(
 
     val coroutineScope = rememberCoroutineScope()
 
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
+    }
+    val contactorCacheManager = entryPoint.contactorCacheManager
+    val displayInfoMap by contactorCacheManager.participantDisplayMap.collectAsState()
+
+    LaunchedEffect(participants) {
+        val uidsToLoad = participants.mapNotNull { p ->
+            val uid = when (p) {
+                is LocalParticipant -> globalServices.myId
+                else -> p.identity?.value ?: ""
+            }
+            uid.takeIf { it.isNotEmpty() && it !in displayInfoMap }
+        }
+        uidsToLoad.forEach { uid ->
+            launch { contactorCacheManager.loadParticipantDisplay(uid) }
+        }
+    }
+
+    val windowInfo = LocalWindowInfo.current
+    val density = LocalDensity.current
     val configuration = LocalConfiguration.current
-    val isWideScreen = configuration.screenWidthDp >= 600 ||
-        configuration.screenWidthDp > configuration.screenHeightDp
+    val containerSize = windowInfo.containerSize
+    // Fall back to Configuration on the first composition, before the first layout pass populates
+    // containerSize. Otherwise width would be 0 and isWideScreen would be wrong for the first frame.
+    val widthDp = if (containerSize.width > 0) {
+        with(density) { containerSize.width.toDp() }
+    } else {
+        configuration.screenWidthDp.dp
+    }
+    val isWideScreen = if (containerSize.width > 0 && containerSize.height > 0) {
+        widthDp >= 600.dp || containerSize.width > containerSize.height
+    } else {
+        widthDp >= 600.dp || configuration.screenWidthDp > configuration.screenHeightDp
+    }
 
     if (!isUserSharingScreen) {
         if (isWideScreen && !isInPipMode) {
@@ -92,7 +129,8 @@ fun MultiParticipantCallPage(
                 room = room,
                 muteOtherEnabled = muteOtherEnabled,
                 topInset = topInset,
-                coroutineScope = coroutineScope
+                coroutineScope = coroutineScope,
+                displayInfoMap = displayInfoMap
             )
         } else {
             CompositionLocalProvider(
@@ -102,11 +140,13 @@ fun MultiParticipantCallPage(
                     columns = GridCells.Fixed(2),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(
-                        start = 16.dp,
-                        top = topInset + 16.dp,
-                        end = 16.dp,
-                        bottom = 4.dp),
+                    modifier = Modifier
+                        .testTag("call_render_multi_grid")
+                        .padding(
+                            start = 16.dp,
+                            top = topInset + 16.dp,
+                            end = 16.dp,
+                            bottom = 4.dp),
                 ) {
                     items(
                         count = participants.size,
@@ -123,6 +163,8 @@ fun MultiParticipantCallPage(
                             participant = participant,
                             modifier = Modifier.fillMaxHeight().aspectRatio(1f),
                             uid = uid,
+                            userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
+                            participantIndex = index,
                             muteOtherEnabled = muteOtherEnabled,
                             onClickMute = { viewModel.toggleMute(participant) },
                             coroutineScope = coroutineScope
@@ -140,36 +182,15 @@ fun MultiParticipantCallPage(
         }
     }
 
-    val barrageConfig = remember(callConfig, autoHideTimeout) {
-        BarrageMessageConfig(
-            isOneVOneCall = false,
-            barrageTexts = callConfig.chatPresets ?: emptyList(),
-            displayDurationMillis = autoHideTimeout,
-            baseSpeed = callConfig.bubbleMessage?.baseSpeed ?: 4600L,
-            deltaSpeed = callConfig.bubbleMessage?.deltaSpeed ?: 400L,
-            columns = callConfig.bubbleMessage?.columns ?: listOf(10, 40, 70),
-            emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
-            textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
-            textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
-        )
-    }
-
-    BarrageMessageView(
-        viewModel,
-        config = barrageConfig,
+    CallBarrageMessageSection(
+        viewModel = viewModel,
+        callConfig = callConfig,
+        autoHideTimeout = autoHideTimeout,
+        isOneVOneCall = false,
         isDualPane = isDualPane,
         isShareScreening = isUserSharingScreen,
-        sendBarrageMessage = { message, type, _ ->
-            viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
-                if (status) {
-                    if (type == RTM_MESSAGE_TYPE_DEFAULT) {
-                        viewModel.showCallBarrageMessage(room.localParticipant, message)
-                    }
-                } else {
-                    L.e { "[Call] Failed to send barrage message status = $status." }
-                }
-            })
-        })
+        room = room,
+    )
 }
 
 
@@ -228,6 +249,7 @@ private fun <T> splitToRows(items: List<T>, maxPerRow: Int): List<List<T>> {
     )
 }
 
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
 private fun WideScreenParticipantLayout(
     participants: List<Participant>,
@@ -235,9 +257,15 @@ private fun WideScreenParticipantLayout(
     room: Room,
     muteOtherEnabled: Boolean,
     topInset: Dp,
-    coroutineScope: CoroutineScope
+    coroutineScope: CoroutineScope,
+    displayInfoMap: Map<String, CallUserDisplayInfo>
 ) {
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val containerWidth = LocalWindowInfo.current.containerSize.width
+    val screenWidthDp = if (containerWidth > 0) {
+        with(LocalDensity.current) { containerWidth.toDp().value.toInt() }
+    } else {
+        LocalConfiguration.current.screenWidthDp
+    }
     val maxPerRow = calculateMaxPerRow(screenWidthDp)
     val maxVisible = maxPerRow * 3
 
@@ -263,6 +291,7 @@ private fun WideScreenParticipantLayout(
         rows.maxOf { it.size }
     }
 
+    var participantOffset = 0
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -274,6 +303,7 @@ private fun WideScreenParticipantLayout(
             val itemsInThisRow = row.size + if (hasOverflow && isLastRow) 1 else 0
             val needsCentering = itemsInThisRow == 1
             val emptySlots = if (needsCentering) maxItemsInRow - 1 else 0
+            val rowOffset = participantOffset
 
             Row(
                 modifier = Modifier
@@ -284,7 +314,7 @@ private fun WideScreenParticipantLayout(
                 if (emptySlots > 0) {
                     Box(Modifier.weight(emptySlots / 2f))
                 }
-                row.forEach { participant ->
+                row.forEachIndexed { colIndex, participant ->
                     key(participant.sid.value) {
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             val uid = when (participant) {
@@ -297,6 +327,8 @@ private fun WideScreenParticipantLayout(
                                 participant = participant,
                                 modifier = Modifier.fillMaxSize(),
                                 uid = uid,
+                                userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
+                                participantIndex = rowOffset + colIndex,
                                 muteOtherEnabled = muteOtherEnabled,
                                 onClickMute = { viewModel.toggleMute(participant) },
                                 coroutineScope = coroutineScope
@@ -321,6 +353,7 @@ private fun WideScreenParticipantLayout(
                     Box(Modifier.weight(emptySlots / 2f))
                 }
             }
+            participantOffset += row.size
         }
     }
 }

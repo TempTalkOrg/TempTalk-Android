@@ -5,11 +5,22 @@ import android.content.res.Configuration
 import android.util.AttributeSet
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.Guideline
+import androidx.core.content.withStyledAttributes
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.datastore.preferences.core.edit
 import com.difft.android.base.R
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.AppStateDataStoreEntryPoint
+import com.difft.android.base.storage.AppStateKeys
+import com.difft.android.base.utils.appScope
+import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A ConstraintLayout that automatically manages system window insets (status bar, navigation bar,
@@ -54,11 +65,11 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
 
     init {
         attrs?.let {
-            val a = context.obtainStyledAttributes(it, R.styleable.InsetAwareConstraintLayout)
-            animateKeyboardChanges = a.getBoolean(
-                R.styleable.InsetAwareConstraintLayout_animateKeyboardChanges, false
-            )
-            a.recycle()
+            context.withStyledAttributes(it, R.styleable.InsetAwareConstraintLayout) {
+                animateKeyboardChanges = getBoolean(
+                    R.styleable.InsetAwareConstraintLayout_animateKeyboardChanges, false
+                )
+            }
         }
     }
 
@@ -266,24 +277,40 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
 
     private fun saveKeyboardHeight(height: Int) {
         val key = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            SP_KEY_KEYBOARD_HEIGHT_LANDSCAPE
+            AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE
         } else {
-            SP_KEY_KEYBOARD_HEIGHT_PORTRAIT
+            AppStateKeys.KEY_KEYBOARD_HEIGHT_PORTRAIT
         }
-        SharedPrefsUtil.putInt(key, height)
+        val dataStore = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AppStateDataStoreEntryPoint::class.java,
+        ).appStateDataStore()
+        appScope.launch(Dispatchers.IO) {
+            runCatching { dataStore.edit { it[key] = height } }
+                .onFailure { L.w { "[InsetAwareConstraintLayout] save kb height failed: ${it.stackTraceToString()}" } }
+        }
     }
 
     companion object {
-        private const val SP_KEY_KEYBOARD_HEIGHT_PORTRAIT = "keyboard_height_portrait"
-        private const val SP_KEY_KEYBOARD_HEIGHT_LANDSCAPE = "keyboard_height_landscape"
-
+        /** Synchronous read for layout-init paths; pre-warmed DataStore typically returns in sub-ms, 1 s cap guards cold start. */
+        @Suppress("BanRunBlockingOutsideTests")
         fun getKeyboardHeight(context: Context): Int {
             val key = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                SP_KEY_KEYBOARD_HEIGHT_LANDSCAPE
+                AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE
             } else {
-                SP_KEY_KEYBOARD_HEIGHT_PORTRAIT
+                AppStateKeys.KEY_KEYBOARD_HEIGHT_PORTRAIT
             }
-            return SharedPrefsUtil.getInt(key, 0)
+            val dataStore = EntryPointAccessors.fromApplication(
+                context.applicationContext,
+                AppStateDataStoreEntryPoint::class.java,
+            ).appStateDataStore()
+            return runBlocking(Dispatchers.IO) {
+                val value = withTimeoutOrNull(1_000) { dataStore.data.first()[key] }
+                if (value == null) {
+                    L.w { "[InsetAwareConstraintLayout] getKeyboardHeight timed out at 1s, fallback=0" }
+                }
+                value ?: 0
+            }
         }
     }
 }

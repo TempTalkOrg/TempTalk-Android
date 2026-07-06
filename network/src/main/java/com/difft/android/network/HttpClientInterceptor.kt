@@ -1,11 +1,13 @@
 package com.difft.android.network
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.CertValidationFailureDetector
+import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.base.utils.application
+import com.difft.android.base.utils.globalServices
 import com.difft.android.network.config.WsTokenManager
 import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.gson.Gson
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -28,8 +30,14 @@ import java.io.IOException
  * 2. Host failover - Switch to backup hosts when request fails (response code not in [100, 499])
  * 3. Response handling - Handle 204 No Content, transform non-success responses
  * 4. Error reporting - Record network errors to Firebase Crashlytics
+ *
+ * @param pinnedConnection True when this client pins trust to the embedded chative CA
+ * (useCustomCa). Only failures on such channels are treated as a possible MITM attack;
+ * system-CA clients (public CDN/OSS) can legitimately hit certificate errors.
  */
-class HttpClientInterceptor : Interceptor {
+class HttpClientInterceptor(
+    private val pinnedConnection: Boolean = true
+) : Interceptor {
 
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -64,6 +72,10 @@ class HttpClientInterceptor : Interceptor {
 
     private var lastException: Exception? = null
 
+    // OkHttp `Interceptor.intercept` is a synchronous API; bridging to the
+    // coroutine-based token refresh requires `runBlocking`. Runs on OkHttp's
+    // dispatcher worker thread — never on the main thread.
+    @Suppress("BanRunBlockingOutsideTests")
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
         var response: Response? = null
@@ -179,6 +191,11 @@ class HttpClientInterceptor : Interceptor {
     }
 
     private fun handleException(e: Exception, request: Request?) {
+        // On a pinned channel a certificate validation failure is a possible MITM attack.
+        // Detection is centralized here because every catch path funnels through handleException.
+        if (pinnedConnection && CertValidationFailureDetector.isCertValidationFailure(e)) {
+            NetworkRiskNotifier.onCertValidationFailed("http:${request?.url?.host ?: "unknown"}")
+        }
         if (needHandleException(e)) {
             recordNetworkException(e, request)
         }
@@ -199,6 +216,9 @@ class HttpClientInterceptor : Interceptor {
         return true
     }
 
+    // Same OkHttp sync-API rationale as `intercept`: backup-host retry path
+    // still runs on OkHttp dispatcher worker thread, never on Main.
+    @Suppress("BanRunBlockingOutsideTests")
     private fun changeHostAndReSendRequest(request: Request, chain: Interceptor.Chain): Response? {
         val originalUrl = request.url
         val originalHost = originalUrl.host
@@ -442,7 +462,7 @@ class HttpClientInterceptor : Interceptor {
             reason = null,
             data = null
         )
-        val errorJson = Gson().toJson(errorResponse)
+        val errorJson = globalServices.gson.toJson(errorResponse)
         val errorMediaType = "application/json".toMediaTypeOrNull()
         val errorResponseBody = errorJson.toResponseBody(errorMediaType)
 

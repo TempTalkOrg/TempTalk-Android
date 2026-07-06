@@ -1,32 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg1"
-    android:fillViewport="true">
+    tools:ignore="Overdraw">
 
-    <FrameLayout
-        android:id="@+id/contentWrapper"
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/rootLayout"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
-        <com.difft.android.chat.ui.textpreview.SelectableTextView
-            android:id="@+id/textContent"
+        <FrameLayout
+            android:id="@+id/contentWrapper"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:layout_marginStart="28dp"
-            android:layout_marginEnd="28dp"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="24dp"
-            android:gravity="center_horizontal"
-            android:textColor="@color/t.primary"
-            android:textSize="24sp"
-            android:lineSpacingExtra="12sp"
-            tools:text="预览文本内容" />
+            android:layout_height="wrap_content">
 
-    </FrameLayout>
+            <com.difft.android.chat.ui.textpreview.SelectableTextView
+                android:id="@+id/textContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_marginStart="28dp"
+                android:layout_marginEnd="28dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="24dp"
+                android:gravity="center_horizontal"
+                android:textColor="@color/t.primary"
+                android:textSize="24sp"
+                android:lineSpacingExtra="12sp"
+                tools:text="预览文本内容" />
 
-</androidx.core.widget.NestedScrollView>
+        </FrameLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Floating close button (bottom-center). Style mirrors the chat list "scroll to bottom"
+         button. Touch handling in TextPreviewActivity routes any gesture starting on this
+         button straight to super.dispatchTouchEvent, so it never interferes with long-press
+         word selection / drag-to-select on the text. -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cv_close"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="32dp"
+        app:cardBackgroundColor="@color/bg3"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="3dp"
+        app:cardMaxElevation="3dp">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_close"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:contentDescription="@string/chat_select_dialog_close"
+            android:src="@drawable/ic_close"
+            app:tint="@color/icon" />
+
+    </androidx.cardview.widget.CardView>
+
+</FrameLayout>

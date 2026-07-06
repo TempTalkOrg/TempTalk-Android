@@ -10,6 +10,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.commit
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
+import difft.android.messageserialization.For
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
@@ -64,6 +65,14 @@ class ChatForwardMessageActivity : BaseActivity() {
 
     // Store ForwardContext objects for Fragment access (avoids serialization)
     private val forwardContextStack = mutableListOf<ForwardContext>()
+
+    // Outer combined-forward message context — used by Fragment to emit
+    // copy/forward notices attributing to the OUTER sender, not nested authors.
+    private var outerSourceConversation: For? = null
+    private var outerSourceAuthorId: String? = null
+
+    fun getOuterSourceConversation(): For? = outerSourceConversation
+    fun getOuterSourceAuthorId(): String? = outerSourceAuthorId
 
     private val mBinding: ChatActivityForwardMessageBinding by viewbind()
 
@@ -314,6 +323,10 @@ class ChatForwardMessageActivity : BaseActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val message = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageId))
             val forwardContext = message?.convertToTextMessage()?.forwardContext ?: return@launch
+
+            // Outer message context for copy/forward notice attribution
+            outerSourceAuthorId = message.fromWho
+            outerSourceConversation = if (message.roomType == 1) For.Group(message.roomId ?: "") else For.Account(message.roomId ?: "")
 
             // Load contactors for author name lookup in title (recursively collect all author IDs)
             val authorIds = collectAllAuthorIds(forwardContext)

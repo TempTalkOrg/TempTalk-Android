@@ -1,5 +1,6 @@
 package com.difft.android.base.widget
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
@@ -240,6 +241,8 @@ class PatternLockView @JvmOverloads constructor(
         }
     }
 
+    // Pattern-drawing gesture — view is not click-actionable.
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isInputEnabled) return false
 

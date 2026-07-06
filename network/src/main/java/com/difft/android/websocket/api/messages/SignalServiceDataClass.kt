@@ -7,7 +7,6 @@ import com.difft.android.websocket.api.messages.TTNotifyMessage.Companion.NOTIFY
 import com.difft.android.websocket.api.messages.TTNotifyMessage.Companion.NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING
 import com.difft.android.websocket.api.util.transformGroupIdFromServerToLocal
 import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.gson.Gson
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.MessageId
 import org.difft.app.database.models.DBMessageModel
@@ -50,7 +49,7 @@ private fun TTNotifyMessage.specialOneToOneConversation(myId: String): For {
 
         NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING -> {
             data?.conversation?.runCatching {
-                val notifyConversation = Gson().fromJson(toString(), NotifyConversation::class.java)
+                val notifyConversation = globalServices.gson.fromJson(toString(), NotifyConversation::class.java)
                 notifyConversation.conversation
             }?.getOrNull()
                 ?: throw IllegalArgumentException("conversation is null when notifyType is NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING")
@@ -211,6 +210,21 @@ class SignalServiceDataClass(
                         For.Account(payloadConv.number)
                     else -> For.Account(senderId) // defensive: NTS fallback
                 }
+            } else if (signalServiceContent.syncMessage.hasActivityNoticeSync()) {
+                // Self-sync mirror of activityNoticeSync — same resolution rules as
+                // forwardNoticeSync above. Activity notice covers COPY (this iteration)
+                // and future types (PASTE/SCREENSHOT/...). Payload.conversation carries
+                // the source conversation filled by the sender's own view.
+                val syncMsg = signalServiceContent.syncMessage.activityNoticeSync
+                val payloadConv = syncMsg.takeIf { it.hasConversation() }?.conversation
+                when {
+                    payloadConv?.hasGroupId() == true ->
+                        payloadConv.parseToFor(signalServiceEnvelope.timestamp)
+                            ?: For.Account(senderId)
+                    payloadConv?.hasNumber() == true && payloadConv.number.isNotEmpty() ->
+                        For.Account(payloadConv.number)
+                    else -> For.Account(senderId) // defensive: NTS fallback
+                }
             } else {
                 throw IllegalArgumentException("syncMessage doesn't have sent or read or topicMark or topicAction")
             }
@@ -266,6 +280,20 @@ class SignalServiceDataClass(
             //                                     (for 1v1 primary; for NTS source this also lands
             //                                      correctly since senderId==myId).
             val payloadConv = signalServiceContent.forwardNotice
+                .takeIf { it.hasConversation() }
+                ?.conversation
+            if (payloadConv?.hasGroupId() == true) {
+                payloadConv.parseToFor(signalServiceEnvelope.timestamp)
+                    ?: For.Account(senderId)
+            } else {
+                For.Account(senderId)
+            }
+        } else if (signalServiceContent?.hasActivityNotice() == true) {
+            // Primary path: Content.activityNotice from peer (or from self for NTS source).
+            // Same resolution rules as forwardNotice — top-level `conversation` field
+            // is filled by sender's own view; 1v1 falls back to envelope.source.
+            // Self-sync goes through SyncMessage.activityNoticeSync — NOT this branch.
+            val payloadConv = signalServiceContent.activityNotice
                 .takeIf { it.hasConversation() }
                 ?.conversation
             if (payloadConv?.hasGroupId() == true) {

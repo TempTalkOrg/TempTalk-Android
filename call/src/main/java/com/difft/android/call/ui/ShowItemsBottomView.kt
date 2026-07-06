@@ -31,11 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
@@ -86,10 +90,6 @@ fun ShowItemsBottomView(
         else -> 32.dp
     }
 
-    val onCriticalAlertComplete: (Boolean) -> Unit = { isSuccess ->
-        if (isSuccess) viewModel.callUiController.setShowToolBarBottomViewEnable(false)
-    }
-
     val shouldShowSheet = showToolBarBottomViewEnable && !isInPipMode
     val dismissSheet: () -> Unit = {
         coroutineScope.launch {
@@ -112,17 +112,20 @@ fun ShowItemsBottomView(
                 .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
                 .wrapContentHeight(),
             sheetState = sheetState,
-            containerColor = colorResource(id = com.difft.android.base.R.color.bg3_night),
+            containerColor = DifftTheme.colors.backgroundTertiary,
             contentWindowInsets = { WindowInsets.navigationBars },
             onDismissRequest = {
                 dismissSheet()
             },
         ) {
+            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
+                    .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+                    .testTag("call_more_sheet")
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
+                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -142,9 +145,10 @@ fun ShowItemsBottomView(
                     ) {
                         Row(
                             modifier = Modifier
+                                .testTag("call_more_btn_invite")
                                 .width(48.dp)
                                 .height(48.dp)
-                                .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
+                                .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 100.dp))
                                 .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                     L.i { "[call] ShowItemsBottomView onClick invite" }
@@ -180,7 +184,7 @@ fun ShowItemsBottomView(
                                 lineHeight = 20.sp,
                                 fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
-                                color = colorResource(id = com.difft.android.base.R.color.gray_50),
+                                color = DifftTheme.colors.textPrimary,
                             )
                         )
                     }
@@ -195,9 +199,10 @@ fun ShowItemsBottomView(
                         ) {
                             Row(
                                 modifier = Modifier
+                                    .testTag("call_more_btn_switch_camera")
                                     .width(48.dp)
                                     .height(48.dp)
-                                    .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
+                                    .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 100.dp))
                                     .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
@@ -228,7 +233,7 @@ fun ShowItemsBottomView(
                                     lineHeight = 20.sp,
                                     fontFamily = FontFamily.Default,
                                     fontWeight = FontWeight(400),
-                                    color = colorResource(id = com.difft.android.base.R.color.gray_50)
+                                    color = DifftTheme.colors.textPrimary
                                 )
                             )
                         }
@@ -244,16 +249,20 @@ fun ShowItemsBottomView(
                         ) {
                             Row(
                                 modifier = Modifier
+                                    .testTag("call_more_btn_critical_alert")
                                     .width(48.dp)
                                     .height(48.dp)
-                                    .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 100.dp))
+                                    .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 100.dp))
                                     .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
                                             L.i { "[call] ShowItemsBottomView click critical alert" }
                                             if (callType == CallType.ONE_ON_ONE.type) {
                                                 viewModel.conversationId?.let {
-                                                    viewModel.handleCriticalAlertNew(callback = onCriticalAlertComplete)
+                                                    coroutineScope.launch {
+                                                        val success = viewModel.handleCriticalAlertNew()
+                                                        if (success) viewModel.callUiController.setShowToolBarBottomViewEnable(false)
+                                                    }
                                                 }
                                             } else {
                                                 viewModel.callUiController.setShowToolBarBottomViewEnable(false)
@@ -284,7 +293,7 @@ fun ShowItemsBottomView(
                                     lineHeight = 20.sp,
                                     fontFamily = FontFamily.Default,
                                     fontWeight = FontWeight(400),
-                                    color = colorResource(id = com.difft.android.base.R.color.gray_50)
+                                    color = DifftTheme.colors.textPrimary
                                 )
                             )
                         }
@@ -296,7 +305,7 @@ fun ShowItemsBottomView(
                     modifier = Modifier
                         .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
                         .wrapContentHeight()
-                        .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
+                        .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
                         .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -304,7 +313,7 @@ fun ShowItemsBottomView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(55.dp)
-                            .background(color = colorResource(id = com.difft.android.base.R.color.gray_600), shape = RoundedCornerShape(size = 8.dp))
+                            .background(color = DifftTheme.colors.backgroundQuaternary, shape = RoundedCornerShape(size = 8.dp))
                             .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -319,22 +328,23 @@ fun ShowItemsBottomView(
                                 lineHeight = 24.sp,
                                 fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
-                                color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                                color = DifftTheme.colors.textPrimary,
                             )
                         )
 
                         Switch(
                             modifier = Modifier
+                                .testTag("call_more_btn_denoise")
                                 .width(51.dp)
                                 .height(31.dp)
                                 .padding(end = 10.dp)
                                 .semantics { contentDescription = "DeNoise" },
                             checked = deNoiseEnable,
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = colorResource(id = com.difft.android.base.R.color.t_white),
-                                checkedTrackColor = colorResource(id = com.difft.android.base.R.color.primary),
-                                uncheckedThumbColor = colorResource(id = com.difft.android.base.R.color.t_white),
-                                uncheckedTrackColor = colorResource(id = com.difft.android.base.R.color.gray_600)
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = DifftTheme.colors.primary,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = DifftTheme.colors.backgroundDisabled
                             ),
                             onCheckedChange = {
                                 viewModel.audioDeviceManager.switchDeNoiseEnable(it)

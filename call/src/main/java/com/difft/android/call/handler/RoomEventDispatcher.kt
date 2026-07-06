@@ -1,6 +1,7 @@
 package com.difft.android.call.handler
 
 import android.os.SystemClock
+import com.difft.android.call.BuildConfig
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils.getString
@@ -16,6 +17,8 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.data.RoomMetadata
 import com.difft.android.call.exception.DisconnectException
+import com.difft.android.call.data.CallStatisticsEvent
+import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.exception.NetworkConnectionPoorException
 import com.difft.android.call.manager.ParticipantManager
@@ -100,6 +103,7 @@ internal class RoomEventDispatcher(
     private val timerManager: TimerManager,
     private val speakerState: SpeakerStateHolder,
     private val callDataManager: CallDataManager,
+    private val statisticsLogManager: CallStatisticsLogManager,
     private val json: Json,
     private val mySelfId: String,
     private val host: RoomEventHost,
@@ -121,11 +125,23 @@ internal class RoomEventDispatcher(
     fun startCollectingParticipants() {
         scope.launch {
             room::remoteParticipants.flow.map { remoteParticipants ->
-                (listOf<Participant>(room.localParticipant) +
+                val realParticipants = listOf<Participant>(room.localParticipant) +
                     remoteParticipants
                         .keys
                         .sortedBy { it.value }
-                        .mapNotNull { remoteParticipants[it] })
+                        .mapNotNull { remoteParticipants[it] }
+
+                if (BuildConfig.DEBUG && DEBUG_FAKE_PARTICIPANTS) {
+                    realParticipants + (1..20).map { i ->
+                        Participant(
+                            Participant.Sid("fake-sid-$i"),
+                            Participant.Identity("fake-user-$i"),
+                            Dispatchers.Unconfined,
+                        )
+                    }
+                } else {
+                    realParticipants
+                }
             }.collectLatest { updatedParticipants ->
                 participantManager.setParticipants(updatedParticipants)
                 participantManager.resortParticipants()
@@ -146,6 +162,9 @@ internal class RoomEventDispatcher(
                 if (event.reason != DisconnectReason.CLIENT_INITIATED) {
                     if (event.reason == DisconnectReason.RECONNECT_FAILED) {
                         roomCtl.updateCallStatus(CallStatus.RECONNECT_FAILED)
+                        statisticsLogManager.report(
+                            CallStatisticsEvent.RoomReconnectFail(errorMsg = event.reason.name)
+                        )
                     }
                     roomCtl.collectError(DisconnectException(event.reason.name))
                 } else {
@@ -240,7 +259,17 @@ internal class RoomEventDispatcher(
 
     private fun onConnected() {
         val rid = host.getCurrentRoomId() ?: return
-        L.i { "[Call] RoomEventDispatcher room event connected." }
+        // The SDK re-emits RoomEvent.Connected (not Reconnected) after an ICE-restart / soft
+        // resume, because a transient primary-PeerConnection DISCONNECTED clobbers the RESUMING
+        // state. On such a resume the existing mic track is preserved (full reconnect republishes
+        // it); only a first connect or an app-initiated server switch (disconnect + reconnect that
+        // tears the track down) leaves no mic publication. So gate the mic bring-up on the absence
+        // of a mic publication rather than on "is this the first connect": re-running it while a
+        // publication still exists would force-unmute a self-muted user (setMicrophoneEnabled(true)
+        // unmutes the published track, ignoring publishMuted) yet keep the UI showing muted, while
+        // a server switch still re-publishes the track as needed.
+        val hasMicPublication = room.localParticipant.getTrackPublication(Track.Source.MICROPHONE) != null
+        L.i { "[Call] RoomEventDispatcher room event connected. hasMicPublication=$hasMicPublication" }
         host.onFeedbackIdentityResolved(
             userSid = room.localParticipant.sid.value,
             userIdentity = room.localParticipant.identity?.value,
@@ -248,7 +277,7 @@ internal class RoomEventDispatcher(
         )
         callDataManager.updateCallingState(rid, isInCalling = true)
         if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
-            host.setMicEnabled(true)
+            if (!hasMicPublication) host.setMicEnabled(true)
             when {
                 room.remoteParticipants.size > 1 -> {
                     host.switchToInstantCall()
@@ -259,10 +288,12 @@ internal class RoomEventDispatcher(
             }
         } else {
             host.handleConnectedState()
-            room::ttCallResp.get()?.let { response ->
-                val autoPublishSilenceAudio = response.callOptions.autoPublishSilenceAudio
-                L.i { "[call] RoomEventDispatcher room event connected, autoPublishSilenceAudio=$autoPublishSilenceAudio" }
-                if (autoPublishSilenceAudio) host.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+            if (!hasMicPublication) {
+                room::ttCallResp.get()?.let { response ->
+                    val autoPublishSilenceAudio = response.callOptions.autoPublishSilenceAudio
+                    L.i { "[call] RoomEventDispatcher room event connected, autoPublishSilenceAudio=$autoPublishSilenceAudio" }
+                    if (autoPublishSilenceAudio) host.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+                }
             }
         }
         refreshRoomMetadata()
@@ -337,6 +368,9 @@ internal class RoomEventDispatcher(
     }
 
     private fun onResubscriptionSettled() {
+        // reconnectCount 自增作为"重绑代"信号：不再用于 compose key（不销毁重建 renderer、不黑闪），
+        // 而是驱动 VideoRenderer 对当前 track 原地 removeRenderer+addRenderer 刷新 sink，确保全量
+        // 重连（track 可能是新对象、或底层流已替换）后新帧能恢复，避免永久卡在最后一帧。
         callUiController.incrementReconnectCount()
         participantManager.screenSharingUser.value?.let { checkRemoteUserScreenShare(it) }
     }
@@ -379,4 +413,12 @@ internal class RoomEventDispatcher(
 
     private fun calculateCountDownDuration(expiredTimeMs: Long, currentTimeMs: Long): Long =
         if (expiredTimeMs < currentTimeMs) 0 else (expiredTimeMs - currentTimeMs) / 1000
+
+    companion object {
+        /**
+         * 设置为 true 可注入 20 个假参会人，用于测试竖屏多人通话列表滚动。
+         * 测试完毕后务必改回 false。
+         */
+        private const val DEBUG_FAKE_PARTICIPANTS = false
+    }
 }

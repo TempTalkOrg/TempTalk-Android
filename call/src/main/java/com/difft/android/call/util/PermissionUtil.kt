@@ -2,13 +2,13 @@ package com.difft.android.call.util
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import androidx.core.content.ContextCompat
 
 object PermissionUtil {
 
     fun isRuntimePermissionsRequired(): Boolean {
-        return Build.VERSION.SDK_INT >= 23
+        // minSdk is 26 (>= 23), so runtime permissions are always required.
+        return true
     }
 
     fun hasAll(context: Context, vararg permissions: String): Boolean {

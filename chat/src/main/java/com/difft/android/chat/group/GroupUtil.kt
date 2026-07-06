@@ -9,7 +9,6 @@ import difft.android.messageserialization.MessageStore
 import com.difft.android.network.group.GroupAvatarData
 import com.difft.android.network.group.GroupAvatarResponse
 import com.difft.android.network.group.GroupRepo
-import com.google.gson.Gson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -36,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class GroupUtil @Inject constructor(
     private val groupRepo: GroupRepo,
@@ -50,7 +51,7 @@ class GroupUtil @Inject constructor(
 
     fun emitSingleGroupUpdate(group: GroupModel) {
         _singleGroupsUpdate.tryEmit(group)
-        RoomChangeTracker.trackRoom(group.gid, RoomChangeType.GROUP)
+        RoomChangeTracker.trackRoom(group.gid ?: "", RoomChangeType.GROUP)
     }
 
     /**
@@ -144,7 +145,7 @@ class GroupUtil @Inject constructor(
                 if (syncMembers) {
                     groups.map {
                         async {
-                            fetchAndSaveSingleGroupInfo(it.gid)
+                            fetchAndSaveSingleGroupInfo(it.gid ?: "")
                         }
                     }.awaitAll()
                 }
@@ -152,7 +153,7 @@ class GroupUtil @Inject constructor(
                 userManager.update {
                     this.syncedGroupAndMembers = true
                 }
-                emitGetGroupsStatusUpdate(true, groups.map { it.gid })
+                emitGetGroupsStatusUpdate(true, groups.mapNotNull { it.gid })
                 L.i { "[GroupUtil] syncAllGroupAndAllGroupMembers success" + groups.size }
             }
         } catch (e: CancellationException) {
@@ -197,6 +198,7 @@ class GroupUtil @Inject constructor(
                     group.groupCryptoMode = groupInfo?.groupCryptoMode
                     group.encryptedName = groupInfo?.encryptedName
                     group.encryptedAvatar = groupInfo?.encryptedAvatar
+                    group.groupCryptoKeyVersion = groupInfo?.groupCryptoKeyVersion
 
                     val members = groupInfo?.members?.map { member ->
                         GroupMemberContactorModel().apply {
@@ -269,7 +271,7 @@ class GroupUtil @Inject constructor(
      */
     internal fun decryptGroupFieldsIfNeeded(group: GroupModel) {
         if (group.groupCryptoMode == null || group.groupCryptoMode == 0) return
-        val rGroupBytes = groupCryptoRepo.getRGroupBytes(group.gid)
+        val rGroupBytes = groupCryptoRepo.getRGroupBytes(group.gid ?: "")
         if (rGroupBytes == null) {
             L.i { "[GE] No key for encrypted group ${group.gid}, showing placeholder" }
             return
@@ -326,9 +328,9 @@ fun GroupModel.getDisplayAvatarData(): GroupAvatarData? {
 
 fun String.getAvatarData(): GroupAvatarData? {
     return try {
-        Gson().fromJson(this, GroupAvatarResponse::class.java)?.data?.let {
+        globalServices.gson.fromJson(this, GroupAvatarResponse::class.java)?.data?.let {
             val avatarData = String(Base64.decode(it))
-            Gson().fromJson(avatarData, GroupAvatarData::class.java)
+            globalServices.gson.fromJson(avatarData, GroupAvatarData::class.java)
         }
     } catch (e: Exception) {
         L.e(e) { "[group] parse avatar data fail: $this ===" }

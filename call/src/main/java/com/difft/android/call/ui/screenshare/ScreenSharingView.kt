@@ -1,13 +1,11 @@
 package com.difft.android.call.ui.screenshare
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
-import android.os.Build
-import android.view.View
 import android.view.Window
-import android.view.WindowInsetsController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,10 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.ui.video.VideoItemTrackSelector
@@ -31,6 +30,8 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 
+// Screen sharing requires landscape on phones; restored on dispose.
+@SuppressLint("SourceLockedOrientationActivity")
 @Composable
 fun ScreenSharingView(
     room: Room,
@@ -49,7 +50,11 @@ fun ScreenSharingView(
         room.localParticipant.deviceRotation = 90
         onDispose {
             WindowCompat.setDecorFitsSystemWindows(activity.window, true)
-            showSystemBars(activity.window)
+            WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+                show(WindowInsetsCompat.Type.statusBars())
+                hide(WindowInsetsCompat.Type.navigationBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
             if (!WindowSizeClassUtil.shouldUseDualPaneLayout(activity)) {
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 room.localParticipant.deviceRotation = 0
@@ -63,7 +68,7 @@ fun ScreenSharingView(
     Box(
         modifier = Modifier.fillMaxSize()
             .clip(shape = RoundedCornerShape(8.dp))
-            .background(colorResource(id = com.difft.android.base.R.color.bg1_night)),
+            .background(DifftTheme.colors.background),
         contentAlignment = Alignment.Center )
     {
         VideoItemTrackSelector(
@@ -88,27 +93,9 @@ fun Context.getActivity(): Activity? = when (this) {
 }
 
 fun hideSystemBars(window: Window) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        window.insetsController?.let { controller ->
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-    } else {
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+        hide(WindowInsetsCompat.Type.systemBars())
+        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 }
 
-fun showSystemBars(window: Window) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        window.insetsController?.let { controller ->
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-    } else {
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-    }
-}

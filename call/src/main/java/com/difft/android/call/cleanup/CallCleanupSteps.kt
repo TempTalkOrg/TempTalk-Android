@@ -8,6 +8,7 @@ import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.feedback.CallFeedbackBinder
 import com.difft.android.call.handler.CallTimeoutMonitor
 import com.difft.android.call.handler.RoomEventDispatcher
+import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.SpeakerStateHolder
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.media.CallAudioSetup
@@ -42,11 +43,17 @@ internal object CallCleanupSteps {
         speakerState: SpeakerStateHolder,
         screenShareFloatingSpeakerStateHolder: ScreenShareFloatingSpeakerStateHolder?,
         screenSharePreWarmer: ScreenSharePreWarmer,
-        roomEventDispatcher: RoomEventDispatcher,
+        roomEventDispatcher: RoomEventDispatcher?,
+        statisticsLogManager: CallStatisticsLogManager,
         feedbackBinder: CallFeedbackBinder,
         shouldTriggerFeedbackView: () -> Unit,
         clearE2eeKey: () -> Unit,
     ): List<CallCleanupExecutor.Step> = listOf(
+        CallCleanupExecutor.Step("flushStatisticsLogs") {
+            statisticsLogManager.flushAll()
+            statisticsLogManager.setRoomLocalId(null)
+            statisticsLogManager.setRoomId(null)
+        },
         CallCleanupExecutor.Step("shouldTriggerFeedbackView") { shouldTriggerFeedbackView() },
         CallCleanupExecutor.Step("cancelCallTimeoutCheck") { timeoutMonitor.cancelIfActive() },
         CallCleanupExecutor.Step("roomCtl.disconnectAndRelease") {
@@ -75,7 +82,7 @@ internal object CallCleanupSteps {
         CallCleanupExecutor.Step("cancelSpeakerStateJobs") { speakerState.cancelJobs() },
         CallCleanupExecutor.Step("cancelScreenShareFloatingSpeaker") { screenShareFloatingSpeakerStateHolder?.cancel() },
         CallCleanupExecutor.Step("cancelScreenSharePreWarmer") { screenSharePreWarmer.cancelJobs() },
-        CallCleanupExecutor.Step("cancelRoomEventDispatcher") { roomEventDispatcher.cancelJobs() },
+        CallCleanupExecutor.Step("cancelRoomEventDispatcher") { roomEventDispatcher?.cancelJobs() },
         CallCleanupExecutor.Step("clearE2eeKey") { clearE2eeKey() },
     )
 }

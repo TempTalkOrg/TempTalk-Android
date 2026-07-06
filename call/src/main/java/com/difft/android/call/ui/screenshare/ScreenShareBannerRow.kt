@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.rememberAsyncImagePainter
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 import com.difft.android.call.ui.LocalImageLoaderProvider
 
@@ -62,7 +62,7 @@ internal fun BannerRow(
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.Normal,
             ),
-            color = colorResource(id = BaseR.color.t_primary_night),
+            color = DifftTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -71,7 +71,7 @@ internal fun BannerRow(
                 modifier = Modifier
                     .padding(horizontal = 2.dp)
                     .size(width = 1.dp, height = 12.dp)
-                    .background(colorResource(id = BaseR.color.bg3_night)),
+                    .background(DifftTheme.colors.backgroundTertiary),
             )
             InlineWaitingAvatars(waitingSpeakers.take(2))
         }

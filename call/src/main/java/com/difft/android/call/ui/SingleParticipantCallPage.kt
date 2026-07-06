@@ -1,7 +1,9 @@
 package com.difft.android.call.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -28,52 +29,47 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import coil3.compose.rememberAsyncImagePainter
-import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.call.CallRole
-import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
-import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.ui.barrage.BarrageMessageView
 import com.difft.android.call.ui.screenshare.ScreenSharingView
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.ui.video.VideoItemTrackSelector
 import com.difft.android.call.ui.video.ViewType
 import com.difft.android.call.data.AvatarData
-import com.difft.android.call.data.BarrageMessageConfig
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
-import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
-import com.difft.android.call.util.ViewUtil
+import androidx.compose.ui.platform.LocalDensity
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlin.collections.listOf
 
 
 @Composable
@@ -90,9 +86,11 @@ fun SingleParticipantCallPage(
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
     val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
-    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val callStatus by viewModel.callStatus.collectAsState()
-    val isConnected = callStatus == CallStatus.CONNECTED || callStatus == CallStatus.RECONNECTED
+    // RECONNECTING 与已连接同等对待：重连期保持视频/共享挂载，避免被叫整块被移出树（黑屏）。
+    val isConnected = callStatus == CallStatus.CONNECTED ||
+        callStatus == CallStatus.RECONNECTED ||
+        callStatus == CallStatus.RECONNECTING
     val remoteParticipant = participants.filterIsInstance<RemoteParticipant>().firstOrNull()
     val participantUid = remoteParticipant?.identity?.value ?: conversationId
 
@@ -111,6 +109,19 @@ fun SingleParticipantCallPage(
         pub::muted.flow.collect { muted -> videoMuted = muted }
     }
 
+    // 点击小悬浮窗时，本端画面与主画面内容互相交换的状态。
+    var isSelfInMain by remember { mutableStateOf(false) }
+    // 仅当本端摄像头开启、出现小悬浮窗时才支持交换。
+    val floatingVisible = isConnected && !videoMuted && !isUserSharingScreen
+
+    // 悬浮窗消失（如关闭本端摄像头）时持久复位，保证下次开摄像头从对端主画面开始。
+    LaunchedEffect(floatingVisible) {
+        if (!floatingVisible) isSelfInMain = false
+    }
+    // 渲染统一使用派生值：LaunchedEffect 的复位会晚一帧，若仅依赖 isSelfInMain，
+    // 在「已交换 + 关摄像头」的那一帧会错显本端，故用派生值与 floatingVisible 强同步。
+    val effectiveIsSelfInMain = isSelfInMain && floatingVisible
+
     when {
         isConnected && isUserSharingScreen && remoteParticipant != null -> {
             ScreenSharingView(room = room, participant = remoteParticipant, reconnectCount = reconnectCount)
@@ -119,118 +130,153 @@ fun SingleParticipantCallPage(
             }
         }
         (isConnected || callRole == CallRole.CALLER) && participantUid != null -> {
-            SingleParticipantItem(
-                room = room,
-                participant = remoteParticipant,
-                uid = participantUid,
-                speakingEnabled = speakingEnabled,
-                reconnectCount = reconnectCount,
-            )
+            if (effectiveIsSelfInMain) {
+                LocalParticipantVideoView(
+                    room = room,
+                    participant = room.localParticipant,
+                    modifier = Modifier.fillMaxSize(),
+                    reconnectCount = reconnectCount,
+                )
+            } else {
+                SingleParticipantItem(
+                    room = room,
+                    participant = remoteParticipant,
+                    uid = participantUid,
+                    speakingEnabled = speakingEnabled,
+                    reconnectCount = reconnectCount,
+                    viewType = ViewType.Surface,
+                )
+            }
         }
     }
 
 
-    if(isConnected && !videoMuted && !isUserSharingScreen) {
-        OneVOneSelfVideoView(viewModel, room = room)
-    }
-
-    val barrageConfig = remember(callConfig, autoHideTimeout) {
-        BarrageMessageConfig(
-            isOneVOneCall = true,
-            barrageTexts = callConfig.chatPresets ?: emptyList(),
-            displayDurationMillis = autoHideTimeout,
-            baseSpeed = callConfig.bubbleMessage?.baseSpeed ?: 4600L,
-            deltaSpeed = callConfig.bubbleMessage?.deltaSpeed ?: 400L,
-            columns = callConfig.bubbleMessage?.columns ?: listOf(10, 40, 70),
-            emojiPresets = callConfig.bubbleMessage?.emojiPresets ?: LCallUiConstants.DEFAULT_BUBBLE_EMOJIS,
-            textPresets = callConfig.bubbleMessage?.textPresets ?: LCallUiConstants.DEFAULT_BUBBLE_TEXTS,
-            textMaxLength = callConfig.chatMessage?.maxLength ?: 30,
-        )
-    }
-
-    BarrageMessageView(
-        viewModel,
-        config = barrageConfig,
-        isDualPane = isDualPane,
-        isShareScreening = isUserSharingScreen,
-        sendBarrageMessage = { message, type, _ ->
-            viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
-                if (status) {
-                    if (type == RTM_MESSAGE_TYPE_DEFAULT) {
-                        viewModel.showCallBarrageMessage(room.localParticipant, message)
-                    }
-                } else {
-                    L.e { "[Call] Failed to send barrage message status = $status." }
-                }
-            })
-        })
-}
-
-
-@Composable
-fun OneVOneSelfVideoView(
-    viewModel: LCallViewModel,
-    modifier: Modifier = Modifier,
-    room: Room,
-) {
-    val videoViewWith = 120.dp
-    val videoViewHeight = 214.dp
-
-    val configuration = LocalConfiguration.current // 获取当前配置
-    val screenWidth = configuration.screenWidthDp.dp.value // 获取屏幕宽度（dp）
-    val screenHeight = configuration.screenHeightDp.dp.value // 获取屏幕高度（dp）
-
-    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
-    val reconnectCount by viewModel.callUiController.reconnectCount.collectAsState()
-
-    var dragViewOffsetX: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(screenWidth.toInt() - videoViewWith.value.toInt() - 12).toFloat()) }
-    var dragViewOffsetY: Float by remember { mutableFloatStateOf(ViewUtil.dpToPx(screenHeight.toInt() - videoViewHeight.value.toInt() - 40).toFloat()) }
-
-    if(!isInPipMode){
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Transparent)
-                .offset {
-                    IntOffset(
-                        dragViewOffsetX.toInt(),
-                        dragViewOffsetY.toInt()
-                    )
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        val newOffsetX =
-                            dragViewOffsetX + dragAmount.x
-                        val newOffsetY =
-                            dragViewOffsetY + dragAmount.y
-                        dragViewOffsetX =
-                            newOffsetX.coerceIn(
-                                0f,
-                                ViewUtil.dpToPx(screenWidth.toInt() - videoViewWith.value.toInt())
-                                    .toFloat()
-                            )
-                        dragViewOffsetY =
-                            newOffsetY.coerceIn(
-                                0f,
-                                ViewUtil.dpToPx(screenHeight.toInt() - videoViewHeight.value.toInt())
-                                    .toFloat()
-                            )
-                    }
-                }
-        ){
-            Box(
-                modifier = Modifier
-                    .wrapContentSize(Alignment.Center)
-                    .size(videoViewWith, videoViewHeight)
-                    .clip(shape = RoundedCornerShape(8.dp))
-                    .background(colorResource(id = R.color.bg2_night))
-            ) {
+    if (floatingVisible) {
+        OneVOneSelfVideoView(
+            viewModel = viewModel,
+            onTap = { isSelfInMain = !isSelfInMain },
+        ) {
+            if (effectiveIsSelfInMain && participantUid != null) {
+                // 已交换：悬浮窗内显示对端，必须用 Texture 以正确叠加在主画面之上。
+                SingleParticipantItem(
+                    room = room,
+                    participant = remoteParticipant,
+                    uid = participantUid,
+                    speakingEnabled = speakingEnabled,
+                    reconnectCount = reconnectCount,
+                    viewType = ViewType.Texture,
+                    draggable = false,
+                    compact = true,
+                )
+            } else {
                 LocalParticipantVideoView(
                     room = room,
                     participant = room.localParticipant,
                     reconnectCount = reconnectCount,
                 )
+            }
+        }
+    }
+
+    CallBarrageMessageSection(
+        viewModel = viewModel,
+        callConfig = callConfig,
+        autoHideTimeout = autoHideTimeout,
+        isOneVOneCall = true,
+        isDualPane = isDualPane,
+        isShareScreening = isUserSharingScreen,
+        room = room,
+    )
+}
+
+
+@SuppressLint("ConfigurationScreenWidthHeight")
+@Composable
+fun OneVOneSelfVideoView(
+    viewModel: LCallViewModel,
+    onTap: () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    val videoViewWidth = 120.dp
+    val videoViewHeight = 214.dp
+    val paddingEnd = 12.dp
+    val paddingBottom = 40.dp
+
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val containerSize = LocalWindowInfo.current.containerSize
+
+    val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
+
+    val maxOffsetX: Float
+    val maxOffsetY: Float
+    val paddingEndPx: Float
+    val paddingBottomPx: Float
+    with(density) {
+        // Fall back to Configuration on the first composition (before first layout pass).
+        // Without this, drag bounds collapse to 0 and the dragView snaps to (0,0).
+        val screenWidthPx = if (containerSize.width > 0) {
+            containerSize.width.toFloat()
+        } else {
+            configuration.screenWidthDp.dp.toPx()
+        }
+        val screenHeightPx = if (containerSize.height > 0) {
+            containerSize.height.toFloat()
+        } else {
+            configuration.screenHeightDp.dp.toPx()
+        }
+        val videoWidthPx = videoViewWidth.toPx()
+        val videoHeightPx = videoViewHeight.toPx()
+        paddingEndPx = paddingEnd.toPx()
+        paddingBottomPx = paddingBottom.toPx()
+        maxOffsetX = (screenWidthPx - videoWidthPx).coerceAtLeast(0f)
+        maxOffsetY = (screenHeightPx - videoHeightPx).coerceAtLeast(0f)
+    }
+    val currentMaxOffsetX by rememberUpdatedState(maxOffsetX)
+    val currentMaxOffsetY by rememberUpdatedState(maxOffsetY)
+    // pointerInput(Unit) 的协程仅首帧启动，捕获的 onTap 不会刷新；用 rememberUpdatedState
+    // 保证始终调用最新回调（与上方拖拽用 currentMaxOffsetX/Y 的范式保持一致）。
+    val currentOnTap by rememberUpdatedState(onTap)
+
+    // 存储的是「逻辑位置」（全屏坐标系）。不要在屏幕尺寸变化时改写它，
+    // 否则进入 PiP（LocalConfiguration 变成小窗尺寸）会把它夹到小窗范围内，
+    // 退出 PiP 后无法还原，导致悬浮窗位置与进 PiP 前不一致。
+    // 改为仅在渲染时按当前可视边界裁剪显示。
+    var dragViewOffsetX by remember { mutableFloatStateOf(maxOffsetX - paddingEndPx) }
+    var dragViewOffsetY by remember { mutableFloatStateOf(maxOffsetY - paddingBottomPx) }
+
+    if (!isInPipMode) {
+        // 全屏容器仅用于建立坐标系；悬浮窗以 TopStart 为锚点 + offset 定位
+        // （offset 即窗口左上角位置）。拖拽与点击手势只挂在 120x214 的窗口本体上，
+        // 保证「只有悬浮窗区域可拖拽」，窗口下方/周围的空白区域不响应拖拽。
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            dragViewOffsetX.coerceIn(0f, maxOffsetX).toInt(),
+                            dragViewOffsetY.coerceIn(0f, maxOffsetY).toInt(),
+                        )
+                    }
+                    .size(videoViewWidth, videoViewHeight)
+                    .clip(shape = RoundedCornerShape(8.dp))
+                    .background(DifftTheme.colors.backgroundSecondary)
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            dragViewOffsetX = (dragViewOffsetX + dragAmount.x)
+                                .coerceIn(0f, currentMaxOffsetX)
+                            dragViewOffsetY = (dragViewOffsetY + dragAmount.y)
+                                .coerceIn(0f, currentMaxOffsetY)
+                        }
+                    }
+                    // 点击悬浮窗 → 交换主画面与悬浮窗内容。detectTapGestures 会消费抬起
+                    // 事件，避免冒泡到 CallSurface 的 clickable；纯点击不触发拖拽 slop，两者共存。
+                    .pointerInput(Unit) {
+                        detectTapGestures { currentOnTap() }
+                    }
+            ) {
+                content()
             }
         }
     }
@@ -273,6 +319,9 @@ fun SingleParticipantItem(
     uid: String,
     speakingEnabled: Boolean = true,
     reconnectCount: Int = 0,
+    viewType: ViewType = ViewType.Surface,
+    draggable: Boolean? = null,
+    compact: Boolean = false,
 ){
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
@@ -305,7 +354,8 @@ fun SingleParticipantItem(
             modifier = modifier,
             userDisplayInfo = userDisplayInfo,
             userId = uid,
-            callToChatController = callToChatController
+            callToChatController = callToChatController,
+            compact = compact,
         )
         return
     }
@@ -344,6 +394,7 @@ fun SingleParticipantItem(
 
     Box(
         modifier = modifier.fillMaxSize()
+            .testTag("call_render_single")
             .clip(shape = RoundedCornerShape(8.dp))
             .background(Color.Transparent),
         contentAlignment = Alignment.Center
@@ -354,8 +405,8 @@ fun SingleParticipantItem(
             participant = participant,
             sourceType = Track.Source.CAMERA,
             scaleType = if (IdUtil.isPersonalMobileDevice(identity?.value)) ScaleType.Fill else ScaleType.FitInside,
-            viewType = ViewType.Surface,
-            draggable = !IdUtil.isPersonalMobileDevice(identity?.value),
+            viewType = viewType,
+            draggable = draggable ?: !IdUtil.isPersonalMobileDevice(identity?.value),
             reconnectCount = reconnectCount,
         )
         if (videoMuted) {
@@ -367,7 +418,8 @@ fun SingleParticipantItem(
                 isSpeaking = effectiveIsSpeaking,
                 showAudioStatus = true,
                 imageLoader = imageLoader,
-                callToChatController = callToChatController
+                callToChatController = callToChatController,
+                compact = compact,
             )
         }
     }
@@ -383,7 +435,16 @@ private fun ParticipantAvatarInfo(
     showAudioStatus: Boolean = false,
     imageLoader: coil3.ImageLoader? = null,
     callToChatController: com.difft.android.call.LCallToChatController,
+    compact: Boolean = false,
 ) {
+    // compact 用于 1v1 小悬浮窗：窗口仅 120x214dp，需按比例缩小头像/图标/字号。
+    val avatarSize = if (compact) 48.dp else 96.dp
+    val spacerHeight = if (compact) 4.dp else 8.dp
+    val iconSize = if (compact) 10.dp else 14.dp
+    val iconPadding = if (compact) 1.dp else 2.dp
+    val nameFontSize = if (compact) 11.sp else TextUnit.Unspecified
+    val nameMaxChars = if (compact) 8 else 14
+
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -405,13 +466,13 @@ private fun ParticipantAvatarInfo(
                         }
                     },
                     modifier = Modifier
-                        .height(96.dp)
-                        .width(96.dp)
+                        .height(avatarSize)
+                        .width(avatarSize)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(spacerHeight))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -434,16 +495,17 @@ private fun ParticipantAvatarInfo(
                     painter = painter,
                     contentDescription = "",
                     modifier = Modifier
-                        .padding(2.dp)
-                        .size(14.dp),
+                        .padding(iconPadding)
+                        .size(iconSize),
                     tint = tintColor
                 )
             }
 
             val username = "${userDisplayInfo.name ?: IdUtil.convertToBase58UserName(userId)}"
             Text(
-                text = StringUtil.truncateWithEllipsis(username, 14),
+                text = StringUtil.truncateWithEllipsis(username, nameMaxChars),
                 color = Color.White,
+                fontSize = nameFontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

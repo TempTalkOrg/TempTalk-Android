@@ -1,6 +1,7 @@
 package com.difft.android.chat.invite
 
-import com.difft.android.base.utils.SecureSharedPrefsUtil
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -18,10 +19,10 @@ class InviteRepo @Inject constructor() {
     }
 
     suspend fun getInviteCode(regenerate: Int, short: Int): BaseResponse<GetInviteCodeResponse> =
-        inviteService.getInviteCode(SecureSharedPrefsUtil.getToken(), regenerate, short)
+        inviteService.getInviteCode((globalServices.userManager.getUserData()?.microToken ?: ""), regenerate, short)
 
-    suspend fun queryByInviteCode(inviteCode: String): BaseResponse<QueryInviteCodeResponse> = inviteService.queryByInviteCode(SecureSharedPrefsUtil.getToken(), QueryInviteCodeRequest(inviteCode))
+    suspend fun queryByInviteCode(inviteCode: String): BaseResponse<QueryInviteCodeResponse> = inviteService.queryByInviteCode((globalServices.userManager.getUserData()?.microToken ?: ""), QueryInviteCodeRequest(inviteCode))
 
-    suspend fun queryByCustomUid(version: Int, customUid: String): BaseResponse<QueryCustomUidResponse> = inviteService.queryByCustomUid(SecureSharedPrefsUtil.getToken(), QueryCustomUidRequest(version, customUid))
+    suspend fun queryByCustomUid(version: Int, customUid: String): BaseResponse<QueryCustomUidResponse> = inviteService.queryByCustomUid((globalServices.userManager.getUserData()?.microToken ?: ""), QueryCustomUidRequest(version, customUid))
 
 }

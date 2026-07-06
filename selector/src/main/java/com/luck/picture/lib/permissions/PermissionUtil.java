@@ -58,9 +58,6 @@ public class PermissionUtil {
 
 
     public static boolean hasPermissions(@NonNull Context context, @Size(min = 1) @NonNull String... perms) {
-        if (Build.VERSION.SDK_INT < 23) {
-            return true;
-        }
         for (String perm : perms) {
             if (ContextCompat.checkSelfPermission(context, perm) != PackageManager.PERMISSION_GRANTED) {
                 return false;

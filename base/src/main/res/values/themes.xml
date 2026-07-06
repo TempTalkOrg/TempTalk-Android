@@ -1,0 +1,35 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Base application theme (light). Dark variant in values-night/themes.xml. -->
+    <style name="Theme.Chative" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@android:color/transparent</item>
+        <item name="colorPrimaryVariant">@android:color/transparent</item>
+        <item name="colorOnPrimary">@android:color/transparent</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@android:color/transparent</item>
+        <item name="colorSecondaryVariant">@android:color/transparent</item>
+        <item name="colorOnSecondary">@android:color/transparent</item>
+        <!-- Default page background (settings idiom — light gray in light, dark in dark).
+             Immersive pages override via android:background="@color/bg1" on root layout. -->
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
+    </style>
+
+    <!-- Theme override for uCrop's UCropActivity / UCropMultipleActivity.
+         uCrop SDK declares these activities with a light-only theme that ignores
+         night mode; in edge-to-edge mode their windowBackground (white) bleeds
+         through to status bar / nav bar regions. Override via Manifest to make
+         them day/night-aware using @color/bg (auto-switching token). -->
+    <style name="Theme.Chative.UCrop" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
+    </style>
+
+</resources>

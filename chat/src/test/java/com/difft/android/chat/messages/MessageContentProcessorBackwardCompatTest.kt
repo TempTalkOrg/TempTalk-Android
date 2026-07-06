@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
+import com.google.gson.Gson
 import com.google.protobuf.ByteString
 import difft.android.messageserialization.model.NotifyMessage
 import io.mockk.MockKAnnotations
@@ -87,6 +88,8 @@ class MessageContentProcessorBackwardCompatTest {
             localMessageCreator = localMessageCreator,
             groupCryptoRepo = mockk(relaxed = true),
             groupUtil = mockk(relaxed = true),
+            weakContactReconciler = mockk(relaxed = true),
+            gson = Gson(),
         )
     }
 

@@ -13,6 +13,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
+import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
@@ -26,12 +27,12 @@ import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.feedback.CallFeedbackBinder
 import com.difft.android.call.handler.CriticalAlertVisibility
-import com.difft.android.call.ui.barrage.BarrageRenderable
 import com.difft.android.call.ui.barrage.CallBarrageFormatter
 import com.difft.android.call.manager.AudioDeviceManager
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.CallFeedbackManager
 import com.difft.android.call.manager.CallRingtoneManager
+import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.CallTimeoutManager
 import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.manager.ContactorCacheManager
@@ -59,80 +60,65 @@ import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.util.concurrent.atomic.AtomicBoolean
 import livekit.org.webrtc.CameraXHelper
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 
-
-class LCallViewModel (
+@HiltViewModel(assistedFactory = LCallViewModelFactory::class)
+class LCallViewModel @AssistedInject constructor(
     application: Application,
-    private val e2eeEnable: Boolean = false,
-    private val callIntent: CallIntent,
-    private val callConfig: CallConfig,
-    private val callRole: CallRole,
+    @Assisted private val e2eeEnable: Boolean,
+    @Assisted private val callIntent: CallIntent,
+    @Assisted private val callConfig: CallConfig,
+    @Assisted private val callRole: CallRole,
     /**
      * Global voice-changer preference applied when the call starts. Per product spec,
      * mid-call changes via [setVoicePreset] do NOT write back to this preference —
      * the next call restores the user's saved value.
      */
-    private val initialVoicePreset: VoicePreset = VoicePreset.ORIGINAL,
+    @Assisted private val initialVoicePreset: VoicePreset,
+    private val callToChatController: LCallToChatController,
+    private val messageEncryptor: INewMessageContentEncryptor,
+    private val onGoingCallStateManager: OnGoingCallStateManager,
+    private val callDataManager: CallDataManager,
+    private val callVibrationManager: CallVibrationManager,
+    private val callRingtoneManager: CallRingtoneManager,
+    private val contactorCacheManager: ContactorCacheManager,
+    private val callFeedbackManager: CallFeedbackManager,
+    private val callStatisticsLogManager: CallStatisticsLogManager,
+    private val callTimeoutManager: CallTimeoutManager,
+    private val callTlsProvider: CallTlsProvider,
+    @ChativeHttpClientModule.Chat private val httpClient: dagger.Lazy<ChativeHttpClient>,
+    private val userManager: UserManager,
+    private val proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider,
 ) : AndroidViewModel(application) {
-
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        val callToChatController: LCallToChatController
-        val messageEncryptor: INewMessageContentEncryptor
-        val onGoingCallStateManager: OnGoingCallStateManager
-        val callDataManager: CallDataManager
-        val callVibrationManager: CallVibrationManager
-        val callRingtoneManager: CallRingtoneManager
-        val contactorCacheManager: ContactorCacheManager
-        val callFeedbackManager: CallFeedbackManager
-        val callTimeoutManager: CallTimeoutManager
-        val callTlsProvider: CallTlsProvider
-
-        @ChativeHttpClientModule.Chat
-        fun httpClient(): ChativeHttpClient
-    }
-
-    private val deps: EntryPoint by lazy { EntryPointAccessors.fromApplication(ApplicationHelper.instance) }
-    private val callToChatController: LCallToChatController get() = deps.callToChatController
-    private val messageEncryptor: INewMessageContentEncryptor get() = deps.messageEncryptor
-    private val onGoingCallStateManager: OnGoingCallStateManager get() = deps.onGoingCallStateManager
-    private val callDataManager: CallDataManager get() = deps.callDataManager
-    private val callVibrationManager: CallVibrationManager get() = deps.callVibrationManager
-    private val callRingtoneManager: CallRingtoneManager get() = deps.callRingtoneManager
-    private val callFeedbackManager: CallFeedbackManager get() = deps.callFeedbackManager
-    private val contactorCacheManager: ContactorCacheManager get() = deps.contactorCacheManager
-    private val callTimeoutManager: CallTimeoutManager get() = deps.callTimeoutManager
-    private val callTlsProvider: CallTlsProvider get() = deps.callTlsProvider
 
     private val json = Json { ignoreUnknownKeys = true }
     private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
 
     private val mySelfId: String by lazy { globalServices.myId }
     val conversationId = callIntent.conversationId
-
     private var roomId: String? = null
     private var e2eeKey: ByteArray? = null
-
     private val audioProcessor = AudioPipelineProcessor(application)
     lateinit var rtm: RtmMessageHandler
     val participantManager = ParticipantManager(viewModelScope)
     val callUiController = CallUiController()
     val timerManager = TimerManager(viewModelScope)
-    val audioDeviceManager = AudioDeviceManager(application, callIntent.callType)
+    val audioDeviceManager = AudioDeviceManager(application, callIntent.callType, userManager)
     val audioHandler get() = audioDeviceManager.audioHandler
     private val audioSetup = CallAudioSetup(
         scope = viewModelScope,
@@ -140,6 +126,7 @@ class LCallViewModel (
         audioProcessor = audioProcessor,
         callConfig = callConfig,
         isDenoiseEnabledProvider = { deNoiseEnable.value },
+        userManager = userManager,
     )
 
     private val roomCtl = CallRoomController(
@@ -148,25 +135,18 @@ class LCallViewModel (
         audioHandler = audioHandler,
         audioProcessor = audioProcessor,
         e2eeEnable = e2eeEnable,
+        proxyConfigProvider = proxyConfigProvider,
         decryptCallMKey = { eKey, eMKey -> messageEncryptor.decryptCallKey(eKey, eMKey) }
     )
 
-    private val activeSpeakers = room::activeSpeakers.flow
+    private lateinit var activeSpeakers: StateFlow<List<Participant>>
 
     val room get() = roomCtl.room
     val callStatus get() = roomCtl.callStatus
     val callType get() = roomCtl.callType
     val error get() = roomCtl.error
 
-    private val mediaCtl = CallMediaController(
-        room = room,
-        roomCtl = roomCtl,
-        audioProcessor = audioProcessor,
-        audioDeviceManager = audioDeviceManager,
-        scope = viewModelScope,
-        showBarrage = { p, m -> showCallBarrageMessage(p, m) },
-        showToast = { m -> showToastMessage(m) },
-    )
+    private lateinit var mediaCtl: CallMediaController
 
     val deNoiseEnable get() = mediaCtl.deNoiseEnable
     val deNoiseMode get() = mediaCtl.deNoiseMode
@@ -208,6 +188,7 @@ class LCallViewModel (
         appContext = application,
         roomCtl = roomCtl,
         callTlsProvider = callTlsProvider,
+        statisticsLogManager = callStatisticsLogManager,
     )
 
     private val screenSharePreWarmer = ScreenSharePreWarmer(viewModelScope)
@@ -224,14 +205,14 @@ class LCallViewModel (
     private val criticalAlertDispatcher by lazy {
         CriticalAlertDispatcher(
             scope = viewModelScope,
-            httpClientProvider = { EntryPointAccessors.fromApplication<EntryPoint>(application).httpClient() },
+            httpClientProvider = { httpClient.get() },
             callToChatController = callToChatController,
             participantManager = participantManager,
             callUiController = callUiController,
             room = room,
             roomIdGetter = { roomId },
-            showBarrage = { participant, message -> showCallBarrageMessage(participant, message) },
-            showToast = { message -> showToastMessage(message) },
+            showBarrage = { p, m -> showCallBarrageMessage(p, m) },
+            showToast = ::showToastMessage,
         )
     }
 
@@ -264,19 +245,19 @@ class LCallViewModel (
         RoomEventHost(
             showBarrageFn = { p, m, t -> showCallBarrageMessage(p, m, t) },
             setMicEnabledFn = { e, pm, sb -> setMicEnabled(e, pm, sb) },
-            resetNoBodySpeakCheckFn = { resetNoBodySpeakCheck() },
-            sendHangUpBroadcastFn = { sendHangUpBroadcast(it) },
-            stopRingToneAndTimeoutCheckFn = { stopRingToneAndTimeoutCheck() },
-            switchToInstantCallFn = { switchToInstantCall() },
-            handleConnectedStateFn = { handleConnectedState() },
-            onFeedbackIdentityResolvedFn = { s, i, r -> feedbackBinder.onIdentityResolved(s, i, r) },
+            resetNoBodySpeakCheckFn = ::resetNoBodySpeakCheck,
+            sendHangUpBroadcastFn = ::sendHangUpBroadcast,
+            stopRingToneAndTimeoutCheckFn = ::stopRingToneAndTimeoutCheck,
+            switchToInstantCallFn = ::switchToInstantCall,
+            handleConnectedStateFn = ::handleConnectedState,
+            onFeedbackIdentityResolvedFn = feedbackBinder::onIdentityResolved,
             onNetworkPoorStateChangedFn = { feedbackBinder.currentCallNetworkPoor = it },
-            getCurrentCallTypeFn = { getCurrentCallType() },
+            getCurrentCallTypeFn = ::getCurrentCallType,
             getCurrentRoomIdFn = { roomId },
         )
     }
 
-    private val roomEventDispatcher by lazy {
+    private val _roomEventDispatcherLazy = lazy {
         RoomEventDispatcher(
             scope = viewModelScope,
             room = room,
@@ -290,11 +271,13 @@ class LCallViewModel (
             timerManager = timerManager,
             speakerState = speakerState,
             callDataManager = callDataManager,
+            statisticsLogManager = callStatisticsLogManager,
             json = json,
             mySelfId = mySelfId,
             host = roomEventHost,
         )
     }
+    private val roomEventDispatcher by _roomEventDispatcherLazy
 
     private val instantCallConverter by lazy {
         InstantCallConverter(
@@ -324,21 +307,42 @@ class LCallViewModel (
             e2eeEnable = e2eeEnable,
             mySelfId = mySelfId,
             createCallMsgConfig = callConfig.createCallMsg,
-            onRoomIdAssigned = { rid -> roomId = rid },
+            onRoomIdAssigned = { rid ->
+                roomId = rid
+                callStatisticsLogManager.setRoomId(rid)
+            },
             onE2eeKeyAssigned = { key -> e2eeKey = key },
         )
     }
-
+    private val roomWiringStarted = AtomicBoolean(false)
     init {
         initCameraProvider(application)
-        initRtmHandler()
         audioSetup.start()
+        contactorCacheManager.startParticipantObservation(viewModelScope)
+    }
+
+    /** Phase B: create [room] off-main (LiveKit.create) then wire all room-dependent collaborators; call once. */
+    fun startRoomDependentWiring() {
+        if (!roomWiringStarted.compareAndSet(false, true)) return
+        val r = roomCtl.createRoom()
+        activeSpeakers = r::activeSpeakers.flow
+        mediaCtl = CallMediaController(
+            room = r,
+            roomCtl = roomCtl,
+            audioProcessor = audioProcessor,
+            audioDeviceManager = audioDeviceManager,
+            scope = viewModelScope,
+            showBarrage = { p, m -> showCallBarrageMessage(p, m) },
+            showToast = { m -> showToastMessage(m) },
+        )
+        initRtmHandler()
+        if (roomCtl.isReleaseIntended()) { L.i { "[Call] Phase B abort: release in flight" }; return }
         applyInitialVoicePreset()
         roomEventDispatcher.startCollectingRoomEvents()
         roomEventDispatcher.startCollectingParticipants()
         CallObservers.register(
             scope = viewModelScope,
-            room = room,
+            room = r,
             participantManager = participantManager,
             callUiController = callUiController,
             contactorCacheManager = contactorCacheManager,
@@ -354,7 +358,8 @@ class LCallViewModel (
             roomIdGetter = { roomId },
             showToast = { m -> showToastMessage(m) },
         )
-        checkCriticalAlertStatusById(callIntent)
+        if (roomCtl.isReleaseIntended()) { L.i { "[Call] Phase B abort: release in flight (pre-connect re-check)" }; return }
+        checkCriticalAlertStatusById(callIntent) // forces criticalAlertDispatcher → room getter; keep under the guard
         sessionStarter.start()
     }
 
@@ -364,7 +369,12 @@ class LCallViewModel (
 
     fun getCallRoomName(): String {
         val name = instantCallConverter.currentRoomName
-        val participantNum = room.remoteParticipants.size + 1
+        // Read the participants StateFlow (already includes the local participant, so its
+        // size equals room.remoteParticipants.size + 1) instead of touching the fail-loud
+        // room getter. This Composable is invoked imperatively during recomposition and can
+        // race with call teardown (releaseLocked sets released=true before callStatus flips
+        // to DISCONNECTED); reading room there crashes with "room accessed after release".
+        val participantNum = participants.value.size.coerceAtLeast(1)
         return if (getCurrentCallType() == CallType.ONE_ON_ONE.type) name else "$name ($participantNum)"
     }
 
@@ -385,23 +395,21 @@ class LCallViewModel (
     }
 
     fun showCallBarrageMessage(participant: Participant, message: String, type: Int? = RTM_MESSAGE_TYPE_DEFAULT) {
-        val identityValue = participant.identity?.value ?: return
-        if (message.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
-            when (val rendered = CallBarrageFormatter.format(identityValue, message, type, callConfig, contactorCacheManager)) {
-                is BarrageRenderable.Default -> callUiController.setBarrageMessage(rendered.message)
-                is BarrageRenderable.Emoji -> callUiController.setEmojiBubbleMessage(rendered.message)
-                is BarrageRenderable.Text -> callUiController.setTextBubbleMessage(rendered.message)
-                null -> Unit
-            }
+            CallBarrageFormatter.formatAndDispatch(
+                participant.identity?.value, message, type,
+                callConfig, contactorCacheManager, callUiController,
+            )
         }
     }
 
     fun resetNoBodySpeakCheck() {
-        val currentParticipants = listOf<Participant>(room.localParticipant) + room.remoteParticipants.values.toList()
-        val speakers = activeSpeakers.value
-        val hasRemote = room.remoteParticipants.isNotEmpty()
-        val isSilent = currentParticipants.firstOrNull { it.isMicrophoneEnabled } == null || speakers.isEmpty()
+        // Read the participants StateFlow (local + remotes) instead of the fail-loud room
+        // getter: this is invoked from the end-reminder dialog's "Continue" path and from
+        // 1v1 room events, both of which can race with call teardown (released=true).
+        val snapshot = participants.value
+        val hasRemote = snapshot.any { it is RemoteParticipant }
+        val isSilent = snapshot.firstOrNull { it.isMicrophoneEnabled } == null || activeSpeakers.value.isEmpty()
         speakerState.reset(hasRemote, isSilent, callConfig)
     }
 
@@ -428,8 +436,6 @@ class LCallViewModel (
     }
 
     fun switchToInstantCall() = instantCallConverter.switchToInstantCall(roomId)
-
-    /** Triggered when the user actively exits the call. */
     fun doExitClear() = cleanupExecutor.start(reason = "doExitClear", steps = buildCleanupSteps())
 
     override fun onCleared() {
@@ -451,7 +457,8 @@ class LCallViewModel (
         speakerState = speakerState,
         screenShareFloatingSpeakerStateHolder = _screenShareSpeakerLazy.takeIf { it.isInitialized() }?.value,
         screenSharePreWarmer = screenSharePreWarmer,
-        roomEventDispatcher = roomEventDispatcher,
+        roomEventDispatcher = _roomEventDispatcherLazy.takeIf { it.isInitialized() }?.value,
+        statisticsLogManager = callStatisticsLogManager,
         feedbackBinder = feedbackBinder,
         shouldTriggerFeedbackView = { shouldTriggerFeedbackView() },
         clearE2eeKey = {
@@ -461,31 +468,24 @@ class LCallViewModel (
     )
 
     fun updateScreenShareFallback(participant: Participant) = screenShareFallback.update(participant)
-
     fun setCameraEnabled(enabled: Boolean) = mediaCtl.setCameraEnabled(enabled)
-
-    fun getCurrentCallUidList(): List<String> = room.remoteParticipants.map { identityId ->
-        val userId = identityId.key.value
-        if (userId.contains(".")) userId.split(".")[0] else userId
-    }
-
     fun toggleMute(participant: Participant) = rtm.toggleMute(participant)
     fun flipCamera() = mediaCtl.flipCamera()
-
-    private fun getCurrentCallType(): String = callDataManager.getCallData(roomId)?.type ?: ""
-
     fun shouldTriggerFeedbackView() = feedbackBinder.maybeTrigger()
+    fun isRequestingPermission() = callUiController.isRequestingPermission.value
+    fun hasOtherActiveSpeaker(): Boolean = speakerState.hasOtherActiveSpeaker()
+    fun addAwaitingJoinInvitees(inviteeIds: List<String>) = participantManager.addAwaitingJoinInvitees(inviteeIds)
 
-    fun handleCriticalAlertNew(gid: String? = null, callback: ((Boolean) -> Unit)? = null) =
-        criticalAlertDispatcher.send(gid, callback)
+    // Uses the participants StateFlow rather than the fail-loud room getter: this is invoked
+    // from CallExitHandler's async hangup callback, which can run after a concurrent path has
+    // already released the room (remote onLeave / onCleared / cleanup). The snapshot also
+    // retains the last-known remotes even after room.remoteParticipants is cleared by disconnect.
+    fun getCurrentCallUidList(): List<String> = participants.value
+        .filterIsInstance<RemoteParticipant>()
+        .mapNotNull { it.identity?.value }
+        .map { userId -> if (userId.contains(".")) userId.split(".")[0] else userId }
 
-    private fun showToastMessage(message: String) {
-        viewModelScope.launch {
-            try { ToastUtil.show(message) } catch (e: Exception) { L.e(e) { "[Call] Failed to show toast message: $message" } }
-        }
-    }
-
-    private fun checkCriticalAlertStatusById(callIntent: CallIntent) = criticalAlertDispatcher.refreshGroupStatus(callIntent)
+    suspend fun handleCriticalAlertNew(gid: String? = null): Boolean = criticalAlertDispatcher.send(gid)
 
     fun is1v1ShowCriticalAlertEnable(callStatus: CallStatus): Boolean =
         CriticalAlertVisibility.for1v1(callType.value, callRole, callStatus)
@@ -496,14 +496,17 @@ class LCallViewModel (
     fun isInstantCriticalAlertEnable(awaitingJoinInvitees: List<String>): Boolean =
         CriticalAlertVisibility.forInstant(callType.value, awaitingJoinInvitees)
 
-    fun isRequestingPermission() = callUiController.isRequestingPermission.value
-
     fun isControlButtonClickEnabled(): Boolean = if (callType.value == CallType.ONE_ON_ONE.type)
         room.state == Room.State.CONNECTED
     else
         callStatus.value == CallStatus.CONNECTED || callStatus.value == CallStatus.RECONNECTED
 
-    fun hasOtherActiveSpeaker(): Boolean = speakerState.hasOtherActiveSpeaker()
+    private fun getCurrentCallType(): String = callDataManager.getCallData(roomId)?.type ?: ""
+    private fun checkCriticalAlertStatusById(callIntent: CallIntent) = criticalAlertDispatcher.refreshGroupStatus(callIntent)
 
-    fun addAwaitingJoinInvitees(inviteeIds: List<String>) = participantManager.addAwaitingJoinInvitees(inviteeIds)
+    private fun showToastMessage(message: String) {
+        viewModelScope.launch {
+            try { ToastUtil.show(message) } catch (e: Exception) { L.e(e) { "[Call] Failed to show toast message: $message" } }
+        }
+    }
 }

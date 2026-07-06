@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg.setting"
     android:orientation="vertical">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -108,14 +107,14 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/bg.setting" />
+            android:background="@color/bg" />
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switch_can_id_search"
             style="@style/Widget.Chative.Switch"
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:background="@color/bg.setting.item"
+            android:background="@color/bg.elevated"
             android:checked="false"
             android:paddingStart="16dp"
             android:paddingEnd="8dp"
@@ -139,7 +138,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/bg.setting" />
+            android:background="@color/bg" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/cl_email"
@@ -186,7 +185,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/bg.setting" />
+            android:background="@color/bg" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/cl_phone"

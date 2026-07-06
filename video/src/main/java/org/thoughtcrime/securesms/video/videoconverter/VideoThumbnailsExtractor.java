@@ -7,7 +7,6 @@ import android.media.MediaFormat;
 import android.opengl.GLES20;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 
 import com.difft.android.base.log.lumberjack.L;
 import org.thoughtcrime.securesms.video.interfaces.MediaInput;
@@ -15,7 +14,6 @@ import org.thoughtcrime.securesms.video.interfaces.MediaInput;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-@RequiresApi(api = 23)
 public final class VideoThumbnailsExtractor {
 
   private static final String TAG = "VideoThumbnailsExtractor";

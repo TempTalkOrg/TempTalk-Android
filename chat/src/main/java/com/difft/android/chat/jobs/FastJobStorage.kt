@@ -24,7 +24,10 @@ class FastJobStorage(private val jobStorage: WcdbJobStorage) : JobStorage {
                 jobConstraints.add(constraintSpec)
             }
         } catch (e: Exception) {
-            L.e { "[JobStorage] Failed to initialize FastJobStorage from database: ${e.message}" }
+            // DB may be corrupt — degrade to an empty in-memory queue (DB rows untouched).
+            // MainActivity's recovery gate drives the real recovery; after its restart,
+            // JobManager.init{} re-runs against the recovered/fresh DB and reloads the queue.
+            L.e { "[JobStorage] init failed (DB may be corrupt — queue empty until recovery restart): ${e.stackTraceToString()}" }
             jobs.clear()
             constraintsByJobId.clear()
         }

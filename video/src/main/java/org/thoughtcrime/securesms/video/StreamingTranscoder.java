@@ -5,7 +5,6 @@ import android.media.MediaMetadataRetriever;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import com.difft.android.base.log.lumberjack.L;
@@ -26,7 +25,6 @@ import java.text.NumberFormat;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
-@RequiresApi(26)
 public final class StreamingTranscoder {
 
     private static final String TAG = "StreamingTranscoder";

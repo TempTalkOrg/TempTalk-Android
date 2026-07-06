@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -34,6 +33,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.difft.android.call.data.VoicePreset
@@ -60,7 +60,7 @@ fun VoicePresetCard(
                 .fillMaxWidth()
                 .height(55.dp)
                 .background(
-                    color = colorResource(id = com.difft.android.base.R.color.gray_600),
+                    color = DifftTheme.colors.backgroundQuaternary,
                     shape = RoundedCornerShape(size = 8.dp)
                 )
                 .clickable { expanded = true }
@@ -75,7 +75,7 @@ fun VoicePresetCard(
                     lineHeight = 24.sp,
                     fontFamily = FontFamily.Default,
                     fontWeight = FontWeight(400),
-                    color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                    color = DifftTheme.colors.textPrimary,
                 )
             )
 
@@ -90,13 +90,13 @@ fun VoicePresetCard(
                         lineHeight = 20.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
-                        color = colorResource(id = com.difft.android.base.R.color.t_secondary_night),
+                        color = DifftTheme.colors.textSecondary,
                     )
                 )
                 Icon(
                     painter = painterResource(id = R.drawable.call_btn_tabler_chevron_right),
                     contentDescription = null,
-                    tint = colorResource(id = com.difft.android.base.R.color.t_secondary_night),
+                    tint = DifftTheme.colors.textSecondary,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -107,7 +107,7 @@ fun VoicePresetCard(
             onDismissRequest = { expanded = false },
             modifier = Modifier
                 .width(menuWidth)
-                .background(colorResource(id = com.difft.android.base.R.color.bg3_night)),
+                .background(DifftTheme.colors.backgroundTertiary),
             offset = DpOffset(x = dropdownOffset, y = 0.dp)
         ) {
             VoicePreset.entries.forEach { preset ->
@@ -119,9 +119,9 @@ fun VoicePresetCard(
                                 fontSize = 16.sp,
                                 lineHeight = 24.sp,
                                 color = if (preset == currentPreset)
-                                    colorResource(id = com.difft.android.base.R.color.primary)
+                                    DifftTheme.colors.primary
                                 else
-                                    colorResource(id = com.difft.android.base.R.color.t_primary_night)
+                                    DifftTheme.colors.textPrimary
                             )
                         )
                     },

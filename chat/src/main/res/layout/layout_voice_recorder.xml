@@ -15,55 +15,127 @@
         android:paddingBottom="16dp"
         android:textColor="@color/t.primary.night"
         android:visibility="invisible"
-        app:layout_constraintBottom_toTopOf="@+id/tv_tips"
+        app:layout_constraintBottom_toTopOf="@+id/ll_action_buttons"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_goneMarginBottom="10dp"
-        tools:text="@string/chat_voice_recording_will_stop"
+        tools:text="Recording will stop in 3 seconds"
         tools:visibility="visible" />
 
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/tv_tips"
+    <!-- 双按钮容器 -->
+    <LinearLayout
+        android:id="@+id/ll_action_buttons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="5dp"
+        android:layout_marginBottom="48dp"
         android:gravity="center"
-        android:paddingHorizontal="8dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="16dp"
-        android:text="@string/chat_voice_release_to_cancel"
-        android:textColor="@color/t.primary"
-        android:visibility="invisible"
-        app:layout_constraintBottom_toTopOf="@+id/cancel_zone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        tools:visibility="visible" />
-
-    <!-- 取消录音区域 -->
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/cancel_zone"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_marginBottom="100dp"
-        android:background="@drawable/chat_voice_cancle_bg"
-        android:padding="24dp"
-        android:src="@drawable/ic_close"
-        android:tint="@color/white"
+        android:orientation="horizontal"
         android:visibility="invisible"
         app:layout_constraintBottom_toTopOf="@+id/ll_record"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        tools:visibility="visible" />
+        tools:visibility="visible">
+
+        <!-- Cancel 按钮列 -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_cancel_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="@string/chat_voice_release_to_cancel"
+                android:textColor="@color/t.primary"
+                android:textSize="12sp"
+                android:visibility="invisible"
+                tools:visibility="visible" />
+
+            <LinearLayout
+                android:id="@+id/btn_cancel"
+                android:layout_width="140dp"
+                android:layout_height="72dp"
+                android:background="@drawable/chat_voice_pill_bg_gray"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="24dp">
+
+                <ImageView
+                    android:id="@+id/iv_cancel_icon"
+                    android:layout_width="17dp"
+                    android:layout_height="17dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_close"
+                    app:tint="@color/white" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/chat_voice_cancel"
+                    android:textColor="@color/white"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <android.widget.Space
+            android:layout_width="32dp"
+            android:layout_height="0dp" />
+
+        <!-- Add effect 按钮列 -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_effect_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="@string/chat_voice_release_to_send"
+                android:textColor="@color/t.primary"
+                android:textSize="12sp"
+                android:visibility="invisible"
+                tools:visibility="visible" />
+
+            <LinearLayout
+                android:id="@+id/btn_add_effect"
+                android:layout_width="140dp"
+                android:layout_height="72dp"
+                android:background="@drawable/chat_voice_pill_bg_gray"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="24dp">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_effect_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/white"
+                    android:textSize="14sp"
+                    tools:text="🐿️ Add effect" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
 
     <!-- 录音按钮 -->
     <LinearLayout
         android:id="@+id/ll_record"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="46dp"
+        android:layout_marginStart="88dp"
+        android:layout_marginEnd="44dp"
         android:background="@drawable/chat_msg_input_bg"
         android:gravity="center_horizontal"
         android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_goneMarginTop="0dp">
 
         <!-- 波形动画控件 -->
@@ -84,6 +156,5 @@
             android:textSize="14sp" />
 
     </LinearLayout>
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,6 +1,6 @@
 package com.difft.android.chat.mediasend.v2.review
 
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -31,18 +31,18 @@ class MediaReviewFragmentPagerAdapter(fragment: Fragment) : androidx.viewpager2.
             return RecyclerView.NO_ID
         }
 
-        return Uri.parse(mediaList[position].realPath).hashCode().toLong()
+        return mediaList[position].realPath.toUri().hashCode().toLong()
     }
 
     override fun containsItem(itemId: Long): Boolean {
-        return mediaList.any { Uri.parse(it.realPath).hashCode().toLong() == itemId }
+        return mediaList.any { it.realPath.toUri().hashCode().toLong() == itemId }
     }
 
     override fun getItemCount(): Int = mediaList.size
 
     override fun createFragment(position: Int): Fragment {
         val mediaItem: LocalMedia = mediaList[position]
-        val mediaUri = Uri.parse(mediaItem.realPath)
+        val mediaUri = mediaItem.realPath.toUri()
         return when {
             MediaUtil.isGif(mediaItem.mimeType) -> MediaReviewGifPageFragment.newInstance(mediaUri)
             MediaUtil.isImageType(mediaItem.mimeType) -> MediaReviewImagePageFragment.newInstance(mediaUri)

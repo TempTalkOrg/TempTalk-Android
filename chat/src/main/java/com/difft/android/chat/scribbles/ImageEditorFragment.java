@@ -16,6 +16,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.ColorInt;
@@ -64,7 +65,6 @@ import com.difft.android.chat.util.MediaUtil;
 import com.difft.android.chat.util.ParcelUtil;
 import com.difft.android.chat.util.SaveAttachmentUtil;
 import com.difft.android.base.utils.FileUtil;
-import com.difft.android.chat.util.TextSecurePreferences;
 import com.difft.android.chat.util.ThrottledDebouncer;
 import com.difft.android.chat.util.Util;
 import com.difft.android.chat.util.ViewUtil;
@@ -370,7 +370,7 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
         TextEntryDialogFragment.Companion.show(
                 getChildFragmentManager(),
                 textElement,
-                TextSecurePreferences.isIncognitoKeyboardEnabled(requireContext()),
+                false,
                 selectAll,
                 imageEditorHud.getColorIndex()
         );
@@ -803,6 +803,14 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
                 return;
             }
 
+            // renderToSingleUseBlob returns null when the underlying render fails
+            // (source image deleted mid-edit, OOM, createDraftAttachment IO error, etc.).
+            if (uri == null) {
+                L.w(() -> "[ImageEditor] Save aborted: render returned null");
+                Toast.makeText(requireContext(), R.string.operation_failed, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
             SaveAttachmentUtil.saveWithUIFromJava(
                     requireContext(),
                     getViewLifecycleOwner(),
@@ -812,20 +820,37 @@ public final class ImageEditorFragment extends Fragment implements ImageEditorHu
     }
 
     @WorkerThread
-    public static Uri renderToSingleUseBlob(@NonNull Context context, @NonNull EditorModel editorModel) {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        Bitmap image = editorModel.render(context, new FontTypefaceProvider());
-
-        image.compress(Bitmap.CompressFormat.JPEG, 80, outputStream);
-        image.recycle();
-
+    public static @Nullable Uri renderToSingleUseBlob(@NonNull Context context, @NonNull EditorModel editorModel) {
+        Bitmap image = null;
         try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            image = editorModel.render(context, new FontTypefaceProvider());
+
+            image.compress(Bitmap.CompressFormat.JPEG, 80, outputStream);
+            // Free the uncompressed pixel data (~10-48MB) before the blocking I/O wait below;
+            // finally's null-guard then no-ops on success and still recycles if compress threw
+            // after a successful render.
+            image.recycle();
+            image = null;
+
             return MyBlobProvider.getInstance()
                     .forData(outputStream.toByteArray())
                     .withMimeType(MediaUtil.IMAGE_JPEG)
                     .createForDraftAttachmentAsync(context).get();
         } catch (Exception e) {
-            L.w(e, () -> "[ImageEditorFragment] createDraftAttachment error: ");
+            // Covers RuntimeException(GlideException) from UriGlideRenderer when the source
+            // file vanished mid-edit, createDraftAttachment IO failures, and OOM.
+            L.w(e, () -> "[ImageEditorFragment] renderToSingleUseBlob failed");
+            // Restore the worker thread's interrupt flag if it was cleared by either
+            // a direct InterruptedException (from createDraftAttachmentAsync().get()) or
+            // an InterruptedException wrapped into RuntimeException by UriGlideRenderer.
+            if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+        } finally {
+            if (image != null) {
+                image.recycle();
+            }
         }
         return null;
     }

@@ -30,11 +30,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
 import com.difft.android.call.data.AvatarData
@@ -251,7 +251,7 @@ internal fun ScreenShareSpeakerBannerContent(
                 shape = shape,
             )
             .clip(shape)
-            .background(colorResource(id = BaseR.color.bg2_night))
+            .background(DifftTheme.colors.backgroundSecondary)
             .padding(BANNER_PADDING),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

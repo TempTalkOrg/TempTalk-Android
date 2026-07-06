@@ -1,5 +1,5 @@
 <resources>
-    <string name="login_sign_to_chative">登录Yelling</string>
+    <string name="login_sign_to_chative">登录Quicall</string>
     <string name="login_email_or_invite_code_hint">邮箱/手机号</string>
     <string name="login_next">下一步</string>
     <string name="login_in">登录</string>
@@ -26,7 +26,7 @@
     <string name="settings_pattern_error_tips">手势密码不匹配</string>
     <string name="settings_passcode_attempts_delay">下一次尝试需要等待%d秒。</string>
     <string name="settings_too_many_attempts_warning">密码错误次数过多，再次错误将强制退出登录。</string>
-    <string name="settings_yelling_unavailable_countdown">Yelling 不可用，请在 %d 秒后重试</string>
+    <string name="settings_service_unavailable_countdown">Quicall 不可用，请在 %d 秒后重试</string>
 
     <string name="login_select_country_code">选择国家编码</string>
 
@@ -59,4 +59,5 @@
     <string name="register_intro_page1_body">任意一方撤回或退出，双方记录即刻消失，不可恢复。重要内容，请自行保留。</string>
     <string name="register_intro_page2_title">仅双方可见</string>
     <string name="register_intro_page2_body">端到端加密。除你和对方之外，任何人都无法查看聊天内容。</string>
+    <string name="login_use_proxy">使用代理</string>
 </resources>

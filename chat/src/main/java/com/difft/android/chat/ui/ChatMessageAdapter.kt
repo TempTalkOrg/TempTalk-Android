@@ -319,6 +319,7 @@ abstract class ChatMessageAdapter(
         // Clear pending highlight runnable to prevent memory leak
         if (holder is ChatMessageViewHolder.Message) {
             holder.clearHighlight()
+            holder.clearQuoteThumbnail()
         }
     }
 

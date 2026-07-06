@@ -2,7 +2,7 @@ package com.difft.android.login
 
 import android.content.Context
 import com.difft.android.base.utils.LanguageUtils
-import com.google.gson.Gson
+import com.difft.android.base.utils.globalServices
 import com.google.gson.reflect.TypeToken
 import java.io.InputStreamReader
 
@@ -12,9 +12,8 @@ object RandomNameUtil {
         val inputStream = context.resources.openRawResource(R.raw.names)
         val reader = InputStreamReader(inputStream)
 
-        val gson = Gson()
         val type = object : TypeToken<List<NameData>>() {}.type
-        val nameDataList: List<NameData> = gson.fromJson(reader, type)
+        val nameDataList: List<NameData> = globalServices.gson.fromJson(reader, type)
 
         reader.close()
 

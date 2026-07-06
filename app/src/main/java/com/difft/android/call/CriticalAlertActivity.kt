@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -24,9 +25,9 @@ import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.CriticalAlertManager
@@ -177,12 +178,17 @@ class CriticalAlertActivity: ComponentActivity() {
 
     private fun showCriticalAlertUI(conversationId: String, title: String, message: String, roomId: String? = null) {
         setContent {
-            Content(
-                title = title,
-                message = message,
-                conversationId = conversationId,
-                roomId = roomId
-            )
+            DifftTheme(darkTheme = true) {
+                SideEffect {
+                    window.setBackgroundDrawableResource(android.R.color.transparent)
+                }
+                Content(
+                    title = title,
+                    message = message,
+                    conversationId = conversationId,
+                    roomId = roomId
+                )
+            }
         }
     }
 
@@ -335,7 +341,7 @@ class CriticalAlertActivity: ComponentActivity() {
                     messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
                 } else {
                     // 2. 如果当前未进行通话，则调用 getCallingList 方法获取最新的会议列表
-                    val response = callService.getCallingList(SecureSharedPrefsUtil.getToken())
+                    val response = callService.getCallingList((globalServices.userManager.getUserData()?.microToken ?: ""))
 
                     if (response.status != 0) {
                         L.e { "[CriticalAlert] getCallingList failed with status: ${response.status}" }
@@ -398,15 +404,11 @@ class CriticalAlertActivity: ComponentActivity() {
                                 // 关闭通知
                                 messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
 
-                                withContext(Dispatchers.Main) {
-                                    // 加入会议
-                                    LCallManager.joinCall(this@CriticalAlertActivity, matchedCall) { status ->
-                                        if (status) {
-                                            L.i { "[CriticalAlert] Successfully joined call for conversationId: $conversationId" }
-                                        } else {
-                                            L.e { "[CriticalAlert] Failed to join call for conversationId: $conversationId" }
-                                        }
-                                    }
+                                val status = LCallManager.joinCall(this@CriticalAlertActivity, matchedCall)
+                                if (status) {
+                                    L.i { "[CriticalAlert] Successfully joined call for conversationId: $conversationId" }
+                                } else {
+                                    L.e { "[CriticalAlert] Failed to join call for conversationId: $conversationId" }
                                 }
                             }
                         }

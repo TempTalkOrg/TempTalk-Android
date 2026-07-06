@@ -23,6 +23,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.LCallConstants.CALL_NOTIFICATION_OPERATION_REJECT
+import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NotificationContentDisplayType
@@ -30,7 +31,7 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.IMessageNotificationUtil
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.storage.AppStateDefaults
 import com.difft.android.base.utils.appScope
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -53,9 +54,12 @@ import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.responses.MuteStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import java.util.concurrent.ConcurrentHashMap
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBRoomModel
@@ -82,7 +86,7 @@ class MessageNotificationUtil @Inject constructor(
     private val cacheManager: NotificationCacheManager,
     private val criticalAlertManager: CriticalAlertManager,
     private val onGoingCallStateManager: OnGoingCallStateManager,
-    private val groupUtil: dagger.Lazy<GroupUtil>
+    private val groupUtil: dagger.Lazy<GroupUtil>,
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -103,6 +107,8 @@ class MessageNotificationUtil @Inject constructor(
     private val nm: NotificationManager by lazy {
         ServiceUtil.getNotificationManager(context)
     }
+
+    private val pendingCallNotifyJobs = ConcurrentHashMap<Int, Job>()
 
 
     fun checkAndCreateNotificationChannels() {
@@ -499,7 +505,7 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     private fun getUnreadMessageNumber(): Int {
-        return SharedPrefsUtil.getInt(SharedPrefsUtil.SP_UNREAD_MSG_NUM)
+        return userManager.getUserData()?.unreadMsgNum ?: AppStateDefaults.SP_UNREAD_MSG_NUM
     }
 
     /**
@@ -582,7 +588,7 @@ class MessageNotificationUtil @Inject constructor(
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             // Add unique data URI to ensure PendingIntent uniqueness
             // (PendingIntent matching doesn't include extras)
-            data = android.net.Uri.parse("app://notification/$notificationId/${System.currentTimeMillis()}")
+            data = "app://notification/$notificationId/${System.currentTimeMillis()}".toUri()
         }
         
         return PendingIntent.getActivity(
@@ -622,7 +628,7 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     //无法解析出加密消息内容时显示默认通知
-    fun showNotificationOfPush(
+    suspend fun showNotificationOfPush(
         context: Context,
         forWhat: For
     ) = runCatching {
@@ -672,95 +678,110 @@ class MessageNotificationUtil @Inject constructor(
 
     fun showCallNotificationNew(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, needAppLock: Boolean) {
         val notificationID = roomId.hashCode()  //roomId为空
-        var title = ""
-        var content = ""
-        val callerInfo = kotlinx.coroutines.runBlocking { ContactorUtil.getContactWithID(context, callerId) }
-        if (callType.isGroup()) {
-            conversationId ?: return
-            val groupInfo = runBlocking { groupUtil.get().getSingleGroupInfo(conversationId) }
-            title = groupInfo?.name ?: conversationId
-            content = "${if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()} ${ResUtils.getString(R.string.call_invite_of_group)}"
-        } else if (callType.isOneOnOne()) {
-            title = if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()
-            content = ResUtils.getString(R.string.call_invite)
-        } else if (callType.isInstant()) {
-            title = if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()
-            content = ResUtils.getString(R.string.call_invite)
-        }
+        if (callType.isGroup() && conversationId == null) return
 
-        L.d { "[Call] showCallNotificationNew createCallIntent roomId:$roomId callName:$callName callerId:$callerId conversationId:$conversationId" }
-        val intent = createCallIntent(context, callType, callerId, roomId, conversationId, null, callName, needAppLock)
-        val pendingIntent = createPendingIntent(context, notificationID, intent)
-        val acceptIntent = CallIntent.Builder(context, activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL))
-            .withAction(CallIntent.Action.ACCEPT_CALL)
-            .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .withCallType(callType.type)
-            .withCallerId(callerId)
-            .withRoomId(roomId)
-            .withRoomName(callName)
-            .withConversationId(conversationId)
-            .withCallRole(CallRole.CALLEE.type)
-            .withNeedAppLock(needAppLock)
-            .build()
-        val acceptPendingIntent = createPendingIntent(context, notificationID, acceptIntent)
+        // LAZY + start() after register: ensures the coroutine doesn't begin executing
+        // until cancelNotificationsById can see it via pendingCallNotifyJobs.
+        val job = appScope.launch(start = CoroutineStart.LAZY) {
+            val callerInfo = ContactorUtil.getContactWithID(context, callerId)
+            val groupInfo = if (callType.isGroup() && conversationId != null) {
+                groupUtil.get().getSingleGroupInfo(conversationId)
+            } else null
 
-        val rejectIntent = Intent(context, InComingCallNotificationReceiver::class.java).apply {
-            action = CALL_NOTIFICATION_OPERATION_REJECT
-            putExtra(LCallConstants.BUNDLE_KEY_CALLER_ID, callerId)
-            putExtra(LCallConstants.KEY_CALLING_NOTIFICATION_ID, notificationID)
-            putExtra(LCallConstants.BUNDLE_KEY_CALL_TYPE, callType.type)
-            putExtra(LCallConstants.BUNDLE_KEY_ROOM_ID, roomId)
-            putExtra(LCallConstants.BUNDLE_KEY_CONVERSATION_ID, conversationId)
-        }
-        val rejectPendingIntent = PendingIntent.getBroadcast(
-            context,
-            notificationID,
-            rejectIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+            var title = ""
+            var content = ""
+            if (callType.isGroup()) {
+                title = groupInfo?.name ?: conversationId.orEmpty()
+                content = "${if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()} ${ResUtils.getString(R.string.call_invite_of_group)}"
+            } else if (callType.isOneOnOne()) {
+                title = if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()
+                content = ResUtils.getString(R.string.call_invite)
+            } else if (callType.isInstant()) {
+                title = if (callerInfo.isPresent) callerInfo.get().getDisplayNameForUI() else callerId.formatBase58Id()
+                content = ResUtils.getString(R.string.call_invite)
+            }
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_CALL)
-            .setContentTitle(title)
-            .setContentText(content)
-            .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
-            .setFullScreenIntent(pendingIntent, true)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setAutoCancel(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
-            .setOnlyAlertOnce(true)
-            .setOngoing(true)
+            L.i { "[Call] showCallNotificationNew createCallIntent roomId=$roomId callType=$callType callerId=$callerId conversationId=$conversationId" }
+            val intent = createCallIntent(context, callType, callerId, roomId, conversationId, null, callName, needAppLock)
+            val pendingIntent = createPendingIntent(context, notificationID, intent)
+            val acceptIntent = CallIntent.Builder(context, activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL))
+                .withAction(CallIntent.Action.ACCEPT_CALL)
+                .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .withCallType(callType.type)
+                .withCallerId(callerId)
+                .withRoomId(roomId)
+                .withRoomName(callName)
+                .withConversationId(conversationId)
+                .withCallRole(CallRole.CALLEE.type)
+                .withNeedAppLock(needAppLock)
+                .build()
+            val acceptPendingIntent = createPendingIntent(context, notificationID, acceptIntent)
 
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val person = Person.Builder().setName(title).setKey(roomId).build()
-            val callStyle = NotificationCompat.CallStyle.forIncomingCall(
-                person,
-                rejectPendingIntent,
-                acceptPendingIntent
+            val rejectIntent = Intent(context, InComingCallNotificationReceiver::class.java).apply {
+                action = CALL_NOTIFICATION_OPERATION_REJECT
+                putExtra(LCallConstants.BUNDLE_KEY_CALLER_ID, callerId)
+                putExtra(LCallConstants.KEY_CALLING_NOTIFICATION_ID, notificationID)
+                putExtra(LCallConstants.BUNDLE_KEY_CALL_TYPE, callType.type)
+                putExtra(LCallConstants.BUNDLE_KEY_ROOM_ID, roomId)
+                putExtra(LCallConstants.BUNDLE_KEY_CONVERSATION_ID, conversationId)
+            }
+            val rejectPendingIntent = PendingIntent.getBroadcast(
+                context,
+                notificationID,
+                rejectIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            builder.setStyle(callStyle)
-        } else {
-            builder.addAction(
-                R.mipmap.chat_ic_call_reject,
-                ResUtils.getString(R.string.call_reject),
-                rejectPendingIntent
-            )
-            builder.addAction(
-                R.mipmap.chat_ic_call_accept,
-                ResUtils.getString(R.string.call_accept),
-                acceptPendingIntent
-            )
-            builder.setStyle(NotificationCompat.InboxStyle())
-        }
 
-        L.i { "[Call] showCallNotificationNew notificationID:$notificationID roomId:$roomId" }
-        try {
-            nm.notify(notificationID, builder.build())
-        } catch (e: Exception) {
-            L.e { "[Call] showCallNotificationNew failed:${e.message}" }
+            val builder = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_CALL)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
+                .setFullScreenIntent(pendingIntent, true)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setAutoCancel(false)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val person = Person.Builder().setName(title).setKey(roomId).build()
+                val callStyle = NotificationCompat.CallStyle.forIncomingCall(
+                    person,
+                    rejectPendingIntent,
+                    acceptPendingIntent
+                )
+                builder.setStyle(callStyle)
+            } else {
+                builder.addAction(
+                    R.mipmap.chat_ic_call_reject,
+                    ResUtils.getString(R.string.call_reject),
+                    rejectPendingIntent
+                )
+                builder.addAction(
+                    R.mipmap.chat_ic_call_accept,
+                    ResUtils.getString(R.string.call_accept),
+                    acceptPendingIntent
+                )
+                builder.setStyle(NotificationCompat.InboxStyle())
+            }
+
+            L.i { "[Call] showCallNotificationNew notificationID:$notificationID roomId:$roomId" }
+            if (!isActive) return@launch
+            try {
+                nm.notify(notificationID, builder.build())
+            } catch (e: Exception) {
+                L.e { "[Call] showCallNotificationNew failed: ${e.stackTraceToString()}" }
+            }
         }
+        pendingCallNotifyJobs.put(notificationID, job)?.cancel()
+        job.invokeOnCompletion { throwable ->
+            val stillOwner = pendingCallNotifyJobs.remove(notificationID, job)
+            if (throwable != null && stillOwner) nm.cancel(notificationID)
+        }
+        job.start()
     }
 
     private fun createCallIntent(context: Context, callType: CallType, callerId: String, roomId: String, conversationId: String?, action: String? = null, roomName: String, isNeedAppLock: Boolean): Intent {
@@ -822,9 +843,12 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun cancelNotificationsById(id: Int) {
-        L.i { "[MessageNotificationUtil] cancelNotificationsById:${id}" }
+        val pendingCancelled = pendingCallNotifyJobs.remove(id)?.also { it.cancel() } != null
+        L.i { "[MessageNotificationUtil] cancelNotificationsById id=$id pendingCancelled=$pendingCancelled" }
         nm.cancel(id)
     }
+
+    fun hasPendingCallNotification(id: Int): Boolean = pendingCallNotifyJobs.containsKey(id)
 
     fun isNotificationShowing(notificationId: Int): Boolean {
         val activeNotifications = nm.activeNotifications
@@ -1092,13 +1116,18 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
 
-        if (AppForegroundObserver.isForegrounded()) {
+        if (AppForegroundObserver.isForegrounded() && !VoiceRecordingTracker.isRecording) {
             // App已经在前台，直接显示CriticalAlertActivity
             L.i { "[CriticalAlert] App is in foreground, starting CriticalAlertActivity"}
             criticalAlertManager.startCriticalAlertActivity(forWhat.id, alertTitle, alertContent, notificationId, roomId)
         } else {
-            // App在后台，显示通知
-            // 创建点击通知的 Intent, 跳转至 CriticalAlertActivity
+            // App is in background, or in foreground while recording. Launching CriticalAlertActivity
+            // while recording would cover ChatFragment and detach VoiceRecorderView (shipping a
+            // partial voice note). The setFullScreenIntent below is OS-suppressed to heads-up only
+            // when the app is in foreground, so falling through here is the correct system behavior.
+            if (VoiceRecordingTracker.isRecording) {
+                L.i { "[CriticalAlert] suppress Activity launch due to voice recording, fall back to notification notificationId=$notificationId" }
+            }
             L.i { "[CriticalAlert] App is in background, show critical alert notification" }
             val clickIntent = Intent(context, activityProvider.getActivityClass(ActivityType.CRITICAL_ALERT)).apply {
                 action = LCallConstants.CRITICAL_ALERT_ACTION_CLICKED
@@ -1160,7 +1189,7 @@ class MessageNotificationUtil @Inject constructor(
 
             try {
                 val notification = builder.build()
-                L.i { "[CriticalAlert] Notifying critical alert: notificationId=$notificationId, title='$title', content='$alertContent', timestamp=$timestamp"}
+                L.i { "[CriticalAlert] Notifying critical alert: notificationId=$notificationId timestamp=$timestamp"}
                 nm.notify(notificationId, notification)
                 L.d { "[CriticalAlert] Critical alert notification posted successfully: notificationId=$notificationId"}
                 criticalAlertManager.playSoundAndFlashLight(forWhat.id, notificationId)

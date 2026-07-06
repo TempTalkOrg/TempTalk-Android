@@ -1,0 +1,25 @@
+{
+  "code": 0,
+  "data": {
+    "call": {
+      "callServers": {
+        "serviceUrls": {
+          "config_version": 1,
+          "ttl": 3600,
+          "primary": {
+            "addrs": ["10.0.0.1", "10.0.0.2"],
+            "domain": "test-primary.ablivekit.org",
+            "region": "T1"
+          },
+          "fallback": [
+            {
+              "addrs": ["10.0.0.3"],
+              "domain": "test-fallback.ablivekit.org",
+              "region": "T2"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

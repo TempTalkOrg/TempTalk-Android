@@ -3,6 +3,7 @@ package com.difft.android.chat.ui
 import android.app.Activity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
@@ -25,13 +26,17 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.core.text.getSpans
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.bumptech.glide.Glide
+import com.bumptech.glide.integration.webp.WebpHeaderParser
 import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
@@ -45,14 +50,17 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.chat.gif.favorite.collectFavoriteEffects
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
+import com.difft.android.chat.common.OVERSIZED_TEXT_BODY_LENGTH
+import com.difft.android.chat.common.OVERSIZED_TEXT_THRESHOLD
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.CombineForwardBar
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
@@ -64,6 +72,8 @@ import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.NoticeAggregator
+import com.difft.android.chat.jobs.ReactionSendCoordinator
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
@@ -91,6 +101,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.FLAG_GIF
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.Draft
 import difft.android.messageserialization.model.Forward
@@ -99,6 +111,7 @@ import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Mention
 import difft.android.messageserialization.model.Quote
+import difft.android.messageserialization.model.QuotedAttachment
 import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.ReadPosition
 import difft.android.messageserialization.model.RealSource
@@ -112,6 +125,7 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
+import difft.android.messageserialization.model.mapToMessageId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -137,7 +151,11 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.create
 import com.difft.android.chat.mediasend.MediaSendActivityResult
 import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
+import com.difft.android.chat.message.getRelevantAttachment
 import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.media.EncryptedAttachmentAccess
+import com.difft.android.chat.util.QuoteThumbnailBinder
+import com.difft.android.chat.util.isHostActivityAlive
 import com.difft.android.chat.util.ServiceUtil
 import com.difft.android.chat.util.ViewUtil
 import com.difft.android.chat.util.visible
@@ -167,6 +185,29 @@ class ChatMessageInputFragment : Fragment() {
     private val draftViewModel: DraftViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
+
+    // GIF inline-panel VM, scoped to this input fragment (the full-screen search dialog
+    // owns a separate instance so its results never leak into the inline panel).
+    private val gifPanelViewModel: com.difft.android.chat.gif.GifPanelViewModel by viewModels()
+
+    // Favorites VM (M3), scoped to the parent (chat) fragment so the long-press "add to favorites"
+    // entry in the message list fragment shares the same instance. Init pulls + reconciles.
+    private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
+
+    @Inject
+    lateinit var gifSendUseCase: com.difft.android.chat.gif.GifSendUseCase
+
+    /**
+     * Single source of truth for what occupies the ll_chat_actions container.
+     * NONE = collapsed (keyboard or nothing), MORE = more-actions grid, GIF = inline GIF panel.
+     * Drives [syncActionButtons], which is the only place that mutates the left-button
+     * (more / more-close) visibility and switches the container's sub-content.
+     */
+    private enum class PanelMode { NONE, MORE, GIF }
+
+    private var panelMode: PanelMode = PanelMode.NONE
 
     private lateinit var binding: ChatFragmentInputBinding
 
@@ -198,6 +239,9 @@ class ChatMessageInputFragment : Fragment() {
 
     @Inject
     lateinit var pushReactionSendJobFactory: PushReactionSendJobFactory
+
+    @Inject
+    lateinit var reactionSendCoordinator: ReactionSendCoordinator
 
     @Inject
     lateinit var pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory
@@ -233,10 +277,6 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     companion object {
-        const val OVERSIZED_TEXT_THRESHOLD = 4096  // 4KB - when to convert text to file
-        const val OVERSIZED_TEXT_BODY_LENGTH = 2048  // 2KB - truncated text in message body
-        const val MAX_TEXT_FILE_SIZE = 10 * 1024 * 1024  // 10MB - maximum text file size
-
         // If focus was lost more than this before the screenshot callback, the notification
         // panel was likely open. The callback has ~944ms system delay (Pixel Android 14+),
         // so 2000ms safely covers ROM variation while staying below the notification-panel minimum.
@@ -251,7 +291,8 @@ class ChatMessageInputFragment : Fragment() {
         val filePath: String,
         val fileName: String,
         val mimeType: String,
-        val isAudioMessage: Boolean = false
+        val isAudioMessage: Boolean = false,
+        val isGif: Boolean = false
     )
 
     override fun onCreateView(
@@ -270,6 +311,8 @@ class ChatMessageInputFragment : Fragment() {
         isGroup = chatViewModel.forWhat is For.Group
 
         initView()
+
+        setupGifPanel()
 
         chatViewModel.chatUIData.filterNotNull().onEach { data ->
             chatUIData = data
@@ -307,7 +350,10 @@ class ChatMessageInputFragment : Fragment() {
                 val message = it as? TextChatMessage ?: return@collect
                 val text = createQuoteContent(message)
 
-                quote = Quote(it.timeStamp, it.authorId, text, null)
+                // Synchronous assignment: the quote (with its type-entry attachments, NO bytes) is
+                // built and persisted in one pass. The preview is rendered from the replied message's
+                // own local attachment, so no async generation is needed.
+                quote = Quote(it.timeStamp, it.authorId, text, buildQuotedAttachments(message))
                 binding.quoteZone.visibility = View.VISIBLE
 
                 // 显示时：如果是引用自己的消息，显示 "你"；否则从缓存获取作者名称
@@ -322,6 +368,7 @@ class ChatMessageInputFragment : Fragment() {
                 binding.edittextInput.requestFocus()
                 ServiceUtil.getInputMethodManager(activity)
                     .showSoftInput(binding.edittextInput, InputMethodManager.SHOW_IMPLICIT)
+                bindQuoteThumbnailPreview(message)
                 currentDraft = currentDraft.copy(quote = quote)
                 draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
             }
@@ -339,8 +386,16 @@ class ChatMessageInputFragment : Fragment() {
                     if (!isAdded || view == null) return@collect
                     if (messages.isNotEmpty()) {
                         val message = messages.first()
-                        val sharedContactList = message.sharedContacts()
                         if (message.type == 0 || message.type == 1) {
+                            // sharedContacts() + forwardContext() each issue WCDB reads — resolve
+                            // off the main thread. Branch on the resolved forwardContext, not the
+                            // raw FK id: a non-null forwardContextDatabaseId can resolve to null
+                            // (orphaned id / WCDB-KSP NULL→0, #901), which would otherwise forward
+                            // the bare "chat history" placeholder instead of the message.
+                            val (sharedContactList, resolvedForwardContext) = withContext(Dispatchers.IO) {
+                                message.sharedContacts() to message.forwardContext()
+                            }
+                            if (!isAdded || view == null) return@collect
                             val content: String?
                             if (sharedContactList.isNotEmpty()) {
                                 content = ResUtils.getString(R.string.chat_contact_card)
@@ -348,11 +403,12 @@ class ChatMessageInputFragment : Fragment() {
                                 val sharedContactId = sharedContactList.getOrNull(0)?.phone?.getOrNull(0)?.value
                                 val sharedContactName = sharedContactList.getOrNull(0)?.name?.displayName
                                 forwardContext = ForwardContext(emptyList(), false, sharedContactId, sharedContactName)
-                            } else if (message.forwardContextDatabaseId != null) {
+                            } else if (resolvedForwardContext != null) {
                                 content = ResUtils.getString(R.string.chat_history)
-                                forwardContext = message.forwardContext()
-                                forwardContext?.forwards?.forEach { forward ->
-                                    changeAttachmentStatus(forward)
+                                forwardContext = resolvedForwardContext.apply {
+                                    forwards?.forEach { forward ->
+                                        changeAttachmentStatus(forward)
+                                    }
                                 }
                             } else {
                                 content = if (messageToForward.isAttachmentMessage()) {
@@ -380,6 +436,17 @@ class ChatMessageInputFragment : Fragment() {
                                 }, isGroup)
                             }
 
+                            // PRD §5.3: derive mode from the single main-conv source message.
+                            val singleMode = NoticeAggregator.computeCombinedForwardMode(
+                                listOf(messageToForward),
+                                isSubContext = false,
+                            )
+                            // PRD v2.0 §改动1/§改动2 条件①④: trace only if the message is someone
+                            // else's (CF judged by inner authors). The forward/save proceeds either way.
+                            val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContent(
+                                listOf(messageToForward),
+                                globalServices.myId,
+                            )
                             if (saveToNote) {
                                 selectChatsUtils.saveToNotes(
                                     requireActivity(),
@@ -388,7 +455,9 @@ class ChatMessageInputFragment : Fragment() {
                                     // Source conversation = the currently opened chat.
                                     sourceConversation = chatViewModel.forWhat,
                                     // Single selected message → exactly one outer author.
-                                    sourceAuthorIds = listOf(messageToForward.authorId)
+                                    sourceAuthorIds = listOf(messageToForward.authorId),
+                                    combinedForwardMode = singleMode,
+                                    carriesForeignContent = carriesForeignContent,
                                 )
                             } else {
                                 selectChatsUtils.showChatSelectAndSendDialog(
@@ -403,6 +472,8 @@ class ChatMessageInputFragment : Fragment() {
                                     sourceConversation = chatViewModel.forWhat,
                                     // Single selected message → exactly one outer author.
                                     sourceAuthorIds = listOf(messageToForward.authorId),
+                                    combinedForwardMode = singleMode,
+                                    carriesForeignContent = carriesForeignContent,
                                 )
                             }
                             forwardContext = null
@@ -491,8 +562,8 @@ class ChatMessageInputFragment : Fragment() {
                         onForwardClick = {
                             chatViewModel.onForwardClick()
                         },
-                        onCombineClick = {
-                            chatViewModel.onCombineClick()
+                        onCopyClick = {
+                            chatViewModel.onCopyClick()
                         },
                         onSaveClick = {
                             chatViewModel.onSaveSelectedMessages()
@@ -515,6 +586,9 @@ class ChatMessageInputFragment : Fragment() {
                 // Source conversation = the user's current chat, plumbed through ForwardContextData from the ViewModel.
                 sourceConversation = it.sourceConversation,
                 sourceAuthorIds = it.sourceAuthorIds,
+                messageCount = it.messageCount,
+                combinedForwardMode = it.combinedForwardMode,
+                carriesForeignContent = it.carriesForeignContent,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -526,7 +600,10 @@ class ChatMessageInputFragment : Fragment() {
                 it.content,
                 it.forwardContexts,
                 sourceConversation = it.sourceConversation,
-                sourceAuthorIds = it.sourceAuthorIds
+                sourceAuthorIds = it.sourceAuthorIds,
+                messageCount = it.messageCount,
+                combinedForwardMode = it.combinedForwardMode,
+                carriesForeignContent = it.carriesForeignContent,
             )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
@@ -534,15 +611,14 @@ class ChatMessageInputFragment : Fragment() {
 
         chatViewModel.listClick
             .onEach {
-                if (binding.llChatActions.visibility == View.VISIBLE) {
+                if (binding.llChatActions.isVisible) {
                     // Tap list while panel open → close panel (same as "×" button)
                     hidePanel {
                         (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
                     }
                 }
 
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
+                syncActionButtons(PanelMode.NONE)
 
                 updateSubmitButtonView()
             }
@@ -555,7 +631,20 @@ class ChatMessageInputFragment : Fragment() {
                 // MimeTypeMap.getMimeTypeFromExtension("m4a") returns "audio/mpeg" on some vendor
                 // ROMs, which breaks cross-platform receiver rendering (decoded as MP3 / shown as
                 // generic file).
-                prepareSendAttachmentPush(path.toUri(), MediaUtil.AUDIO_MP4, isAudioMessage = true)
+                //
+                // Override the wire-format filename to a neutral "<timestamp>.m4a" (the format
+                // the old MediaRecorder path used) instead of letting it default to the local
+                // basename. The dual-candidate recorder names local files
+                // `voice-<recipe.id>-<timestamp>.m4a` (e.g. `voice-denoised+higher-...m4a`)
+                // for internal lookup, but that internal naming should not leak into the
+                // recipient-visible attachment metadata.
+                val neutralFileName = "${System.currentTimeMillis()}.m4a"
+                prepareSendAttachmentPush(
+                    attachmentUri = path.toUri(),
+                    mimeType = MediaUtil.AUDIO_MP4,
+                    originalFileName = neutralFileName,
+                    isAudioMessage = true,
+                )
             }
             .catch { L.w { "[ChatMessageInputFragment] observe voiceMessageSend error: ${it.stackTraceToString()}" } }
             .launchIn(viewLifecycleOwner.lifecycleScope)
@@ -600,7 +689,6 @@ class ChatMessageInputFragment : Fragment() {
             binding.clRightActions.visibility = View.GONE
             binding.buttonVoice.visibility = View.GONE
             binding.buttonKeyboard.visibility = View.GONE
-            binding.buttonMedia.visibility = View.GONE
             if (!TextUtils.isEmpty(message)) {
                 binding.clRightActions.visibility = View.VISIBLE
                 binding.buttonSubmit.visibility = View.VISIBLE
@@ -619,12 +707,10 @@ class ChatMessageInputFragment : Fragment() {
                     binding.buttonSubmit.visibility = View.VISIBLE
                     binding.buttonVoice.visibility = View.GONE
                     binding.buttonKeyboard.visibility = View.GONE
-                    binding.buttonMedia.visibility = View.GONE
                 } else {
                     binding.buttonSubmit.visibility = View.GONE
                     binding.buttonVoice.visibility = View.VISIBLE
                     binding.buttonKeyboard.visibility = View.GONE
-                    binding.buttonMedia.visibility = View.VISIBLE
                 }
             }
         }
@@ -640,6 +726,8 @@ class ChatMessageInputFragment : Fragment() {
 
     private fun initView() {
         binding.quoteDelete.setOnClickListener {
+            clearQuoteThumbnail()               // clear Glide load + hide the thumbnail ImageView
+
             // Remove from memory
             quote = null
 
@@ -655,6 +743,10 @@ class ChatMessageInputFragment : Fragment() {
         // 设置文件粘贴监听器
         binding.edittextInput.setOnFilePasteListener { uri, mimeType ->
             handleFilePaste(uri, mimeType)
+        }
+
+        binding.edittextInput.setOnStickerCommitListener { info, mimeType ->
+            handleStickerCommit(info, mimeType)
         }
 
         binding.edittextInput.doOnTextChanged { text, start, before, count ->
@@ -737,7 +829,10 @@ class ChatMessageInputFragment : Fragment() {
             }
         }
 
-        binding.buttonMedia.setOnClickListener {
+        // Photo entry moved into the more-actions grid (M2); same behavior as the former
+        // standalone button_media in the input row.
+        binding.buttonPhoto.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             // check permission
             // callback to select picture in onPicturePermissionForMessageResult
             onPicturePermissionForMessage.launchMultiplePermission(PermissionUtil.picturePermissions)
@@ -746,16 +841,13 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonAttachment.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             ScreenLockUtil.temporarilyDisabled = true
-            fileActivityLauncher.launch(
-                Intent(Intent.ACTION_GET_CONTENT).apply {
-                    setType("*/*")
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                }
-            )
+            launchFilePicker()
         }
 
         binding.buttonContact.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             selectChatsUtils.showContactSelectDialog(requireActivity()) { contact ->
                 // 用户取消选择，直接返回
                 if (contact == null) return@showContactSelectDialog
@@ -787,70 +879,11 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonSubmit.setOnClickListener {
-            if (isGroup) { //判断是否仅协调人可发言
-                val group = chatUIData?.group
-                if (group != null && !groupUtil.canSpeak(group, globalServices.myId)) {
-                    ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
-                    return@setOnClickListener
-                }
-            }
+            if (!checkCanSpeak()) return@setOnClickListener
             val message: String = binding.edittextInput.text.toString().trim()
             if (!TextUtils.isEmpty(message)) {
-                // Check if text exceeds maximum file size (10MB) before processing
-                val messageBytes = message.toByteArray(Charsets.UTF_8)
-                if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
-                    ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
-                    L.w { "Text message exceeds MAX_TEXT_FILE_SIZE (${messageBytes.size} bytes), send blocked." }
-                    return@setOnClickListener
-                }
-
-                // Check if text is oversized (>= 4KB) and needs to be converted to file attachment
-                if (messageBytes.size >= OVERSIZED_TEXT_THRESHOLD) {
-                    // Generate file name and create text file in background thread
-                    val timeStamp = System.currentTimeMillis()
-                    val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
-                    val fileName = generateOversizedTextFileName()
-                    val truncatedText = message.utf8Substring(OVERSIZED_TEXT_BODY_LENGTH)
-
-                    L.i { "Text message oversized (${messageBytes.size} bytes), converting to file attachment. Body truncated to $OVERSIZED_TEXT_BODY_LENGTH bytes." }
-
-                    // Create file and send in background thread using coroutines
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        val filePath = withContext(Dispatchers.IO) {
-                            createTextFile(messageId, fileName, message)
-                        }
-
-                        // Check if fragment is still in valid state before UI updates
-                        if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                            return@launch
-                        }
-
-                        if (filePath != null) {
-                            sendTextPush(
-                                content = truncatedText,
-                                timeStamp = timeStamp,
-                                messageId = messageId,
-                                attachmentInfo = AttachmentInfo(
-                                    filePath = filePath,
-                                    fileName = fileName,
-                                    mimeType = CONTENT_TYPE_LONG_TEXT,
-                                    isAudioMessage = false
-                                )
-                            )
-                            // Clear UI only after successful send
-                            binding.edittextInput.setText("")
-                            binding.quoteZone.visibility = View.GONE
-                        } else {
-                            // Keep user input when file creation fails
-                            L.e { "Failed to create text file: file creation exception" }
-                            ToastUtil.show(getString(R.string.chat_status_fail))
-                        }
-                    }
-                } else {
-                    // Send as normal text message
-                    sendTextPush(message)
+                sendValidatedText(message) {
                     binding.edittextInput.setText("")
-                    binding.quoteZone.visibility = View.GONE
                 }
             }
         }
@@ -858,11 +891,18 @@ class ChatMessageInputFragment : Fragment() {
         binding.buttonMoreActions.setOnClickListener {
             val root = parentFragment?.view as? InsetAwareConstraintLayout
 
-            if (binding.llChatActions.visibility == View.VISIBLE) {
-                // Panel already behind keyboard — just hide keyboard to reveal it
-                ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+            if (binding.llChatActions.isVisible) {
+                // Panel already on-screen. Switching GIF -> MORE (or refreshing MORE) must ONLY swap
+                // content in place; re-running showPanel would replay the 0->height animation and
+                // make the panel collapse+re-expand (Issue 1). syncActionButtons(MORE) hides the GIF
+                // ComposeView and shows the grid; no re-animation, no re-freeze.
+                if (panelMode == PanelMode.MORE) {
+                    // Already MORE but behind the keyboard -> just hide keyboard to reveal it.
+                    ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+                }
+                syncActionButtons(PanelMode.MORE)
             } else {
-                // Enter panel mode: freeze padding, show panel, hide keyboard
+                // Panel not visible: enter panel mode fresh (animate), freeze padding, hide keyboard.
                 val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
                     ?.isVisible(WindowInsetsCompat.Type.ime()) == true
                 root?.freezeKeyboardPadding()
@@ -870,14 +910,13 @@ class ChatMessageInputFragment : Fragment() {
                 if (keyboardHeight > 0) {
                     binding.llChatActions.minHeight = keyboardHeight
                 }
+                syncActionButtons(PanelMode.MORE)
                 showPanel(animated = !hasKeyboard)
                 chatViewModel.setVoiceVisibility(false)
                 chatViewModel.showChatActions()
                 ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
             }
 
-            binding.buttonMoreActions.visibility = View.GONE
-            binding.buttonMoreActionsClose.visibility = View.VISIBLE
             isVoiceMode = false
             updateSubmitButtonView()
         }
@@ -885,15 +924,20 @@ class ChatMessageInputFragment : Fragment() {
         binding.buttonMoreActionsClose.setOnClickListener {
             // Show keyboard to replace panel — keyboard slides up as overlay,
             // panel dismissed in onKeyboardAnimationEnded (same as tapping EditText)
-            binding.buttonMoreActions.visibility = View.VISIBLE
-            binding.buttonMoreActionsClose.visibility = View.GONE
+            syncActionButtons(PanelMode.NONE)
 
             isVoiceMode = false
             updateSubmitButtonView()
             ViewUtil.focusAndShowKeyboard(binding.edittextInput)
         }
 
+        binding.buttonGif.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
+            toggleGifPanel()
+        }
+
         binding.buttonVoice.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
             ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
 
             viewLifecycleOwner.lifecycleScope.launch {
@@ -907,9 +951,8 @@ class ChatMessageInputFragment : Fragment() {
                 hidePanel {
                     (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
                 }
-
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
+                // Voice is mutually exclusive with any panel: collapse to NONE.
+                syncActionButtons(PanelMode.NONE)
             }
         }
 
@@ -1095,10 +1138,14 @@ class ChatMessageInputFragment : Fragment() {
                 insertTextToEdittext("@")
 
                 hidePanel(animated = false)
+                syncActionButtons(PanelMode.NONE)
                 ViewUtil.focusAndShowKeyboard(binding.edittextInput)
             }
         } else {
-            binding.buttonAt.visibility = View.GONE
+            // Group-only: hide via INVISIBLE (not GONE) so button_at still occupies its grid cell in
+            // the more-actions Flow. This keeps photo/contact/attachment left-aligned at their fixed
+            // grid columns (same positions as in a group) instead of collapsing/redistributing.
+            binding.buttonAt.visibility = View.INVISIBLE
         }
 
         binding.rvAt.apply {
@@ -1152,6 +1199,7 @@ class ChatMessageInputFragment : Fragment() {
 
                     // Show the quoted text
                     binding.quoteText.text = quote.text
+                    bindQuoteThumbnailPreview(quote)
                 } else {
                     binding.quoteZone.visibility = View.GONE
                 }
@@ -1228,7 +1276,7 @@ class ChatMessageInputFragment : Fragment() {
                         }
                         delay(500)
                         if (body.isNotEmpty()) {
-                            sendTextPush(body)
+                            sendValidatedText(body)
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -1240,6 +1288,36 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    /**
+     * Prefer ACTION_OPEN_DOCUMENT (SAF / DocumentsProvider) over ACTION_GET_CONTENT.
+     *
+     * ACTION_GET_CONTENT can be routed to legacy providers (e.g. some OEM file
+     * managers, stale MediaStore _data entries) that expose metadata but fail the
+     * byte-stream open with ENOENT. ACTION_OPEN_DOCUMENT resolves against the real
+     * filesystem and avoids that. Falls back to ACTION_GET_CONTENT only when no
+     * activity handles ACTION_OPEN_DOCUMENT. Mirrors Signal's AttachmentManager.
+     */
+    private fun launchFilePicker() {
+        val intent = Intent().apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        intent.action = Intent.ACTION_OPEN_DOCUMENT
+        try {
+            fileActivityLauncher.launch(intent)
+            return
+        } catch (e: ActivityNotFoundException) {
+            L.w { "[ChatMessageInputFragment] ACTION_OPEN_DOCUMENT no activity, fallback to GET_CONTENT: ${e.message}" }
+        }
+        intent.action = Intent.ACTION_GET_CONTENT
+        try {
+            fileActivityLauncher.launch(intent)
+        } catch (e: ActivityNotFoundException) {
+            L.w { "[ChatMessageInputFragment] ACTION_GET_CONTENT no activity: ${e.message}" }
+            ToastUtil.showLong(R.string.unsupported_file_type)
+        }
+    }
+
     private val fileActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -1248,7 +1326,7 @@ class ChatMessageInputFragment : Fragment() {
 
         val uri = result.data?.data
         if (uri == null) {
-            ToastUtil.showLong(R.string.unsupported_file_type)
+            ToastUtil.showLong(R.string.file_unavailable)
             return@registerForActivityResult
         }
 
@@ -1268,7 +1346,7 @@ class ChatMessageInputFragment : Fragment() {
             }
 
             if (copyResult == null) {
-                ToastUtil.showLong(R.string.unsupported_file_type)
+                ToastUtil.showLong(R.string.file_unavailable)
                 return@launch
             }
 
@@ -1322,7 +1400,7 @@ class ChatMessageInputFragment : Fragment() {
                         prepareSendAttachmentPush(filePath.toUri(), mimeType, fileName)
                         if (body.isNotEmpty()) {
                             delay(500)
-                            sendTextPush(body)
+                            sendValidatedText(body)
                         }
                     } catch (e: CancellationException) {
                         throw e
@@ -1337,7 +1415,9 @@ class ChatMessageInputFragment : Fragment() {
 
     private fun createQuoteContent(message: TextChatMessage): String {
         val text = if (message.isAttachmentMessage()) {
-            if (message.attachment?.isImage() == true) {
+            if (message.attachment?.isAnimatedImage() == true) {
+                ResUtils.getString(R.string.chat_message_gif)
+            } else if (message.attachment?.isImage() == true) {
                 ResUtils.getString(R.string.chat_message_image)
             } else if (message.attachment?.isVideo() == true) {
                 ResUtils.getString(R.string.chat_message_video)
@@ -1351,7 +1431,10 @@ class ChatMessageInputFragment : Fragment() {
             if (forwardContext?.forwards?.size == 1) {
                 val forward = forwardContext.forwards?.firstOrNull()
                 if (!forward?.attachments.isNullOrEmpty()) {
-                    getString(R.string.chat_message_attachment)
+                    // Type-specific label (gif/image/video/audio) for a forwarded media message,
+                    // matching the normal-attachment branch above instead of a generic "[Attachment]".
+                    val att = forward.attachments?.firstOrNull()
+                    getString(MediaUtil.quoteTypeLabelRes(att?.contentType, att?.flags ?: 0))
                 } else {
                     forward?.text
                 }
@@ -1364,6 +1447,144 @@ class ChatMessageInputFragment : Fragment() {
             message.message.toString()
         }
         return text ?: ""
+    }
+
+    /**
+     * Builds the [QuotedAttachment] list (a single type-entry: contentType/fileName/flags, NO
+     * thumbnail bytes) for a reply to a media message. Returns null for a text-only message (no
+     * attachment). Forward-aware: for a single-forward reply, the relevant attachment is the
+     * forwarded one. The preview is rendered from the replied message's own local file; the wire
+     * carries only the entry so the recipient reverse-looks-up its own local original.
+     */
+    internal fun buildQuotedAttachments(message: TextChatMessage): List<QuotedAttachment>? {
+        val attachment = message.getRelevantAttachment() ?: return null
+        return listOf(
+            QuotedAttachment(
+                contentType = attachment.contentType,
+                fileName = attachment.fileName ?: "",
+                thumbnail = null,
+                flags = attachment.flags
+            )
+        )
+    }
+
+    /**
+     * Local file path of the replied message's media, forward-aware.
+     * - Normal attachment: `getMessageAttachmentFilePath(message.id) + fileName`.
+     * - Single-forward: the forwarded file lives under the attachment's `authorityId` directory
+     *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment:1774.
+     * Returns null if the resolved media is not readable on disk (plaintext or ciphertext).
+     */
+    private fun quoteLocalAttachmentPath(message: TextChatMessage, attachment: Attachment): String? {
+        val forwards = message.forwardContext?.forwards
+        val dirId = if (forwards?.size == 1) attachment.authorityId.toString() else message.id
+        val fileName = attachment.fileName ?: return null
+        val path = FileUtil.getMessageAttachmentFilePath(dirId) + fileName
+        // isReadable (not File.exists): encrypted-at-rest media keeps only the .encrypt on disk; the
+        // loader resolves it to a decrypting content uri via imageGlideModel.
+        return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
+    }
+
+    /** Clears the Glide load and hides the quote thumbnail ImageView (does NOT touch quoteZone). */
+    private fun clearQuoteThumbnail() {
+        // Guard against a dead host: on rapid back-press during send (resetData → finishing Activity)
+        // Glide.with can throw IllegalArgumentException. Mirrors clearQuoteThumbnail(ImageView) in
+        // ChatMessageViewHolder.
+        if (binding.quoteThumbnail.isHostActivityAlive()) {
+            Glide.with(binding.quoteThumbnail).clear(binding.quoteThumbnail)
+        }
+        binding.quoteThumbnail.visibility = View.GONE
+    }
+
+    /**
+     * Binds the compose-bar quote preview from the live replied message (Mac full-type semantics):
+     * audio → mic icon, image/video with a local original on disk → rounded Glide load, image/video
+     * without a local file → GONE (text-only), genuine file → [R.drawable.ic_file], text-only → GONE.
+     */
+    private fun bindQuoteThumbnailPreview(message: TextChatMessage) {
+        val attachment = message.getRelevantAttachment()
+        if (attachment == null) {
+            clearQuoteThumbnail()
+            return
+        }
+        val isAudio = attachment.flags == 1 || MediaUtil.isAudioType(attachment.contentType)
+        if (isAudio) {
+            binding.quoteThumbnail.visibility = View.VISIBLE
+            QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.chat_ic_quote_mic)
+            return
+        }
+        when {
+            MediaUtil.isImageOrVideoType(attachment.contentType) -> {
+                // Stay GONE until the off-main-thread file check confirms a local original —
+                // quoteLocalAttachmentPath does File.exists(), which must not run on the main thread.
+                clearQuoteThumbnail()
+                loadComposeQuoteThumbnailAsync(message.timeStamp) {
+                    quoteLocalAttachmentPath(message, attachment)
+                }
+            }
+            else -> {
+                // Genuine file (pdf/doc/zip/etc.) → file icon.
+                binding.quoteThumbnail.visibility = View.VISIBLE
+                QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.ic_file)
+            }
+        }
+    }
+
+    /**
+     * Resolves a compose-bar quote-thumbnail path off the main thread and applies it only if the
+     * compose quote is still the same one ([expectedQuoteId]) when the lookup returns. Guards both
+     * view teardown (`!isAdded`) AND the quote being dismissed/replaced mid-lookup (the field
+     * [quote] is nulled on delete/reset and reassigned on a new reply) — without that check a stale
+     * lookup could re-show a thumbnail the user already dismissed.
+     */
+    private fun loadComposeQuoteThumbnailAsync(expectedQuoteId: Long, resolve: suspend () -> String?) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val path = withContext(Dispatchers.IO) { resolve() }
+            if (!isAdded || view == null) return@launch
+            if (quote?.id != expectedQuoteId) return@launch // quote dismissed or replaced while resolving
+            if (path == null) {
+                clearQuoteThumbnail()
+                return@launch
+            }
+            binding.quoteThumbnail.visibility = View.VISIBLE
+            QuoteThumbnailBinder.loadRoundedThumbnail(binding.quoteThumbnail, EncryptedAttachmentAccess.imageGlideModel(path))
+        }
+    }
+
+    /**
+     * Draft-restore variant: there is no live [TextChatMessage] in scope, only the deserialized
+     * [Quote]. Renders by type — audio → mic, genuine file → [R.drawable.ic_file], null → GONE.
+     * For image/video the restored [QuotedAttachment] carries no local path, so the original message
+     * is reverse-looked-up locally (by [Quote.id] = original timestamp + the current room) on
+     * [Dispatchers.IO]; its on-disk thumbnail is shown if found, else text-only. Mirrors the list
+     * renderer's [findOriginalAttachmentPath].
+     */
+    private fun bindQuoteThumbnailPreview(quote: Quote?) {
+        val qa = quote?.attachments?.firstOrNull()
+        if (qa == null) {
+            clearQuoteThumbnail()
+            return
+        }
+        val isAudio = qa.flags == 1 || MediaUtil.isAudioType(qa.contentType)
+        when {
+            isAudio -> {
+                binding.quoteThumbnail.visibility = View.VISIBLE
+                QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.chat_ic_quote_mic)
+            }
+            MediaUtil.isImageOrVideoType(qa.contentType) -> {
+                // No inline bytes on restore → reverse-look-up the local original off the main thread.
+                // Stay GONE until/unless the lookup finds a file (avoids a flash of misleading icon).
+                clearQuoteThumbnail()
+                val forWhat = chatViewModel.forWhat
+                loadComposeQuoteThumbnailAsync(quote.id) {
+                    findOriginalAttachmentPath(quote.id, forWhat.id, forWhat.typeValue)
+                }
+            }
+            else -> {
+                binding.quoteThumbnail.visibility = View.VISIBLE
+                QuoteThumbnailBinder.setTypeIcon(binding.quoteThumbnail, R.drawable.ic_file)
+            }
+        }
     }
 
     private val contactsAtAdapter: ContactsAtAdapter by lazy {
@@ -1573,7 +1794,7 @@ class ChatMessageInputFragment : Fragment() {
                 val response = withContext(Dispatchers.IO) {
                     chatHttpClient.httpService
                         .fetchShareConversationConfig(
-                            SecureSharedPrefsUtil.getToken(),
+                            (globalServices.userManager.getUserData()?.microToken ?: ""),
                             GetConversationShareRequestBody(
                                 listOf(messageArchiveManager.conversationParams(chatViewModel.forWhat.id)),
                                 true
@@ -1868,6 +2089,57 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    /** Sends text with size validation: >10MB blocked, ≥4KB → text-file attachment, <4KB → normal. */
+    private fun sendValidatedText(message: String, onSent: (() -> Unit)? = null): Boolean {
+        val messageBytes = message.toByteArray(Charsets.UTF_8)
+        if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
+            ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
+            L.w { "Text message exceeds MAX_TEXT_FILE_SIZE (${messageBytes.size} bytes), send blocked." }
+            return false
+        }
+
+        if (messageBytes.size >= OVERSIZED_TEXT_THRESHOLD) {
+            val timeStamp = System.currentTimeMillis()
+            val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+            val fileName = generateOversizedTextFileName()
+            val truncatedText = message.utf8Substring(OVERSIZED_TEXT_BODY_LENGTH)
+
+            L.i { "Text message oversized (${messageBytes.size} bytes), converting to file attachment. Body truncated to $OVERSIZED_TEXT_BODY_LENGTH bytes." }
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                val filePath = withContext(Dispatchers.IO) {
+                    createTextFile(messageId, fileName, message)
+                }
+
+                if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    return@launch
+                }
+
+                if (filePath != null) {
+                    sendTextPush(
+                        content = truncatedText,
+                        timeStamp = timeStamp,
+                        messageId = messageId,
+                        attachmentInfo = AttachmentInfo(
+                            filePath = filePath,
+                            fileName = fileName,
+                            mimeType = CONTENT_TYPE_LONG_TEXT,
+                            isAudioMessage = false
+                        )
+                    )
+                    onSent?.invoke()
+                } else {
+                    L.e { "Failed to create text file: file creation exception" }
+                    ToastUtil.show(getString(R.string.chat_status_fail))
+                }
+            }
+        } else {
+            sendTextPush(message)
+            onSent?.invoke()
+        }
+        return true
+    }
+
     /**
      * Unified method to send text messages with optional attachment
      * @param content Text content (can be null for attachment-only messages)
@@ -1884,8 +2156,11 @@ class ChatMessageInputFragment : Fragment() {
     ) {
         val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
 
+        // Mentions live in `content`; attachment-only sends must skip them to avoid phantom @-notifications.
+        val hasContent = !content.isNullOrEmpty()
+
         var atPersonsString: String? = null
-        if (mentions.isNotEmpty()) {
+        if (hasContent && mentions.isNotEmpty()) {
             val atPersons = StringBuilder()
             mentions.forEach { mention ->
                 atPersons.append(mention.uid)
@@ -1911,7 +2186,8 @@ class ChatMessageInputFragment : Fragment() {
                         "".toByteArray(),
                         "".toByteArray(),
                         info.fileName,
-                        if (info.isAudioMessage) 1 else 0,
+                        // Mutually exclusive: gif marks the GIF bit, voice keeps 1, else 0.
+                        if (info.isGif) FLAG_GIF else if (info.isAudioMessage) 1 else 0,
                         mediaWidthAndHeight.first,
                         mediaWidthAndHeight.second,
                         info.filePath,
@@ -1940,7 +2216,7 @@ class ChatMessageInputFragment : Fragment() {
                 quote,
                 forwardContext,
                 recall,
-                mentions.toMutableList(),
+                if (hasContent) mentions.toMutableList() else mutableListOf(),
                 atPersonsString,
                 reactions.toMutableList(),
                 screenShot,
@@ -1950,14 +2226,26 @@ class ChatMessageInputFragment : Fragment() {
 
             ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
 
+            // Optimistic add so the sent message renders instantly. Recall/reaction add no bubble.
             if (reactions.isEmpty() && recall == null) {
                 chatViewModel.addOneMessage(textMessage)
             }
 
             checkAndSendAddFriendRequest()
 
-            resetData()
+            resetData(clearInputBoundState = hasContent)
         }
+    }
+
+    /** Returns false (and shows a toast) when the user is restricted by group speak permission. */
+    private fun checkCanSpeak(): Boolean {
+        if (!isGroup) return true
+        val group = chatUIData?.group ?: return true
+        if (!groupUtil.canSpeak(group, globalServices.myId)) {
+            ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
+            return false
+        }
+        return true
     }
 
     /**
@@ -1989,7 +2277,7 @@ class ChatMessageInputFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    ContactorUtil.fetchAddFriendRequest(requireContext(), SecureSharedPrefsUtil.getToken(), chatViewModel.forWhat.id, sourceType, source, action)
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), (globalServices.userManager.getUserData()?.microToken ?: ""), chatViewModel.forWhat.id, sourceType, source, action)
                 }
                 ComposeDialogManager.dismissWait()
                 if (response.status == 0) {
@@ -2012,23 +2300,292 @@ class ChatMessageInputFragment : Fragment() {
     }
 
 
-    private fun resetData() {
-        mentionsSelectedContacts.clear()
-        mentions.clear()
-        prevInputTextLength = 0
+    private fun resetData(clearInputBoundState: Boolean = true) {
+        clearQuoteThumbnail()               // clear thumbnail ImageView (does NOT hide quoteZone itself)
 
         quote = null
         forwardContext = null
         recall = null
         reactions.clear()
         sharedContacts.clear()
+
+        binding.quoteZone.visibility = View.GONE
+
+        // Preserve mentions / length tracker when input text is kept (attachment-only sends).
+        if (clearInputBoundState) {
+            mentionsSelectedContacts.clear()
+            mentions.clear()
+            prevInputTextLength = 0
+        }
     }
 
+    // ==================== GIF panel (M1) ====================
+
+    /**
+     * Wire the inline GIF panel ComposeView, collect its SendGif effect, and listen for the
+     * full-screen search dialog's result. Called once from onViewCreated.
+     */
+    private fun setupGifPanel() {
+        binding.gifPanelCompose.setViewCompositionStrategy(
+            androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.gifPanelCompose.setContent {
+            com.difft.android.base.ui.theme.DifftTheme {
+                com.difft.android.chat.gif.compose.GifInlinePanel(
+                    viewModel = gifPanelViewModel,
+                    favoriteViewModel = favoriteViewModel,
+                    onOpenSearch = { openGifSearchDialog() },
+                    onPickFavorite = { item -> onFavoritePicked(item) }
+                )
+            }
+        }
+
+        // Inline-panel pick -> send the resolved gif.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                gifPanelViewModel.effect.collect { effect ->
+                    when (effect) {
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.SendGif ->
+                            onGifPicked(effect.uri)
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.ShowError ->
+                            L.w { "[ChatMessageInputFragment] gif inline effect error" }
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.FavoriteRemote ->
+                            // Long-press add-to-favorites (Issue 5): forward the raw item to
+                            // FavoriteViewModel as FromRemote — the placeholder + toast are instant
+                            // and the download + trans-store + CAS PUT run in the background.
+                            favoriteViewModel.dispatch(
+                                com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(
+                                    com.difft.android.chat.gif.favorite.FavoriteSource.FromRemote(
+                                        effect.giphyId, effect.previewUrl, effect.width, effect.height
+                                    )
+                                )
+                            )
+                    }
+                }
+            }
+        }
+
+        // Favorites effects (cap dialog / toast).
+        collectFavoriteEffects(favoriteViewModel)
+
+        // Full-screen search dialog result -> send the picked gif.
+        childFragmentManager.setFragmentResultListener(
+            com.difft.android.chat.gif.GifSearchDialogFragment.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val pick = androidx.core.os.BundleCompat.getParcelable(
+                bundle,
+                com.difft.android.chat.gif.GifSearchDialogFragment.RESULT_PICK,
+                com.difft.android.chat.gif.GifSearchDialogFragment.GifPick::class.java
+            ) ?: return@setFragmentResultListener
+            onGifPicked(pick.uri.toUri())
+        }
+    }
+
+    private fun openGifSearchDialog() {
+        if (childFragmentManager.findFragmentByTag(
+                com.difft.android.chat.gif.GifSearchDialogFragment.TAG
+            ) != null
+        ) {
+            return
+        }
+        com.difft.android.chat.gif.GifSearchDialogFragment.newInstance()
+            .show(childFragmentManager, com.difft.android.chat.gif.GifSearchDialogFragment.TAG)
+    }
+
+    /**
+     * Send a resolved gif Uri as an image/webp attachment (v2 sends webp), then collapse the panel.
+     * Width/height ride the SendGif effect for forward use but are not needed here:
+     * the attachment pipeline derives dimensions from the file itself.
+     */
+    private fun onGifPicked(uri: Uri) {
+        // Known-animated GIPHY webp — mark it directly, no header inspection needed.
+        prepareSendAttachmentPush(uri, "image/webp", "gif_${System.currentTimeMillis()}.webp", isGif = true)
+        hideGifPanel()
+    }
+
+    /**
+     * Send a favorited gif. Resolve the decrypted file by fileHash the same way the grid cell does
+     * (cache hit → no network, else download + decrypt) rather than trusting [item.localPath], which
+     * is absent once a row is rebuilt from the server blob (e.g. after a fresh sync / rewrap) — that
+     * was silently throwing and doing nothing.
+     */
+    private fun onFavoritePicked(item: com.difft.android.chat.gif.favorite.FavoriteGifUiItem) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Optimistic placeholder (upload not done yet): send from the preview URL, same as a
+                // search send (works before the ciphertext exists). Confirmed rows decrypt the
+                // encrypted-at-rest attachment via its content:// uri.
+                val sourceUrl = item.sourceUrl
+                val input = if (sourceUrl != null && item.attachmentId == null) {
+                    com.difft.android.chat.gif.GifSendInput.FromUrl(sourceUrl, item.width, item.height)
+                } else {
+                    val contentUri = favoriteViewModel.resolveGif(item.fileHash)
+                    if (contentUri == null) {
+                        L.w { "[ChatMessageInputFragment] favorite pick: resolve failed hash=${item.fileHash}" }
+                        return@launch
+                    }
+                    com.difft.android.chat.gif.GifSendInput.FromFavorite(contentUri.toString(), item.width, item.height)
+                }
+                val uri = gifSendUseCase.resolveSendable(input)
+                onGifPicked(uri)
+            } catch (e: Exception) {
+                L.w { "[ChatMessageInputFragment] favorite pick send failed: ${e.stackTraceToString()}" }
+            }
+        }
+    }
+
+    /**
+     * Toggle the inline GIF panel. Mutually exclusive with the keyboard and the more-actions
+     * grid: shows the GIF ComposeView (hiding the grid Flow) inside the shared ll_chat_actions
+     * container, mirroring the more-actions panel's freeze/showPanel/hideKeyboard handshake.
+     */
+    private fun toggleGifPanel() {
+        if (panelMode == PanelMode.GIF && binding.llChatActions.isVisible) {
+            // GIF panel already open -> return to keyboard.
+            ViewUtil.focusAndShowKeyboard(binding.edittextInput)
+            return
+        }
+
+        // Deferred initial trending load: fire only when the panel is shown, not on VM
+        // creation (conversation open). Idempotent across re-opens.
+        gifPanelViewModel.onPanelShown()
+
+        if (binding.llChatActions.isVisible) {
+            // Panel already on-screen (switching MORE -> GIF): ONLY swap content in place; do not
+            // re-run showPanel (it would replay the 0->height animation and jump). syncActionButtons
+            // (via setActionContentMode) re-applies the GIF ComposeView keyboard-height bound (Issue 1).
+            syncActionButtons(PanelMode.GIF)
+        } else {
+            // Panel not visible: enter GIF panel mode fresh (animate when no keyboard to displace).
+            val root = parentFragment?.view as? InsetAwareConstraintLayout
+            val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            root?.freezeKeyboardPadding()
+            // Use a fallback height when the IME height isn't known yet (keyboard never shown this
+            // session) so the panel is bounded — otherwise the GIF lazy grid fills the whole screen.
+            binding.llChatActions.minHeight = gifPanelHeightPx()
+            syncActionButtons(PanelMode.GIF)
+            showPanel(animated = !hasKeyboard)
+            chatViewModel.setVoiceVisibility(false)
+            ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+        }
+
+        isVoiceMode = false
+        updateSubmitButtonView()
+    }
+
+    private fun hideGifPanel() {
+        if (panelMode != PanelMode.GIF) return
+        hidePanel {
+            (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+        }
+        // Restore the GIF ComposeView's default height so the shared ll_chat_actions container and
+        // the more-actions grid path are unaffected by the keyboard-height bound set on show.
+        binding.gifPanelCompose.updateLayoutParams {
+            height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        syncActionButtons(PanelMode.NONE)
+    }
+
+    /**
+     * Single point that mutates the left action buttons and the ll_chat_actions sub-content for
+     * the given [mode]. Replaces the previously scattered direct `buttonMoreActions`/
+     * `buttonMoreActionsClose` visibility writes and the M1 `setGifPanelContentVisible` helper,
+     * so the panel state never drifts across the keyboard / list-tap / voice / mention / send
+     * dismiss paths.
+     *
+     * - NONE: collapsed. more->VISIBLE, moreClose->GONE, content reset to the grid (so a fresh
+     *   more-actions tap shows the grid, not a stale GIF panel).
+     * - MORE: more-actions grid. more->GONE, moreClose->VISIBLE, grid content shown.
+     * - GIF:  inline GIF panel. more->VISIBLE, moreClose->GONE so the user can tap "+" to switch
+     *   from the GIF panel to the more-actions grid (the GIF button carries its own highlight).
+     *   Tapping "+" routes through the existing MORE path (onClickMoreActions), which sets
+     *   PanelMode.MORE and swaps the content cleanly.
+     */
+    private fun syncActionButtons(mode: PanelMode) {
+        panelMode = mode
+        when (mode) {
+            PanelMode.NONE -> {
+                binding.buttonMoreActions.visibility = View.VISIBLE
+                binding.buttonMoreActionsClose.visibility = View.GONE
+                setActionContentMode(gif = false)
+            }
+            PanelMode.MORE -> {
+                binding.buttonMoreActions.visibility = View.GONE
+                binding.buttonMoreActionsClose.visibility = View.VISIBLE
+                setActionContentMode(gif = false)
+            }
+            PanelMode.GIF -> {
+                binding.buttonMoreActions.visibility = View.VISIBLE
+                binding.buttonMoreActionsClose.visibility = View.GONE
+                setActionContentMode(gif = true)
+            }
+        }
+    }
+
+    /**
+     * Switch ll_chat_actions content between the GIF panel ([gif] = true) and the more-actions
+     * grid ([gif] = false). The grid is driven by the Flow's referenced ids, so the Flow and all
+     * grid items toggle together against the GIF ComposeView.
+     *
+     * Owns the GIF ComposeView fixed height so an IN-PLACE swap into GIF (from a visible MORE panel)
+     * still bounds the grid to the keyboard slot (Issue 1): on [gif] = true it (re)applies
+     * keyboardHeight minus the container's top+bottom padding (the ComposeView sits inside both, so
+     * the panel total still equals keyboardHeight); on [gif] = false it resets to WRAP_CONTENT so the
+     * more-grid / collapsed paths are unaffected.
+     */
+    /**
+     * Height (px) for the GIF panel. Uses the measured IME height when known; otherwise falls back to
+     * a sane default so the panel's lazy grid is bounded instead of filling the screen (the IME height
+     * is unavailable until the keyboard has been shown at least once this session).
+     */
+    private fun gifPanelHeightPx(): Int {
+        val kb = InsetAwareConstraintLayout.getKeyboardHeight(requireContext())
+        return if (kb > 0) kb else (280 * resources.displayMetrics.density).toInt()
+    }
+
+    private fun setActionContentMode(gif: Boolean) {
+        binding.gifPanelCompose.visibility = if (gif) View.VISIBLE else View.GONE
+        if (gif) {
+            val verticalPadding = binding.llChatActions.paddingTop + binding.llChatActions.paddingBottom
+            binding.gifPanelCompose.updateLayoutParams {
+                // Always bind an explicit height (with fallback when the IME height is unknown) so the
+                // lazy grid is bounded; otherwise the GIF panel fills the whole screen.
+                height = (gifPanelHeightPx() - verticalPadding).coerceAtLeast(0)
+            }
+        } else {
+            binding.gifPanelCompose.updateLayoutParams {
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+        }
+        val gridVisibility = if (gif) View.GONE else View.VISIBLE
+        binding.flow.visibility = gridVisibility
+        binding.buttonPhoto.visibility = gridVisibility
+        binding.buttonContact.visibility = gridVisibility
+        binding.buttonAttachment.visibility = gridVisibility
+        // @-mention is group-only. In the grid, a single chat uses INVISIBLE (not GONE) so button_at
+        // still holds its Flow grid cell and the other entries stay at fixed columns; GIF mode hides
+        // the whole grid so GONE is fine there.
+        binding.buttonAt.visibility = when {
+            gif -> View.GONE
+            isGroup -> View.VISIBLE
+            else -> View.INVISIBLE
+        }
+    }
+
+    /**
+     * @param isGif set when the caller already knows the attachment is an animated gif (e.g. the
+     * GIPHY picker). When false and the mime is an image type, the just-copied plaintext file header
+     * is inspected off the main thread to auto-detect an animated gif/webp, so gallery/camera/sticker
+     * image sends carry the GIF flag too.
+     */
     private fun prepareSendAttachmentPush(
         attachmentUri: Uri?,
         mimeType: String,
         originalFileName: String? = null,
-        isAudioMessage: Boolean = false
+        isAudioMessage: Boolean = false,
+        isGif: Boolean = false
     ) {
         attachmentUri ?: return
 
@@ -2039,10 +2596,18 @@ class ChatMessageInputFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val isAnimatedImage = withContext(Dispatchers.IO) {
                     FileUtils.copy(attachmentUri.path, filePath)
+                    // Known-gif callers skip inspection; otherwise auto-detect on image sends only.
+                    if (isGif) true
+                    else if (MediaUtil.isImageType(mimeType)) detectAnimatedImage(filePath, mimeType)
+                    else false
                 }
                 FileUtil.deleteTempFile(FileUtils.getFileName(attachmentUri.path))
+                // Our gif send-cache staging file holds decrypted plaintext; delete it once copied into
+                // the encrypted attachment dir so it never lingers in cache (deleteTempFile above does
+                // not cover the cacheDir/gif_send dir).
+                attachmentUri.path?.takeIf { it.contains("/gif_send/") }?.let { runCatching { File(it).delete() } }
                 sendTextPush(
                     timeStamp = timeStamp,
                     messageId = messageId,
@@ -2050,7 +2615,8 @@ class ChatMessageInputFragment : Fragment() {
                         filePath = filePath,
                         fileName = fileName,
                         mimeType = mimeType,
-                        isAudioMessage = isAudioMessage
+                        isAudioMessage = isAudioMessage,
+                        isGif = isAnimatedImage
                     )
                 )
             } catch (e: CancellationException) {
@@ -2058,6 +2624,36 @@ class ChatMessageInputFragment : Fragment() {
             } catch (e: Exception) {
                 L.w { "[ChatMessageInputFragment] prepareSendAttachmentPush error: ${e.stackTraceToString()}" }
             }
+        }
+    }
+
+    /**
+     * Reads only the file header (never the whole file) to decide whether an outgoing image is an
+     * animated gif/webp. `image/gif` is animated by convention; webp is probed with [WebpHeaderParser].
+     * MUST be called off the main thread. Detection failures default to false (never blocks the send).
+     */
+    private fun detectAnimatedImage(filePath: String, mimeType: String): Boolean {
+        if (mimeType.trim() == MediaUtil.IMAGE_GIF) return true
+        return try {
+            val header = ByteArray(WebpHeaderParser.MAX_WEBP_HEADER_SIZE)
+            // read() may return fewer bytes than requested even mid-stream; a short first read could
+            // truncate the header before the VP8X animation flag and misclassify an animated webp as
+            // static. Loop until the buffer is full or EOF.
+            val read = File(filePath).inputStream().use { input ->
+                var off = 0
+                while (off < header.size) {
+                    val n = input.read(header, off, header.size - off)
+                    if (n < 0) break
+                    off += n
+                }
+                off
+            }
+            if (read <= 0) return false
+            val bytes = if (read == header.size) header else header.copyOf(read)
+            WebpHeaderParser.isAnimatedWebpType(WebpHeaderParser.getType(bytes))
+        } catch (e: Exception) {
+            L.w { "[ChatMessageInputFragment] detectAnimatedImage failed mime=$mimeType: ${e.stackTraceToString()}" }
+            false
         }
     }
 
@@ -2082,40 +2678,55 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
-    /**
-     * Sends a reaction-only message without clearing the composing input.
-     * This is separate from sendTextPush() to avoid clearing the user's draft message
-     * when they react to a message while composing.
-     */
     private fun sendReactionPush(reaction: Reaction, timeStamp: Long) {
         val forWhat = chatViewModel.forWhat
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
+        val textMessage = buildReactionTextMessage(reaction, timeStamp, messageId, forWhat)
 
-        val textMessage = TextMessage(
-            messageId,
-            For.Account(globalServices.myId),
-            forWhat,
-            timeStamp,
-            timeStamp,
-            System.currentTimeMillis(),
-            SendType.Sending.rawValue,
-            chatSettingViewModel.getMessageExpirySeconds(),
-            0,
-            0,
-            0,
-            "",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            mutableListOf(reaction),
-            null,
-            null,
+        val realMessageId = reaction.realSource?.mapToMessageId()?.idValue
+        if (realMessageId == null) {
+            L.w { "[Reaction] realMessageId=null, bypassing dedupe target=${forWhat.id} emoji=${reaction.emoji}" }
+            ApplicationDependencies.getJobManager().add(pushReactionSendJobFactory.create(null, textMessage))
+            return
+        }
+
+        reactionSendCoordinator.enqueueReactionWithDedupe(
+            conversationId = forWhat.id,
+            realMessageId = realMessageId,
+            reaction = reaction,
+            textMessage = textMessage,
+            factory = pushReactionSendJobFactory,
         )
-        ApplicationDependencies.getJobManager().add(pushReactionSendJobFactory.create(null, textMessage))
     }
+
+    private fun buildReactionTextMessage(
+        reaction: Reaction,
+        timeStamp: Long,
+        messageId: String,
+        forWhat: For,
+    ): TextMessage = TextMessage(
+        messageId,
+        For.Account(globalServices.myId),
+        forWhat,
+        timeStamp,
+        timeStamp,
+        System.currentTimeMillis(),
+        SendType.Sending.rawValue,
+        chatSettingViewModel.getMessageExpirySeconds(),
+        0,
+        0,
+        0,
+        "",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        mutableListOf(reaction),
+        null,
+        null,
+    )
 
     private fun recallMessage(messageID: String) {
         ComposeDialogManager.showWait(requireActivity(), cancelable = false)
@@ -2144,7 +2755,6 @@ class ChatMessageInputFragment : Fragment() {
                     resultJob.cancel()
                     ComposeDialogManager.dismissWait()
                     ToastUtil.show(R.string.operation_failed)
-                    resetData()
                     return@launch
                 }
                 if (originMessage.fromWho != globalServices.myId) {
@@ -2152,7 +2762,6 @@ class ChatMessageInputFragment : Fragment() {
                     resultJob.cancel()
                     ComposeDialogManager.dismissWait()
                     ToastUtil.show(R.string.operation_failed)
-                    resetData()
                     return@launch
                 }
                 val textMessage = TextMessage(
@@ -2195,12 +2804,12 @@ class ChatMessageInputFragment : Fragment() {
                     ComposeDialogManager.dismissWait()
                 }
 
-                resetData()
+                recall = null
             } catch (e: Exception) {
                 L.e { "Recall message failed: ${e.stackTraceToString()}" }
                 ComposeDialogManager.dismissWait()
                 ToastUtil.show(R.string.operation_failed)
-                resetData()
+                recall = null
             }
         }
     }
@@ -2307,7 +2916,7 @@ class ChatMessageInputFragment : Fragment() {
             }
 
             if (copyResult == null) {
-                ToastUtil.showLong(R.string.unsupported_file_type)
+                ToastUtil.showLong(R.string.file_unavailable)
                 return@launch
             }
 
@@ -2341,6 +2950,54 @@ class ChatMessageInputFragment : Fragment() {
                     conversationId = chatViewModel.forWhat.id
                 )
                 filePreSendLauncher.launch(filePreSendIntent)
+            }
+        }
+    }
+
+    // IME stickers/GIFs (Gboard, Sogou, etc.) send directly — they are emoji-like, so they skip the
+    // image editor preview (which also can't keep animated WebP/GIF moving) and post the raw file as-is.
+    private fun handleStickerCommit(info: InputContentInfoCompat, mimeType: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            // try/finally guarantees the temporary IME read grant is released on every exit path.
+            try {
+                if (!isGroup && !isFriend) {
+                    ToastUtil.show(R.string.contact_non_friend_text_only)
+                    return@launch
+                }
+                // Same muted-member gate every other send path uses.
+                if (!checkCanSpeak()) return@launch
+                // We only advertise image/* to the IME; ignore anything else a keyboard might commit.
+                if (!MediaUtil.isImageType(mimeType)) {
+                    L.w { "[ChatMessageInputFragment] sticker commit ignored, non-image mimeType=$mimeType" }
+                    return@launch
+                }
+
+                val fileSize = withContext(Dispatchers.IO) { FileUtil.getFileSize(info.contentUri) }
+                if (!isAdded || view == null) return@launch
+                if (fileSize >= FileUtil.MAX_SUPPORT_FILE_SIZE) {
+                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                    return@launch
+                }
+
+                val copyResult = withContext(Dispatchers.IO) {
+                    runCatching { FileUtil.copyUriToFile(info.contentUri) }
+                        .onFailure { L.e { "[ChatMessageInputFragment] sticker copyUriToFile failed: ${it.stackTraceToString()}" } }
+                        .getOrNull()
+                }
+
+                if (copyResult == null) {
+                    ToastUtil.showLong(R.string.unsupported_file_type)
+                    return@launch
+                }
+
+                if (!isAdded || view == null) return@launch
+
+                // The committed file name comes from an untrusted IME content provider; drop it if unsafe
+                // (the temp file is UUID-named) so it can't influence the destination attachment path.
+                val safeFileName = copyResult.originalFileName?.takeIf { FileUtil.isFileNameValid(it) }
+                prepareSendAttachmentPush(copyResult.tempFile.toUri(), mimeType, safeFileName)
+            } finally {
+                runCatching { info.releasePermission() }
             }
         }
     }
@@ -2428,12 +3085,12 @@ class ChatMessageInputFragment : Fragment() {
         keyboardStateListener = object : InsetAwareConstraintLayout.KeyboardStateListener {
             override fun onKeyboardShown() {
                 if (!isAdded || view == null) return
-                val panelVisible = binding.llChatActions.visibility == View.VISIBLE
+                val panelVisible = binding.llChatActions.isVisible
                 if (!panelVisible) {
                     hidePanel(animated = false)
                 }
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
+                // Keyboard is mutually exclusive with any panel (MORE or GIF): collapse to NONE.
+                syncActionButtons(PanelMode.NONE)
                 updateSubmitButtonView()
             }
             override fun onKeyboardHidden() {
@@ -2442,10 +3099,13 @@ class ChatMessageInputFragment : Fragment() {
             }
             override fun onKeyboardAnimationEnded(isKeyboardVisible: Boolean) {
                 if (!isAdded || view == null) return
-                val panelVisible = binding.llChatActions.visibility == View.VISIBLE
+                val panelVisible = binding.llChatActions.isVisible
                 if (isKeyboardVisible && panelVisible) {
                     hidePanel(animated = false)
                     insetLayout.releaseKeyboardPaddingFreeze()
+                    // Keyboard replaced the panel: reset content to the grid so the next
+                    // more-actions tap shows the grid, not a stale GIF panel.
+                    syncActionButtons(PanelMode.NONE)
                 }
             }
         }.also { insetLayout.addKeyboardStateListener(it) }

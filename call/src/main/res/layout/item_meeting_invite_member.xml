@@ -54,6 +54,7 @@
             android:layout_width="8dp"
             android:layout_height="2dp"
             android:layout_gravity="center"
+            android:importantForAccessibility="no"
             android:src="@drawable/ic_remove_minus"
             android:scaleType="fitCenter" />
     </FrameLayout>

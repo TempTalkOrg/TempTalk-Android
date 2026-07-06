@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.utils.globalServices
 import com.difft.android.messageserialization.db.store.DBRoomStore
@@ -27,11 +26,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
@@ -50,6 +52,28 @@ class ChatSettingViewModel @AssistedInject constructor(
 ) : ViewModel() {
     private val _conversationSet = MutableStateFlow<ConversationSetResponseBody?>(null)
     val conversationSet: StateFlow<ConversationSetResponseBody?> = _conversationSet.asStateFlow()
+
+    /**
+     * Message expiry derived from [conversationSet], falling back to the default archive time
+     * when no config is loaded. Exposed as [StateFlow] so Compose can collect via
+     * `collectAsState()` without invoking flow operators inside composition
+     * (see lint rule FlowOperatorInvokedInComposition).
+     */
+    val messageExpiry: StateFlow<Long> = conversationSet
+        .map { it?.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime() }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            messageArchiveManager.getDefaultMessageArchiveTime()
+        )
+
+    /**
+     * Save-to-photos value derived from [conversationSet]. Exposed as [StateFlow] so Compose
+     * can collect via `collectAsState()` without invoking flow operators inside composition.
+     */
+    val saveToPhotos: StateFlow<Int?> = conversationSet
+        .map { it?.saveToPhotos }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
      * 获取当前会话配置的快照值
@@ -157,7 +181,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService
                         .fetchConversationSet(
-                            SecureSharedPrefsUtil.getBasicAuth(),
+                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             ConversationSetRequestBody(
                                 conversation = conversation,
                                 remark = remark,
@@ -230,7 +254,7 @@ class ChatSettingViewModel @AssistedInject constructor(
             try {
                 val response = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchGetConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         GetConversationSetRequestBody(listOf(conversationId))
                     )
                 }

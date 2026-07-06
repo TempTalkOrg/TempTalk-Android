@@ -1,15 +1,12 @@
 package com.difft.android.call.manager
 
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -32,18 +29,11 @@ import javax.inject.Singleton
  * - 超时后执行回调
  */
 @Singleton
-class CallTimeoutManager @Inject constructor() {
-    
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        @ChativeHttpClientModule.Call
-        fun callHttpClient(): ChativeHttpClient
-    }
-    
+class CallTimeoutManager @Inject constructor(
+    @ChativeHttpClientModule.Call private val callHttpClient: dagger.Lazy<ChativeHttpClient>,
+) {
     private val callService by lazy {
-        val callHttpClient = EntryPointAccessors.fromApplication<EntryPoint>(ApplicationHelper.instance).callHttpClient()
-        callHttpClient.getService(LCallHttpService::class.java)
+        callHttpClient.get().getService(LCallHttpService::class.java)
     }
     
     // 存储每个 roomId 对应的超时检测任务
@@ -168,7 +158,7 @@ class CallTimeoutManager @Inject constructor() {
      */
     private suspend fun checkCallStatus(roomId: String, callBack: (Boolean) -> Unit) {
         try {
-            val token = SecureSharedPrefsUtil.getToken()
+            val token = (globalServices.userManager.getUserData()?.microToken ?: "")
             if (token.isNullOrEmpty()) {
                 L.e { "[Call] CallTimeoutManager checkCallStatus failed: missing authentication token" }
                 callBack(false)

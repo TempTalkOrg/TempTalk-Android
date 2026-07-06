@@ -2,10 +2,10 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
 }
@@ -19,12 +19,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    kapt {
-        correctErrorTypes = true
-    }
-
-    viewBinding.isEnabled = true
     buildFeatures {
+        viewBinding = true
         buildConfig = true
         compose = true
     }
@@ -37,12 +33,6 @@ android {
         enable = true
     }
 
-    // Workaround: kotlin-kapt does not register a Kotlin compilation task for
-    // the testFixtures source set. Include testFixtures Kotlin sources in the
-    // unit-test compilation so tests can use shared infrastructure.
-    sourceSets.getByName("test") {
-        java.srcDir("src/testFixtures/kotlin")
-    }
 
     buildTypes {
         getByName("release") {
@@ -119,8 +109,7 @@ dependencies {
 
     // Hilt
     api(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    kapt(libs.kotlin.metadata.jvm)
+    ksp(libs.hilt.compiler)
 
     // Coroutines
     api(libs.kotlinx.coroutines.android)
@@ -128,19 +117,35 @@ dependencies {
     // UI
     api(libs.binding)
     api(libs.glide)
-    kapt(libs.glide.compiler)
+    ksp(libs.glide.ksp)
+    // zjupure webp decoder — animated WebP via @GlideModule (api exposes WebpDrawable/Transformation
+    // to :chat). Kept on Glide 5: its built-in AnimatedImageDecoder is unreliable for WebP in lists
+    // (bumptech #5176/#5477). Built for 4.16 but runs unchanged on 5.0.7.
+    api(libs.glide.webpdecoder)
     api(libs.android.svg)
 
     // 日志
     api(libs.timber)
     api(platform(libs.firebase.bom))
     api(libs.firebase.crashlytics.ktx)
+    api(libs.firebase.perf.ktx)
     api(libs.slf4j.api)
     api(libs.logback.android)
 
     // 安全
+    // Retained for the legacy EncryptedSharedPreferences reader path used by storage
+    // migration lambdas (issue #725 v(N+1) → v(N+4) retention window).
     api(libs.security.crypto)
     api(libs.firebase.analytics.ktx)
+
+    // Storage layer (issue #725): DataStore + Tink AEAD + kotlinx-serialization protobuf.
+    // Exported as api(...) so :app, :network, :call, :chat, :database can inject the
+    // storage qualifiers (`@SecureUserDataStore`, `@SecureConfigDataStore`, `@AppStateDataStore`)
+    // without per-module dependency declarations.
+    api(libs.datastore)
+    api(libs.datastore.preferences)
+    api(libs.tink.android)
+    api(libs.kotlinx.serialization.protobuf)
 
     // 刷新布局
     api(libs.bundles.smart.refresh)
@@ -190,4 +195,10 @@ dependencies {
     testFixturesImplementation(libs.junit)
     testFixturesImplementation(libs.kotlinx.coroutines.test)
     testFixturesImplementation(libs.mockk)
+    // ShadowThrowingService is a Robolectric @Implements shadow living in
+    // testFixtures. AGP 9 built-in Kotlin compiles testFixtures as its own
+    // Kotlin source set (kapt previously folded it into the test compilation,
+    // where it inherited testImplementation(robolectric)); the dependency must
+    // now be declared on the testFixtures classpath explicitly.
+    testFixturesImplementation(libs.robolectric)
 }

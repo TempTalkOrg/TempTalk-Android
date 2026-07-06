@@ -128,7 +128,7 @@ class LocalMessageCreatorForwardNoticeTest {
         mockkStatic("org.difft.app.database.WCDBExtensionsKt")
         every { wcdb.getContactorsFromAllTable(any(), any()) } returns emptyList()
 
-        creator = LocalMessageCreator(context, messageStore, messageArchiveManager)
+        creator = LocalMessageCreator(context, messageStore, messageArchiveManager, Gson())
     }
 
     @After

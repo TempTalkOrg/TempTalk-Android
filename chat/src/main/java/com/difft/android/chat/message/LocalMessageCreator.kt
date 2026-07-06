@@ -11,6 +11,7 @@ import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.util.ForwardNoticeRenderer
+import com.difft.android.chat.util.MessageActivityNoticeRenderer
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.websocket.api.messages.Data
@@ -21,6 +22,7 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT
 import difft.android.messageserialization.model.ForwardNoticeData
+import difft.android.messageserialization.model.MessageActivityNoticeData
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.TextMessage
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +44,8 @@ import javax.inject.Singleton
 class LocalMessageCreator @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val messageStore: MessageStore,
-    private val messageArchiveManager: MessageArchiveManager
+    private val messageArchiveManager: MessageArchiveManager,
+    private val gson: Gson,
 ) {
 
     companion object {
@@ -65,8 +68,6 @@ class LocalMessageCreator @Inject constructor(
         }
     }
 
-    private val gson = Gson()
-
     /**
      * 为群消息设置 receiverIds
      * 只有自己发送的群消息才需要设置 receiverIds
@@ -80,7 +81,7 @@ class LocalMessageCreator @Inject constructor(
                 .filter { it != globalServices.myId }
                 .toMutableSet()
             if (receiverIds.isNotEmpty()) {
-                this.receiverIds = globalServices.gson.toJson(receiverIds)
+                this.receiverIds = gson.toJson(receiverIds)
             }
         }
         return this
@@ -377,6 +378,69 @@ class LocalMessageCreator @Inject constructor(
         L.i {
             "[$TAG] createForwardNoticeMessage success, messageId=$messageId, " +
                 "scene=${noticeData.scene}, count=${noticeData.messageCount}, " +
+                "authors=${noticeData.sourceAuthorIds.size}"
+        }
+        message
+    }
+
+    /** Mirrors [createForwardNoticeMessage] for COPY (and future activity) notices. */
+    suspend fun createActivityNoticeMessage(
+        operatorId: String,
+        forWhat: For,
+        noticeData: MessageActivityNoticeData,
+        systemShowTimestamp: Long,
+        timestamp: Long,
+        sourceDevice: Int = DEFAULT_DEVICE_ID
+    ): NotifyMessage = withContext(Dispatchers.IO) {
+        val expiresInSeconds = messageArchiveManager.getMessageArchiveTime(forWhat, false).toInt()
+        val messageId = generateMessageId(timestamp, operatorId, sourceDevice)
+
+        val idsToResolve = buildSet {
+            add(operatorId)
+            addAll(noticeData.sourceAuthorIds)
+        }
+        val myId = globalServices.myId
+        val preferredGid = (forWhat as? For.Group)?.id
+        val contactorMap = wcdb.getContactorsFromAllTable(idsToResolve.toList(), preferredGid)
+            .associateBy { it.id }
+        val nameCache: Map<String, String> = idsToResolve.associateWith { id ->
+            contactorMap[id]?.getDisplayNameForUI() ?: id.formatBase58Id()
+        }
+
+        val showContent = MessageActivityNoticeRenderer.render(
+            operatorId = operatorId,
+            myId = myId,
+            notice = noticeData,
+            context = context
+        ) { id -> nameCache[id] ?: id.formatBase58Id() }
+
+        val ttNotify = TTNotifyMessage(
+            data = null,
+            notifyTime = timestamp,
+            notifyType = TTNotifyMessage.NOTIFY_ACTION_TYPE_COPY_NOTICE,
+            showContent = showContent,
+            display = 1
+        )
+
+        val message = NotifyMessage(
+            messageId,
+            For.Account(operatorId),
+            forWhat,
+            systemShowTimestamp,
+            timestamp,
+            System.currentTimeMillis(),
+            SendType.Sent.rawValue,
+            expiresInSeconds,
+            0,
+            0,
+            0,
+            gson.toJson(ttNotify)
+        )
+
+        messageStore.putWhenNonExist(message)
+        L.i {
+            "[$TAG] createActivityNoticeMessage success, messageId=$messageId, " +
+                "type=${noticeData.type}, count=${noticeData.messageCount}, " +
                 "authors=${noticeData.sourceAuthorIds.size}"
         }
         message

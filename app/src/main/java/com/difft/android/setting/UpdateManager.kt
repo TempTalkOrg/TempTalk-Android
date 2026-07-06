@@ -3,9 +3,9 @@ package com.difft.android.setting
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.text.TextUtils
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
@@ -15,12 +15,12 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ResUtils.getString
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
 import com.difft.android.network.di.ChativeHttpClientModule
+import com.difft.android.security.SecurityLib
 import com.difft.android.setting.data.CheckUpdateResponse
 import com.difft.android.setting.repo.SettingRepo
 import com.difft.android.base.widget.ComposeDialogManager
@@ -73,7 +73,7 @@ class UpdateManager @Inject constructor(
                     }
                 } else {
                     val result = withContext(Dispatchers.IO) {
-                        settingRepo.checkUpdate(SecureSharedPrefsUtil.getToken(), PackageUtil.getAppVersionName() ?: "")
+                        settingRepo.checkUpdate((userManager.getUserData()?.microToken ?: ""), PackageUtil.getAppVersionName() ?: "")
                     }
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()
@@ -166,20 +166,37 @@ class UpdateManager @Inject constructor(
             showCancel = !isForce,
             cancelable = !isForce,
             onConfirm = {
-                ScreenLockUtil.temporarilyDisabled = true
-                try {
-                    if (!apkFile.exists()) {
-                        L.e { "APK file does not exist: ${apkFile.absolutePath}" }
-                        ToastUtil.show(R.string.status_upgrade_install_failed)
-                        return@showMessageDialog
+                appScope.launch {
+                    val errorRes = withContext(Dispatchers.IO) {
+                        if (!apkFile.exists()) {
+                            L.e { "APK file does not exist: ${apkFile.absolutePath}" }
+                            R.string.status_upgrade_install_failed
+                        } else if (!SecurityLib.checkApkFileSign(context, apkFile.absolutePath, context.packageName)) {
+                            L.e { "[UpdateManager] install rejected: apk signature not in whitelist." }
+                            apkFile.delete()
+                            R.string.status_upgrade_verify_failed
+                        } else {
+                            0
+                        }
                     }
-                    val authority: String = context.applicationContext.packageName + ".provider"
-                    val uri = FileProvider.getUriForFile(context, authority, apkFile)
-                    installAPK(context, uri, apkFile)
-                } catch (e: IllegalArgumentException) {
-                    L.e { "FileProvider failed to find configured root for: ${apkFile.absolutePath}" }
-                    L.e { "Error: ${e.message}" }
-                    ToastUtil.show(R.string.status_upgrade_install_failed)
+                    withContext(Dispatchers.Main) {
+                        if (errorRes != 0) {
+                            ToastUtil.show(errorRes)
+                            return@withContext
+                        }
+                        try {
+                            val authority: String = context.applicationContext.packageName + ".provider"
+                            val uri = FileProvider.getUriForFile(context, authority, apkFile)
+                            // 仅在 FileProvider 成功、真正调起系统安装器（会切到后台）前才豁免锁屏；
+                            // 放在 getUriForFile 之后，避免它抛异常时误留豁免位导致一次锁屏被跳过。
+                            ScreenLockUtil.temporarilyDisabled = true
+                            installAPK(context, uri, apkFile)
+                        } catch (e: IllegalArgumentException) {
+                            L.e { "FileProvider failed to find configured root for: ${apkFile.absolutePath}" }
+                            L.e { "Error: ${e.message}" }
+                            ToastUtil.show(R.string.status_upgrade_install_failed)
+                        }
+                    }
                 }
             }
         )
@@ -226,14 +243,14 @@ class UpdateManager @Inject constructor(
         val playPackage = "com.android.vending"
         try {
             PackageUtil.getAppVersionName()
-            val currentPackageUri: Uri = Uri.parse("market://details?id=" + context.packageName)
+            val currentPackageUri: Uri = ("market://details?id=" + context.packageName).toUri()
             val intent = Intent(Intent.ACTION_VIEW, currentPackageUri)
             intent.setPackage(playPackage)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } catch (e: Exception) {
             L.w { "[UpdateManager] openGooglePlay error: ${e.stackTraceToString()}" }
-            val currentPackageUri: Uri = Uri.parse("https://play.google.com/store/apps/details?id=" + context.packageName)
+            val currentPackageUri: Uri = ("https://play.google.com/store/apps/details?id=" + context.packageName).toUri()
             val intent = Intent(Intent.ACTION_VIEW, currentPackageUri)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
@@ -243,7 +260,7 @@ class UpdateManager @Inject constructor(
     private fun upgradeApk(context: Context, url: String, apkHash: String, isForce: Boolean = false) {
         val fileDir = FileUtil.getFilePath(FileUtil.FILE_DIR_UPGRADE)
 
-        val filename = Uri.parse(url).lastPathSegment?.let {
+        val filename = url.toUri().lastPathSegment?.let {
             if (it.endsWith(".apk")) it else null
         } ?: "${CryptoUtil.bytesToHex(CryptoUtil.sha256(url.toByteArray(Charsets.UTF_8)))}.apk"
 
@@ -268,7 +285,7 @@ class UpdateManager @Inject constructor(
                 try {
                     // 在 IO 线程执行验证
                     val isValid = withContext(Dispatchers.IO) {
-                        verifyApk(filePath, apkHash)
+                        verifyApk(context, filePath, apkHash)
                     }
                     
                     // 切换到主线程处理结果
@@ -284,6 +301,10 @@ class UpdateManager @Inject constructor(
                         } else {
                             // If the hash verification code fails, it will be downloaded.
                             L.i { "UpdateManager upgradeApk verify failed, invoke service download and install." }
+                            // 删除校验失败（hash 不符或签名不在白名单）的旧文件，避免带病复用并触发无谓的重下循环。
+                            if (file.exists()) {
+                                file.delete()
+                            }
                             startDownloadService(context, url, apkHash, filePath, isForce)
                         }
                     }
@@ -337,16 +358,23 @@ class UpdateManager @Inject constructor(
 
         val ACTION_APK_DOWNLOAD_COMPLETED: String by lazy { "${application.packageName}.APK_DOWNLOAD_COMPLETED" }
 
-        fun verifyApk(apkPath: String, apkHash: String): Boolean {
+        fun verifyApk(context: Context, apkPath: String, apkHash: String): Boolean {
             if (TextUtils.isEmpty(apkPath)) {
                 return false
             }
             try {
-                // 使用流式哈希计算，避免一次性读取整个文件到内存
+                // 1. 完整性校验：流式计算 SHA256，避免一次性读取整个文件到内存
                 val hash = calculateFileSha256(File(apkPath))
-                if (hash.equals(apkHash, ignoreCase = true)) {
-                    return true
+                if (!hash.equals(apkHash, ignoreCase = true)) {
+                    L.w { "[UpdateManager] verifyApk hash mismatch." }
+                    return false
                 }
+                // 2. 来源校验：强制校验下载 APK 的签名证书是否在硬编码白名单内。
+                if (!SecurityLib.checkApkFileSign(context, apkPath, context.packageName)) {
+                    L.e { "[UpdateManager] verifyApk signature not in whitelist, reject install." }
+                    return false
+                }
+                return true
             } catch (e: Exception) {
                 L.w { "[UpdateManager] verifyApk error: ${e.stackTraceToString()}" }
             }
@@ -371,22 +399,10 @@ class UpdateManager @Inject constructor(
 
         fun installAPK(context: Context, apkUri: Uri, apkFile: File?) {
             val intent = Intent()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                //安卓7.0版本以上安装
-                intent.action = Intent.ACTION_VIEW
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                intent.setDataAndType(apkUri, "application/vnd.android.package-archive")
-            } else {
-                //安卓6.0-7.0版本安装
-                intent.action = Intent.ACTION_DEFAULT
-                intent.addCategory(Intent.CATEGORY_DEFAULT)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                apkFile?.let {
-                    intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive")
-                }
-            }
+            intent.action = Intent.ACTION_VIEW
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive")
             try {
                 context.startActivity(intent)
             } catch (e: Exception) {

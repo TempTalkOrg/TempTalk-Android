@@ -6,7 +6,6 @@ import android.content.Context;
 import android.database.Cursor;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
@@ -232,10 +231,9 @@ public class PictureFileUtils {
     @SuppressLint("NewApi")
     public static String getPath(final Context ctx, final Uri uri) {
         Context context = ctx.getApplicationContext();
-        final boolean isKitKat = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT;
 
         // DocumentProvider
-        if (isKitKat && DocumentsContract.isDocumentUri(context, uri)) {
+        if (DocumentsContract.isDocumentUri(context, uri)) {
             if (isExternalStorageDocument(uri)) {
                 final String docId = DocumentsContract.getDocumentId(uri);
                 final String[] split = docId.split(":");
@@ -444,15 +442,9 @@ public class PictureFileUtils {
      * @return
      */
     public static Uri parUri(Context context, File cameraFile) {
-        Uri imageUri;
         String authority = context.getPackageName() + ".luckProvider";
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
-            //通过FileProvider创建一个content类型的Uri
-            imageUri = FileProvider.getUriForFile(context, authority, cameraFile);
-        } else {
-            imageUri = Uri.fromFile(cameraFile);
-        }
-        return imageUri;
+        //通过FileProvider创建一个content类型的Uri
+        return FileProvider.getUriForFile(context, authority, cameraFile);
     }
 
     /**

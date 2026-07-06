@@ -1,12 +1,13 @@
 package com.difft.android.login.viewmodel
 
+import com.difft.android.base.utils.globalServices
+
 import android.app.Activity
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.wcdb
 import com.difft.android.chat.common.upload.ContactAvatarUploader
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -28,7 +29,9 @@ import org.difft.app.database.models.DBContactorModel
 import javax.inject.Inject
 
 @HiltViewModel
-class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
+class ContactProfileSettingViewModel @Inject constructor(
+    private val gson: Gson,
+) : ViewModel() {
 
     @ChativeHttpClientModule.Chat
     @Inject
@@ -49,7 +52,7 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
         name: String?,
         contactor: ContactorModel?
     ) {
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
         mSetProfileResultData.value = Resource.loading()
 
         viewModelScope.launch {
@@ -76,7 +79,7 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
                 } else {
                     val meta = contactAvatarUploader.uploadAvatar(filePath)
 
-                    val avatar = Gson().toJson(
+                    val avatar = gson.toJson(
                         AvatarRequestBody(
                             encAlgo = ContactAvatarUploader.AVATAR_ENC_ALGO,
                             encKey = meta.encryptionKey,
@@ -88,7 +91,7 @@ class ContactProfileSettingViewModel @Inject constructor() : ViewModel() {
                     if (profileResult.status == 0) {
                         contactor?.let {
                             contactor.name = name
-                            contactor.avatar = Gson().toJson(
+                            contactor.avatar = gson.toJson(
                                 AvatarResponse(
                                     attachmentId = meta.serverId,
                                     encAlgo = ContactAvatarUploader.AVATAR_ENC_ALGO,

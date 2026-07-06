@@ -8,7 +8,7 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.annotation.RequiresApi
+import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.difft.android.base.log.lumberjack.L
@@ -146,7 +146,7 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
         }
 
         sharedViewModel.state.observe(viewLifecycleOwner) { incomingState ->
-            val focusedUri = Uri.parse(incomingState.focusedMedia?.realPath)
+            val focusedUri = incomingState.focusedMedia?.realPath?.toUri()
             val currentlyFocused = focusedUri != null && focusedUri == uri
             if (MediaConstraints.isVideoTranscodeAvailable()) {
                 if (currentlyFocused) {
@@ -174,7 +174,6 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
         }
     }
 
-    @RequiresApi(23)
     private fun bindVideoTimeline(data: VideoTrimData) {
         startTimeUs = data.startTimeUs
 
@@ -227,10 +226,8 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
     }
 
     private fun startPositionUpdates() {
-        if (Build.VERSION.SDK_INT >= 23) {
-            stopPositionUpdates()
-            handler.post(updatePosition)
-        }
+        stopPositionUpdates()
+        handler.post(updatePosition)
     }
 
     private fun stopPositionUpdates() {
@@ -264,7 +261,6 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
         hud.showPlayButton()
     }
 
-    @RequiresApi(23)
     private fun onEditVideoDuration(data: VideoTrimData, editingComplete: Boolean) {
         if (editingComplete) {
             isInEdit = false

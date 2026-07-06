@@ -1,7 +1,7 @@
 package com.difft.android.websocket.api.util
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil.getSignalingKey
+import com.difft.android.base.utils.globalServices
 import org.signal.libsignal.protocol.InvalidVersionException
 import com.difft.android.websocket.api.util.PipeDecryptTool.getCipherKey
 import com.difft.android.websocket.api.util.PipeDecryptTool.getMacKey
@@ -22,7 +22,7 @@ object EnvelopDeserializer {
 
     private fun parseSignalServiceEnvelop(body: ByteArray): Envelope? {
         val envelope: Envelope? = try {
-            val signalingKey = getSignalingKey()
+            val signalingKey = globalServices.userManager.getUserData()?.signalingKey ?: ""
             // 该过程包含对 envelop 数据通道加密的解密过程，不包含端上加密的解密过程
             val input = body
             if (input.size < VERSION_LENGTH || input[VERSION_OFFSET].toInt() != SUPPORTED_VERSION) {

@@ -17,16 +17,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 
 @Composable
 fun OneOnOneHangupButton(onHangup: () -> Unit) {
     Row(
         modifier = Modifier
+            .testTag("call_btn_hangup")
             .width(50.dp)
             .height(48.dp)
             .clickable(
@@ -51,7 +53,7 @@ fun OneOnOneHangupButton(onHangup: () -> Unit) {
                     .width(48.dp)
                     .height(48.dp)
                     .background(
-                        color = colorResource(id = com.difft.android.base.R.color.error),
+                        color = DifftTheme.colors.error,
                         shape = RoundedCornerShape(size = 100.dp)
                     )
                     .padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
@@ -86,11 +88,12 @@ fun GroupCallLeaveButton(
         Box(
             contentAlignment = Alignment.CenterEnd,
             modifier = Modifier
+                .testTag("call_btn_end_choices")
                 .align(Alignment.CenterEnd)
                 .width(54.dp)
                 .height(48.dp)
                 .background(
-                    color = colorResource(id = com.difft.android.base.R.color.bg2_night),
+                    color = DifftTheme.colors.backgroundSecondary,
                     shape = RoundedCornerShape(
                         topStart = 0.dp, topEnd = 100.dp,
                         bottomStart = 0.dp, bottomEnd = 100.dp
@@ -115,10 +118,11 @@ fun GroupCallLeaveButton(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
+                .testTag("call_btn_leave")
                 .align(Alignment.CenterStart)
                 .size(48.dp)
                 .background(
-                    color = colorResource(id = com.difft.android.base.R.color.t_error_night),
+                    color = DifftTheme.colors.textError,
                     shape = RoundedCornerShape(size = 100.dp)
                 )
                 .clickable(

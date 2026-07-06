@@ -12,7 +12,6 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -127,7 +126,7 @@ class AccountFragment : Fragment() {
             ComposeDialogManager.showWait(requireContext(), "")
             try {
                 withContext(Dispatchers.IO) {
-                    chatHttpClient.httpService.fetchLogout(SecureSharedPrefsUtil.getBasicAuth())
+                    chatHttpClient.httpService.fetchLogout((userManager.getUserData()?.baseAuth ?: ""))
                 }
                 withContext(Dispatchers.Main) {
                     ComposeDialogManager.dismissWait()
@@ -154,7 +153,7 @@ class AccountFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    settingRepo.getProfile(SecureSharedPrefsUtil.getToken())
+                    settingRepo.getProfile((userManager.getUserData()?.microToken ?: ""))
                 }
 
                 withContext(Dispatchers.Main) {
@@ -188,7 +187,7 @@ class AccountFragment : Fragment() {
         switch: SwitchCompat,
         idSwitchRule: Int,
     ) {
-        val token = SecureSharedPrefsUtil.getToken()
+        val token = (userManager.getUserData()?.microToken ?: "")
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {

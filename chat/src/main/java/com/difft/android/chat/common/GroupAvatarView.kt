@@ -1,6 +1,6 @@
 package com.difft.android.chat.common
 
-import android.app.Activity
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -9,11 +9,16 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
+import com.bumptech.glide.signature.ObjectKey
+import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.getLifecycleOwner
+import com.difft.android.base.utils.getSafeContext
+import com.difft.android.chat.media.AvatarEncryptedProvider
 import org.difft.app.database.wcdb
 import com.difft.android.chat.databinding.LayoutGroupAvatarBinding
 import com.difft.android.network.group.GroupAvatarData
@@ -49,15 +54,6 @@ class GroupAvatarView @JvmOverloads constructor(
         val membersNumber: Int,
         val gid: String?
     )
-
-    private val glideContext: Context
-        get() {
-            return if (context is Activity && !(context as Activity).isFinishing && !(context as Activity).isDestroyed) {
-                context
-            } else {
-                context.applicationContext
-            }
-        }
 
     init {
         resetView()
@@ -157,8 +153,16 @@ class GroupAvatarView @JvmOverloads constructor(
      * Load and display avatar from cache file, retry download on failure.
      */
     private fun loadFromCacheFile(avatarId: String, cacheFile: File, groupAvatarData: GroupAvatarData) {
-        Glide.with(glideContext)
-            .load(cacheFile)
+        // Decrypting content:// provider (plaintext never on disk, docs §15) + stable uri key +
+        // lastModified signature; RESOURCE disk cache only when the Keystore key is available.
+        val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_GROUP_AVATAR, cacheFile.name)
+        Glide.with(context.getSafeContext())
+            .load(uri)
+            .signature(ObjectKey(cacheFile.lastModified()))
+            .diskCacheStrategy(
+                if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                else DiskCacheStrategy.NONE
+            )
             .listener(object : RequestListener<Drawable> {
                 override fun onLoadFailed(
                     e: GlideException?,
@@ -193,8 +197,14 @@ class GroupAvatarView @JvmOverloads constructor(
                 GroupAvatarUtil.ensureCached(context.applicationContext, groupAvatarData)
             }
             if (downloadedFile != null && currentLoadingId == avatarId && isAttachedToWindow) {
-                Glide.with(glideContext)
-                    .load(downloadedFile)
+                val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_GROUP_AVATAR, downloadedFile.name)
+                Glide.with(context.getSafeContext())
+                    .load(uri)
+                    .signature(ObjectKey(downloadedFile.lastModified()))
+                    .diskCacheStrategy(
+                        if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                        else DiskCacheStrategy.NONE
+                    )
                     .into(binding.ivAvatar)
             }
         }
@@ -202,11 +212,13 @@ class GroupAvatarView @JvmOverloads constructor(
 
     fun setAvatar(localPath: String) {
         currentLoadingId = null
-        Glide.with(glideContext)
+        Glide.with(context.getSafeContext())
             .load(localPath)
             .into(binding.ivAvatar)
     }
 
+    // Numeric-only display (group member count); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private suspend fun updateMembersNumber(show: Boolean, number: Int, gid: String?) = withContext(Dispatchers.Main) {
         if (!show) {
             binding.tvMembersNumber.visibility = View.GONE

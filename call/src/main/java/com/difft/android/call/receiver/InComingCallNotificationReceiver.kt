@@ -9,6 +9,7 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.LCallConstants.CALL_NOTIFICATION_OPERATION_REJECT
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.appScope
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.manager.CallDataManager
@@ -16,6 +17,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.launch
 
 class InComingCallNotificationReceiver: BroadcastReceiver() {
 
@@ -48,7 +50,9 @@ class InComingCallNotificationReceiver: BroadcastReceiver() {
                     }else{
                         LCallManager.stopIncomingCallService(roomId, tag = "reject: local reject call")
                     }
-                    entryPoint.callToChatController().rejectCall(callerId, CallRole.CALLEE, callType, roomId, conversationId){}
+                    appScope.launch {
+                        entryPoint.callToChatController().rejectCall(callerId, CallRole.CALLEE, callType, roomId, conversationId)
+                    }
                 }
             }
         }

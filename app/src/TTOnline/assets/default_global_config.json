@@ -4,16 +4,6 @@
   "data": {
     "hosts": [
       {
-        "name": "srv.chative.im",
-        "certType": "authority",
-        "servTo": "fuse"
-      },
-      {
-        "name": "srv.temptalk.net",
-        "certType": "authority",
-        "servTo": "fuse"
-      },
-      {
         "name": "chat.temptalk.net",
         "certType": "self",
         "servTo": "chat"
@@ -169,6 +159,7 @@
       "chatWithoutReceiptThreshold": 50,
       "membersMaxSize": 200,
       "encryptionEnabled": false,
+      "encryptionKeyResetEnabled": false,
       "messageArchivingTimeOptionValues": [
         3600,
         172800,
@@ -301,6 +292,12 @@
         ],
         "baseSpeed": 4600,
         "deltaSpeed": 400
+      }
+    },
+    "proxy": {
+      "tunnelDomains": {
+        "chat": ["chat.chative.im"],
+        "call": ["pr7sg9kf2dt5bq8mw3zx.ablivekit.org"]
       }
     }
   }

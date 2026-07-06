@@ -11,20 +11,20 @@
     <uses-permission android:name="com.sec.android.provider.badge.permission.READ" />
     <uses-permission android:name="com.sec.android.provider.badge.permission.WRITE" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE" />
+    <uses-permission
+        android:name="android.permission.DETECT_SCREEN_CAPTURE"
+        android:minSdkVersion="34" />
 
     <uses-sdk
         android:minSdkVersion="24"
         tools:overrideLibrary="org.difft.android.rust_encryption_sdk" />
 
-    <application>
+    <application android:supportsRtl="true">
         <activity
             android:name=".ui.ChatActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustNothing|stateHidden"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustNothing|stateHidden" />
         <activity
             android:name=".ui.ChatForwardMessageActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -34,18 +34,14 @@
             android:name=".ui.ChatPopupActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.TT.TransparentActivity"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
             android:name=".group.GroupChatPopupActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.TT.TransparentActivity"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <service
             android:name=".jobmanager.JobSchedulerScheduler$SystemService"
@@ -57,9 +53,7 @@
             android:name=".group.GroupChatContentActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustNothing|stateHidden"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustNothing|stateHidden" />
 
         <activity
             android:name=".contacts.contactsdetail.ContactDetailActivity"
@@ -147,16 +141,12 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
             android:name=".presend.FilePreSendActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustResize|stateHidden"
-            tools:ignore="LockedOrientationActivity" />
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <activity
             android:name=".search.SearchMessageActivity"
@@ -217,6 +207,28 @@
             android:exported="false"
             android:foregroundServiceType="remoteMessaging"
             android:stopWithTask="false" />
+
+        <!-- Streams decrypted attachment bytes on demand (no plaintext on disk). Not exported:
+             only this app and grantees of a per-uri read permission can read. -->
+        <provider
+            android:name=".media.EncryptedAttachmentProvider"
+            android:authorities="${applicationId}.encryptedattachment"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- Streams decrypted favorite-GIF bytes on demand (favorites analogue of the above). -->
+        <provider
+            android:name=".media.FavoriteEncryptedAttachmentProvider"
+            android:authorities="${applicationId}.favoriteattachment"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- Streams decrypted avatar-cache bytes on demand (avatar analogue of the above). -->
+        <provider
+            android:name=".media.AvatarEncryptedProvider"
+            android:authorities="${applicationId}.avatarcache"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
     </application>
 

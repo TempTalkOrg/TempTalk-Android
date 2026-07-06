@@ -1,7 +1,7 @@
 package com.difft.android.call.ui.barrage
 
 import android.content.res.Configuration
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -344,7 +344,7 @@ private fun BarrageMessageCard(message: BarrageMessage, textMaxLength: Int) {
             .shadow(elevation = 10.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
             .wrapContentWidth()
             .heightIn(min = LCallUiConstants.BARRAGE_MESSAGE_ITEM_HEIGHT.dp)
-            .background(color = DifftTheme.colors.backgroundSettingItem, shape = RoundedCornerShape(size = 8.dp))
+            .background(color = DifftTheme.colors.bgElevated, shape = RoundedCornerShape(size = 8.dp))
             .padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -397,19 +397,19 @@ internal fun ShouldShowBarrageInput(
         LCallUiConstants.SIMPLE_BARRAGE_UI_WIDTH
     }
 
-    // Lazy-once composition: content is NOT composed until first expand (ANR fix).
-    // After first expand, content stays in the tree permanently and visibility is
-    // toggled via graphicsLayer alpha — zero re-composition, zero re-measure,
-    // zero main-thread jank, so the overlay-window bubble animations stay smooth.
     val everExpandedRef = remember { booleanArrayOf(false) }
     if (expanded) everExpandedRef[0] = true
     val contentComposed = everExpandedRef[0]
 
-    val pickerAlpha by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0f,
-        animationSpec = tween(durationMillis = 80),
-        label = "barrage-picker-alpha"
-    )
+    val pickerAlpha = remember { Animatable(0f) }
+    LaunchedEffect(expanded) {
+        pickerAlpha.animateTo(
+            if (expanded) 1f else 0f,
+            animationSpec = tween(durationMillis = 80)
+        )
+    }
+
+    val expandedState by rememberUpdatedState(expanded)
 
     Box(
         modifier = Modifier
@@ -423,7 +423,9 @@ internal fun ShouldShowBarrageInput(
                 .layout { measurable, constraints ->
                     val placeable = measurable.measure(constraints)
                     layout(placeable.width, 0) {
-                        placeable.placeRelative(0, -(placeable.height + 4.dp.roundToPx()))
+                        if (expandedState) {
+                            placeable.placeRelative(0, -(placeable.height + 4.dp.roundToPx()))
+                        }
                     }
                 }
                 .testTag("barrage-outer-box")
@@ -431,17 +433,15 @@ internal fun ShouldShowBarrageInput(
                     minWidth = bubbleWidthDp.dp,
                     minHeight = LCallUiConstants.SIMPLE_BARRAGE_PICKER_MIN_HEIGHT.dp
                 )
-                .tapInterceptor(enabled = !expanded && shouldShow) {
-                    viewModel.callUiController.toggleTopBottomBars()
-                }
         ) {
             if (contentComposed) {
                 BubbleBarrageMessage(
                     modifier = Modifier
-                        .graphicsLayer { alpha = pickerAlpha }
+                        .graphicsLayer { alpha = pickerAlpha.value }
                         .testTag("barrage-picker-content"),
                     config = config,
                     widthDp = bubbleWidthDp,
+                    enabled = expanded,
                     onClickItem = onClickItem
                 )
             }
@@ -454,7 +454,7 @@ internal fun ShouldShowBarrageInput(
                 .shadow(elevation = 6.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
                 .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
                 .wrapContentSize()
-                .background(color = DifftTheme.colors.backgroundSettingItem, shape = RoundedCornerShape(size = 8.dp))
+                .background(color = DifftTheme.colors.bgElevated, shape = RoundedCornerShape(size = 8.dp))
                 .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                 .clickable {
                     val now = android.os.SystemClock.uptimeMillis()

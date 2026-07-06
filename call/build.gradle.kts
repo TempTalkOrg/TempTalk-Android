@@ -2,10 +2,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     id("kotlin-parcelize")
     id("org.jetbrains.kotlin.plugin.serialization")
     alias(libs.plugins.roborazzi)
@@ -23,25 +22,13 @@ android {
 
     buildFeatures {
         viewBinding = true
+        compose = true
+        buildConfig = true
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kapt {
-        correctErrorTypes = true
-    }
-
-    viewBinding.isEnabled = true
-
-
-    buildFeatures {
-        compose = true
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
     testOptions {
@@ -66,8 +53,7 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    kapt(libs.kotlin.metadata.jvm)
+    ksp(libs.hilt.compiler)
 
     // Compose Debug
     debugImplementation(libs.bundles.compose.debug)
@@ -80,7 +66,7 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.hilt.android.testing)
-    kaptTest(libs.hilt.compiler)
+    kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
     // Compose test
     testImplementation(platform(libs.compose.bom))
@@ -101,7 +87,7 @@ dependencies {
     implementation(libs.coil)
     implementation(libs.coil.gif)
     implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.compose.foundation.version)
+    implementation(libs.compose.foundation)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
 

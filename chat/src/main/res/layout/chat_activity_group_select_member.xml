@@ -4,7 +4,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".group.GroupSelectMemberActivity">
+    android:background="@color/bg1"
+    tools:context=".group.GroupSelectMemberActivity"
+    tools:ignore="Overdraw">
 
     <RelativeLayout
         android:id="@+id/title_container"
@@ -41,7 +43,8 @@
             android:textColor="@color/t.primary"
             android:textFontWeight="510"
             android:textSize="17sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            tools:targetApi="28" />
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/done_button"

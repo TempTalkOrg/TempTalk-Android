@@ -44,7 +44,7 @@ class AboutFragment : Fragment() {
     ): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                DifftTheme(useSecondaryBackground = true) {
+                DifftTheme {
                     AboutPageView(
                         onBackClick = { activity?.finish() },
                         appVersion = PackageUtil.getAppVersionName() ?: "",

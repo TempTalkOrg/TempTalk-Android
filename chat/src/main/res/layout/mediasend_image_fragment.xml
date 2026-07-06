@@ -2,9 +2,12 @@
 <ImageView
     xmlns:tools="http://schemas.android.com/tools"
     tools:viewBindingIgnore="true"
+    tools:ignore="Overdraw"
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/bg1"
+    android:importantForAccessibility="no"
     android:scaleType="fitCenter">
 
 </ImageView>

@@ -25,6 +25,7 @@ import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.TextMessage
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -32,7 +33,6 @@ import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import com.google.common.reflect.TypeToken
 import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.gson.Gson
 import com.google.protobuf.ByteString
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.ReadInfoModel
@@ -118,15 +118,16 @@ fun generateMessageTwo(
     groupMemberCount: Int = 0
 ): ChatMessage? {
     val isFromMySelf = globalServices.myId == record.fromWho
-    val authorId = record.fromWho
+    val authorId = record.fromWho ?: ""
     val author =
         contactor.firstOrNull { it.id == record.fromWho } ?: ContactorModel().also {
-            it.id = record.fromWho
+            it.id = record.fromWho ?: ""
         }
     return if (record.type == MessageModel.TYPE_TEXT || record.type == MessageModel.TYPE_ATTACHMENT || record.type == MessageModel.TYPE_UNSUPPORTED) {
         TextChatMessage().apply {
             this.id = record.id
             this.authorId = authorId
+            this.forWhat = forWhat
             this.isMine = isFromMySelf
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
@@ -161,6 +162,7 @@ fun generateMessageTwo(
         ConfidentialPlaceholderChatMessage().apply {
             this.id = record.id
             this.authorId = authorId
+            this.forWhat = forWhat
             this.isMine = isFromMySelf
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
@@ -173,6 +175,7 @@ fun generateMessageTwo(
         NotifyChatMessage().apply {
             this.id = record.id
             this.authorId = author.id
+            this.forWhat = forWhat
             this.isMine = isFromMySelf
             this.sendStatus = record.sendType
             this.timeStamp = record.timeStamp
@@ -180,7 +183,7 @@ fun generateMessageTwo(
             this.notifySequenceId = record.notifySequenceId
             this.readMaxSId = record.sequenceId
             this.notifyMessage =
-                Gson().fromJson(record.messageText, TTNotifyMessage::class.java)
+                globalServices.gson.fromJson(record.messageText, TTNotifyMessage::class.java)
         }
     } else {
         L.e { "generateMessage message can't find type! ${record.timeStamp}  type:${record.type}" }
@@ -268,7 +271,9 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
         when (record) {
             is TextMessage -> {
                 if (record.isAttachmentMessage()) {
-                    if (record.attachments?.firstOrNull()?.isImage() == true) {
+                    if (record.attachments?.firstOrNull()?.isAnimatedImage() == true) {
+                        senderName + ResUtils.getString(R.string.chat_message_gif)
+                    } else if (record.attachments?.firstOrNull()?.isImage() == true) {
                         senderName + ResUtils.getString(R.string.chat_message_image)
                     } else if (record.attachments?.firstOrNull()?.isVideo() == true) {
                         senderName + ResUtils.getString(R.string.chat_message_video)
@@ -287,7 +292,7 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
             }
 
             is NotifyMessage -> {
-                val notifyMessage = Gson().fromJson(record.notifyContent, TTNotifyMessage::class.java)
+                val notifyMessage = globalServices.gson.fromJson(record.notifyContent, TTNotifyMessage::class.java)
                 notifyMessage?.showContent ?: ""
             }
 

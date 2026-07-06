@@ -34,8 +34,8 @@ import com.difft.android.base.ui.theme.DifftTheme
 @Composable
 fun TitleBar(
     titleText: String,
-    titleEndText: String = "",
     modifier: Modifier = Modifier,
+    titleEndText: String = "",
     showBackButton: Boolean = true,
     onBackClick: () -> Unit = {}
 ) {

@@ -1,11 +1,12 @@
 package com.difft.android.setting.viewmodel
 
+import com.difft.android.base.utils.globalServices
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.setting.repo.SettingRepo
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,7 @@ class SetCustomIdViewModel@Inject constructor() : ViewModel() {
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val token = SecureSharedPrefsUtil.getToken()
+                val token = (globalServices.userManager.getUserData()?.microToken ?: "")
                 val response = settingRepo.setProfile(token = token, customUid = customUid)
                 if (response.status != 0) {
                     L.e {"[Settings] submitCustomUid status:${response.status}, reason:${response.reason} "}

@@ -45,7 +45,7 @@
             android:ellipsize="end"
             android:gravity="center_vertical"
             android:hint="@string/MediaReviewFragment__add_a_message"
-            android:maxLines="3"
+            android:maxLines="5"
             android:minHeight="48dp"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"

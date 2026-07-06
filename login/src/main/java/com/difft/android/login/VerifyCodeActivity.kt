@@ -16,7 +16,6 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.login.databinding.ActivityVerifyCodeBinding
 import com.difft.android.login.repo.BindRepo
 import com.difft.android.login.viewmodel.LoginViewModel
@@ -382,7 +381,7 @@ class VerifyCodeActivity : BaseActivity() {
     private fun verifyBindAccount() {
         ComposeDialogManager.showWait(this@VerifyCodeActivity, "")
         val account = account ?: return
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (userManager.getUserData()?.baseAuth ?: "")
 
         lifecycleScope.launch {
             try {
@@ -406,7 +405,7 @@ class VerifyCodeActivity : BaseActivity() {
     }
 
     private fun verifyBindAccountCode(code: String) {
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (userManager.getUserData()?.baseAuth ?: "")
 
         if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
             loadingHandleZone()

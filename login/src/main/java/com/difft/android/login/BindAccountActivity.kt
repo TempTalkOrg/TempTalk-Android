@@ -1,5 +1,7 @@
 package com.difft.android.login
 
+import com.difft.android.base.utils.globalServices
+
 import android.app.Activity
 import com.difft.android.base.log.lumberjack.L
 import android.content.Context
@@ -12,7 +14,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.widget.doOnTextChanged
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.difft.android.base.utils.dp
@@ -160,7 +161,7 @@ class BindAccountActivity : BaseActivity() {
 
     private fun verifyAccount(nonce: String?) {
         val account = mBinding.account.text.toString().trim()
-        val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+        val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
 
         loadingHandleZone()
 

@@ -27,14 +27,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import com.difft.android.call.BuildConfig
 import androidx.compose.ui.unit.dp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.BottomButtonTextStyle
 import com.difft.android.call.data.BottomCallEndAction
+import com.difft.android.call.ui.HideNavigationBarEffect
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,8 +83,11 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
                 dismissSheet()
             },
         ){
+            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
+                    .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
+                    .testTag("call_end_sheet")
                     .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
                     .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
             ) {
@@ -96,7 +103,6 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
 
 @Composable
 fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCancelClick: () -> Unit = { onClickItem(BottomCallEndAction.CANCEL) }) {
-    val context = LocalContext.current
     Row(
         modifier = Modifier
             .wrapContentWidth()
@@ -106,10 +112,11 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
     ) {
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_end_for_all")
                 .padding(0.25.dp)
                 .width(238.dp)
                 .height(60.dp)
-                .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp, topStart = 12.dp, bottomStart = 12.dp))
+                .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp, topStart = 12.dp, bottomStart = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
                     onClickItem(BottomCallEndAction.END_CALL)
@@ -121,16 +128,17 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
                 modifier = Modifier
                     .height(24.dp),
                 text = ResUtils.getString(R.string.call_button_group_alert_end_text),
-                style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.red_500))
+                style = BottomButtonTextStyle.copy(color = DifftTheme.colors.textError)
             )
         }
 
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_leave")
                 .padding(0.25.dp)
                 .width(238.dp)
                 .height(60.dp)
-                .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp, topStart = 0.dp, bottomStart = 0.dp))
+                .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp, topStart = 0.dp, bottomStart = 0.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
                     onClickItem(BottomCallEndAction.LEAVE_CALL)
@@ -142,7 +150,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
                 modifier = Modifier
                     .height(24.dp),
                 text = ResUtils.getString(R.string.call_button_group_leave_meeting),
-                style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
+                style = BottomButtonTextStyle.copy(color = DifftTheme.colors.textPrimary)
             )
         }
 
@@ -150,10 +158,11 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
 
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_cancel")
                 .padding(0.dp)
                 .width(212.dp)
                 .height(60.dp)
-                .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 12.dp))
+                .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
                     onCancelClick()
@@ -165,7 +174,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
                 modifier = Modifier
                     .height(24.dp),
                 text = ResUtils.getString(R.string.call_button_group_alert_cancel_text),
-                style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
+                style = BottomButtonTextStyle.copy(color = DifftTheme.colors.textPrimary)
             )
         }
     }
@@ -175,8 +184,6 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
 
 @Composable
 fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCancelClick: () -> Unit = { onClickItem(BottomCallEndAction.CANCEL) }) {
-    val context = LocalContext.current
-
     Column(
         modifier = Modifier
             .padding(0.dp)
@@ -194,10 +201,11 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
         ) {
             Row(
                 modifier = Modifier
+                    .testTag("call_end_sheet_end_for_all")
                     .padding(0.25.dp)
                     .fillMaxWidth()
                     .height(60.dp)
-                    .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomEnd = 0.dp, bottomStart = 0.dp))
+                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomEnd = 0.dp, bottomStart = 0.dp))
                     .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                     .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
                         onClickItem(BottomCallEndAction.END_CALL)
@@ -210,16 +218,17 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
                         .width(327.dp)
                         .height(24.dp),
                     text = ResUtils.getString(R.string.call_button_group_alert_end_text),
-                    style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.red_500))
+                    style = BottomButtonTextStyle.copy(color = DifftTheme.colors.textError)
                 )
             }
 
             Row(
                 modifier = Modifier
+                    .testTag("call_end_sheet_leave")
                     .padding(0.25.dp)
                     .fillMaxWidth()
                     .height(60.dp)
-                    .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomEnd = 12.dp, bottomStart = 12.dp))
+                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomEnd = 12.dp, bottomStart = 12.dp))
                     .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                     .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
                         onClickItem(BottomCallEndAction.LEAVE_CALL)
@@ -232,17 +241,18 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
                         .width(327.dp)
                         .height(24.dp),
                     text = ResUtils.getString(R.string.call_button_group_leave_meeting),
-                    style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
+                    style = BottomButtonTextStyle.copy(color = DifftTheme.colors.textPrimary)
                 )
             }
         }
 
         Row(
             modifier = Modifier
+                .testTag("call_end_sheet_cancel")
                 .padding(0.dp)
                 .fillMaxWidth()
                 .height(60.dp)
-                .background(color = colorResource(id = com.difft.android.base.R.color.bg2_night), shape = RoundedCornerShape(size = 12.dp))
+                .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
                 .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null){
                     onCancelClick()
@@ -255,7 +265,7 @@ fun VerticalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCance
                     .width(327.dp)
                     .height(24.dp),
                 text = ResUtils.getString(R.string.call_button_group_alert_cancel_text),
-                style = BottomButtonTextStyle.copy(color = colorResource(id = com.difft.android.base.R.color.t_primary_night))
+                style = BottomButtonTextStyle.copy(color = DifftTheme.colors.textPrimary)
             )
         }
     }

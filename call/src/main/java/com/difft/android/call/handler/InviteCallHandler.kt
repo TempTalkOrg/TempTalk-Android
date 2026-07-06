@@ -15,6 +15,7 @@ import com.difft.android.call.data.InviteMember
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.ui.invite.InviteScreenState
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import io.livekit.android.room.participant.RemoteParticipant
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -314,9 +315,14 @@ class InviteCallHandler(
         excludedIds.add(callToChatController.getMySelfUid())
 
         // 排除已经在会议中的参与者
-        val remoteParticipants = viewModel.room.remoteParticipants.keys.sortedBy { it.value }
-        remoteParticipants.forEach { remoteParticipant ->
-            val userId = extractUserId(remoteParticipant.value)
+        // 使用 participants StateFlow（含本地参与者，过滤出 RemoteParticipant 即远端集合），
+        // 避免在通话结束清理窗口内访问已 release 的 room getter 触发崩溃。
+        val remoteIdentities = viewModel.participants.value
+            .filterIsInstance<RemoteParticipant>()
+            .mapNotNull { it.identity?.value }
+            .sorted()
+        remoteIdentities.forEach { identityValue ->
+            val userId = extractUserId(identityValue)
             excludedIds.add(userId)
         }
 
@@ -373,29 +379,23 @@ class InviteCallHandler(
         return currentCallType == CallType.ONE_ON_ONE.type || currentCallType == CallType.INSTANT.type
     }
 
-    /**
-     * 发起邀请
-     */
-    suspend fun inviteMembers(callback: (InviteRequestState, List<String>) -> Unit) {
+    suspend fun inviteMembers(): Pair<InviteRequestState, List<String>> {
         val memberIds = selectedMembers.value.map { it.uid }
         if (memberIds.isEmpty()) {
             L.w { "[Call] InviteCallHandler No members to invite" }
-            callback.invoke(InviteRequestState.FAILED, memberIds)
-            return
+            return InviteRequestState.FAILED to memberIds
         }
 
-        viewModel.getRoomId()?.let { roomId ->
-            callToChatController.inviteCall(
-                roomId = roomId,
-                roomName = getRoomNameForInvite(),
-                callType = getCallTypeForInvite(),
-                mKey = viewModel.getE2eeKey(),
-                inviteMembers = ArrayList(memberIds),
-                conversationId = callIntent.conversationId,
-                callback = { it ->
-                    callback.invoke(it, memberIds)
-                }
-            )
-        }
+        val roomId = viewModel.getRoomId() ?: return InviteRequestState.FAILED to memberIds
+
+        val state = callToChatController.inviteCall(
+            roomId = roomId,
+            roomName = getRoomNameForInvite(),
+            callType = getCallTypeForInvite(),
+            mKey = viewModel.getE2eeKey(),
+            inviteMembers = ArrayList(memberIds),
+            conversationId = callIntent.conversationId,
+        )
+        return state to memberIds
     }
 }

@@ -4,17 +4,16 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.firebase.perf)
     alias(libs.plugins.roborazzi)
 }
 
-val appVersionName = "2.2.3"
+val appVersionName = "2.3.1"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -30,6 +29,14 @@ fun getTimeBasedVersionCode(): Int {
     val timeDiff = currentTime - baseTime
     return (timeDiff / (1000 * 60)).toInt()
 }
+
+// Sampled ONCE at configuration start and reused everywhere (both product
+// flavors' versionCode AND the APK output filename). getTimeBasedVersionCode()
+// is minute-resolution wall-clock, so independent calls could disagree across a
+// minute boundary in a local build without the VERSION_CODE env var — making the
+// filename's versionCode differ from the one baked into the APK manifest.
+val resolvedVersionCode = getTimeBasedVersionCode()
+val resolvedBuildTimestamp = getCurrentDayTimestamp()
 
 fun getBuildTime(): String {
     return System.currentTimeMillis().toString()
@@ -66,6 +73,8 @@ fun getKeyPassword(): String? {
 android {
     namespace = "com.difft.android"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    // ndkVersion required: AGP 9 dropped the implicit NDK fallback used for llvm-strip (see libs.versions.toml).
+    ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
         minSdk = libs.versions.minSdk.get().toInt()
@@ -78,9 +87,6 @@ android {
         localeFilters += setOf("en", "zh", "en-rUS", "zh-rCN")
     }
 
-    buildFeatures {
-        viewBinding = true
-    }
 //    val flavorDimensionType = "type"
     val flavorDimensionEnvironment = "environment"
     val flavorDimensionChannel = "channel"
@@ -94,7 +100,7 @@ android {
             dimension = flavorDimensionEnvironment
 
             applicationId = "org.difft.chative.test"
-            versionCode = getTimeBasedVersionCode()
+            versionCode = resolvedVersionCode
             versionName = appVersionName
 
             buildConfigField("String", "APP_TYPE", "\"${this.name}\"")
@@ -117,7 +123,7 @@ android {
             dimension = flavorDimensionEnvironment
 
             applicationId = "org.difft.chative"
-            versionCode = getTimeBasedVersionCode()
+            versionCode = resolvedVersionCode
             versionName = appVersionName
 
             buildConfigField("String", "APP_TYPE", "\"${this.name}\"")
@@ -173,7 +179,8 @@ android {
     buildTypes {
         debug {
             ndk {
-                abiFilters += listOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+                //noinspection ChromeOsAbiSupport
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
             isMinifyEnabled = false
         }
@@ -192,25 +199,6 @@ android {
         }
     }
 
-    /**
-     * 修改生成的 apk 文件名
-     */
-    android.applicationVariants.all {
-        val flavorName1 = this.productFlavors[0].name
-        var flavorName2 = ""
-        if (this.productFlavors.size > 1) {
-            flavorName2 = this.productFlavors[1].name
-        }
-        val buildType = this.buildType.name
-        val versionName = this.versionName
-        val versionCode = this.versionCode
-        outputs.all {
-            if (this is com.android.build.gradle.internal.api.ApkVariantOutputImpl) {
-                this.outputFileName = "${flavorName1}-${flavorName2}-v${versionName}-${versionCode}-${getCurrentDayTimestamp()}-${buildType}.apk"
-            }
-        }
-    }
-
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
@@ -223,7 +211,6 @@ android {
 
     buildFeatures {
         viewBinding = true
-        dataBinding = true
         buildConfig = true
         compose = true
     }
@@ -231,6 +218,10 @@ android {
     packaging {
         // Exclude non-Android platform libraries (following Signal's approach)
         jniLibs {
+            // AGP 9 rejects `android:extractNativeLibs="true"` in the manifest;
+            // express the same intent (extract native libs at install time)
+            // here instead. Preserves prior packaging behavior.
+            useLegacyPackaging = true
             excludes += setOf(
                 "**/*.dylib",
                 "**/*.dll",
@@ -262,13 +253,33 @@ kotlin {
     }
 }
 
-roborazzi {
-    outputDir.set(rootProject.file("screenshots/app"))
+/**
+ * Customise the generated APK filename. Migrated from the AGP 8
+ * `applicationVariants.all{}` API (removed in AGP 9) to the new Variant API:
+ * onVariants sets outputFileName on each APK output. Filename format matches
+ * the old logic: {flavor1}-{flavor2}-v{versionName}-{versionCode}-{timestamp}-{buildType}.apk
+ *
+ * Reuses the file-scope resolvedVersionCode / resolvedBuildTimestamp (sampled
+ * once at configuration start) so the filename's versionCode is identical to the
+ * one baked into the flavor config, and every APK in one build shares the suffix.
+ */
+androidComponents {
+    onVariants { variant ->
+        val flavor1 = variant.productFlavors.getOrNull(0)?.second.orEmpty()
+        val flavor2 = variant.productFlavors.getOrNull(1)?.second.orEmpty()
+        val buildType = variant.buildType.orEmpty()
+        variant.outputs.forEach { output ->
+            // outputFileName is declared on the public VariantOutput interface;
+            // only APK outputs have a settable filename (bundle outputs ignore it).
+            output.outputFileName.set(
+                "$flavor1-$flavor2-v$appVersionName-$resolvedVersionCode-$resolvedBuildTimestamp-$buildType.apk"
+            )
+        }
+    }
 }
 
-// Allow references to generated code
-kapt {
-    correctErrorTypes = true
+roborazzi {
+    outputDir.set(rootProject.file("screenshots/app"))
 }
 
 hilt {
@@ -284,6 +295,13 @@ dependencies {
     implementation(project(":security"))
     implementation(project(":call"))
 
+    // Bundled Conscrypt: registered as the top JSSE provider on API < 30 (see
+    // TempTalkApplication.initTlsProvider) so inner TLS uses the stream-based
+    // ConscryptEngineSocket. The platform Conscrypt there defaults to a raw-fd
+    // socket that bypasses the outer proxy tunnel (TLS-in-TLS), breaking proxy
+    // connections — including LiveKit call signaling, whose SSLSocketFactory is
+    // built internally and cannot be injected from app code.
+    implementation(libs.conscrypt.android)
     // Desugar JDK libs
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
@@ -301,8 +319,7 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    kapt(libs.kotlin.metadata.jvm)
+    ksp(libs.hilt.compiler)
 
     // 其他依赖
     implementation(libs.jwtdecode)
@@ -323,7 +340,7 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.hilt.android.testing)
-    kaptTest(libs.hilt.compiler)
+    kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
     // Compose test
     testImplementation(platform(libs.compose.bom))

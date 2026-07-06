@@ -1,5 +1,6 @@
 package org.difft.app.database
 
+import androidx.annotation.WorkerThread
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
@@ -11,20 +12,25 @@ import com.difft.android.base.utils.checkThread
 import com.difft.android.base.utils.globalServices
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
-import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.core.Table
 import com.tencent.wcdb.winq.Column
+import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
 import com.tencent.wcdb.winq.OrderingTerm
 import com.tencent.wcdb.winq.StatementSelect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
+import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
@@ -33,6 +39,7 @@ import difft.android.messageserialization.model.Mention
 import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.Quote
+import difft.android.messageserialization.model.QuotedAttachment
 import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.SharedContact
@@ -43,6 +50,7 @@ import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.TranslateStatus
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -59,6 +67,7 @@ import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBPendingMessageModelNew
+import org.difft.app.database.models.DBPendingRemovalContactModel
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBReadInfoModel
@@ -73,6 +82,7 @@ import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.MentionModel
 import org.difft.app.database.models.MessageModel
+import org.difft.app.database.models.PendingRemovalContactModel
 import org.difft.app.database.models.QuoteModel
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.ReadInfoModel
@@ -111,6 +121,10 @@ fun Table<GroupMemberContactorModel>.search(keyword: String): List<GroupMemberCo
     )
 }
 
+/** Weak-snapshot row → ContactorModel (via globalServices.gson). Returns null on malformed JSON. */
+private fun PendingRemovalContactModel.deserializeSnapshot(): ContactorModel? =
+    snapshotJson?.let { runCatching { globalServices.gson.fromJson(it, ContactorModel::class.java) }.getOrNull() }
+
 fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
     val fromContactor = contactor.getFirstObject(DBContactorModel.id.eq(id))
     if (fromContactor != null) {
@@ -122,8 +136,13 @@ fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
         L.i { "[WCDBExtensions] getContactorFromAllTable id:$id from groupMemberContactor gid=${fromGroupMember.gid}" }
         return fromGroupMember.convertToContactorModel()
     }
-    return null
+    // Weak-snapshot fallback: keeps message rendering from degrading to a bare UID after the peer deregisters.
+    return pendingRemovalContact.getFirstObject(DBPendingRemovalContactModel.uid.eq(id))?.deserializeSnapshot()
 }
+
+/** Fetch a single message row by id. */
+fun WCDB.getMessageById(id: String): MessageModel? =
+    message.getFirstObject(DBMessageModel.id.eq(id))
 
 fun WCDB.getContactorsFromAllTable(ids: List<String>, preferredGid: String? = null): List<ContactorModel> {
     val foundContactors = contactor.getAllObjects(DBContactorModel.id.`in`(ids))
@@ -152,7 +171,15 @@ fun WCDB.getContactorsFromAllTable(ids: List<String>, preferredGid: String? = nu
     val othersFromGroupMember = deduplicatedRows.map { it.convertToContactorModel() }
     val merged = (foundContactors + othersFromGroupMember).distinctBy { it.id }
 
-    return merged
+    // Weak-snapshot fallback: batch-fill any ids still missing from the two local tables.
+    val stillMissing = ids.toList() - merged.map { it.id }.toSet()
+    if (stillMissing.isEmpty()) {
+        return merged
+    }
+    val fromPending = pendingRemovalContact
+        .getAllObjects(DBPendingRemovalContactModel.uid.`in`(stillMissing))
+        .mapNotNull { it.deserializeSnapshot() }
+    return (merged + fromPending).distinctBy { it.id }
 }
 
 val GroupModel.members: List<GroupMemberContactorModel>
@@ -226,9 +253,9 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     val attachments = if (attachmentModels.isNotEmpty()) {
         attachmentModels.map { am ->
             Attachment(
-                id = am.id,
-                authorityId = am.authorityId,
-                contentType = am.contentType,
+                id = am.id!!,
+                authorityId = am.authorityId!!,
+                contentType = am.contentType!!,
                 key = am.key,
                 size = am.size,
                 thumbnail = am.thumbnail,
@@ -262,8 +289,8 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     // For a user: For(fromWho, For.Type.USER)
     // For a room: For(roomId, if (roomType == 1) For.Type.GROUP else For.Type.ONE_TO_ONE)
 
-    val fromWhoFor = For.Account(fromWho) // replace 0 with the correct type value for a user
-    val forWhatFor = if (roomType == 0) For.Account(roomId) else For.Group(roomId)// if roomType == 1 is group, else one-to-one
+    val fromWhoFor = For.Account(fromWho ?: "") // replace 0 with the correct type value for a user
+    val forWhatFor = if (roomType == 0) For.Account(roomId ?: "") else For.Group(roomId ?: "")// if roomType == 1 is group, else one-to-one
 
     return TextMessage(
         id = id,
@@ -296,9 +323,9 @@ fun MessageModel.convertToTextMessage(): TextMessage {
 
 fun AttachmentModel.toAttachment(): Attachment {
     return Attachment(
-        id = id,
-        authorityId = authorityId,
-        contentType = contentType,
+        id = id!!,
+        authorityId = authorityId!!,
+        contentType = contentType!!,
         key = key,
         size = size,
         thumbnail = thumbnail,
@@ -356,9 +383,9 @@ fun MessageModel.attachment(): Attachment? {
     return wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(id))
         .firstOrNull()?.let {
             Attachment(
-                id = it.id,
-                authorityId = it.authorityId,
-                contentType = it.contentType,
+                id = it.id!!,
+                authorityId = it.authorityId!!,
+                contentType = it.contentType!!,
                 key = it.key,
                 size = it.size,
                 thumbnail = it.thumbnail,
@@ -390,7 +417,7 @@ fun MessageModel.reactions(): List<Reaction> {
     return wcdb.reaction.getAllObjects(DBReactionModel.messageId.eq(id)).map {
         Reaction(
             emoji = it.emoji,
-            uid = it.uid,
+            uid = it.uid ?: "",
             originTimestamp = it.timeStamp
         )
     }
@@ -441,7 +468,7 @@ fun MessageModel.speechToTextData(): SpeechToTextData? {
 fun MessageModel.screenShot(): ScreenShot? {
     return screenShotJson?.takeIf { it.isNotEmpty() }?.let {
         runCatching {
-            Gson().fromJson(it, ScreenShot::class.java)
+            globalServices.gson.fromJson(it, ScreenShot::class.java)
         }.onFailure { e ->
             L.e { "parse screenShot error: ${e.stackTraceToString()}" }
         }.getOrNull()
@@ -450,11 +477,35 @@ fun MessageModel.screenShot(): ScreenShot? {
 
 fun MessageModel.quote(): Quote? = quoteDatabaseId?.let { qId ->
     wcdb.quote.getFirstObject(DBQuoteModel.databaseId.eq(qId))?.let { qm ->
+        val attachments = wcdb.attachment
+            .getAllObjects(DBAttachmentModel.quoteModelDatabaseId.eq(qId))
+            .map { am ->
+                QuotedAttachment(
+                    contentType = am.contentType ?: "",
+                    fileName = am.fileName ?: "",
+                    thumbnail = Attachment(
+                        id = am.id ?: "",
+                        authorityId = am.authorityId ?: 0L,
+                        contentType = am.contentType ?: "",
+                        key = am.key,
+                        size = am.size,
+                        thumbnail = am.thumbnail?.takeIf { it.isNotEmpty() }, // null = no bytes (mirrors write)
+                        digest = am.digest,
+                        fileName = am.fileName,
+                        flags = am.flags,
+                        width = am.width,
+                        height = am.height,
+                        path = am.path,
+                        status = am.status
+                    ),
+                    flags = am.flags
+                )
+            }
         Quote(
             id = qm.id,
             author = qm.author,
             text = qm.text,
-            attachments = null
+            attachments = attachments.ifEmpty { null }
         )
     }
 }
@@ -462,9 +513,9 @@ fun MessageModel.quote(): Quote? = quoteDatabaseId?.let { qId ->
 fun ForwardModel.attachments(): List<Attachment> {
     return wcdb.attachment.getAllObjects(DBAttachmentModel.forwardModelDatabaseId.eq(databaseId)).map {
         Attachment(
-            id = it.id,
-            authorityId = it.authorityId,
-            contentType = it.contentType,
+            id = it.id!!,
+            authorityId = it.authorityId!!,
+            contentType = it.contentType!!,
             key = it.key,
             size = it.size,
             thumbnail = it.thumbnail,
@@ -541,11 +592,24 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
 // ---------------------------
 
 fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L) {
-    val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
-    if (existing == null) {
-        putMessage(message, roomReadPosition)
-    } else {
-        L.i { "[Message] message existing:${message.timeStamp}" }
+    // #971: wrap the single-message cascade (existence check + putMessage's ~11 child inserts)
+    // in ONE transaction so it is atomic — no "half message" (e.g. message row inserted but its
+    // attachment/mention/reaction rows missing, or vice-versa) on partial failure. Per-message
+    // grain ONLY — never spans messages (that would re-introduce #197 eager-ACK batch-loss +
+    // long-tx white-screen). runTransaction is BEGIN IMMEDIATE (takes the write lock up front, so
+    // even the existence-check read runs under the write lock) — intentional: one lock for
+    // atomicity. The body is pure synchronous WCDB calls (no suspend / network). On throw,
+    // runTransaction rolls back AND re-throws, so the exception still propagates to
+    // putWhenNonExist → process.classify → FailedMessage retry — the message-loss safety net is
+    // preserved unchanged.
+    this.db.runTransaction {
+        val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
+        if (existing == null) {
+            putMessage(message, roomReadPosition)
+        } else {
+            L.i { "[Message] message existing:${message.timeStamp}" }
+        }
+        true // commit
     }
 }
 
@@ -558,12 +622,16 @@ private fun WCDB.putMessage(message: Message, roomReadPosition: Long = 0L) {
 }
 
 private fun WCDB.putTextMessage(message: TextMessage, roomReadPosition: Long = 0L) {
-    val messageModel = convertToMessageModel(message, roomReadPosition)
+    val messageModel = insertChildrenAndBuildMessageModel(message, roomReadPosition)
     this.message.insertObject(messageModel)
-    L.d { "observerMessagesChanges: Inserted message: ${messageModel.messageText}, time stamp is ${System.currentTimeMillis()}" }
 }
 
-fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
+/**
+ * Builds the [MessageModel] AND inserts all its child-table rows (attachments/quote/forward/
+ * mentions/reactions/sharedContact/...) as a side effect. Does NOT insert the message row — go
+ * through [putMessageIfNotExists] so the id existence-check prevents duplicate children (#997).
+ */
+fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
     val quoteDatabaseId = message.quote?.let { quote ->
         val quoteModel = QuoteModel().apply {
             id = quote.id
@@ -571,7 +639,27 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
             text = quote.text
         }
         this.quote.insertObject(quoteModel)
-        quoteModel.databaseId
+
+        quote.attachments?.forEach { qa ->
+            val attachmentModel = AttachmentModel().apply {
+                quoteModelDatabaseId = quoteModel.databaseId.toLong() // #901: QuoteModel.databaseId is Int, FK column is Long?
+                contentType = qa.contentType
+                fileName = qa.fileName
+                flags = qa.flags
+                // null (not empty array) when there are no inline bytes — honors the "null = no bytes"
+                // convention so future consumers don't read a zero-length array as "has bytes".
+                val bytes = qa.thumbnail?.thumbnail?.takeIf { it.isNotEmpty() }
+                thumbnail = bytes
+                size = bytes?.size ?: 0 // mirror toAttachmentModel: persist size alongside thumbnail bytes
+                width = qa.thumbnail?.width ?: 0
+                height = qa.thumbnail?.height ?: 0
+                path = qa.thumbnail?.path
+                status = qa.thumbnail?.status ?: AttachmentStatus.SUCCESS.code
+            }
+            this.attachment.insertObject(attachmentModel)
+        }
+
+        quoteModel.databaseId.toLong()
     }
 
     val forwardContextDatabaseId = message.forwardContext?.let { fc ->
@@ -581,9 +669,9 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         this.forwardContext.insertObject(fcModel)
 
         fc.forwards?.forEach { fwd ->
-            insertForward(fwd, forwardContextDatabaseId = fcModel.databaseId, parentForwardModelDatabaseId = null)
+            insertForward(fwd, forwardContextDatabaseId = fcModel.databaseId.toLong(), parentForwardModelDatabaseId = null)
         }
-        fcModel.databaseId
+        fcModel.databaseId.toLong()
     }
 
     message.attachments?.forEach { attachment ->
@@ -627,7 +715,7 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
 
         sc.phone?.forEach { phone ->
             val phoneModel = SharedContactPhoneModel().apply {
-                sharedContactDatabaseId = scModel.databaseId
+                sharedContactDatabaseId = scModel.databaseId.toLong()
                 phoneNumber = phone.value
                 phoneNumberType = phone.type
                 phoneNumberLabel = phone.label
@@ -689,7 +777,7 @@ fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L
         readTime = calculatedReadTime
         this.quoteDatabaseId = quoteDatabaseId
         this.forwardContextDatabaseId = forwardContextDatabaseId
-        this.screenShotJson = message.screenShot?.let { Gson().toJson(it) }
+        this.screenShotJson = message.screenShot?.let { globalServices.gson.toJson(it) }
     }
     return messageModel
 }
@@ -741,14 +829,14 @@ fun WCDB.insertForward(
     this.forward.insertObject(forwardModel)
 
     forward.attachments?.forEach { attachment ->
-        val attachmentModel = attachment.toAttachmentModel(forwardModel.databaseId)
-        attachmentModel.forwardModelDatabaseId = forwardModel.databaseId
+        val attachmentModel = attachment.toAttachmentModel(forwardModel.databaseId.toLong())
+        attachmentModel.forwardModelDatabaseId = forwardModel.databaseId.toLong()
         this.attachment.insertObject(attachmentModel)
     }
 
     forward.mentions?.forEach { mention ->
         val mentionModel = MentionModel().apply {
-            forwardModelDatabaseId = forwardModel.databaseId
+            forwardModelDatabaseId = forwardModel.databaseId.toLong()
             start = mention.start
             length = mention.length
             uid = mention.uid
@@ -758,7 +846,7 @@ fun WCDB.insertForward(
     }
 
     forward.forwards?.forEach { subForward ->
-        insertForward(subForward, forwardContextDatabaseId, parentForwardModelDatabaseId = forwardModel.databaseId)
+        insertForward(subForward, forwardContextDatabaseId, parentForwardModelDatabaseId = forwardModel.databaseId.toLong())
     }
 }
 
@@ -766,8 +854,109 @@ fun WCDB.insertForward(
 fun MessageModel.delete() {
     deleteRelatedDataForMessage()
     wcdb.message.deleteObjects(DBMessageModel.databaseId.eq(databaseId))
-    RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
+    RoomChangeTracker.trackRoom(roomId ?: "", RoomChangeType.MESSAGE)
 }
+
+// region #909 paged message access
+// Helpers that bound peak memory when operating over a conversation's messages.
+// Never materialize an entire conversation's MessageModel list into memory:
+// - messageCount       → SQL COUNT, no object load.
+// - deleteMessagesPaged→ paged per-row delete (cascades attachment files + related tables).
+// - forEachMessagePaged→ keyset-cursor paged read, peak memory = one page.
+
+/**
+ * SQL COUNT of messages matching [condition]. No object load. (#909 TP1)
+ *
+ * Mirrors the existing `selectableMessageCount` idiom (`getValue(col.count(), cond)`),
+ * generalized to any [Expression]. Returns `Long`; callers needing `Int` call `.toInt()`.
+ */
+fun messageCount(condition: Expression): Long =
+    wcdb.message.getValue(DBMessageModel.databaseId.count(), condition)?.long ?: 0L
+
+/**
+ * Current MAX(databaseId) among messages of [roomId], or 0 if none. (#969)
+ *
+ * databaseId is the autoincrement PK ([MessageModel.databaseId], #901) — strictly monotonic,
+ * so this is a STABLE upper bound: any message inserted AFTER this call gets a databaseId
+ * greater than the returned value. Used to snapshot a room-delete's match set so concurrent
+ * inserts during the paged delete cannot extend it — the unbounded `roomId.eq` match set
+ * never converges under a message flood. No object load — SQL MAX only. Mirrors the
+ * `messageCount` `getValue(col.aggregate(), cond)` idiom.
+ *
+ * @WorkerThread — blocking WCDB read; callers MUST invoke off the main thread. NOTE this is the
+ * ONLY guard and it is advisory at runtime: detekt's BlockingWcdbInSuspend matches only DIRECT
+ * `wcdb.*` call expressions (rootReceiverText == "wcdb"), so an indirect call to this helper from a
+ * `suspend fun` without `withContext(IO)` is NOT flagged. Current callers are already off-main
+ * (`appScope.launch` = Dispatchers.IO in DBMessageStore; `withContext(IO)` in cleanEmptyRooms);
+ * a new suspend caller must wrap it itself. #969
+ */
+@WorkerThread
+fun maxMessageDatabaseId(roomId: String): Int =
+    wcdb.message.getValue(DBMessageModel.databaseId.max(), DBMessageModel.roomId.eq(roomId))?.int ?: 0
+
+/**
+ * Delete all messages matching [condition] in pages, calling [MessageModel.delete]
+ * per row so attachment files + related tables are cascaded. (#909 #1)
+ *
+ * MUST stay per-row delete — a bulk SQL `deleteObjects` would orphan attachment files
+ * on disk and related-table rows (see [MessageModel.deleteRelatedDataForMessage]).
+ *
+ * Plain re-`LIMIT pageSize` from the front is correct here because `delete()` shrinks
+ * the matching set each iteration — no OFFSET needed. Mirrors
+ * `MessageArchiveManager.clearMessagesBeforeTimestamp`. Exceptions propagate to the
+ * caller's try/catch; [delay] respects coroutine cancellation.
+ *
+ * Convergence note (#969): re-LIMIT-from-front only converges when the match set is
+ * monotonically non-increasing. A `databaseId.le(snapshotMax)` upper bound is REQUIRED
+ * whenever [condition] has no natural converging boundary (e.g. `roomId.eq` alone — a
+ * concurrent insert flood keeps extending the set). Conditions that already carry an upper
+ * bound — time/anchor cutoffs like `systemShowTimestamp.lt(ts)` in MessageArchiveManager —
+ * converge on their own and need no databaseId snapshot. Do not re-introduce an unbounded
+ * `roomId.eq` delete without a snapshot.
+ */
+suspend fun deleteMessagesPaged(condition: Expression, pageSize: Long = 100) = withContext(Dispatchers.IO) {
+    while (true) {
+        val page = wcdb.message.getAllObjects(condition, null, pageSize)
+        if (page.isEmpty()) break
+        page.forEach { it.delete() }
+        if (page.size < pageSize) break
+        delay(100)
+    }
+}
+
+/**
+ * Iterate messages matching [condition] in `databaseId ASC` keyset pages — one page in memory
+ * at a time, not the whole match set. (#909 #5)
+ *
+ * Cursor is the autoincrement PK `databaseId`: single column → pure `AND` WHERE (no OR/AND
+ * nesting whose SQL grouping would depend on winq), and strictly monotonic → concurrent inserts
+ * are never skipped or revisited. Order is insertion order, not message time — the sole caller
+ * only aggregates, so order is irrelevant.
+ *
+ * `.select(*...allBindingFields())` is REQUIRED — without it `allObjects()` NPEs
+ * (`Select.fields` null); see WcdbJobStorage. (#909 regression)
+ */
+suspend fun forEachMessagePaged(
+    condition: Expression,
+    pageSize: Long = 200,
+    action: (MessageModel) -> Unit
+) = withContext(Dispatchers.IO) {
+    var cursorId = Long.MIN_VALUE
+    while (true) {
+        val page = wcdb.message.prepareSelect()
+            .select(*DBMessageModel.allBindingFields())
+            .where(condition.and(DBMessageModel.databaseId.gt(cursorId)))
+            .orderBy(DBMessageModel.databaseId.order(Order.Asc))
+            .limit(pageSize)
+            .allObjects()
+        if (page.isEmpty()) break
+        page.forEach(action)
+        cursorId = page.last().databaseId.toLong()
+        if (page.size < pageSize) break
+        yield()
+    }
+}
+// endregion
 
 fun MessageModel.deleteRelatedDataForMessage() {
     try {
@@ -851,7 +1040,7 @@ fun MessageModel.convertToConfidentialPlaceholder() {
         DBMessageModel.databaseId.eq(databaseId)
     )
     L.i { "[Confidential] convertToConfidentialPlaceholder done: id=$id, databaseId=$databaseId" }
-    RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
+    RoomChangeTracker.trackRoom(roomId ?: "", RoomChangeType.MESSAGE)
 }
 
 fun MessageModel.isAttachmentMessage(): Boolean {
@@ -871,8 +1060,9 @@ fun MessageModel.isUnsupportedMessage(): Boolean {
 }
 
 fun MessageModel.previewContent(): String {
-    val senderName = if (roomType == 1) (wcdb.getContactorFromAllTable(fromWho)?.getDisplayNameForUI()
-        ?: fromWho) + ": " else ""
+    val from = fromWho ?: ""
+    val senderName = if (roomType == 1) (wcdb.getContactorFromAllTable(from)?.getDisplayNameForUI()
+        ?: from) + ": " else ""
     // Check unsupported message first
     return if (isUnsupportedMessage()) {
         senderName + ResUtils.getString(R.string.chat_message_unsupported)
@@ -881,7 +1071,9 @@ fun MessageModel.previewContent(): String {
     } else {
         if (isAttachmentMessage()) {
             val attachment = attachment()
-            if (attachment?.isImage() == true) {
+            if (attachment?.isAnimatedImage() == true) {
+                senderName + ResUtils.getString(R.string.chat_message_gif)
+            } else if (attachment?.isImage() == true) {
                 senderName + ResUtils.getString(R.string.chat_message_image)
             } else if (attachment?.isVideo() == true) {
                 senderName + ResUtils.getString(R.string.chat_message_video)
@@ -899,7 +1091,7 @@ fun MessageModel.previewContent(): String {
                 senderName + messageText
             }
         } else if (isNotifyMessage()) {
-            Gson().fromJson(messageText, JsonObject::class.java)?.get("showContent")?.asString.orEmpty()
+            globalServices.gson.fromJson(messageText, JsonObject::class.java)?.get("showContent")?.asString.orEmpty()
         } else {
             ""
         }
@@ -1057,7 +1249,7 @@ fun List<GroupMemberContactorModel>.convertToContactorModels(): List<ContactorMo
 }
 
 private fun ContactorModel.updateFrom(member: GroupMemberContactorModel) {
-    this.id = member.id
+    this.id = member.id ?: ""
     this.groupMemberContactor = member
 }
 

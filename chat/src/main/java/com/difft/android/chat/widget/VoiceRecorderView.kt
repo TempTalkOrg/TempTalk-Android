@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.MediaRecorder
 import android.os.Build
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -14,14 +13,20 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.globalServices
+import com.difft.android.call.data.VoicePreset
 import com.difft.android.chat.R
+import com.difft.android.chat.providers.MyBlobProvider
+import com.difft.android.chat.voice.DualCandidateVoiceRecorder
+import com.difft.android.chat.voice.VoiceMessageRecipes
+import com.difft.android.chat.voice.VoiceMessageRecordingCandidate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,8 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.difft.android.chat.audio.MediaRecorderWrapper
-import com.difft.android.chat.providers.MyBlobProvider
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 
 class VoiceRecorderView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -41,34 +46,50 @@ class VoiceRecorderView @JvmOverloads constructor(
     private val recordView: LinearLayout
     private val recordButton: AppCompatTextView
     private val waveformView: WaveformView
-    private val cancelZone: AppCompatImageView
-    private val tvTips: AppCompatTextView
     private val tvStop: AppCompatTextView
 
-    // View 级别的协程作用域，与 View 生命周期绑定
+    private val llActionButtons: LinearLayout
+    private val btnCancel: LinearLayout
+    private val btnAddEffect: LinearLayout
+    private val tvCancelHint: AppCompatTextView
+    private val tvEffectHint: AppCompatTextView
+    private val tvEffectLabel: AppCompatTextView
+
     private val viewScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private var startY = 0f
     @Volatile private var isRecording = false
-    @Volatile private var isCancelled = false
 
-    private var mediaRecorder: MediaRecorder? = null
+    private enum class GestureTarget { NONE, CANCEL, ADD_EFFECT }
+
+    @Volatile private var gestureTarget = GestureTarget.NONE
+
+    private var voiceRecorder: DualCandidateVoiceRecorder? = null
     private var amplitudeUpdateJob: Job? = null
     private var countdownJob: Job? = null
-    // Tracks the start coroutine so stop can join on it before tearing the recorder down,
-    // preventing the "stop wins the race -> recorder created afterwards leaks" interleaving.
     private var startJob: Job? = null
+    private var stopJob: Job? = null
 
     @Volatile private var recordingStartTime: Long = 0
 
     var recordingCallback: ((RecordingState) -> Unit)? = null
 
-    @Volatile private var outputFilePath: String? = null
+    /**
+     * Fired synchronously on the main thread the instant the user lifts
+     * their finger — before any async recording finalization.  Use this to
+     * hide the recording overlay / background immediately.
+     */
+    var onRecordingDismissed: (() -> Unit)? = null
+
+    @Volatile private var outputDir: File? = null
+
+    @Volatile var lastCandidates: List<VoiceMessageRecordingCandidate> = emptyList()
+        private set
 
     private companion object {
-        const val MIN_RECORDING_DURATION_MS = 1000L // 最短录制时间 1 秒（以毫秒为单位）
-        const val MAX_RECORDING_DURATION_MS = 180000L // 最长录制时间 3 分钟（以毫秒为单位）
-        const val COUNTDOWN_THRESHOLD_MS = 10000L // 倒计时阈值 10 秒（以毫秒为单位）
+        const val MIN_RECORDING_DURATION_MS = 1000L
+        const val MAX_RECORDING_DURATION_MS = 180000L
+        const val COUNTDOWN_THRESHOLD_MS = 10000L
+        const val RECORDER_STOP_TIMEOUT_MS = 5_000L
     }
 
     init {
@@ -76,10 +97,15 @@ class VoiceRecorderView @JvmOverloads constructor(
         recordView = findViewById(R.id.ll_record)
         recordButton = findViewById(R.id.record_button)
         waveformView = findViewById(R.id.waveform_view)
-        cancelZone = findViewById(R.id.cancel_zone)
-        tvTips = findViewById(R.id.tv_tips)
         tvStop = findViewById(R.id.tv_stop)
         tvStop.background = TooltipBackgroundDrawable()
+
+        llActionButtons = findViewById(R.id.ll_action_buttons)
+        btnCancel = findViewById(R.id.btn_cancel)
+        btnAddEffect = findViewById(R.id.btn_add_effect)
+        tvCancelHint = findViewById(R.id.tv_cancel_hint)
+        tvEffectHint = findViewById(R.id.tv_effect_hint)
+        tvEffectLabel = findViewById(R.id.tv_effect_label)
 
         initListeners()
     }
@@ -87,37 +113,24 @@ class VoiceRecorderView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
 
-        // Mark not-recording up-front so any surviving callback (audio focus listener,
-        // amplitude loop) early-returns instead of touching a dead recorder.
         isRecording = false
+        VoiceRecordingTracker.setRecording(false, "detach")
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
 
-        // Snapshot the recorder and hand cleanup off to appScope so it outlives viewScope.cancel().
-        // The lambda intentionally does NOT reference any View member, so it can't capture
-        // `this@VoiceRecorderView` and won't leak the View/Activity. Any context held by
-        // MediaRecorder is released as soon as release() runs (typical bound: <500 ms).
-        val recorderToCleanup = mediaRecorder
-        mediaRecorder = null
+        val recorderToCleanup = voiceRecorder
+        voiceRecorder = null
         if (recorderToCleanup != null) {
-            // appScope is a process-scoped SupervisorJob on Dispatchers.IO; not cancelled by us,
-            // so the cleanup runs to completion.
             appScope.launch {
                 try {
-                    recorderToCleanup.stop()
-                } catch (_: Exception) {
-                }
-                try {
                     recorderToCleanup.release()
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    L.w(e) { "[VoiceRecorder] dual-candidate release failed on detach" }
                 }
             }
         }
 
         releaseAudioFocus()
-
-        // Cancel viewScope last so the cleanup task above is already dispatched to appScope
-        // and won't be torn down with viewScope's children.
         viewScope.cancel()
         L.i { "[VoiceRecorder] View detached, cleanup dispatched to appScope" }
     }
@@ -130,15 +143,12 @@ class VoiceRecorderView @JvmOverloads constructor(
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                         recordingCallback?.invoke(RecordingState.RecordPermissionRequired)
                     } else {
-                        startY = event.rawY
                         startRecordingIfPermissionGranted()
                     }
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     if (isRecording) handleMove(event.rawX, event.rawY)
                 }
-
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (isRecording) stopRecording()
                 }
@@ -147,20 +157,31 @@ class VoiceRecorderView @JvmOverloads constructor(
         }
     }
 
+    private fun resolveVoicePreset(): VoicePreset {
+        val key = globalServices.userManager.getUserData()?.callVoiceChangerPreset
+        return VoicePreset.fromSdkKey(key ?: VoicePreset.ORIGINAL.sdkKey)
+    }
+
     private fun startRecordingIfPermissionGranted() {
         isRecording = true
-        isCancelled = false
+        VoiceRecordingTracker.setRecording(true, "start")
+        gestureTarget = GestureTarget.NONE
 
-        // Must initialize synchronously before any coroutine is dispatched. Otherwise startCountdown()
-        // can run on Main before startMediaRecorder() (on IO) sets recordingStartTime, read the default
-        // 0L, compute a huge elapsed time, and immediately trigger stopRecording(), producing a
-        // 0-second voice message that fails to send.
         recordingStartTime = System.currentTimeMillis()
-        outputFilePath = FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY) + recordingStartTime + ".m4a"
+        outputDir = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY))
 
-        cancelZone.visibility = View.VISIBLE
-        cancelZone.setBackgroundResource(R.drawable.chat_voice_cancle_bg)
-        tvTips.visibility = View.GONE
+        val preset = resolveVoicePreset()
+        val emoji = if (preset == VoicePreset.ORIGINAL) "🐿️" else preset.emoji
+        tvEffectLabel.text = context.getString(R.string.chat_voice_add_effect).let { label ->
+            if (emoji.isEmpty()) label else "$emoji  $label"
+        }
+
+        llActionButtons.visibility = View.VISIBLE
+        btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+        btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+        tvCancelHint.visibility = View.INVISIBLE
+        tvEffectHint.visibility = View.INVISIBLE
+
         waveformView.visibility = View.VISIBLE
         waveformView.startAnimation()
 
@@ -176,7 +197,6 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     private fun startCountdown() {
         countdownJob = viewScope.launch {
-            // Guards against abortRecording() firing before this coroutine gets CPU time.
             while (isActive && isRecording) {
                 val elapsedTime = System.currentTimeMillis() - recordingStartTime
                 val remainingTime = MAX_RECORDING_DURATION_MS - elapsedTime
@@ -184,7 +204,7 @@ class VoiceRecorderView @JvmOverloads constructor(
                 if (remainingTime in 1..COUNTDOWN_THRESHOLD_MS) {
                     val secondsRemaining = (remainingTime / 1000).toInt()
                     tvStop.visibility = View.VISIBLE
-                    tvStop.text = context.getString(R.string.chat_voice_recording_will_stop, secondsRemaining)
+                    tvStop.text = context.resources.getQuantityString(R.plurals.chat_voice_recording_will_stop, secondsRemaining, secondsRemaining)
                 } else {
                     tvStop.visibility = View.GONE
                 }
@@ -201,46 +221,49 @@ class VoiceRecorderView @JvmOverloads constructor(
 
     private fun launchMediaRecorder() {
         startJob = viewScope.launch {
-            withContext(Dispatchers.IO) {
-                startMediaRecorder()
-            }
-            if (isRecording) {
+            val started = withContext(Dispatchers.IO) { startDualCandidateRecorder() }
+            if (started && isRecording) {
                 startAmplitudeUpdates()
             }
         }
     }
 
-    private fun startMediaRecorder() {
-        // recordingStartTime and outputFilePath are assigned synchronously in
-        // startRecordingIfPermissionGranted(); this method only handles the MediaRecorder lifecycle.
+    private fun startDualCandidateRecorder(): Boolean {
         try {
-            // Guard against the late-IO-dispatch case: if onDetachedFromWindow / stopRecording flipped
-            // isRecording to false before this coroutine got CPU time, skip creating the recorder so we
-            // don't leak the mic. isRecording is @Volatile, so the write is visible here on IO.
             if (!isRecording) {
-                L.i { "[VoiceRecorder] startMediaRecorder skipped, no longer recording" }
-                return
+                L.i { "[VoiceRecorder] startDualCandidateRecorder skipped, no longer recording" }
+                return false
             }
-            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                MediaRecorder()
+            val dir = outputDir ?: run {
+                L.w { "[VoiceRecorder] outputDir null at start, aborting" }
+                return false
             }
-            mediaRecorder?.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(MediaRecorderWrapper.SAMPLE_RATE)
-                setAudioEncodingBitRate(MediaRecorderWrapper.BIT_RATE)
-                setAudioChannels(MediaRecorderWrapper.CHANNELS)
-                setOutputFile(outputFilePath)
-                prepare()
-                start()
-            }
+            val preset = resolveVoicePreset()
+            val recipes = VoiceMessageRecipes.buildRecipes(preset.sdkKey)
+            val recorder = DualCandidateVoiceRecorder(
+                context = context.applicationContext,
+                outputDir = dir,
+                recipes = recipes,
+                denoiseModel = VoiceMessageRecipes.DEFAULT_DENOISE_MODEL,
+                fileDeleter = ::deleteCandidateFile,
+                callbacks = object : DualCandidateVoiceRecorder.Callbacks {
+                    override fun onStarted() {}
+                    override fun onStopRequested() {}
+                    override fun onStopped(candidates: List<VoiceMessageRecordingCandidate>) {}
+                    override fun onCancelled() {}
+                    override fun onError(message: String) {
+                        L.w { "[VoiceRecorder] dual-candidate recorder error: $message" }
+                    }
+                },
+            )
+            voiceRecorder = recorder
+            recorder.start()
+            return true
         } catch (e: Exception) {
-            L.i { "[VoiceRecorder] start record failed:" + e.stackTraceToString() }
-            isCancelled = true
-            stopRecording()
+            L.w(e) { "[VoiceRecorder] start record failed" }
+            gestureTarget = GestureTarget.CANCEL
+            viewScope.launch { stopRecording() }
+            return false
         }
     }
 
@@ -252,25 +275,15 @@ class VoiceRecorderView @JvmOverloads constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setOnAudioFocusChangeListener { focusChange ->
-                    // ✅ 检查录音状态，避免在 MediaRecorder 已停止时操作
                     if (!isRecording) {
                         L.i { "[VoiceRecorder] Audio focus changed but not recording, ignore" }
                         return@setOnAudioFocusChangeListener
                     }
-
-                    // Any focus loss (transient or permanent) cancels the recording rather than
-                    // stop-and-send. Dominant trigger is an incoming call; in that case the user
-                    // is responding to something else and does NOT want a half-finished voice
-                    // note auto-delivered. False positives (alarm, external recorder) are rare
-                    // and the worst-case is the user re-records — much better than an unintended
-                    // partial send. Also avoids the pause/resume state-machine bugs (resume()
-                    // throwing IllegalStateException on a never-paused recorder, GAIN firing as
-                    // an initial notification on some OEM ROMs).
                     when (focusChange) {
                         AudioManager.AUDIOFOCUS_LOSS,
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                             L.i { "[VoiceRecorder] Audio focus lost ($focusChange), cancel recording" }
-                            isCancelled = true
+                            gestureTarget = GestureTarget.CANCEL
                             try {
                                 stopRecording()
                             } catch (e: Exception) {
@@ -284,7 +297,7 @@ class VoiceRecorderView @JvmOverloads constructor(
             audioFocusRequest?.let {
                 val focusRequestResult = audioManager?.requestAudioFocus(it)
                 if (focusRequestResult == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                    L.i { "[VoiceRecorder] Get audio focus, start Media Recorder" }
+                    L.i { "[VoiceRecorder] Got audio focus, start dual-candidate recorder" }
                     launchMediaRecorder()
                 } else {
                     L.w { "[VoiceRecorder] Audio focus denied (result=$focusRequestResult), abort recording" }
@@ -296,20 +309,15 @@ class VoiceRecorderView @JvmOverloads constructor(
         }
     }
 
-
     private fun startAmplitudeUpdates() {
         amplitudeUpdateJob = viewScope.launch(Dispatchers.IO) {
-            // Loop terminates promptly once stopRecording() flips isRecording (@Volatile), so we
-            // don't keep polling maxAmplitude after MediaRecorder is released.
             while (isActive && isRecording) {
                 try {
-                    val amplitude = mediaRecorder?.maxAmplitude?.toFloat() ?: 0f
+                    val amplitude = voiceRecorder?.readPeakAmplitude()?.toFloat() ?: 0f
                     withContext(Dispatchers.Main) {
                         waveformView.updateAmplitude(amplitude)
                     }
                 } catch (e: Exception) {
-                    // maxAmplitude throws IllegalStateException once the recorder is released.
-                    // Break out instead of hot-looping (delay was inside try → catch path skipped it).
                     L.w { "[VoiceRecorder] amplitude update failed: ${e.stackTraceToString()}" }
                     break
                 }
@@ -318,142 +326,215 @@ class VoiceRecorderView @JvmOverloads constructor(
         }
     }
 
-    private fun handleMove(currentX: Float, currentY: Float) {
-        // 获取 cancel_zone 的屏幕坐标
+    private fun isPointInsideView(view: View, rawX: Float, rawY: Float): Boolean {
         val location = IntArray(2)
-        cancelZone.getLocationOnScreen(location)
-        val cancelZoneX = location[0]
-        val cancelZoneY = location[1]
+        view.getLocationOnScreen(location)
+        return rawX.toInt() in location[0]..(location[0] + view.width) &&
+            rawY.toInt() in location[1]..(location[1] + view.height)
+    }
 
-        // 获取当前的放大比例
-        val scaleFactor = cancelZone.scaleX // 假设 scaleX 和 scaleY 始终相等
+    private fun handleMove(currentX: Float, currentY: Float) {
+        val previousTarget = gestureTarget
 
-        // 计算放大后的 cancel_zone 范围
-        val scaledWidth = cancelZone.width * scaleFactor
-        val scaledHeight = cancelZone.height * scaleFactor
-        val scaledCancelZoneX = cancelZoneX - (scaledWidth - cancelZone.width) / 2
-        val scaledCancelZoneY = cancelZoneY - (scaledHeight - cancelZone.height) / 2
+        gestureTarget = when {
+            isPointInsideView(btnCancel, currentX, currentY) -> GestureTarget.CANCEL
+            isPointInsideView(btnAddEffect, currentX, currentY) -> GestureTarget.ADD_EFFECT
+            else -> GestureTarget.NONE
+        }
 
-        // 判断触摸点是否在放大后的 cancel_zone 范围内
-        val isInScaledCancelZone = currentX.toInt() in scaledCancelZoneX.toInt()..(scaledCancelZoneX + scaledWidth).toInt() &&
-                currentY.toInt() in scaledCancelZoneY.toInt()..(scaledCancelZoneY + scaledHeight).toInt()
+        if (gestureTarget == previousTarget) return
 
-        if (isInScaledCancelZone) {
-            if (!isCancelled) {
-                isCancelled = true
-                cancelZone.animate().scaleX(1.2f).scaleY(1.2f).setDuration(200).start()
+        when (gestureTarget) {
+            GestureTarget.CANCEL -> {
+                btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_red)
+                btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+                tvCancelHint.visibility = View.VISIBLE
+                tvEffectHint.visibility = View.INVISIBLE
+                recordButton.text = context.getString(R.string.chat_voice_release_to_send)
+                recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
+                waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
+                recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
             }
-            recordButton.text = context.getString(R.string.chat_voice_release_to_send)
-            recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
-            waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
-            recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
-            cancelZone.setBackgroundResource(R.drawable.chat_voice_cancle_bg_red)
-            tvTips.visibility = View.VISIBLE
-            tvTips.text = context.getString(R.string.chat_voice_release_to_cancel)
-        } else {
-            if (isCancelled) {
-                isCancelled = false
-                cancelZone.animate().scaleX(1f).scaleY(1f).setDuration(200).start()
+            GestureTarget.ADD_EFFECT -> {
+                btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+                btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gradient)
+                tvCancelHint.visibility = View.INVISIBLE
+                tvEffectHint.visibility = View.VISIBLE
+                recordButton.text = context.getString(R.string.chat_voice_release_to_send)
+                recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
+                waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_disable))
+                recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
             }
-            recordButton.text = context.getString(R.string.chat_voice_release_to_send)
-            recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
-            waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
-            recordView.setBackgroundResource(R.drawable.chat_voice_record_blue_bg)
-            cancelZone.setBackgroundResource(R.drawable.chat_voice_cancle_bg)
-            tvTips.visibility = View.GONE
+            GestureTarget.NONE -> {
+                btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+                btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+                tvCancelHint.visibility = View.INVISIBLE
+                tvEffectHint.visibility = View.INVISIBLE
+                recordButton.text = context.getString(R.string.chat_voice_release_to_send)
+                recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
+                waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
+                recordView.setBackgroundResource(R.drawable.chat_voice_record_blue_bg)
+            }
         }
     }
 
     private fun stopRecording() {
         if (!isRecording) return
         isRecording = false
+        val gesture = gestureTarget
+        VoiceRecordingTracker.setRecording(false, if (gesture == GestureTarget.CANCEL) "cancel" else "stop")
 
-        // 计算录制时长
         val recordingDuration = System.currentTimeMillis() - recordingStartTime
 
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
 
-        // 在后台线程停止 MediaRecorder，避免阻塞主线程
-        viewScope.launch(Dispatchers.IO) {
-            // Wait for an in-flight start to finish so we never tear down a recorder that hasn't
-            // been created yet (the "stop wins the race" interleaving from the lifecycle audit).
+        // Reset UI immediately so the user gets instant visual feedback on
+        // finger release. Recording finalization (encoder EOS drain, pipeline
+        // release) can take 1-3 s and must not block the UI.
+        resetButton()
+        onRecordingDismissed?.invoke()
+
+        stopJob = viewScope.launch(Dispatchers.IO) {
             startJob?.join()
-            try {
-                stopMediaRecorder()
-                releaseAudioFocus()
+
+            val rec = voiceRecorder
+            val candidates: List<VoiceMessageRecordingCandidate>? = try {
+                if (rec == null) {
+                    null
+                } else if (gesture == GestureTarget.CANCEL) {
+                    rec.cancel()
+                    withTimeoutOrNull(RECORDER_STOP_TIMEOUT_MS) { rec.awaitResult() }
+                    null
+                } else {
+                    rec.stop()
+                    val result = withTimeoutOrNull(RECORDER_STOP_TIMEOUT_MS) { rec.awaitResult() }
+                    if (result == null) {
+                        L.w { "[VoiceRecorder] recorder.awaitResult() timed out after ${RECORDER_STOP_TIMEOUT_MS} ms" }
+                    }
+                    result
+                }
             } catch (e: Exception) {
-                L.i { "[VoiceRecorder] Error during stop: ${e.message}" }
+                L.w(e) { "[VoiceRecorder] Error awaiting recorder result" }
+                null
+            } finally {
+                voiceRecorder = null
+                // Ensure the recorder's internal scope is cancelled so the
+                // AudioRecord is released even if awaitResult() timed out.
+                // releaseAndJoin() is idempotent: if cleanup() already ran
+                // (normal path), the join returns immediately and cancel is a
+                // no-op on an already-idle scope.
+                try { rec?.releaseAndJoin() } catch (_: Exception) {}
+                try { releaseAudioFocus() } catch (e: Exception) {
+                    L.i { "[VoiceRecorder] release audio focus failed: ${e.message}" }
+                }
             }
 
-            // 在主线程更新 UI 和回调，确保无论是否发生异常都会执行
-            withContext(Dispatchers.Main) {
-                // 检查 View 是否还附加在窗口上，避免操作已销毁的 View
-                if (!isAttachedToWindow) {
-                    L.i { "[VoiceRecorder] View detached, skip UI update" }
-                    return@withContext
+            val terminalState: RecordingState = when {
+                gesture == GestureTarget.CANCEL -> {
+                    L.i { "[VoiceRecorder] Recording cancelled, files deleted." }
+                    RecordingState.Cancelled
                 }
 
-                when {
-                    isCancelled -> {
-                        L.i { "[VoiceRecorder] Recording cancelled, file deleted." }
-                        deleteRecordingFile()
-                        recordingCallback?.invoke(RecordingState.Cancelled)
-                    }
+                recordingDuration < MIN_RECORDING_DURATION_MS -> {
+                    L.i { "[VoiceRecorder] Recording too short, files deleted." }
+                    candidates?.forEach { it.file?.let(::deleteCandidateFile) }
+                    RecordingState.TooShort
+                }
 
-                    recordingDuration < MIN_RECORDING_DURATION_MS -> {
-                        L.i { "[VoiceRecorder] Recording too short, file deleted." }
-                        deleteRecordingFile()
-                        recordingCallback?.invoke(RecordingState.TooShort)
-                    }
+                candidates == null || candidates.all { it.file == null } -> {
+                    L.w { "[VoiceRecorder] no candidate files after stop (recorder failure)" }
+                    RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED)
+                }
 
-                    else -> {
-                        val path = outputFilePath
-                        if (path == null) {
-                            L.w { "[VoiceRecorder] outputFilePath is null after stop, treat as failed" }
-                            recordingCallback?.invoke(RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED))
-                        } else {
-                            val file = java.io.File(path)
-                            when {
-                                !file.exists() || file.length() == 0L -> {
-                                    L.w { "[VoiceRecorder] file missing/empty after stop (exists=${file.exists()}, length=${if (file.exists()) file.length() else -1})" }
-                                    deleteRecordingFile()
-                                    recordingCallback?.invoke(RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED))
-                                }
-                                file.length() > 10 * 1024 * 1024 -> { // 10MB
-                                    deleteRecordingFile()
-                                    recordingCallback?.invoke(RecordingState.TooLarge)
-                                }
-                                else -> {
-                                    L.i { "[VoiceRecorder] Recording saved. duration=$recordingDuration size=${file.length()}" }
-                                    recordingCallback?.invoke(RecordingState.Stopped(filePath = path))
-                                }
+                else -> {
+                    val picked = pickCandidateByGesture(gesture, candidates)
+                    val pickedFile = picked?.file
+                    val pickedLength = pickedFile?.length() ?: 0L
+                    when {
+                        pickedFile == null || pickedLength == 0L -> {
+                            L.w {
+                                "[VoiceRecorder] picked candidate not usable " +
+                                    "(file=${pickedFile?.absolutePath} length=$pickedLength)"
                             }
+                            candidates.forEach { it.file?.let(::deleteCandidateFile) }
+                            RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED)
+                        }
+                        pickedLength > 10 * 1024 * 1024 -> {
+                            candidates.forEach { it.file?.let(::deleteCandidateFile) }
+                            RecordingState.TooLarge
+                        }
+                        else -> {
+                            deleteUnpickedCandidates(picked, candidates)
+                            L.i {
+                                "[VoiceRecorder] Recording saved. gesture=$gesture " +
+                                    "duration=$recordingDuration " +
+                                    "pickedRecipe=${picked.recipe.id} pickedSize=$pickedLength " +
+                                    "candidates=" + candidates.joinToString { "${it.recipe.id}(${it.file?.length() ?: 0}B)" }
+                            }
+                            RecordingState.StoppedWithCandidates(
+                                pickedFilePath = pickedFile.absolutePath,
+                                candidates = candidates,
+                            )
                         }
                     }
                 }
+            }
 
-                // 确保无论什么情况都重置 UI
-                resetButton()
+            when (terminalState) {
+                is RecordingState.StoppedWithCandidates -> lastCandidates = terminalState.candidates
+                else -> lastCandidates = emptyList()
+            }
+
+            withContext(Dispatchers.Main) {
+                if (!isAttachedToWindow) {
+                    L.i { "[VoiceRecorder] View detached, skip callback" }
+                    return@withContext
+                }
+                // Defensive: ensure dismiss even if onRecordingDismissed was not
+                // set by the host (the synchronous call already fired, so this
+                // is a no-op for well-behaved callers).
+                onRecordingDismissed?.invoke()
+                recordingCallback?.invoke(terminalState)
             }
         }
     }
 
-
-    private fun stopMediaRecorder() {
-        // Split try blocks so release() always runs even if stop() throws
-        // (e.g. IllegalStateException when start() never reached or no data captured).
-        val r = mediaRecorder ?: return
-        mediaRecorder = null
-        try {
-            r.stop()
-        } catch (e: Exception) {
-            L.i { "[VoiceRecorder] stop failed: ${e.stackTraceToString()}" }
+    /**
+     * Pick a candidate based on the user's gesture:
+     * - [GestureTarget.ADD_EFFECT] → prefer denoise+effect candidate
+     * - [GestureTarget.NONE] → prefer denoise-only candidate (original voice)
+     * Falls back through usable candidates if the preferred one is missing.
+     */
+    private fun pickCandidateByGesture(
+        gesture: GestureTarget,
+        candidates: List<VoiceMessageRecordingCandidate>,
+    ): VoiceMessageRecordingCandidate? {
+        fun usable(c: VoiceMessageRecordingCandidate): Boolean {
+            val f = c.file ?: return false
+            return f.exists() && f.length() > 0
         }
-        try {
-            r.release()
-        } catch (e: Exception) {
-            L.i { "[VoiceRecorder] release failed: ${e.stackTraceToString()}" }
+
+        return when (gesture) {
+            GestureTarget.ADD_EFFECT -> {
+                candidates.firstOrNull { usable(it) && it.recipe.effect != null }
+                    ?: candidates.firstOrNull { usable(it) }
+            }
+            else -> {
+                candidates.firstOrNull { usable(it) && it.recipe.denoise && it.recipe.effect == null }
+                    ?: candidates.firstOrNull { usable(it) }
+            }
+        }
+    }
+
+    private fun deleteUnpickedCandidates(
+        picked: VoiceMessageRecordingCandidate,
+        candidates: List<VoiceMessageRecordingCandidate>,
+    ) {
+        candidates.forEach { candidate ->
+            if (candidate !== picked) {
+                candidate.file?.let(::deleteCandidateFile)
+            }
         }
     }
 
@@ -465,14 +546,15 @@ class VoiceRecorderView @JvmOverloads constructor(
         }
     }
 
-    // No MediaRecorder to tear down — caller detected failure before recording started.
     private fun abortRecording(reason: RecordingState.Reason) {
         isRecording = false
+        VoiceRecordingTracker.setRecording(false, "abort")
         countdownJob?.cancel()
         amplitudeUpdateJob?.cancel()
-        deleteRecordingFile()
+        deleteRecordingFiles()
         releaseAudioFocus()
         resetButton()
+        onRecordingDismissed?.invoke()
         recordingCallback?.invoke(RecordingState.RecordFailed(reason))
     }
 
@@ -481,25 +563,33 @@ class VoiceRecorderView @JvmOverloads constructor(
         recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary))
         waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
         recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
-        cancelZone.visibility = View.INVISIBLE
-        cancelZone.setBackgroundResource(R.drawable.chat_voice_cancle_bg)
-        cancelZone.animate().scaleX(1f).scaleY(1f).setDuration(200).start()
-        tvTips.visibility = View.GONE
+
+        llActionButtons.visibility = View.INVISIBLE
+        btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+        btnAddEffect.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
+        tvCancelHint.visibility = View.INVISIBLE
+        tvEffectHint.visibility = View.INVISIBLE
         tvStop.visibility = View.GONE
         waveformView.visibility = View.GONE
         waveformView.stopAnimation()
     }
 
-    private fun deleteRecordingFile() {
-        outputFilePath?.let {
-            MyBlobProvider.getInstance().delete(it.toUri())
-        }
+    private fun deleteRecordingFiles() {
+        lastCandidates.forEach { it.file?.let(::deleteCandidateFile) }
+        lastCandidates = emptyList()
+    }
+
+    private fun deleteCandidateFile(file: File) {
+        MyBlobProvider.getInstance().delete(file.absolutePath.toUri())
     }
 }
 
 sealed class RecordingState {
     data object Started : RecordingState()
-    data class Stopped(val filePath: String) : RecordingState()
+    data class StoppedWithCandidates(
+        val pickedFilePath: String,
+        val candidates: List<VoiceMessageRecordingCandidate>,
+    ) : RecordingState()
     data object TooShort : RecordingState()
     data object Cancelled : RecordingState()
     data object RecordPermissionRequired : RecordingState()
@@ -507,10 +597,7 @@ sealed class RecordingState {
     data class RecordFailed(val reason: Reason) : RecordingState()
 
     enum class Reason {
-        // requestAudioFocus() returned NOT_GRANTED — another app is using audio (call, music, assistant, ...).
         AUDIO_FOCUS_DENIED,
-        // MediaRecorder did not produce a valid output file (init failed, or stop ran before any data was captured).
         RECORDER_INIT_FAILED,
     }
 }
-

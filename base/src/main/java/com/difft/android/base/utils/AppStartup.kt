@@ -1,6 +1,9 @@
 package com.difft.android.base.utils
 
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.log.lumberjack.L
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -10,10 +13,18 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Manages our app startup flow with improved performance and error handling.
- * Uses Kotlin object for thread-safe singleton pattern and coroutines for efficient concurrency.
+ * Manages our app startup flow.
  *
- * Note: All public methods should be called on the main thread.
+ * Tasks must be registered before [execute] is called; additions made from inside
+ * a running task body are silently dropped (the iteration takes a snapshot up front
+ * to guard against [java.util.ConcurrentModificationException]).
+ *
+ * Tasks run with **continue-on-failure** semantics — a throw does NOT abort the
+ * rest of the chain (see #863 for why this matters). Failures are reported to
+ * [L] and Crashlytics; the goal is "guarantee no crash", not strict fail-fast.
+ * If a task's failure should be fatal, handle it in the task body.
+ *
+ * All public methods must be called on the main thread.
  */
 object AppStartup {
 
@@ -61,11 +72,12 @@ object AppStartup {
 
     /**
      * Schedules a task that should not block app startup, but should still happen as quickly as possible.
+     * @param name Task name for logging and Crashlytics attribution
      * @param task The task to execute
      * @return This AppStartup instance for chaining
      */
-    fun addNonBlocking(task: () -> Unit): AppStartup {
-        nonBlocking.add(Task("", task))
+    fun addNonBlocking(name: String, task: () -> Unit): AppStartup {
+        nonBlocking.add(Task(name, task))
         return this
     }
 
@@ -73,11 +85,12 @@ object AppStartup {
      * Schedules a task that should only be executed after all critical UI has been rendered.
      * If no UI will be shown (i.e. the Application was created in the background),
      * this will simply happen a short delay after Application#onCreate().
+     * @param name Task name for logging and Crashlytics attribution
      * @param task The task to execute
      * @return This AppStartup instance for chaining
      */
-    fun addPostRender(task: () -> Unit): AppStartup {
-        postRender.add(Task("", task))
+    fun addPostRender(name: String, task: () -> Unit): AppStartup {
+        postRender.add(Task(name, task))
         return this
     }
 
@@ -132,35 +145,24 @@ object AppStartup {
         }
     }
 
-    /**
-     * Begins all pending task execution with improved error handling and performance monitoring.
-     */
     fun execute() {
         val stopwatch = Stopwatch("init")
 
-        try {
-            // Execute blocking tasks with detailed logging
-            executeBlockingTasks(stopwatch)
+        executeBlockingTasks(stopwatch)
+        executeNonBlockingTasks()
 
-            // Schedule non-blocking tasks using coroutines
-            executeNonBlockingTasks()
+        stopwatch.split("schedule-non-blocking")
+        stopwatch.stop(TAG)
 
-            stopwatch.split("schedule-non-blocking")
-            stopwatch.stop(TAG)
-
-            // Schedule post-render tasks
-            schedulePostRenderTasks()
-
-        } catch (e: Exception) {
-            L.e(e) { "[$TAG]Error during app startup execution" }
-            // Continue with non-blocking and post-render tasks even if blocking tasks fail
-            executeNonBlockingTasks()
-            schedulePostRenderTasks()
-        }
+        schedulePostRenderTasks()
     }
 
     private fun executeBlockingTasks(stopwatch: Stopwatch) {
-        blocking.forEach { task ->
+        // Snapshot-before-iterate guards against ConcurrentModificationException
+        // if a task body re-enters addBlocking (e.g. via a lazy ContentProvider).
+        val tasks = blocking.toList()
+        blocking.clear()
+        tasks.forEach { task ->
             try {
                 val taskStartTime = System.currentTimeMillis()
                 task.runnable()
@@ -173,34 +175,36 @@ object AppStartup {
                     L.w { "[$TAG]Blocking task '${task.name}' took ${taskDuration}ms - consider moving to non-blocking" }
                 }
 
-            } catch (e: Exception) {
-                L.e(e) { "[$TAG]Error executing blocking task: ${task.name}" }
-                throw e // Re-throw to stop execution of remaining blocking tasks
+            } catch (e: Throwable) {
+                reportTaskFailure(kind = "blocking", taskName = task.name, e = e)
             }
         }
-        blocking.clear()
     }
 
     private fun executeNonBlockingTasks() {
-        nonBlocking.forEach { task ->
+        val tasks = nonBlocking.toList()
+        nonBlocking.clear()
+        tasks.forEach { task ->
             startupScope.launch(Dispatchers.IO) {
                 try {
                     val taskStartTime = System.currentTimeMillis()
                     task.runnable()
                     val taskDuration = System.currentTimeMillis() - taskStartTime
 
-                    L.d { "[$TAG]Non-blocking task completed in ${taskDuration}ms" }
+                    L.d { "[$TAG]Non-blocking task '${task.name}' completed in ${taskDuration}ms" }
 
                     if (taskDuration > 500) {
-                        L.w { "[$TAG]Non-blocking task took ${taskDuration}ms - consider optimization" }
+                        L.w { "[$TAG]Non-blocking task '${task.name}' took ${taskDuration}ms - consider optimization" }
                     }
 
-                } catch (e: Exception) {
-                    L.e(e) { "[$TAG]Error executing non-blocking task" }
+                } catch (e: CancellationException) {
+                    // Preserve structured-concurrency cancellation.
+                    throw e
+                } catch (e: Throwable) {
+                    reportTaskFailure(kind = "non-blocking", taskName = task.name, e = e)
                 }
             }
         }
-        nonBlocking.clear()
     }
 
     private fun schedulePostRenderTasks() {
@@ -212,25 +216,50 @@ object AppStartup {
     }
 
     private fun executePostRender() {
-        postRender.forEach { task ->
+        val tasks = postRender.toList()
+        postRender.clear()
+        tasks.forEach { task ->
             startupScope.launch(Dispatchers.IO) {
                 try {
                     val taskStartTime = System.currentTimeMillis()
                     task.runnable()
                     val taskDuration = System.currentTimeMillis() - taskStartTime
 
-                    L.d { "[$TAG]Post-render task completed in ${taskDuration}ms" }
+                    L.d { "[$TAG]Post-render task '${task.name}' completed in ${taskDuration}ms" }
 
                     if (taskDuration > 1000) {
-                        L.w { "[$TAG]Post-render task took ${taskDuration}ms - consider optimization" }
+                        L.w { "[$TAG]Post-render task '${task.name}' took ${taskDuration}ms - consider optimization" }
                     }
 
-                } catch (e: Exception) {
-                    L.e(e) { "[$TAG]Error executing post-render task" }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    reportTaskFailure(kind = "post-render", taskName = task.name, e = e)
                 }
             }
         }
-        postRender.clear()
+    }
+
+    /**
+     * Two sinks: [L] for the local log file, Crashlytics for ops visibility. Each
+     * call is independently wrapped so one failing sink does not break the others.
+     * The goal is "guarantee no crash", not full log fidelity — `android.util.Log`
+     * was intentionally excluded since it does not reach the local log file.
+     *
+     * The stack trace is inlined into the message via `stackTraceToString()` per
+     * `.claude/rules/logging-standards.md` so it is always present in the file log
+     * regardless of the Timber formatter's throwable-handling policy.
+     */
+    private fun reportTaskFailure(kind: String, taskName: String, e: Throwable) {
+        val displayName = taskName.ifEmpty { "<anonymous>" }
+        val label = "[$TAG] $kind task '$displayName' failed — continuing"
+
+        runCatching { L.e { "$label: ${e.stackTraceToString()}" } }
+        runCatching {
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            runCatching { crashlytics.log(label) }
+            runCatching { crashlytics.recordException(e) }
+        }
     }
 
     /**
@@ -244,4 +273,24 @@ object AppStartup {
     fun getApplicationStartTime(): Long {
         return applicationStartTime
     }
-} 
+
+    /** Test-only: singleton state can leak across tests if [execute] is not reached. */
+    @VisibleForTesting
+    internal fun reset() {
+        blocking.clear()
+        nonBlocking.clear()
+        postRender.clear()
+        outstandingCriticalRenderEvents.set(0)
+        applicationStartTime = 0L
+        renderStartTime = 0L
+        renderEndTime = 0L
+        postRenderTimeoutJob?.cancel()
+        postRenderTimeoutJob = null
+        backgroundPostRenderJob?.cancel()
+        backgroundPostRenderJob = null
+        // Cancel anonymous IO children launched by executeNonBlockingTasks /
+        // executePostRender — without this they survive teardown and can race
+        // against the next test (e.g. CountDownLatch in non-blocking test).
+        startupScope.coroutineContext[Job]?.children?.forEach { it.cancel() }
+    }
+}

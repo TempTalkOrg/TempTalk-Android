@@ -29,7 +29,6 @@ class CallCleanupManager(
     fun cleanup(
         lifecycleObserver: CallLifecycleObserver?,
         dialogManager: CallDialogManager?,
-        handler: android.os.Handler,
         proximitySensorManager: ProximitySensorManager?,
         pictureInPictureManager: PictureInPictureManager?,
         callActivityBroadcastReceiver: CallActivityBroadcastReceiver?,
@@ -51,9 +50,6 @@ class CallCleanupManager(
 
         runCatching { cleanupUIResources(dialogManager, backPressedCallback) }
             .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupUIResources failed" } }
-
-        runCatching { cleanupHandler(handler) }
-            .onFailure { L.e(it) { "[Call] CallCleanupManager: cleanupHandler failed" } }
 
         runCatching {
             releaseManagers(
@@ -113,14 +109,6 @@ class CallCleanupManager(
     }
 
     /**
-     * 清理 Handler 的延迟任务
-     */
-    private fun cleanupHandler(handler: android.os.Handler) {
-        handler.removeCallbacksAndMessages(null)
-        L.d { "[Call] CallCleanupManager cleared handler callbacks" }
-    }
-
-    /**
      * 释放各种管理器资源
      */
     private fun releaseManagers(
@@ -156,6 +144,7 @@ class CallCleanupManager(
     ) {
         vibrationManager.stopVibration()
         ringtoneManager.stopRingTone()
+        contactorCacheManager.stopParticipantObservation()
         contactorCacheManager.clearContactorCache()
         callControlMessageManager.clearControlMessage()
         L.d { "[Call] CallCleanupManager cleaned up system resources" }

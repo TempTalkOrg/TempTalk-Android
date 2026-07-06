@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -12,7 +13,6 @@ import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import org.difft.app.database.getCommonGroupsCount
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -265,6 +265,8 @@ class SingleChatSettingActivity : BaseActivity() {
     /**
      * Handle the display and query of common groups between current user and contact
      */
+    // Numeric-only display (common-group count); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private fun handleCommonGroupsDisplay() {
         if (contactId == globalServices.myId || contactId.isBotId()) {
             mBinding.relGroupInCommon.visibility = View.GONE
@@ -299,7 +301,7 @@ class SingleChatSettingActivity : BaseActivity() {
     }
 
     val token: String by lazy {
-        SecureSharedPrefsUtil.getToken()
+        (userManager.getUserData()?.microToken ?: "")
     }
 
     private fun showRemoveDialog() {

@@ -68,13 +68,13 @@ import com.difft.android.base.ui.theme.DifftTheme
 @Composable
 fun DifftScreen(
     title: String,
+    modifier: Modifier = Modifier,
     onNavigateBack: (() -> Unit)? = null,
     actionText: String? = null,
     onActionClick: (() -> Unit)? = null,
     actionEnabled: Boolean = true,
     containerColor: Color = DifftTheme.colors.background,
     titleStyle: TextStyle? = null,
-    modifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
@@ -125,8 +125,8 @@ fun DifftScreen(
 @Composable
 fun DifftScreen(
     topBar: @Composable () -> Unit,
-    containerColor: Color = DifftTheme.colors.background,
     modifier: Modifier = Modifier,
+    containerColor: Color = DifftTheme.colors.background,
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(

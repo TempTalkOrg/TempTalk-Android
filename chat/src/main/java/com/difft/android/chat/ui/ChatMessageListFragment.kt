@@ -73,6 +73,7 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
+import com.difft.android.chat.message.singleForwardableAttachment
 import difft.android.messageserialization.model.isLongText
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
@@ -96,12 +97,18 @@ import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.TranslateTargetLanguage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
+import com.difft.android.chat.media.AttachmentPreview
+import com.difft.android.chat.media.EncryptedAttachmentAccess
+import com.difft.android.chat.gif.favorite.resolveMessageGifPlaintext
+import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import difft.android.messageserialization.model.isImage
+import difft.android.messageserialization.model.keepEncryptedAtRest
 import difft.android.messageserialization.model.isVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -160,6 +167,10 @@ class ChatMessageListFragment : Fragment() {
         ownerProducer = { parentFragment ?: requireActivity() }
     )
     private val chatSettingViewModel: ChatSettingViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
+    // Shared with ChatMessageInputFragment (same parent owner): long-press "add to favorites".
+    private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
     private val chatMessageAdapter: ChatMessageAdapter by lazy {
@@ -655,7 +666,7 @@ class ChatMessageListFragment : Fragment() {
                 if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
                     it.translateData = translateData
-                    chatMessageAdapter.notifyItemChanged(chatMessageAdapter.currentList.indexOf(it))
+                    notifyItemChangedAndAnchorBottom(chatMessageAdapter.currentList.indexOf(it))
                 }
             }
         }
@@ -665,7 +676,7 @@ class ChatMessageListFragment : Fragment() {
                 if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
                     it.speechToTextData = speechToTextData
-                    chatMessageAdapter.notifyItemChanged(chatMessageAdapter.currentList.indexOf(it))
+                    notifyItemChangedAndAnchorBottom(chatMessageAdapter.currentList.indexOf(it))
                 }
             }
         }
@@ -804,7 +815,6 @@ class ChatMessageListFragment : Fragment() {
 
         val list = state.chatMessages
         val scrollAction = state.scrollAction
-        val previousListSize = chatMessageAdapter.currentList.size
         val isAtBottomBeforeUpdateList = isAtBottom(binding.recyclerViewMessage.layoutManager as LinearLayoutManager)
 
         chatMessageAdapter.submitList(list) {
@@ -826,15 +836,28 @@ class ChatMessageListFragment : Fragment() {
                 is ScrollAction.ToBottom -> {
                     scrollTo(list.size - 1)
                 }
-                // 2. 没有 scrollAction，走自动滚动逻辑
+
+                // 2. PreservePosition: pagination — DiffUtil keeps the anchor, never auto-snap.
+                //    Body is intentionally identical to the null/else arm today; kept as a
+                //    separate branch so pagination and passive-update paths can diverge later
+                //    without re-conflating them.
+                is ScrollAction.PreservePosition -> {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        updateBottomFloatingButton()
+                    }
+                }
+                // 3. No scrollAction: handle auto-scroll
                 null -> {
                     if (isAtBottomBeforeUpdateList) {
-                        // 在底部时：有新消息才需要滚动，其他情况（删除/更新）保持现状
-                        if (list.size > previousListSize) {
-                            scrollTo(list.size - 1)
+                        // Bypass scrollTo(): its lastScrollPos cache blocks re-anchoring when position/count are unchanged.
+                        if (list.isNotEmpty()) {
+                            binding.recyclerViewMessage.noSmoothScrollToBottom()
+                            binding.recyclerViewMessage.post {
+                                if (!isAdded || view == null || !this::binding.isInitialized) return@post
+                                sendAndUpdateMessageRead()
+                            }
                         }
                     } else {
-                        // 不在底部时，才需要更新悬浮按钮
                         viewLifecycleOwner.lifecycleScope.launch {
                             updateBottomFloatingButton()
                         }
@@ -877,6 +900,8 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
+    // Numeric-only display (unread/mention counts); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private suspend fun updateBottomFloatingButton() {
         if (!isAdded || view == null) return
         val defaultTintColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.icon)
@@ -1310,6 +1335,9 @@ class ChatMessageListFragment : Fragment() {
      * @param isForForward Whether in forward selection mode
      * @param isSaved Whether the message is saved/favorited
      */
+    // Clears the OnTouchListener installed by TextTruncationUtil.setupDoubleClickPreview;
+    // no click semantics involved (setOnTouchListener(null) only).
+    @SuppressLint("ClickableViewAccessibility")
     private fun showNewMessageActionPopup(
         message: TextChatMessage,
         messageView: View,
@@ -1376,11 +1404,17 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onCopy(message: TextChatMessage, selectedText: String?) {
-            if (selectedText != null) {
+            // PRD §4: copy notice emitted only after clipboard write succeeds.
+            if (!selectedText.isNullOrEmpty()) {
                 _root_ide_package_.com.difft.android.chat.util.Util.copyToClipboard(requireContext(), selectedText)
                 ToastUtil.show(getString(R.string.chat_message_action_copied))
+                chatViewModel.sendCopyNotice(listOf(message))
             } else {
-                messageActionHelper.copyMessageContent(message)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    if (messageActionHelper.copyMessageContent(message)) {
+                        chatViewModel.sendCopyNotice(listOf(message))
+                    }
+                }
             }
         }
 
@@ -1399,8 +1433,17 @@ class ChatMessageListFragment : Fragment() {
 
         override fun onForward(message: TextChatMessage, selectedText: String?) {
             if (selectedText != null) {
-                // Forward selected text as new message
-                selectChatsUtils.showChatSelectAndSendDialog(requireActivity(), selectedText)
+                // Partial-text forward — pass source context for SINGLE forward notice.
+                // PRD §5.5: text selection inside a CF bubble is not allowed in main conv, so
+                // this path is always main-conv → UNKNOWN. CF-detail partial select goes through
+                // ChatForwardMessageFragment.onForward, which explicitly passes SUB_COMBINED_FORWARD.
+                selectChatsUtils.showChatSelectAndSendDialog(
+                    requireActivity(),
+                    selectedText,
+                    sourceConversation = chatViewModel.forWhat,
+                    sourceAuthorIds = listOf(message.authorId),
+                    combinedForwardMode = CombinedForwardMode.UNKNOWN,
+                )
             } else {
                 chatViewModel.forwardMessage(message, false)
             }
@@ -1446,6 +1489,45 @@ class ChatMessageListFragment : Fragment() {
             if (position >= 0) {
                 val viewHolder = binding.recyclerViewMessage.findViewHolderForAdapterPosition(position)
                 viewHolder?.itemView?.let { gotoDetailPage(it, message) }
+            }
+        }
+
+        override fun onFavoriteGif(message: TextChatMessage) {
+            // Gif is encrypted at rest: gate on isReadable, then decrypt to a temp the write path
+            // consumes and deletes (deleteAfterUse). Shares resolveActionAttachment with save-to-album
+            // so the file path can't drift (§5.3).
+            val (attachment, messageId) = resolveActionAttachment(message) ?: return
+            // Reject oversized gifs up front using the known attachment size — avoids decrypting a large
+            // file just to reject it (the write path also enforces MAX_FAVORITE_ASSET_BYTES as a backstop).
+            if (attachment.size > MAX_FAVORITE_ASSET_BYTES) {
+                L.w { "[ChatMessageListFragment] favorite gif: too large size=${attachment.size} messageId=$messageId" }
+                ToastUtil.show(getString(R.string.gif_favorites_add_size_limit))
+                return
+            }
+            val fileName = attachment.fileName ?: return
+            val basePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+            if (!EncryptedAttachmentAccess.isReadable(basePath)) {
+                L.w { "[ChatMessageListFragment] favorite gif: not readable messageId=$messageId" }
+                ToastUtil.show(getString(R.string.gif_favorites_failed))
+                return
+            }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val resolved = withContext(Dispatchers.IO) {
+                    resolveMessageGifPlaintext(requireContext(), basePath, attachment.key)
+                }
+                if (resolved == null) {
+                    L.w { "[ChatMessageListFragment] favorite gif: decrypt failed messageId=${message.id}" }
+                    ToastUtil.show(getString(R.string.gif_favorites_failed))
+                    return@launch
+                }
+                val (file, isTemp) = resolved
+                favoriteViewModel.dispatch(
+                    com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(
+                        com.difft.android.chat.gif.favorite.FavoriteSource.FromMessageFile(
+                            file, attachment.width, attachment.height, deleteAfterUse = isTemp
+                        )
+                    )
+                )
             }
         }
 
@@ -1574,41 +1656,45 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun saveAttachment(data: TextChatMessage) {
-        var messageId = ""
-        val attachment = when {
-            data.isAttachmentMessage() -> {
-                messageId = data.id
-                data.attachment
-            }
+        val (attachment, messageId) = resolveActionAttachment(data) ?: return
+        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+        val progress = data.getAttachmentProgress()
 
-            data.forwardContext?.forwards?.size == 1 -> {
-                val attachment = data.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
-                messageId = attachment?.authorityId.toString()
-                attachment
+        // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
+        // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
+        // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
+        if (EncryptedAttachmentAccess.isReadable(attachmentPath) && (progress == null || progress == 100)) {
+            // Prefer the durable ciphertext (content uri) over the plaintext file: for a self-sent
+            // attachment PushTextSendJob deletes the plaintext right after upload, so a plaintext
+            // uri resolved here can ENOENT by the time this async save opens it (intermittent
+            // "error while saving"). The .encrypt copy decrypts on demand and never goes missing.
+            val saveUri = EncryptedAttachmentAccess.exportContentUriIfEncrypted(messageId, attachmentPath)
+                ?: File(attachmentPath).toUri()
+            val attachmentToSave = SaveAttachmentUtil.Attachment(
+                uri = saveUri,
+                contentType = attachment.contentType,
+                date = System.currentTimeMillis(),
+                fileName = attachment.fileName
+            )
+            viewLifecycleOwner.lifecycleScope.launch {
+                SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave)
             }
-
-            else -> null
+        } else {
+            L.w { "[ChatMessageListFragment] save attachment error, readable=" + EncryptedAttachmentAccess.isReadable(attachmentPath) + " downloadCompleted=" + (progress == null || progress == 100) }
+            ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
         }
+    }
 
-        attachment?.let {
-            val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + it.fileName
-            val progress = data.getAttachmentProgress()
-
-            if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
-                val attachment = SaveAttachmentUtil.Attachment(
-                    uri = File(attachmentPath).toUri(),
-                    contentType = it.contentType,
-                    date = System.currentTimeMillis(),
-                    fileName = it.fileName
-                )
-                viewLifecycleOwner.lifecycleScope.launch {
-                    SaveAttachmentUtil.saveWithUI(requireContext(), attachment)
-                }
-            } else {
-                L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
-                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
-            }
-        }
+    /**
+     * Resolve the actionable attachment + its on-disk storage messageId — the SINGLE source of truth
+     * shared by save AND favorite so their file-path resolution can never diverge again: a direct
+     * attachment is stored under message.id, a single-forward under the forward attachment's
+     * authorityId. Returns null when the message carries no actionable attachment.
+     */
+    private fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? {
+        val attachment = message.singleForwardableAttachment() ?: return null
+        val messageId = if (message.isAttachmentMessage()) message.id else attachment.authorityId.toString()
+        return attachment to messageId
     }
 
     private fun showTranslateDialog(data: TextChatMessage) {
@@ -1677,7 +1763,7 @@ class ChatMessageListFragment : Fragment() {
         val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
         val fileName = attachment.fileName ?: ""
         val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        val isFileValid = FileUtil.isFileValid(attachmentPath)
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
         return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
     }
@@ -1695,7 +1781,7 @@ class ChatMessageListFragment : Fragment() {
                 filePath,
                 attachment.authorityId,
                 attachment.key ?: byteArrayOf(),
-                !attachment.isAudioMessage(),
+                !attachment.keepEncryptedAtRest(),
                 autoSave
             )
         )
@@ -1703,7 +1789,7 @@ class ChatMessageListFragment : Fragment() {
 
     private fun openPreview(message: TextChatMessage) {
         val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
-        if (!FileUtil.isFileValid(filePath)) {
+        if (!EncryptedAttachmentAccess.isReadable(filePath)) {
             ToastUtil.showLong(R.string.file_load_error)
             return
         }
@@ -1717,7 +1803,7 @@ class ChatMessageListFragment : Fragment() {
 
                 if (isConfidential) {
                     // Confidential: only show the current message, no swiping
-                    mediaList.add(LocalMedia.generateLocalMedia(context, filePath))
+                    message.attachment?.let { mediaList.add(AttachmentPreview.localMediaFor(message.id, it)) }
                 } else {
                     chatMessageAdapter.currentList.forEach { msg ->
                         if (msg !is TextChatMessage) return@forEach
@@ -1726,9 +1812,10 @@ class ChatMessageListFragment : Fragment() {
 
                         //消息附件
                         msg.attachment?.takeIf { it.isImage() || it.isVideo() }?.let { attachment ->
-                            val path = FileUtil.getMessageAttachmentFilePath(msg.id) + (attachment.fileName ?: return@let)
-                            if (FileUtil.isFileValid(path)) {
-                                mediaList.add(LocalMedia.generateLocalMedia(context, path))
+                            attachment.fileName ?: return@let
+                            val path = FileUtil.getMessageAttachmentFilePath(msg.id) + attachment.fileName
+                            if (EncryptedAttachmentAccess.isReadable(path)) {
+                                mediaList.add(AttachmentPreview.localMediaFor(msg.id, attachment))
                             }
                             return@forEach
                         }
@@ -1738,15 +1825,17 @@ class ChatMessageListFragment : Fragment() {
                         val forwardAttachment = forward.attachments?.firstOrNull()
                         if (forwardAttachment?.isImage() == true || forwardAttachment?.isVideo() == true) {
                             val forwardMessage = generateMessageFromForward(forward) as? TextChatMessage ?: return@forEach
-                            val path = FileUtil.getMessageAttachmentFilePath(forwardMessage.id) + (forwardMessage.attachment?.fileName ?: return@forEach)
-                            if (FileUtil.isFileValid(path)) {
-                                mediaList.add(LocalMedia.generateLocalMedia(context, path))
+                            val forwardMsgAttachment = forwardMessage.attachment ?: return@forEach
+                            forwardMsgAttachment.fileName ?: return@forEach
+                            val path = FileUtil.getMessageAttachmentFilePath(forwardMessage.id) + forwardMsgAttachment.fileName
+                            if (EncryptedAttachmentAccess.isReadable(path)) {
+                                mediaList.add(AttachmentPreview.localMediaFor(forwardMessage.id, forwardMsgAttachment))
                             }
                         }
                     }
                 }
 
-                val position = if (isConfidential) 0 else mediaList.indexOfFirst { it.path == filePath }
+                val position = if (isConfidential) 0 else mediaList.indexOfFirst { it.realPath == filePath }
                 mediaList to position
             }
 
@@ -1833,6 +1922,16 @@ class ChatMessageListFragment : Fragment() {
         if (isAtTop(linearLayoutManager)) {
             L.d { "[message] isAtTop" }
             loadPreviousPage()
+        }
+    }
+
+    private fun notifyItemChangedAndAnchorBottom(position: Int) {
+        if (position < 0) return
+        val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
+        val wasAtBottom = layoutManager?.let { isAtBottom(it) } == true
+        chatMessageAdapter.notifyItemChanged(position)
+        if (wasAtBottom) {
+            binding.recyclerViewMessage.noSmoothScrollToBottom()
         }
     }
 
@@ -2149,7 +2248,8 @@ class ChatMessageListFragment : Fragment() {
         override fun isDraggable(): Boolean = false
         override fun showDragHandle(): Boolean = false
 
-        @SuppressLint("ClickableViewAccessibility")
+        // SetTextI18n: line-number overlay uses numeric-only display; no English text to translate.
+        @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
         override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
 
             view.findViewById<ImageView>(R.id.iv_close).setOnClickListener {
@@ -2243,10 +2343,12 @@ class ChatMessageListFragment : Fragment() {
             val attachment = currentMessage.attachment
             if (attachment?.isLongText() == true) {
                 val filePath = FileUtil.getMessageAttachmentFilePath(currentMessage.id) + (attachment.fileName ?: "")
+                val appContext = requireContext().applicationContext
                 viewLifecycleOwner.lifecycleScope.launch {
                     val fullText = withContext(Dispatchers.IO) {
-                        if (FileUtil.isFileValid(filePath)) {
-                            try { java.io.File(filePath).readText() } catch (_: Exception) { null }
+                        if (EncryptedAttachmentAccess.isReadable(filePath)) {
+                            // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
+                            try { EncryptedAttachmentAccess.readDecryptedText(appContext, filePath) } catch (_: Exception) { null }
                         } else null
                     }
                     if (fullText != null) renderConfidentialText(fullText)
@@ -2365,8 +2467,12 @@ class ChatMessageListFragment : Fragment() {
             attachMessageView?.setupAttachmentView(message)
             attachMessageView?.setOnClickListener {
                 // 点击附件打开文件查看器
+                // Encrypted-at-rest: generic files keep only "<path>.encrypt" on disk, so a
+                // plaintext-only isFileValid() would report "not available" and block opening.
+                // Gate on isReadable; viewFile() already routes ciphertext through the decrypting
+                // content uri (and falls back to a FileProvider uri for any legacy plaintext).
                 val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
-                if (FileUtil.isFileValid(filePath)) {
+                if (EncryptedAttachmentAccess.isReadable(filePath)) {
                     requireContext().viewFile(filePath)
                 } else {
                     ToastUtil.showLong(R.string.file_load_error)

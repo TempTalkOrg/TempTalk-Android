@@ -1,174 +1,24 @@
 package timber.log
 
 import android.os.Build
-import android.util.Log
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.log.lumberjack.L.replaceUid
 import com.difft.android.base.log.lumberjack.data.StackData
-import java.io.PrintWriter
-import java.io.StringWriter
 
 abstract class BaseTree : Timber.Tree() {
 
-    // we overwrite all log functions because the base classes Timber.prepareLog is private and we need to make a small adjustment
-    // to get correct line numbers for kotlin exceptions (only the IDE does convert the line limbers correctly based on a mapping table)
-
-    override fun v(message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.VERBOSE,
-            null,
-            message,
-            *args
-        )
-    }
-
-    override fun v(t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.VERBOSE,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun v(t: Throwable?) {
-        prepareLog(Log.VERBOSE, t, null)
-    }
-
-    override fun d(message: String?, vararg args: Any?) {
-        prepareLog(Log.DEBUG, null, message, *args)
-    }
-
-    override fun d(t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.DEBUG,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun d(t: Throwable?) {
-        prepareLog(Log.DEBUG, t, null)
-    }
-
-    override fun i(message: String?, vararg args: Any?) {
-        prepareLog(Log.INFO, null, message, *args)
-    }
-
-    override fun i(t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.INFO,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun i(t: Throwable?) {
-        prepareLog(Log.INFO, t, null)
-    }
-
-    override fun w(message: String?, vararg args: Any?) {
-        prepareLog(Log.WARN, null, message, *args)
-    }
-
-    override fun w(t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.WARN,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun w(t: Throwable?) {
-        prepareLog(Log.WARN, t, null)
-    }
-
-    override fun e(message: String?, vararg args: Any?) {
-        prepareLog(Log.ERROR, null, message, *args)
-    }
-
-    override fun e(t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.ERROR,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun e(t: Throwable?) {
-        prepareLog(Log.ERROR, t, null)
-    }
-
-    override fun wtf(message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.ASSERT,
-            null,
-            message,
-            *args
-        )
-    }
-
-    override fun wtf(t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            Log.ASSERT,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun wtf(t: Throwable?) {
-        prepareLog(Log.ASSERT, t, null)
-    }
-
-    override fun log(priority: Int, message: String?, vararg args: Any?) {
-        prepareLog(
-            priority,
-            null,
-            message,
-            *args
-        )
-    }
-
-    override fun log(priority: Int, t: Throwable?, message: String?, vararg args: Any?) {
-        prepareLog(
-            priority,
-            t,
-            message,
-            *args
-        )
-    }
-
-    override fun log(priority: Int, t: Throwable?) {
-        prepareLog(priority, t, null)
-    }
-
-    override fun isLoggable(tag: String?, priority: Int): Boolean {
-        return tag == null || (L.filter?.isTagEnabled(this, tag) ?: true)
-    }
-
-    // copied from Timber.Tree because it's private in the base class
-    private fun getStackTraceString(t: Throwable): String {
-        // Don't replace this with Log.getStackTraceString() - it hides
-        // UnknownHostException, which is not what we want.
-        val sw = StringWriter(256)
-        val pw = PrintWriter(sw, false)
-        t.printStackTrace(pw)
-        pw.flush()
-        return sw.toString()
-    }
-
-    // --------------------
-    // custom code
-    // --------------------
-
-    private fun prepareLog(priority: Int, t: Throwable?, message: String?, vararg args: Any?) {
-
-        // custom: we create a stack data object
+    // Override the canonical log() entry. Timber's prepareLog (private) already
+    // resolves the per-call tag from `Timber.tag(...)` and passes it here, so we
+    // no longer need our own convenience-method overrides nor `super.getTag()`
+    // (which became `internal` in Timber 5 and is unreachable from this module).
+    // The custom work — stack-data resolution, UID redaction, prefix formatting —
+    // happens here and then delegates to the abstract extended-signature log().
+    final override fun log(
+        priority: Int,
+        tag: String?,
+        message: String,
+        t: Throwable?
+    ) {
         val callStackCorrection = getCallStackCorrection() ?: 0
         val stackDataLocal = getStackTrace()
         var needReplaceUid = false
@@ -193,49 +43,27 @@ abstract class BaseTree : Timber.Tree() {
                         return
                     }
                 } else {
-                    val t = Throwable()
-                    if (t.stackTrace.size <= CALL_STACK_INDEX_LIVEKIT) {
-                        return
-                    }
-                    StackData(t, CALL_STACK_INDEX_LIVEKIT, true)
+                    // Mirror the StackWalker semantics above: skip the baseline, then
+                    // filter out any further timber.log.* frames. Required because
+                    // Timber 5's `prepareLog` adds an extra frame between this method
+                    // and the user-meaningful caller.
+                    val syntheticTrace = Throwable()
+                    val frames = syntheticTrace.stackTrace
+                    val callerIndex = (CALL_STACK_INDEX_LIVEKIT until frames.size)
+                        .firstOrNull { !frames[it].className.startsWith("timber.log") }
+                        ?: return
+                    StackData(syntheticTrace, callerIndex, true)
                 }
             }
         }
 
-        // Consume tag even when message is not loggable so that next message is correctly tagged.
-        @Suppress("NAME_SHADOWING") var message =
-            if (needReplaceUid && message != null) replaceUid(message) else message
-        val customTag = super.getTag()
-        val prefix = getPrefix(customTag, stackData)
-        if (!isLoggable(customTag, priority)) {
-            return
-        }
-        if (message != null && message.isEmpty()) {
-            message = null
-        }
-        if (message == null) {
-            if (t == null) {
-                return  // Swallow message if it's null and there's no throwable.
-            }
-            message = getStackTraceString(t)
-        } else {
-            if (args.isNotEmpty()) {
-                message = String.format(message, *args)
-            }
-            if (t != null) {
-                message += " - " + getStackTraceString(t).trimIndent()
-            }
-        }
-        log(priority, prefix, message, t, stackData)
+        val resolvedMessage = if (needReplaceUid) replaceUid(message) else message
+        val prefix = getPrefix(tag, stackData)
+        log(priority, prefix, resolvedMessage, t, stackData)
     }
 
-    final override fun log(
-        priority: Int,
-        tag: String?,
-        message: String,
-        t: Throwable?
-    ) {
-        /* empty, we use our own function with StackData */
+    override fun isLoggable(tag: String?, priority: Int): Boolean {
+        return tag == null || (L.filter?.isTagEnabled(this, tag) ?: true)
     }
 
     abstract fun log(
@@ -252,10 +80,6 @@ abstract class BaseTree : Timber.Tree() {
 
     protected fun formatLine(prefix: String, message: String) =
         L.formatter.formatLine(this, prefix, message)
-
-    // --------------------
-    // custom code - extended tag
-    // --------------------
 
     private fun getPrefix(customTag: String?, stackData: StackData): String {
         return L.formatter.formatLogPrefix(customTag, stackData)

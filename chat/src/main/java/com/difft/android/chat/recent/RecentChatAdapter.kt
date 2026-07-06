@@ -18,6 +18,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.appScope
+import kotlinx.coroutines.launch
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
@@ -382,8 +384,9 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 binding.callBarDuration.setOnClickListener {
                     if (!callStateManager.isInCalling()) {
                         L.i { "[call] CallBar Joining call for roomId:${roomId}." }
-                        LCallManager.joinCall(activity, callData) { status ->
-                            if(!status) {
+                        appScope.launch {
+                            val status = LCallManager.joinCall(activity, callData)
+                            if (!status) {
                                 L.e { "[Call] CallBar join call failed." }
                                 ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
                             }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import com.difft.android.call.ui.HideNavigationBarEffect
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,7 +35,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -51,6 +51,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.PopupPositionProvider
 import com.difft.android.base.call.CallType
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallManager
@@ -110,17 +111,18 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                 .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
                 .wrapContentHeight(),
             sheetState = sheetState,
-            containerColor = colorResource(id = com.difft.android.base.R.color.bg3_night),
+            containerColor = DifftTheme.colors.backgroundTertiary,
             contentWindowInsets = { WindowInsets.navigationBars },
             onDismissRequest = {
                 onDismiss()
             },
         ) {
+            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .background(color = colorResource(id = com.difft.android.base.R.color.bg3_night), shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
+                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
                     .padding(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -154,7 +156,7 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                                     lineHeight = 24.sp,
                                     fontFamily = FontFamily.Default,
                                     fontWeight = FontWeight(400),
-                                    color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                                    color = DifftTheme.colors.textPrimary,
                                 )
                             )
 
@@ -206,7 +208,7 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                                 lineHeight = 20.sp,
                                 fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
-                                color = colorResource(id = com.difft.android.base.R.color.t_secondary_night),
+                                color = DifftTheme.colors.textSecondary,
                                 textAlign = TextAlign.Center,
                             )
                         )
@@ -216,7 +218,7 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                         modifier = Modifier
                             .width(343.dp)
                             .height(48.dp)
-                            .background(color = colorResource(id = com.difft.android.base.R.color.primary), shape = RoundedCornerShape(size = 8.dp))
+                            .background(color = DifftTheme.colors.primary, shape = RoundedCornerShape(size = 8.dp))
                             .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 8.dp)
                             .clickable{
                                 sendCriticalAlert(gid)
@@ -231,7 +233,7 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                                 lineHeight = 20.sp,
                                 fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
-                                color = colorResource(id = com.difft.android.base.R.color.t_primary_night),
+                                color = DifftTheme.colors.textPrimary,
                                 textAlign = TextAlign.Center,
                             )
                         )
@@ -290,7 +292,7 @@ private suspend fun getInviteeNames(
 
 @Composable
 private fun TooltipBubble(text: String) {
-    val tooltipBackground = colorResource(id = com.difft.android.base.R.color.bg_tooltip)
+    val tooltipBackground = DifftTheme.colors.backgroundTooltip
     Column(
         modifier = Modifier
             .alpha(0.95f)

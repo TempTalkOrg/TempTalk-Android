@@ -5,6 +5,8 @@ import com.difft.android.base.log.lumberjack.L;
 
 import android.text.TextUtils;
 
+import java.util.Locale;
+
 /**
  * @author：luck
  * @date：2017-5-24 17:02
@@ -30,7 +32,7 @@ public final class PictureMimeType {
      * @return
      */
     public static boolean isUrlHasGif(String url) {
-        return url.toLowerCase().endsWith(".gif");
+        return url.toLowerCase(Locale.ROOT).endsWith(".gif");
     }
 
     /**
@@ -40,10 +42,10 @@ public final class PictureMimeType {
      * @return
      */
     public static boolean isUrlHasImage(String url) {
-        return url.toLowerCase().endsWith(".jpg")
-                || url.toLowerCase().endsWith(".jpeg")
-                || url.toLowerCase().endsWith(".png")
-                || url.toLowerCase().endsWith(".heic");
+        return url.toLowerCase(Locale.ROOT).endsWith(".jpg")
+                || url.toLowerCase(Locale.ROOT).endsWith(".jpeg")
+                || url.toLowerCase(Locale.ROOT).endsWith(".png")
+                || url.toLowerCase(Locale.ROOT).endsWith(".heic");
     }
 
     /**
@@ -63,7 +65,7 @@ public final class PictureMimeType {
      * @return
      */
     public static boolean isUrlHasWebp(String url) {
-        return url.toLowerCase().endsWith(".webp");
+        return url.toLowerCase(Locale.ROOT).endsWith(".webp");
     }
 
     /**
@@ -83,7 +85,7 @@ public final class PictureMimeType {
      * @return
      */
     public static boolean isUrlHasVideo(String url) {
-        return url.toLowerCase().endsWith(".mp4");
+        return url.toLowerCase(Locale.ROOT).endsWith(".mp4");
     }
 
     /**
@@ -103,7 +105,7 @@ public final class PictureMimeType {
      * @return
      */
     public static boolean isUrlHasAudio(String url) {
-        return url.toLowerCase().endsWith(".amr") || url.toLowerCase().endsWith(".mp3");
+        return url.toLowerCase(Locale.ROOT).endsWith(".amr") || url.toLowerCase(Locale.ROOT).endsWith(".mp3");
     }
 
     /**

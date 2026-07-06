@@ -1,6 +1,9 @@
+@file:SuppressLint("PrivateApi")
+
 package com.difft.android.call.util
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AppOpsManager
 import android.app.Notification
 import android.app.NotificationManager
@@ -147,26 +150,14 @@ object FullScreenPermissionHelper {
     }
 
     private fun buildChannelSettingIntent(context: Context, channelId: String): Intent = Intent().apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            action = Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS
-            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
-        } else {
-            action = "android.settings.APP_NOTIFICATION_SETTINGS"
-            putExtra("app_package", context.packageName)
-            putExtra("app_uid", context.applicationInfo.uid)
-        }
+        action = Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS
+        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
     }
 
     private fun buildAppNotificationIntent(context: Context): Intent = Intent().apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
-            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-        } else {
-            action = "android.settings.APP_NOTIFICATION_SETTINGS"
-            putExtra("app_package", context.packageName)
-            putExtra("app_uid", context.applicationInfo.uid)
-        }
+        action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
     }
 
     fun jumpToPermissionSettingActivity(context: Context?) {
@@ -227,17 +218,15 @@ object FullScreenPermissionHelper {
             return false
         }
         // 4. Channel 权限（横幅通知 + 锁屏可见性）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = nm.getNotificationChannel(channelId)
-            if (channel != null) {
-                // 横幅通知需要 IMPORTANCE_HIGH 或以上
-                if (channel.importance < NotificationManager.IMPORTANCE_HIGH) {
-                    return false
-                }
-                // 锁屏可见性不能是 SECRET，否则锁屏上不显示内容
-                if (channel.lockscreenVisibility == Notification.VISIBILITY_SECRET) {
-                    return false
-                }
+        val channel = nm.getNotificationChannel(channelId)
+        if (channel != null) {
+            // 横幅通知需要 IMPORTANCE_HIGH 或以上
+            if (channel.importance < NotificationManager.IMPORTANCE_HIGH) {
+                return false
+            }
+            // 锁屏可见性不能是 SECRET，否则锁屏上不显示内容
+            if (channel.lockscreenVisibility == Notification.VISIBILITY_SECRET) {
+                return false
             }
         }
         return true

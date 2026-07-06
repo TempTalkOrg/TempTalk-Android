@@ -1,9 +1,11 @@
 package com.difft.android.chat.jobs
 
+import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.sanitizeUrl
+
 import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import org.difft.app.database.wcdb
 import com.difft.android.chat.fileshare.DownloadReq
 import com.difft.android.chat.fileshare.FileShareRepo
@@ -15,6 +17,7 @@ import org.difft.app.database.models.DBAttachmentModel
 import util.FileUtils
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.SaveAttachmentUtil
@@ -107,7 +110,7 @@ class DownloadAttachmentJob private constructor(
 
         try {
             val fileShareRepo = EntryPointAccessors.fromApplication<EntryPoint>(context).fileShareRepo
-            val response = fileShareRepo.download(DownloadReq(SecureSharedPrefsUtil.getToken(), authorizedId, fileHash, "")).execute()
+            val response = fileShareRepo.download(DownloadReq((globalServices.userManager.getUserData()?.microToken ?: ""), authorizedId, fileHash, "")).execute()
 
             if (!response.isSuccessful) {
                 throw Exception("[DownloadAttachmentJob] download attachment fail: ${response.message()}")
@@ -154,57 +157,66 @@ class DownloadAttachmentJob private constructor(
 
             for ((index, url) in urlsToTry.withIndex()) {
                 try {
-                    L.i { "[DownloadAttachmentJob] Attempting download with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                    L.i { "[DownloadAttachmentJob] Attempting download with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
 
                     val downLoadResponse = fileShareRepo.downloadFromOSS(url).execute()
 
                     if (!downLoadResponse.isSuccessful) {
-                        L.w { "[DownloadAttachmentJob] Download failed with URL ${index + 1}/${urlsToTry.size}: ${downLoadResponse.message}, messageId: $messageId, url: $url" }
+                        L.w { "[DownloadAttachmentJob] Download failed with URL ${index + 1}/${urlsToTry.size}: ${downLoadResponse.message}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
                         lastDownloadException = Exception("Download from OSS failed: ${downLoadResponse.message}")
                         continue
                     }
 
                     val downLoadResponseBody = downLoadResponse.body
                     if (downLoadResponseBody == null) {
-                        L.w { "[DownloadAttachmentJob] Download response body is null with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                        L.w { "[DownloadAttachmentJob] Download response body is null with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
                         lastDownloadException = Exception("Download response body is null")
                         continue
                     }
 
+                    val contentLength = downLoadResponseBody.contentLength()
+                    var totalBytesRead: Long = 0
                     downLoadResponseBody.byteStream().let { inputStream ->
                         val encryptOutputStream = FileOutputStream(encryptFile)
 
                         try {
                             var bytesRead: Int
-                            var totalBytesRead: Long = 0
                             var lastEmitTime = System.currentTimeMillis()
                             var lastEmitProgress = 0
 
                             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                                 encryptOutputStream.write(buffer, 0, bytesRead)
                                 totalBytesRead += bytesRead
-                                val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt().coerceAtMost(99)
+                                val progress = (100.0 * totalBytesRead / contentLength).toInt().coerceAtMost(99)
                                 val currentTime = System.currentTimeMillis()
                                 // Update every 50ms or when progress changes by >=5%
                                 if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
-                                    L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/${downLoadResponseBody.contentLength()} = $progress%" }
+                                    L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/$contentLength = $progress%" }
                                     FileUtil.emitProgressUpdate(messageId, progress)
                                     lastEmitTime = currentTime
                                     lastEmitProgress = progress
                                 }
                             }
+                            encryptOutputStream.flush()
                         } finally {
                             inputStream.close()
                             encryptOutputStream.close()
                         }
                     }
 
-                    L.i { "[DownloadAttachmentJob] Download successful with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: $url" }
+                    // Guard against a silently-truncated stream (early EOF on a dropped connection):
+                    // an incomplete .encrypt would later decrypt to garbage. Treat it as a failure so
+                    // we fall through to the next URL / retry instead of persisting a corrupt file.
+                    if (contentLength > 0 && totalBytesRead != contentLength) {
+                        throw IOException("[DownloadAttachmentJob] incomplete download: $totalBytesRead/$contentLength bytes, messageId: $messageId")
+                    }
+
+                    L.i { "[DownloadAttachmentJob] Download successful with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
                     downloadSuccess = true
                     break
 
                 } catch (e: Exception) {
-                    L.w { "[DownloadAttachmentJob] Download exception with URL ${index + 1}/${urlsToTry.size}: ${e.message}, messageId: $messageId, url: $url" }
+                    L.e { "[DownloadAttachmentJob] Download exception ${e::class.simpleName} ${index + 1}/${urlsToTry.size} messageId=$messageId url=${url.sanitizeUrl()}\n${e.stackTraceToString().sanitizeUrl()}" }
                     lastDownloadException = e
                     // 清理可能的部分下载文件
                     if (encryptFile.exists()) {
@@ -237,6 +249,13 @@ class DownloadAttachmentJob private constructor(
                     realFile.delete()
                     throw e
                 }
+            } else {
+                // Encrypted-at-rest (image / voice): keep the ciphertext on disk and decrypt on
+                // demand. Verify integrity ONCE now so consumers can read later without re-verifying.
+                if (fileKey.size >= 64 && !FileDecryptionUtil.verifyMac(encryptFile, fileKey)) {
+                    encryptFile.delete()
+                    throw SecurityException("[DownloadAttachmentJob] MAC verification failed, messageId: $messageId")
+                }
             }
 
             // Auto save to photos if enabled
@@ -248,8 +267,17 @@ class DownloadAttachmentJob private constructor(
             if (autoSave) {
                 L.i { "[DownloadAttachmentJob] auto save to photos: $filePath" }
                 if (FileUtil.canWriteToMediaStore()) {
-                    if (File(filePath).exists()) {
-                        val fileUri = File(filePath).toUri()
+                    val plainExists = File(filePath).exists()
+                    val encryptedExists = EncryptedAttachmentAccess.hasEncrypted(filePath)
+                    if (plainExists || encryptedExists) {
+                        // Prefer the durable ciphertext (content uri) when present; only fall back to
+                        // the plaintext file for legacy plaintext-only data. Reading the .encrypt on
+                        // demand avoids racing with any concurrent plaintext deletion.
+                        val fileUri = if (encryptedExists) {
+                            EncryptedAttachmentAccess.contentUri(messageId, File(filePath).name)
+                        } else {
+                            File(filePath).toUri()
+                        }
                         val attachment = SaveAttachmentUtil.Attachment(
                             uri = fileUri,
                             contentType = MediaUtil.getMimeType(context, fileUri) ?: "",

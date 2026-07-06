@@ -1,6 +1,7 @@
 package com.difft.android.chat.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -245,6 +246,9 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             private var isClosing = false  // Track if bottom sheet is being closed
             private var keyboardDismissed = false  // Track if keyboard has been dismissed during close
 
+            // Intentional partial coverage — only EXPANDED/SETTLING/HIDDEN drive UI state.
+            // COLLAPSED/DRAGGING/HALF_EXPANDED are no-ops for this dialog (no half-expanded peek).
+            @SuppressLint("SwitchIntDef")
             override fun onStateChanged(bottomSheet: View, newState: Int) {
                 when (newState) {
                     BottomSheetBehavior.STATE_EXPANDED -> {
@@ -419,6 +423,9 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
             .catch { L.w { "[ChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
             .launchIn(lifecycleScope)
 
+        mBinding.vVoiceRecorder.onRecordingDismissed = {
+            mBinding.vVoiceRecordBg.visibility = View.GONE
+        }
         mBinding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
                 is RecordingState.Started -> {
@@ -426,12 +433,11 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                     mBinding.vVoiceRecordBg.visibility = View.VISIBLE
                 }
 
-                is RecordingState.Stopped -> {
-                    mBinding.vVoiceRecordBg.visibility = View.GONE
-                    val file = java.io.File(state.filePath)
+                is RecordingState.StoppedWithCandidates -> {
+                    val file = java.io.File(state.pickedFilePath)
                     if (file.exists() && file.length() > 0) {
                         L.i { "[VoiceRecorder] Recording stopped. size=${file.length()}" }
-                        chatViewModel.sendVoiceMessage(state.filePath)
+                        chatViewModel.sendVoiceMessage(state.pickedFilePath)
                     } else {
                         L.w { "[VoiceRecorder] Stopped emitted with invalid file." }
                         ToastUtil.showLong(R.string.chat_voice_record_failed)
@@ -442,12 +448,10 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                 is RecordingState.TooShort -> {
                     L.i { "[VoiceRecorder] Recording too short" }
                     ToastUtil.showLong(R.string.chat_voice_recording_too_short)
-                    mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
 
                 is RecordingState.Cancelled -> {
                     L.i { "[VoiceRecorder] Recording cancelled" }
-                    mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
 
                 is RecordingState.RecordPermissionRequired -> {
@@ -457,12 +461,10 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                 is RecordingState.TooLarge -> {
                     L.i { "[VoiceRecorder] Recording file too large" }
                     ToastUtil.showLong(R.string.chat_voice_max_size_limit)
-                    mBinding.vVoiceRecordBg.visibility = View.GONE
                 }
 
                 is RecordingState.RecordFailed -> {
                     L.w { "[VoiceRecorder] Recording failed: reason=${state.reason}" }
-                    mBinding.vVoiceRecordBg.visibility = View.GONE
                     val msgRes = when (state.reason) {
                         RecordingState.Reason.AUDIO_FOCUS_DENIED -> R.string.chat_voice_focus_denied_hint
                         RecordingState.Reason.RECORDER_INIT_FAILED -> R.string.chat_voice_record_failed

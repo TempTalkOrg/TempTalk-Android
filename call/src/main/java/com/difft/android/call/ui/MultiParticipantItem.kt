@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
@@ -39,15 +40,12 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.data.MUTE_ACTION_INDEX
-import com.difft.android.call.util.IdUtil
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import kotlin.collections.contains
 
 @Composable
 fun MultiParticipantItem(
@@ -56,6 +54,8 @@ fun MultiParticipantItem(
     participant: Participant,
     modifier: Modifier = Modifier,
     uid: String,
+    userDisplayInfo: CallUserDisplayInfo,
+    participantIndex: Int,
     muteOtherEnabled: Boolean,
     onClickMute: () -> Unit,
     coroutineScope: CoroutineScope
@@ -63,7 +63,6 @@ fun MultiParticipantItem(
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
     }
-    val contactorCacheManager = entryPoint.contactorCacheManager
     val callToChatController = entryPoint.callToChatController
 
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
@@ -76,8 +75,6 @@ fun MultiParticipantItem(
 
     var videoMuted by remember { mutableStateOf(true) }
 
-    var userDisplayInfo: CallUserDisplayInfo by remember { mutableStateOf(CallUserDisplayInfo(null, null, null)) }
-
     var expanded by remember { mutableStateOf(false) }
 
     fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
@@ -86,10 +83,6 @@ fun MultiParticipantItem(
             MUTE_ACTION_INDEX -> onClickMute()
             else -> {}
         }
-    }
-
-    suspend fun updateNameAndAvatar(userId: String) {
-        userDisplayInfo = contactorCacheManager.getParticipantDisplayInfo(userId)
     }
 
     fun handleClickScreen() {
@@ -105,20 +98,9 @@ fun MultiParticipantItem(
         }
     }
 
-    LaunchedEffect(uid) {
-        updateNameAndAvatar(uid)
-    }
-
-    LaunchedEffect(uid) {
-        LCallManager.getContactsUpdateListener().collect { updatedIds ->
-            if (updatedIds.contains(IdUtil.getUidByIdentity(uid))) {
-                launch { updateNameAndAvatar(uid) }
-            }
-        }
-    }
-
     Box(
         modifier = Modifier
+            .testTag("call_render_participant_$participantIndex")
             .pointerInput(Unit) {
                 detectTapGestures(
                     onLongPress = {

@@ -6,6 +6,7 @@ import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
+import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.CallIntent
@@ -141,10 +142,11 @@ class IncomingCallServiceManager @Inject constructor(
     private fun showIncomingCallUI(context: Context, callInfo: IncomingCallInfo) {
         val application = context.applicationContext
         
-        if (!callToChatController.isIncomingCallActivityShowing() 
-            && !onGoingCallStateManager.isInCalling() 
-            && callToChatController.isAppForegrounded()) {
-            // 显示来电 Activity
+        if (!callToChatController.isIncomingCallActivityShowing()
+            && !onGoingCallStateManager.isInCalling()
+            && callToChatController.isAppForegrounded()
+            && !VoiceRecordingTracker.isRecording) {
+            // Show incoming call Activity
             val intentActivity = CallIntent.Builder(application, globalServices.activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL))
                 .withAction(CallIntent.Action.INCOMING_CALL)
                 .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -158,7 +160,10 @@ class IncomingCallServiceManager @Inject constructor(
                 .build()
             application.startActivity(intentActivity)
         } else {
-            // 显示通知
+            // Show notification
+            if (VoiceRecordingTracker.isRecording) {
+                L.i { "[call] IncomingCallServiceManager suppress incoming-call Activity due to voice recording, fall back to notification roomId=${callInfo.roomId}" }
+            }
             L.i { "[call] IncomingCallServiceManager startIncomingCallService showCallNotification roomId:${callInfo.roomId}" }
             callToChatController.showCallNotification(
                 callInfo.roomId,

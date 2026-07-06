@@ -1,0 +1,41 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LargeClass:ChatMessageInputFragment.kt:ChatMessageInputFragment : Fragment</ID>
+    <ID>LargeClass:ChatMessageListFragment.kt:ChatMessageListFragment : Fragment</ID>
+    <ID>LargeClass:ChatMessageViewModel.kt:ChatMessageViewModel : ViewModelIChatPaginationController</ID>
+    <ID>LargeClass:GroupUpdater.kt:GroupUpdater</ID>
+    <ID>LargeClass:MediaReviewFragment.kt:MediaReviewFragment : FragmentRangeDragListener</ID>
+    <ID>LargeClass:MessageContentProcessor.kt:MessageContentProcessor</ID>
+    <ID>LargeClass:MessageNotificationUtil.kt:MessageNotificationUtil : IMessageNotificationUtil</ID>
+    <ID>LargeClass:ReactionSendCoordinatorTest.kt:ReactionSendCoordinatorTest</ID>
+    <ID>LargeClass:RecentChatFragment.kt:RecentChatFragment : FragmentDualPaneSelectionListener</ID>
+    <ID>LargeClass:SelectChatsUtils.kt:SelectChatsUtils</ID>
+    <ID>LongMethod:ChatFragment.kt:ChatFragment$private fun onCreateForShowingMessages</ID>
+    <ID>LongMethod:ChatMessageInputFragment.kt:ChatMessageInputFragment$override fun onViewCreated</ID>
+    <ID>LongMethod:ChatMessageInputFragment.kt:ChatMessageInputFragment$private fun initView</ID>
+    <ID>LongMethod:ChatMessageListFragment.kt:ChatMessageListFragment$@SuppressLint("ClickableViewAccessibility", "NotifyDataSetChanged") override fun onViewCreated</ID>
+    <ID>LongMethod:ChatPopupActivity.kt:ChatPopupActivity$private fun onCreateForShowingMessages</ID>
+    <ID>LongMethod:DataMessageCreator.kt:DataMessageCreator$fun createFrom: SignalServiceProtos.DataMessage</ID>
+    <ID>LongMethod:DownloadAttachmentJob.kt:DownloadAttachmentJob$override suspend fun onRun</ID>
+    <ID>LongMethod:FilePreSendActivity.kt:@Composable private fun FilePreSendScreen</ID>
+    <ID>LongMethod:GroupChatFragment.kt:GroupChatFragment$private fun onCreateForShowingMessages</ID>
+    <ID>LongMethod:GroupChatPopupActivity.kt:GroupChatPopupActivity$private fun onCreateForShowingMessages</ID>
+    <ID>LongMethod:GroupGlobalNotificationSettingsActivity.kt:GroupGlobalNotificationSettingsActivity$@Preview @Composable private fun ItemViews</ID>
+    <ID>LongMethod:GroupInfoActivity.kt:GroupInfoActivity$private fun setOtherView</ID>
+    <ID>LongMethod:GroupNotificationSettingsActivity.kt:GroupNotificationSettingsActivity$@Preview @Composable private fun MainContent</ID>
+    <ID>LongMethod:GroupUpdater.kt:GroupUpdater$private suspend fun processGroupNotifyMessage</ID>
+    <ID>LongMethod:MediaReviewFragment.kt:MediaReviewFragment$override fun onViewCreated</ID>
+    <ID>LongMethod:MessageActionPopup.kt:MessageActionPopup$fun show</ID>
+    <ID>LongMethod:MessageContentProcessor.kt:MessageContentProcessor$private suspend fun handleNotifyMessage</ID>
+    <ID>LongMethod:MessageContentProcessor.kt:MessageContentProcessor$private suspend fun handleTextMessage: Message?</ID>
+    <ID>LongMethod:MessageNotificationUtil.kt:MessageNotificationUtil$suspend fun showNotificationSuspend</ID>
+    <ID>LongMethod:PushTextSendJob.kt:PushTextSendJob$private suspend fun uploadAttachment</ID>
+    <ID>LongMethod:RecentChatAdapter.kt:RecentChatViewHolder$@SuppressLint("ClickableViewAccessibility") fun bind</ID>
+    <ID>LongMethod:RecentChatFragment.kt:RecentChatFragment$private fun buildSortedListForCalling: Pair&lt;List&lt;RoomViewData&gt;, Map&lt;String, RoomViewData&gt;&gt;</ID>
+    <ID>LongMethod:SelectChatsUtils.kt:ChatSelectBottomSheetFragment$override fun onContentViewCreated</ID>
+    <ID>LongMethod:SingleChatSettingActivity.kt:SingleChatSettingActivity$override fun onCreate</ID>
+    <ID>LongMethod:TextPreviewSelectionPopup.kt:@Composable private fun TextPreviewSelectionOverlay</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -4,4 +4,6 @@
     android:id="@+id/container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".recent.InviteParticipantsActivity" />
+    android:background="@color/bg1"
+    tools:context=".recent.InviteParticipantsActivity"
+    tools:ignore="Overdraw" />

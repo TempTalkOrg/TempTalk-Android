@@ -16,7 +16,8 @@ object JobManagerFactories {
         DownloadAttachmentJob.KEY to DownloadAttachmentJob.Factory(),
         PushReadReceiptSendJob.KEY to PushReadReceiptSendJob.Factory(),
         PushGroupKeySendJob.KEY to PushGroupKeySendJob.Factory(),
-        PushForwardNoticeSendJob.KEY to PushForwardNoticeSendJob.Factory()
+        PushForwardNoticeSendJob.KEY to PushForwardNoticeSendJob.Factory(),
+        PushActivityNoticeSendJob.KEY to PushActivityNoticeSendJob.Factory()
     )
 
     @JvmStatic

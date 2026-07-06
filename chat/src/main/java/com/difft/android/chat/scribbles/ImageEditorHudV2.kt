@@ -191,9 +191,19 @@ class ImageEditorHudV2 @JvmOverloads constructor(
         widthSeekBar.thumb = HSVColorSlider.createThumbDrawable(Color.WHITE)
         widthSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                // Hot-write throttling (issue #725 §10.2): `onProgressChanged` fires up to
+                // 100 times/sec during a drag. Keep this path UI-only — update the in-view
+                // brush preview thickness. Persistence happens once in `onStopTrackingTouch`.
                 listener?.onBrushWidthChange()
                 brushPreview.setThickness(getActiveBrushWidth())
+            }
 
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                // Single persist per drag — replaces the ~100 writes/drag the legacy
+                // implementation produced inside `onProgressChanged`.
+                val progress = seekBar?.progress ?: return
                 when (currentMode) {
                     Mode.DRAW -> userManager.update { imageEditorMarkerPercentage = progress }
                     Mode.BLUR -> userManager.update { imageEditorBlurPercentage = progress }
@@ -201,9 +211,6 @@ class ImageEditorHudV2 @JvmOverloads constructor(
                     else -> Unit
                 }
             }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
         })
 
         widthSeekBar.setOnTouchListener { v, event ->

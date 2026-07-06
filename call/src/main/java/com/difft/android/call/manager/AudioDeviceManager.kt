@@ -3,7 +3,7 @@ package com.difft.android.call.manager
 import android.content.Context
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SharedPrefsUtil
+import com.difft.android.base.user.UserManager
 import com.difft.android.call.BuildConfig
 import com.difft.android.call.data.VoicePreset
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
@@ -15,7 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class AudioDeviceManager(
     private val context: Context,
-    private val callType: String
+    private val callType: String,
+    private val userManager: UserManager,
 ) {
     private val _deNoiseEnable = MutableStateFlow(true)
     val deNoiseEnable = _deNoiseEnable.asStateFlow()
@@ -92,7 +93,8 @@ class AudioDeviceManager(
     fun switchDeNoiseMode(mode: AudioModule) {
         if (_deNoiseMode.value == mode) return
         _deNoiseMode.value = mode
-        SharedPrefsUtil.putString(SharedPrefsUtil.SP_DENOISE_MODE, mode.toConfigMode())
+        val configMode = mode.toConfigMode()
+        userManager.update { denoiseMode = configMode }
     }
 
     fun initDeNoiseMode(mode: AudioModule) {

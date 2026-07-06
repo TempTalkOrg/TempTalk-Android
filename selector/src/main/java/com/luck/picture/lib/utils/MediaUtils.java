@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.FileNameMap;
 import java.net.URLConnection;
+import java.util.Locale;
 
 
 /**
@@ -69,7 +70,7 @@ public class MediaUtils {
     public static String getMimeTypeFromMediaUrl(String path) {
         String fileExtension = MimeTypeMap.getFileExtensionFromUrl(path);
         String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
-                fileExtension.toLowerCase());
+                fileExtension.toLowerCase(Locale.ROOT));
         if (TextUtils.isEmpty(mimeType)) {
             mimeType = getMimeType(new File(path));
         }
@@ -86,25 +87,25 @@ public class MediaUtils {
         if (TextUtils.isEmpty(url)) {
             return null;
         }
-        if (url.toLowerCase().endsWith(".jpg") || url.toLowerCase().endsWith(".jpeg")) {
+        if (url.toLowerCase(Locale.ROOT).endsWith(".jpg") || url.toLowerCase(Locale.ROOT).endsWith(".jpeg")) {
             return "image/jpeg";
-        } else if (url.toLowerCase().endsWith(".png")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".png")) {
             return "image/png";
-        } else if (url.toLowerCase().endsWith(".gif")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".gif")) {
             return "image/gif";
-        } else if (url.toLowerCase().endsWith(".webp")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".webp")) {
             return "image/webp";
-        } else if (url.toLowerCase().endsWith(".bmp")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".bmp")) {
             return "image/bmp";
-        } else if (url.toLowerCase().endsWith(".mp4")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".mp4")) {
             return "video/mp4";
-        } else if (url.toLowerCase().endsWith(".avi")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".avi")) {
             return "video/avi";
-        } else if (url.toLowerCase().endsWith(".mp3")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".mp3")) {
             return "audio/mpeg";
-        } else if (url.toLowerCase().endsWith(".amr")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".amr")) {
             return "audio/amr";
-        } else if (url.toLowerCase().endsWith(".m4a")) {
+        } else if (url.toLowerCase(Locale.ROOT).endsWith(".m4a")) {
             return "audio/mpeg";
         }
         return null;
@@ -455,13 +456,11 @@ public class MediaUtils {
      */
     public static Bundle createQueryArgsBundle(String selection, String[] selectionArgs, int limitCount, int offset, String orderBy) {
         Bundle queryArgs = new Bundle();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            queryArgs.putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection);
-            queryArgs.putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs);
-            queryArgs.putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, orderBy);
-            if (SdkVersionUtils.isR()) {
-                queryArgs.putString(ContentResolver.QUERY_ARG_SQL_LIMIT, limitCount + " offset " + offset);
-            }
+        queryArgs.putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection);
+        queryArgs.putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs);
+        queryArgs.putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, orderBy);
+        if (SdkVersionUtils.isR()) {
+            queryArgs.putString(ContentResolver.QUERY_ARG_SQL_LIMIT, limitCount + " offset " + offset);
         }
         return queryArgs;
     }

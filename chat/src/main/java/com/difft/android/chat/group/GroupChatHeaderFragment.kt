@@ -1,5 +1,6 @@
 package com.difft.android.chat.group
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
@@ -57,6 +58,8 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
         return binding.root
     }
 
+    // Member-count display is "($n)" — parens + number, no English text to translate.
+    @SuppressLint("SetTextI18n")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
@@ -86,7 +89,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                 binding.imageviewAddMember.visibility = View.VISIBLE
                 binding.imageviewAddMember.setOnClickListener {
                     if (currentUserRole < GROUP_ROLE_MEMBER || group.invitationRule == 2) {
-                        gotoMembersActivity(group.gid)
+                        gotoMembersActivity(group.gid ?: "")
                     } else {
                         ToastUtil.show(getString(R.string.group_permission_denied))
                     }

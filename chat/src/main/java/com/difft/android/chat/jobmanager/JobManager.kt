@@ -6,9 +6,9 @@ import android.os.Build
 import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.jobmanager.impl.JsonDataSerializer
+import com.difft.android.chat.jobmanager.persistence.JobSpec
 import com.difft.android.chat.jobmanager.persistence.JobStorage
 import com.difft.android.chat.util.Debouncer
-import com.difft.android.chat.util.TextSecurePreferences
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -54,7 +55,6 @@ class JobManager(
         scope.launch(managementDispatcher) {
             try {
                 configuration.jobStorage.init()
-                TextSecurePreferences.setJobManagerVersion(application, 1)
                 jobController.init()
                 configuration.constraintObservers.forEach { it.register(this@JobManager) }
                 if (Build.VERSION.SDK_INT < 26) {
@@ -150,8 +150,23 @@ class JobManager(
     }
 
     /**
+     * Snapshot of pending+running jobs in [queue], sorted by createTime ascending.
+     * The framework does NOT provide RMW atomicity across `find → cancel → add`; callers
+     * that need it must layer their own serialization (e.g. a business-side Mutex).
+     */
+    suspend fun findJobsInQueue(queue: String): List<JobSpec> =
+        withContext(managementDispatcher) {
+            initDeferred.await()
+            jobController.findJobsInQueue(queue)
+        }
+
+    /**
      * Retrieves a string representing the state of the job queue. Intended for debugging.
      */
+    // @WorkerThread contract on getDebugInfo + flush: production callers are
+    // test-only. runBlocking bridges async job completion to non-suspend API
+    // for debug/diagnostic surface.
+    @Suppress("BanRunBlockingOutsideTests")
     @WorkerThread
     fun getDebugInfo(): String {
         val deferred = CompletableDeferred<String>()
@@ -195,6 +210,7 @@ class JobManager(
     /**
      * Blocks until all pending operations are finished.
      */
+    @Suppress("BanRunBlockingOutsideTests")
     @WorkerThread
     fun flush() {
         val deferred = CompletableDeferred<Unit>()

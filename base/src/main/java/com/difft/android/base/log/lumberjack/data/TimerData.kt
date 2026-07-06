@@ -1,6 +1,7 @@
 package com.difft.android.base.log.lumberjack.data
 
 import java.text.SimpleDateFormat
+import java.util.Locale
 
 /**
  * Created by flisar on 17.01.2019.
@@ -9,7 +10,7 @@ import java.text.SimpleDateFormat
 class TimerData {
 
     companion object {
-        val TIME_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
+        val TIME_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     }
 
     private var mStart: Long = 0

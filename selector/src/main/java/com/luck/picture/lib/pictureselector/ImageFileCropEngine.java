@@ -1,6 +1,7 @@
 package com.luck.picture.lib.pictureselector;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -86,30 +87,39 @@ public class ImageFileCropEngine implements CropFileEngine {
         options.isForbidSkipMultipleCrop(true);
         options.setHideBottomControls(true);
         options.setMaxScaleMultiplier(100);
-        options.setRootViewBackgroundColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1));
+
+        // uCrop reads colors as hard ARGB values (window.setStatusBarColor / toolbar paint).
+        // It does NOT auto-switch on theme change. Resolve dark/light explicitly so the
+        // crop screen matches the app's current night mode.
+        int nightMask = context.getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        boolean isDark = nightMask == Configuration.UI_MODE_NIGHT_YES;
+
+        int barColor = ContextCompat.getColor(context, com.difft.android.base.R.color.bg);
+        int textColor = ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary);
+
+        options.setRootViewBackgroundColor(barColor);
+        options.setStatusBarColor(barColor);
+        options.setToolbarColor(barColor);
+        options.setToolbarWidgetColor(textColor);
+        // status bar icons: dark mode → light icons (false); light mode → dark icons (true).
+        options.isDarkStatusBarBlack(!isDark);
+
+        // Allow selectorStyle to override status/toolbar color when set explicitly.
         if (selectorStyle != null && selectorStyle.getSelectMainStyle().getStatusBarColor() != 0) {
             SelectMainStyle mainStyle = selectorStyle.getSelectMainStyle();
-            boolean isDarkStatusBarBlack = mainStyle.isDarkStatusBarBlack();
             int statusBarColor = mainStyle.getStatusBarColor();
-            options.isDarkStatusBarBlack(isDarkStatusBarBlack);
             if (StyleUtils.checkStyleValidity(statusBarColor)) {
                 options.setStatusBarColor(statusBarColor);
                 options.setToolbarColor(statusBarColor);
-            } else {
-                options.setStatusBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1));
-                options.setToolbarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1));
+                options.isDarkStatusBarBlack(mainStyle.isDarkStatusBarBlack());
             }
             TitleBarStyle titleBarStyle = selectorStyle.getTitleBarStyle();
             if (StyleUtils.checkStyleValidity(titleBarStyle.getTitleTextColor())) {
                 options.setToolbarWidgetColor(titleBarStyle.getTitleTextColor());
-            } else {
-                options.setToolbarWidgetColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary));
             }
-        } else {
-            options.setStatusBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1));
-            options.setToolbarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.bg1));
-            options.setToolbarWidgetColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary));
         }
+
         return options;
     }
 }

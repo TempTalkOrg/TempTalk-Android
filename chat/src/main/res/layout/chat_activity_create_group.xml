@@ -4,7 +4,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".group.CreateGroupActivity">
+    android:background="@color/bg1"
+    tools:context=".group.CreateGroupActivity"
+    tools:ignore="Overdraw">
 
     <RelativeLayout
         android:id="@+id/title_container"
@@ -44,6 +46,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
+            tools:ignore="RelativeOverlap"
             android:layout_centerVertical="true"
             android:clickable="true"
             android:focusable="true"

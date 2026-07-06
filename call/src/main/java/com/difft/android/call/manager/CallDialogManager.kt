@@ -2,11 +2,11 @@ package com.difft.android.call.manager
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import android.widget.TextView
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
@@ -23,6 +23,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.DialogActionType
+import io.livekit.android.room.participant.RemoteParticipant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,7 +67,7 @@ class CallDialogManager(
         // 如果对话框已存在，只更新倒计时
         if (callEndReminderDialog != null) {
             val remainingSeconds = secondsToLeaveMeeting - 1
-            callEndReminderMessageView?.text = "${remainingSeconds}s left"
+            callEndReminderMessageView?.text = activity.getString(R.string.call_ending_seconds_left, remainingSeconds)
             if (remainingSeconds <= 0) {
                 onEndCall()
             }
@@ -75,7 +76,10 @@ class CallDialogManager(
 
         // 创建新对话框
         isShowCallingEndReminder = true
-        val title = if (viewModel.room.remoteParticipants.isEmpty()) {
+        // Use the participants StateFlow (local + remotes) instead of the fail-loud room
+        // getter: this dialog can be shown during teardown, where room is already released.
+        val hasRemote = viewModel.participants.value.any { it is RemoteParticipant }
+        val title = if (!hasRemote) {
             activity.getString(R.string.call_single_person_timeout_reminder)
         } else {
             activity.getString(R.string.call_all_mute_timeout_reminder)
@@ -97,7 +101,7 @@ class CallDialogManager(
             onConfirm = {
                 viewModel.resetNoBodySpeakCheck()
                 if (viewModel.callType.value == CallType.ONE_ON_ONE.type) {
-                    viewModel.room.remoteParticipants.values.firstOrNull()?.let { participant ->
+                    viewModel.participants.value.firstOrNull { it is RemoteParticipant }?.let { participant ->
                         viewModel.rtm.sendContinueCallRtmMessage(participant)
                     }
                 }
@@ -121,7 +125,7 @@ class CallDialogManager(
             },
             onViewCreated = { view ->
                 val messageView = view.findViewById<TextView>(R.id.tv_message)
-                messageView.text = "${secondsToLeaveMeeting}s left"
+                messageView.text = activity.getString(R.string.call_ending_seconds_left, secondsToLeaveMeeting)
                 callEndReminderMessageView = messageView
             }
         )
@@ -178,7 +182,7 @@ class CallDialogManager(
                     try {
                         val intent = Intent(
                             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:${activity.packageName}")
+                            "package:${activity.packageName}".toUri()
                         ).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
@@ -231,7 +235,7 @@ class CallDialogManager(
                         return@launch
                     }
                     // 更新倒计时显示
-                    callEndReminderMessageView?.text = "${remainingSeconds}s left"
+                    callEndReminderMessageView?.text = activity.getString(R.string.call_ending_seconds_left, remainingSeconds)
                     if (remainingSeconds <= 0) {
                         onEndCall()
                         return@launch

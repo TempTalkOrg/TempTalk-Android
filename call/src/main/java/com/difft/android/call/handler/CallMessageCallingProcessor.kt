@@ -1,5 +1,7 @@
 package com.difft.android.call.handler
 
+import com.difft.android.base.utils.globalServices
+
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallDataCaller
@@ -8,7 +10,6 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.R
 import com.difft.android.call.response.RoomState
@@ -49,7 +50,7 @@ internal fun CallMessageHandler.handleCallingMessage(
 
     appScope.launch(Dispatchers.IO) {
         try {
-            val response = callService.checkCall(SecureSharedPrefsUtil.getToken(), roomId)
+            val response = callService.checkCall((globalServices.userManager.getUserData()?.microToken ?: ""), roomId)
 
             if (response.status != CallMessageHandler.RESPONSE_STATUS_SUCCESS ||
                 response.data?.userStopped == true

@@ -1,8 +1,6 @@
 package com.difft.android.chat.mediasend
 
 import android.content.Context
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
@@ -47,7 +45,6 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     @WorkerThread
     override fun transform(context: Context, media: LocalMedia): LocalMedia {
         val inputPath = media.realPath
@@ -93,7 +90,6 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
      * Perform full video transcode (for trimming or compression).
      * This is slower but necessary when video content needs to be modified.
      */
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun performFullTranscode(context: Context, media: LocalMedia, constraints: MediaConstraints): LocalMedia {
         var outputStream: FileOutputStream? = null
 
@@ -140,7 +136,6 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
      * Perform fast remux to remove metadata without re-encoding.
      * This is very fast (milliseconds) as it only copies the encoded streams.
      */
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun performFastRemux(media: LocalMedia): LocalMedia {
         val inputPath = media.realPath
         val outputFile = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY), "${UUID.randomUUID()}.mp4")

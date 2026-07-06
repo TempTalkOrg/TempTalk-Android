@@ -32,8 +32,8 @@ import com.difft.android.login.R
 internal fun RegisterIntroPage(
     data: RegisterIntroPageData,
     onNext: () -> Unit,
-    onButtonBottomYInRoot: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
+    onButtonBottomYInRoot: (Int) -> Unit = {},
 ) {
     Box(
         modifier = modifier
@@ -44,7 +44,7 @@ internal fun RegisterIntroPage(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(24.dp))
-                .background(DifftTheme.colors.backgroundSettingItem)
+                .background(DifftTheme.colors.bgElevated)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,

@@ -9,6 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_centerInParent="true"
+        android:importantForAccessibility="no"
         android:scaleType="centerCrop" />
 
     <ImageView
@@ -17,6 +18,7 @@
         android:layout_height="wrap_content"
         android:layout_alignBottom="@id/ivImage"
         android:layout_margin="3dp"
+        android:importantForAccessibility="no"
         android:src="@drawable/ps_ic_editor"
         android:visibility="gone" />
 
@@ -25,6 +27,7 @@
         android:layout_width="21dp"
         android:layout_height="21dp"
         android:layout_centerInParent="true"
+        android:importantForAccessibility="no"
         android:src="@drawable/ps_ic_video_play"
         android:visibility="gone" />
 

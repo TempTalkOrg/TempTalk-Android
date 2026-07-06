@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Environment.MEDIA_MOUNTED
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import java.io.Closeable
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.RandomAccessFile
 import java.text.DecimalFormat
 import java.util.UUID
@@ -39,6 +41,7 @@ object FileUtil {
     const val FILE_DIR_ATTACHMENT = "attachment"
     const val FILE_DIR_UPGRADE = "upgrade"
     const val DRAFT_ATTACHMENTS_DIRECTORY: String = "draft_blobs"
+    const val FILE_DIR_GIF_FAVORITES = "gif_favorites"
 
     /** Large file threshold for manual download prompt (10MB) */
     const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
@@ -326,15 +329,49 @@ object FileUtil {
                 directory.mkdirs()
             }
             val tempFile = File(directory, tempFileName)
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                tempFile.outputStream().use { outputStream ->
-                    inputStream.copyTo(outputStream)
-                }
+            if (!copyUriContent(uri, tempFile, contentResolver)) {
+                tempFile.delete()
+                throw FileNotFoundException("Unable to open content for uri")
             }
             CopiedFileResult(tempFile, originalFileName)
         }.onFailure {
             L.e { "copyUriToFile fail:" + it.stackTraceToString() }
         }.getOrNull()
+    }
+
+    /**
+     * Copy the content behind [uri] into [target].
+     *
+     * Tries [ContentResolver.openInputStream] first, then falls back to
+     * [ContentResolver.openFileDescriptor]. Some providers (notably certain OEM
+     * file managers reached via ACTION_GET_CONTENT) expose metadata but fail the
+     * stream path with ENOENT, while the fd path still works.
+     *
+     * @return true only when bytes were actually copied; false when no open path succeeded.
+     */
+    private fun copyUriContent(uri: Uri, target: File, resolver: ContentResolver): Boolean {
+        runCatching {
+            resolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { input.copyTo(it) }
+                return true
+            }
+        }.onFailure { L.w { "[FileUtil] openInputStream failed, trying fd fallback: ${it.message}" } }
+
+        runCatching {
+            resolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                // use{} on pfd guards against a leak if AutoCloseInputStream
+                // construction throws. AutoCloseInputStream also closes pfd, but
+                // ParcelFileDescriptor.close() is idempotent (mClosed flag), so the
+                // second close is a harmless no-op — unlike a raw FileInputStream
+                // over pfd.fileDescriptor, which would double-close the OS fd.
+                ParcelFileDescriptor.AutoCloseInputStream(pfd).use { input ->
+                    target.outputStream().use { input.copyTo(it) }
+                    return true
+                }
+            }
+        }.onFailure { L.w { "[FileUtil] openFileDescriptor fallback failed: ${it.message}" } }
+
+        return false
     }
 
     private fun getFileNameFromUri(uri: Uri, contentResolver: ContentResolver): String? {

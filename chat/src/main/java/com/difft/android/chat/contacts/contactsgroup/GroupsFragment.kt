@@ -118,14 +118,14 @@ class GroupsFragment : Fragment(), DualPaneSelectionListener {
                 // Use ConversationNavigationCallback for dual-pane support
                 val navigationCallback = activity as? ConversationNavigationCallback
                 if (navigationCallback != null) {
-                    navigationCallback.onGroupConversationSelected(group.gid)
+                    navigationCallback.onGroupConversationSelected(group.gid ?: "")
                     if (navigationCallback.isDualPaneMode) {
                         selectedId = group.gid
                     }
                 } else {
                     GroupChatContentActivity.startActivity(
                         this@GroupsFragment.requireActivity(),
-                        group.gid
+                        group.gid ?: ""
                     )
                 }
             }

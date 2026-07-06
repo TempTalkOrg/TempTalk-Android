@@ -11,12 +11,15 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.LCallViewModel
 
 /**
@@ -61,6 +64,11 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
     val activity = context.findActivity() ?: return
 
     DisposableEffect(activity, lifecycleOwner) {
+        if (activity.isFinishing || activity.isDestroyed) {
+            L.w { "[BubbleOverlay] Activity finishing/destroyed, skip overlay window" }
+            return@DisposableEffect onDispose { }
+        }
+
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
         // 独立 ComposeView：承载气泡 Composable。
@@ -75,7 +83,9 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
                 ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycleOwner)
             )
             setContent {
-                BubbleOverlayLayer(viewModel = viewModel)
+                DifftTheme(darkTheme = true) {
+                    BubbleOverlayLayer(viewModel = viewModel)
+                }
             }
         }
 
@@ -110,11 +120,35 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
             // BadTokenException 等：多见于 Activity 还没 attach 完 window 或
             // 已经开始销毁，此时直接放弃挂载即可，主界面不受影响。
             L.w(t) { "[BubbleOverlay] addView failed, skip overlay window" }
+            return@DisposableEffect onDispose { }
         }
 
+        // ComponentActivity.setContent 创建的主 ComposeView 默认使用
+        // DisposeOnDetachedFromWindowOrReleasedFromPool 策略，composition
+        // 在 View detach 时才 dispose，而 Android 框架的 WindowLeaked
+        // 检查发生在 onDestroy 返回之后、View detach 之前。因此依赖
+        // DisposableEffect.onDispose 来 removeView 会来不及。
+        // 这里直接用 LifecycleObserver 监听 ON_DESTROY，它在
+        // super.onDestroy() 中同步派发，早于框架的泄漏检查。
+        var removed = false
+        val removeOverlay: () -> Unit = {
+            if (!removed) {
+                removed = true
+                runCatching { windowManager.removeViewImmediate(composeView) }
+                    .onFailure { L.w(it) { "[BubbleOverlay] removeView failed" } }
+            }
+        }
+
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) {
+                removeOverlay()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+
         onDispose {
-            runCatching { windowManager.removeView(composeView) }
-                .onFailure { L.w(it) { "[BubbleOverlay] removeView failed" } }
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+            removeOverlay()
         }
     }
 }

@@ -16,9 +16,22 @@ import uniffi.dtproto.DtProtoException
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Thrown when a Base64-encoded envelope field (identityKey / peerContext) is
+ * malformed. Same input → same failure, so [EnvelopToMessageProcessor.classify]
+ * routes this to [DropReason.BASE64_DECODE_FAILED] (Permanent).
+ *
+ * Wrapping the raw `IOException` / `IllegalArgumentException` / `NullPointerException`
+ * from `Base64.decode` lets `classify()` match on a stable type instead of
+ * sniffing stack frames.
+ */
+class Base64DecodeException(field: String, cause: Throwable?) :
+    RuntimeException("Base64 decode failed for envelope field: $field", cause)
+
 @Singleton
 class NewMessageDecryptionUtil @Inject constructor(
-    private val encryptionDataManager: EncryptionDataManager
+    private val encryptionDataManager: EncryptionDataManager,
+    private val gson: Gson,
 ) {
     fun decrypt(envelope: Envelope): SignalServiceDataClass? {
         val content = if (envelope.getType().number == Envelope.Type.ENCRYPTEDTEXT_VALUE) { //is encrypted envelop
@@ -32,6 +45,9 @@ class NewMessageDecryptionUtil @Inject constructor(
                 return null
             }
 
+            val identityKeyBytes = decodeBase64OrThrow("identityKey", envelope.identityKey)
+            val peerContextBytes = decodeBase64OrThrow("peerContext", envelope.peerContext)
+
             val encryptedContent = envelope.content.drop(1).toByteArray()
             val encryptedMessage = EncryptedMessageProtos.EncryptContent.parseFrom(encryptedContent)
             val decryptResult = try {
@@ -40,11 +56,11 @@ class NewMessageDecryptionUtil @Inject constructor(
                     it.decryptMessage(
                         encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
                         encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
-                        Base64.decode(envelope.identityKey).map { it.toUByte() }.drop(1),
+                        identityKeyBytes.map { it.toUByte() }.drop(1),
                         null, // cachedTheirIdKey: no local cache yet
                         encryptedMessage.eKey.toByteArray().map { it.toUByte() },
                         encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() },
-                        Base64.decode(envelope.peerContext).map { it.toUByte() },
+                        peerContextBytes.map { it.toUByte() },
                         encryptedMessage.cipherText.toByteArray().map { it.toUByte() },
                     )
                 }
@@ -57,11 +73,11 @@ class NewMessageDecryptionUtil @Inject constructor(
                             it.decryptMessage(
                                 encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
                                 encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
-                                Base64.decode(envelope.identityKey).map { it.toUByte() }.drop(1),
+                                identityKeyBytes.map { it.toUByte() }.drop(1),
                                 null, // cachedTheirIdKey: no local cache yet
                                 encryptedMessage.eKey.toByteArray().map { it.toUByte() },
                                 encryptionDataManager.getAciIdentityOldKey().privateKey.serialize().map { it.toUByte() },
-                                Base64.decode(envelope.peerContext).map { it.toUByte() },
+                                peerContextBytes.map { it.toUByte() },
                                 encryptedMessage.cipherText.toByteArray().map { it.toUByte() },
                             )
                         }
@@ -81,7 +97,7 @@ class NewMessageDecryptionUtil @Inject constructor(
         }
         if (envelope.getType().number == Envelope.Type.NOTIFY_VALUE) {
             val contentString = String(content)
-            val notifyMessage = Gson().fromJson(
+            val notifyMessage = gson.fromJson(
                 contentString,
                 TTNotifyMessage::class.java
             )
@@ -105,6 +121,21 @@ class NewMessageDecryptionUtil @Inject constructor(
         } else {
             val contentObj = org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content.parseFrom(content)
             return SignalServiceDataClass(envelope, contentObj, null)
+        }
+    }
+
+    /**
+     * Decode a Base64 envelope field, wrapping any failure (returns-null,
+     * IOException, IllegalArgumentException, NPE) as [Base64DecodeException]
+     * so the classifier gets a stable type to match on.
+     */
+    private fun decodeBase64OrThrow(field: String, value: String?): ByteArray {
+        return try {
+            Base64.decode(value) ?: throw Base64DecodeException(field, null)
+        } catch (e: Base64DecodeException) {
+            throw e
+        } catch (e: Exception) {
+            throw Base64DecodeException(field, e)
         }
     }
 }

@@ -8,6 +8,7 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
 import android.app.Service;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
@@ -788,11 +789,22 @@ public class PictureSelectorPreviewFragment extends PictureCommonFragment {
         ivShare.setOnClickListener(view -> {
             try {
                 LocalMedia currentMedia = mData.get(viewPager.getCurrentItem());
-                File file = new File(currentMedia.getRealPath());
-                Uri uri = FileProvider.getUriForFile(requireContext(), requireActivity().getApplicationContext().getPackageName() + ".provider", file);
+                String availablePath = currentMedia.getAvailablePath();
+                Uri uri;
+                if (PictureMimeType.isContent(availablePath)) {
+                    // Encrypted-at-rest attachment: the media is backed by a decrypting content uri
+                    // and the plaintext realPath does not exist on disk — share the content uri
+                    // directly so the receiver reads decrypted bytes (no FileProvider/ENOENT).
+                    uri = Uri.parse(availablePath);
+                } else {
+                    File file = new File(currentMedia.getRealPath());
+                    uri = FileProvider.getUriForFile(requireContext(), requireActivity().getApplicationContext().getPackageName() + ".provider", file);
+                }
                 Intent intent = new Intent(Intent.ACTION_SEND);
                 intent.setType(currentMedia.getMimeType());
                 intent.putExtra(Intent.EXTRA_STREAM, uri);
+                // clipData carries the grant reliably across the chooser to the resolved target.
+                intent.setClipData(ClipData.newRawUri(currentMedia.getFileName(), uri));
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
                 requireActivity().startActivity(Intent.createChooser(intent, currentMedia.getFileName()));

@@ -28,6 +28,9 @@ sealed class ScrollAction {
 
     /** 滚动到底部（用于 jumpToBottom、发送消息后） */
     data object ToBottom : ScrollAction()
+
+    /** Keep current viewport for user-driven pagination; never auto-snap. */
+    data object PreservePosition : ScrollAction()
 }
 
 data class ChatMessageListBehavior(

@@ -2,9 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.roborazzi)
     id("kotlin-parcelize")
@@ -28,12 +27,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kapt {
-        correctErrorTypes = true
-    }
-
-    viewBinding.isEnabled = true
-
     val flavorDimensionEnvironment = "environment"
     flavorDimensions += flavorDimensionEnvironment
 
@@ -77,8 +70,7 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    kapt(libs.kotlin.metadata.jvm)
+    ksp(libs.hilt.compiler)
 
     // Login specific dependencies
     implementation(libs.signal.android)
@@ -86,7 +78,7 @@ dependencies {
     // SMS Retriever API for auto-fill
     implementation(libs.play.services.auth.api.phone)
     
-    // Retrofit (explicit for KAPT)
+    // Retrofit (explicit for annotation processing)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
 
@@ -103,7 +95,7 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.hilt.android.testing)
-    kaptTest(libs.hilt.compiler)
+    kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
     // Compose test
     testImplementation(platform(libs.compose.bom))

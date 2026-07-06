@@ -18,6 +18,7 @@ import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isLongText
+import difft.android.messageserialization.model.keepEncryptedAtRest
 
 /**
  * Information about a long text file for copying
@@ -33,7 +34,8 @@ data class LongTextFileInfo(
 data class FileInfoForCopy(
     val filePath: String,
     val fileName: String,
-    val attachment: Attachment
+    val attachment: Attachment,
+    val messageId: String
 )
 
 open class TextChatMessage : ChatMessage() {
@@ -100,8 +102,21 @@ fun TextChatMessage.isAttachmentMessage(): Boolean {
     return this.attachment != null
 }
 
+/**
+ * The single attachment eligible for per-item actions (save / favorite): a direct attachment message,
+ * or the sole attachment of a single-item forward (a combined-forward wrapper with exactly one
+ * forward). Returns null otherwise. Keeps save/favorite detection in lockstep across the chat list
+ * and the forward detail view — a single forward wraps its gif in forwardContext, so `attachment` is
+ * null and a naive check misses it.
+ */
+fun TextChatMessage.singleForwardableAttachment(): Attachment? = when {
+    isAttachmentMessage() -> attachment
+    forwardContext?.forwards?.size == 1 -> forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
+    else -> null
+}
+
 fun TextChatMessage.shouldDecrypt(): Boolean {
-    return this.attachment?.isAudioMessage() != true
+    return this.attachment?.keepEncryptedAtRest() != true
 }
 
 fun TextChatMessage.getAttachmentProgress(): Int? {
@@ -149,7 +164,7 @@ fun TextChatMessage.shouldShowFail(): Boolean {
  * Gets the relevant attachment for this message.
  * For single forward messages, returns the forward attachment, otherwise returns the message attachment.
  */
-private fun TextChatMessage.getRelevantAttachment(): Attachment? {
+internal fun TextChatMessage.getRelevantAttachment(): Attachment? {
     val forwards = forwardContext?.forwards
     return if (forwards?.size == 1) {
         forwards.firstOrNull()?.attachments?.firstOrNull()
@@ -288,7 +303,7 @@ fun TextChatMessage.getFileInfoForCopy(): FileInfoForCopy? {
     val messageId = if (isAttachmentMessage()) id else attachment.authorityId.toString()
     val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
 
-    return FileInfoForCopy(filePath, attachment.fileName ?: "file", attachment)
+    return FileInfoForCopy(filePath, attachment.fileName ?: "file", attachment, messageId)
 }
 
 /**

@@ -197,7 +197,7 @@ object L {
     /** @suppress */
     @PublishedApi
     internal fun log(t: Throwable?, t2: Throwable, logBlock: () -> Unit) {
-        if (!enabled || Timber.treeCount() == 0) {
+        if (!enabled || Timber.treeCount == 0) {
             return
         }
         processLogAsync(t, t2, logBlock)

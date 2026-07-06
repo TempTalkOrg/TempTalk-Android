@@ -2,7 +2,6 @@ package util;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.os.Build;
 import android.provider.Settings;
 
 import androidx.annotation.NonNull;
@@ -50,11 +49,7 @@ public final class TimeUtils {
      * @return {@code true}: yes<br>{@code false}: no
      */
     public static boolean isUsingNetworkProvidedTime(Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            return Settings.Global.getInt(context.getApplicationContext().getContentResolver(), Settings.Global.AUTO_TIME, 0) == 1;
-        } else {
-            return Settings.System.getInt(context.getApplicationContext().getContentResolver(), Settings.System.AUTO_TIME, 0) == 1;
-        }
+        return Settings.Global.getInt(context.getApplicationContext().getContentResolver(), Settings.Global.AUTO_TIME, 0) == 1;
     }
 
 

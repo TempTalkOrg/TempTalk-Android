@@ -23,6 +23,8 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class ReceiptMessageHelper @Inject constructor(
     private val dbMessageStore: DBMessageStore

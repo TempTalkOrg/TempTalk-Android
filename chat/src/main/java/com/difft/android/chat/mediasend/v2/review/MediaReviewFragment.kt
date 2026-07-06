@@ -4,7 +4,6 @@ import android.animation.Animator
 import android.animation.AnimatorSet
 import android.graphics.Color
 import android.graphics.Rect
-import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
@@ -16,6 +15,7 @@ import androidx.appcompat.widget.AppCompatTextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
@@ -27,7 +27,6 @@ import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.network.ChativeHttpClient
@@ -400,7 +399,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         if (!MediaUtil.isVideoType(mediaItem.mimeType) || !MediaConstraints.isVideoTranscodeAvailable()) {
             return
         }
-        val uri = Uri.parse(mediaItem.realPath)
+        val uri = mediaItem.realPath.toUri()
         val updatedInputInTimeline = videoTimeLine.setInput(uri)
         if (updatedInputInTimeline) {
             videoTimeLine.unregisterDragListener()
@@ -422,7 +421,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
 
     private fun presentVideoSizeHint(state: MediaSelectionState) {
         val focusedMedia = state.focusedMedia ?: return
-        val trimData = state.getOrCreateVideoTrimData(Uri.parse(focusedMedia.realPath))
+        val trimData = state.getOrCreateVideoTrimData(focusedMedia.realPath.toUri())
 
         videoSizeHint.text = if (state.isVideoTrimmingVisible) {
             val seconds = trimData.getDuration().inWholeSeconds
@@ -665,7 +664,7 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        SecureSharedPrefsUtil.getBasicAuth(),
+                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(conversationId, confidentialMode = mode)
                     )
                 }

@@ -1,5 +1,5 @@
 <resources>
-    <string name="login_sign_to_chative">Sign in to Yelling</string>
+    <string name="login_sign_to_chative">Sign in to Quicall</string>
     <string name="login_email_or_invite_code_hint">Email/Phone Number</string>
     <string name="login_next">Next</string>
     <string name="login_in">Log in</string>
@@ -26,7 +26,7 @@
     <string name="settings_pattern_error_tips">Pattern does not match</string>
     <string name="settings_passcode_attempts_delay">Next attempt will be delayed by %ds.</string>
     <string name="settings_too_many_attempts_warning">Too many failed attempts. The next incorrect attempt will force a logout.</string>
-    <string name="settings_yelling_unavailable_countdown">Yelling Unavailable. Try again in %ds</string>
+    <string name="settings_service_unavailable_countdown">Quicall Unavailable. Try again in %ds</string>
 
     <string name="login_select_country_code">Select Country Code</string>
 
@@ -59,4 +59,5 @@
     <string name="register_intro_page1_body">Either side can recall or leave — it\'s gone from both sides. No trace, no recovery. Keep a copy of anything that matters.</string>
     <string name="register_intro_page2_title">Only both sides can see it</string>
     <string name="register_intro_page2_body">End-to-end encryption. No one except you and the other side can view chat content.</string>
+    <string name="login_use_proxy">Use proxy</string>
 </resources>

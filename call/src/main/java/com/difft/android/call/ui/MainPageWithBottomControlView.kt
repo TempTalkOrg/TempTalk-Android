@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.LCallActivity
@@ -175,245 +177,256 @@ fun MainPageWithBottomControlView(
                 .tapInterceptor(enabled = !isBottomVisible) {
                     viewModel.callUiController.toggleOverlays()
                 }
-        ){
-                val controlSize = 48.dp
-                val controlPadding = if (isLandscape) 16.dp else 12.dp
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .wrapContentSize(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                                Box(modifier = Modifier.size(controlSize)) {
-                                    Surface(
-                                        modifier = Modifier.size(controlSize),
-                                        color = Color.Transparent,
-                                        shape = CircleShape,
-                                        border = if (voicePreset.isEnabled) BorderStroke(
-                                            width = 2.dp,
-                                            color = colorResource(id = com.difft.android.base.R.color.blue_400),
-                                        ) else null
-                                    ) {
-                                        val painter = if (micEnabled) micOpenPainter else micClosePainter
-                                        Image(
-                                            painter = painter,
-                                            contentDescription = "Mic",
-                                            contentScale = ContentScale.Fit,
-                                            modifier = Modifier
-                                                .clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
-                                                    indication = null,
-                                                    onClick = {
-                                                        L.i { "[call] LCallActivity onClick Mic" }
-                                                        if (viewModel.isControlButtonClickEnabled()) requestMicPermission()
-                                                    }
-                                                )
-                                        )
-                                    }
-                                    if (voicePreset.isEnabled) {
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .size(18.dp)
-                                                .background(
-                                                    brush = Brush.linearGradient(
-                                                        colors = listOf(
-                                                            Color(0xFF4DA0FF),
-                                                            Color(0xFF82C1FC),
-                                                            Color(0xFF328AFD)
-                                                        ),
-                                                        start = Offset(0f, 0f),
-                                                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                                                    ),
-                                                    shape = CircleShape
-                                                )
-                                        ) {
-                                            Text(
-                                                text = voicePreset.emoji,
-                                                fontSize = 12.sp,
-                                                lineHeight = 16.sp,
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(controlPadding))
-
-                                Surface(
-                                    modifier = Modifier.size(controlSize),
-                                    color = Color.Transparent
-                                ) {
-                                    val painter = if (videoEnabled) cameraOpenPainter else cameraClosePainter
-                                    Image(
-                                        painter = painter,
-                                        contentDescription = "Camera",
-                                        contentScale = ContentScale.Fit, // 根据需要调整
-                                        modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
-                                        {
-                                            L.i { "[call] LCallActivity onClick Camera" }
-                                            if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
-                                        }
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(controlPadding))
-
-                                var showAudioDeviceDialog by remember { mutableStateOf(false) }
-
-                                Surface(
-                                    modifier = Modifier.size(controlSize),
-                                    color = Color.Transparent
-                                ) {
-                                    val painter = when (currentAudioDevice) {
-                                        is AudioDevice.Earpiece -> volumePhonePainter
-                                        is AudioDevice.Speakerphone -> volumeSpeakerPainter
-                                        is AudioDevice.WiredHeadset -> volumeHeadphonesPainter
-                                        is AudioDevice.BluetoothHeadset -> volumeAirpodPainter
-                                        else -> volumeSpeakerPainter
-                                    }
-                                    Image(
-                                        painter = painter,
-                                        contentDescription = "Horn",
-                                        contentScale = ContentScale.Fit,
-                                        modifier = Modifier
-                                            .clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
-                                            {
-                                                L.i { "[call] LCallActivity onClick Horn" }
-                                                if(audioSwitchHandler != null){
-                                                    if(audioSwitchHandler.availableAudioDevices.size>2){
-                                                        showAudioDeviceDialog = !showAudioDeviceDialog
-                                                    }else{
-                                                        viewModel.audioDeviceManager.switchToNext()
-                                                    }
-                                                }
-                                            }
-                                    )
-
-                                    audioSwitchHandler?.availableAudioDevices?.let { availableAudioDevices->
-                                        ShowAudioDeviceOnClickView(
-                                            audioDevices = availableAudioDevices,
-                                            currentDevice = currentAudioDevice ?: audioSwitchHandler.selectedAudioDevice,
-                                            expanded = showAudioDeviceDialog,
-                                            setExpanded = { value -> showAudioDeviceDialog = value},
-                                            onClickItem = { item ->
-                                                item.let {
-                                                    viewModel.audioDeviceManager.select(item)
-                                                    showAudioDeviceDialog = false
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
-
-                                if(isUserSharingScreen){
-                                    Spacer(modifier = Modifier.width(controlPadding))
-                                    Surface(
-                                        modifier = Modifier.size(controlSize),
-                                        color = Color.Transparent
-                                    ){
-                                        Box {
-                                            Image(
-                                                painter = usersPainter,
-                                                contentDescription = "Users",
-                                                contentScale = ContentScale.Fit, // 根据需要调整
-                                                modifier = Modifier.clickable( interactionSource = remember { MutableInteractionSource() }, indication = null)
-                                                {
-                                                    //展开参会人列表
-                                                    L.i { "[call] LCallActivity onClick Users" }
-                                                    viewModel.callUiController.setShowUsersEnabled(!viewModel.callUiController.showUsersEnabled.value)
-                                                }
-                                            )
-                                            if(participants.isNotEmpty()){
-                                                Box(
-                                                    contentAlignment = Alignment.Center,
-                                                    modifier = Modifier
-                                                        .align(Alignment.BottomEnd)
-                                                        .size(20.dp)
-                                                        .background(
-                                                            color = colorResource(id = com.difft.android.base.R.color.bg_tooltip),
-                                                            shape = CircleShape
-                                                        )
-                                                ){
-                                                    Text(
-                                                        text = "${participants.size}",
-                                                        color = Color.White,
-                                                        fontSize = 10.sp,
-                                                        lineHeight = 16.sp,
-                                                        fontFamily = FontFamily.Default,
-                                                        fontWeight = FontWeight(590),
-                                                        textAlign = TextAlign.Center,
-                                                        modifier = Modifier
-                                                            .wrapContentSize(Alignment.Center)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(controlPadding))
-
-                                Row(
-                                    modifier = Modifier
-                                        .width(48.dp)
-                                        .height(48.dp)
-                                        .background(
-                                            color = colorResource(id = com.difft.android.base.R.color.bg2_night),
-                                            shape = RoundedCornerShape(size = 100.00001.dp)
-                                        )
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) {
-                                            viewModel.callUiController.setShowToolBarBottomViewEnable(true)
-                                        }
-                                        .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(
-                                        10.000000953674316.dp,
-                                        Alignment.Start
-                                    ),
-                                    verticalAlignment = Alignment.Top,
-                                ) {
-                                    Image(
-                                        modifier = Modifier
-                                            .padding(1.dp)
-                                            .width(24.dp)
-                                            .height(24.dp),
-                                        painter = dotsPainter,
-                                        contentDescription = "more options menu",
-                                        contentScale = ContentScale.None
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(controlPadding))
-
-                                if(currentCallType == CallType.ONE_ON_ONE.type) {
-                                    OneOnOneHangupButton(
-                                        onHangup = { endCallAction(currentCallType, CallEndType.END) }
-                                    )
-                                } else if(!isLandscape) {
-                                    GroupCallLeaveButton(
-                                        onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
-                                        onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
-                                    )
-                                }
-                            }
-
-                    if (currentCallType != CallType.ONE_ON_ONE.type && isLandscape) {
-                        Box(
+        ) {
+            val controlSize = 48.dp
+            val controlPadding = if (isLandscape) 16.dp else 12.dp
+            Row(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .wrapContentSize(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.size(controlSize)) {
+                    Surface(
+                        modifier = Modifier.size(controlSize),
+                        color = Color.Transparent,
+                        shape = CircleShape,
+                        border = if (voicePreset.isEnabled) BorderStroke(
+                            width = 2.dp,
+                            color = colorResource(id = com.difft.android.base.R.color.blue_400),
+                        ) else null
+                    ) {
+                        val painter = if (micEnabled) micOpenPainter else micClosePainter
+                        Image(
+                            painter = painter,
+                            contentDescription = "Mic",
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .padding(end = 19.dp)
+                                .testTag("call_btn_mic")
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = {
+                                        L.i { "[call] LCallActivity onClick Mic" }
+                                        if (viewModel.isControlButtonClickEnabled()) requestMicPermission()
+                                    }
+                                )
+                        )
+                    }
+                    if (voicePreset.isEnabled) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(18.dp)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFF4DA0FF),
+                                            Color(0xFF82C1FC),
+                                            Color(0xFF328AFD)
+                                        ),
+                                        start = Offset(0f, 0f),
+                                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                                    ),
+                                    shape = CircleShape
+                                )
                         ) {
-                            GroupCallLeaveButton(
-                                onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
-                                onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
+                            Text(
+                                text = voicePreset.emoji,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.width(controlPadding))
+
+                Surface(
+                    modifier = Modifier.size(controlSize),
+                    color = Color.Transparent
+                ) {
+                    val painter = if (videoEnabled) cameraOpenPainter else cameraClosePainter
+                    Image(
+                        painter = painter,
+                        contentDescription = "Camera",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .testTag("call_btn_camera")
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                L.i { "[call] LCallActivity onClick Camera" }
+                                if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
+                            }
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(controlPadding))
+
+                var showAudioDeviceDialog by remember { mutableStateOf(false) }
+
+                Surface(
+                    modifier = Modifier.size(controlSize),
+                    color = Color.Transparent
+                ) {
+                    val painter = when (currentAudioDevice) {
+                        is AudioDevice.Earpiece -> volumePhonePainter
+                        is AudioDevice.Speakerphone -> volumeSpeakerPainter
+                        is AudioDevice.WiredHeadset -> volumeHeadphonesPainter
+                        is AudioDevice.BluetoothHeadset -> volumeAirpodPainter
+                        else -> volumeSpeakerPainter
+                    }
+                    Image(
+                        painter = painter,
+                        contentDescription = "Horn",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .testTag("call_btn_horn")
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                L.i { "[call] LCallActivity onClick Horn" }
+                                if (audioSwitchHandler != null) {
+                                    if (audioSwitchHandler.availableAudioDevices.size > 2) {
+                                        showAudioDeviceDialog = !showAudioDeviceDialog
+                                    } else {
+                                        viewModel.audioDeviceManager.switchToNext()
+                                    }
+                                }
+                            }
+                    )
+
+                    audioSwitchHandler?.availableAudioDevices?.let { availableAudioDevices ->
+                        ShowAudioDeviceOnClickView(
+                            audioDevices = availableAudioDevices,
+                            currentDevice = currentAudioDevice ?: audioSwitchHandler.selectedAudioDevice,
+                            expanded = showAudioDeviceDialog,
+                            setExpanded = { value -> showAudioDeviceDialog = value },
+                            onClickItem = { item ->
+                                viewModel.audioDeviceManager.select(item)
+                                showAudioDeviceDialog = false
+                            }
+                        )
+                    }
+                }
+
+                if (isUserSharingScreen) {
+                    Spacer(modifier = Modifier.width(controlPadding))
+                    Surface(
+                        modifier = Modifier.size(controlSize),
+                        color = Color.Transparent
+                    ) {
+                        Box {
+                            Image(
+                                painter = usersPainter,
+                                contentDescription = "Users",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .testTag("call_btn_users")
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        L.i { "[call] LCallActivity onClick Users" }
+                                        viewModel.callUiController.setShowUsersEnabled(
+                                            !viewModel.callUiController.showUsersEnabled.value
+                                        )
+                                    }
+                            )
+                            if (participants.isNotEmpty()) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(20.dp)
+                                        .background(
+                                            color = DifftTheme.colors.backgroundTooltip,
+                                            shape = CircleShape
+                                        )
+                                ) {
+                                    Text(
+                                        text = "${participants.size}",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        lineHeight = 16.sp,
+                                        fontFamily = FontFamily.Default,
+                                        fontWeight = FontWeight(590),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.wrapContentSize(Alignment.Center)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(controlPadding))
+
+                Row(
+                    modifier = Modifier
+                        .testTag("call_btn_more")
+                        .width(48.dp)
+                        .height(48.dp)
+                        .background(
+                            color = DifftTheme.colors.backgroundSecondary,
+                            shape = RoundedCornerShape(size = 100.00001.dp)
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            viewModel.callUiController.setShowToolBarBottomViewEnable(true)
+                        }
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        10.000000953674316.dp,
+                        Alignment.Start
+                    ),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Image(
+                        modifier = Modifier
+                            .padding(1.dp)
+                            .width(24.dp)
+                            .height(24.dp),
+                        painter = dotsPainter,
+                        contentDescription = "more options menu",
+                        contentScale = ContentScale.None
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(controlPadding))
+
+                if (currentCallType == CallType.ONE_ON_ONE.type) {
+                    OneOnOneHangupButton(
+                        onHangup = { endCallAction(currentCallType, CallEndType.END) }
+                    )
+                } else if (!isLandscape) {
+                    GroupCallLeaveButton(
+                        onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
+                        onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
+                    )
+                }
+            }
+
+            if (currentCallType != CallType.ONE_ON_ONE.type && isLandscape) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 19.dp)
+                ) {
+                    GroupCallLeaveButton(
+                        onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
+                        onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
+                    )
+                }
+            }
         }
     }
 }

@@ -4,8 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.net.Uri
 import android.os.Looper
+import androidx.core.net.toUri
 import android.os.Process
 import android.view.View
 import androidx.lifecycle.LifecycleOwner
@@ -38,7 +38,7 @@ fun String.utf8Substring(maxUtf8Len: Int): String {
 }
 
 fun Context.openExternalBrowser(url: String) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
     startActivity(intent)
 }
 
@@ -130,6 +130,11 @@ fun checkThread() {
             L.d { "Running on main thread. Stack trace (limited to 10 frames):\n$stackTrace" }
         }
     }
+}
+
+// Strips query params to prevent presigned credentials from leaking into persistent log files.
+fun String.sanitizeUrl(): String {
+    return replace(Regex("""\?[^\s"')\]}>]+"""), "?[REDACTED]")
 }
 
 fun Context.restartApp(): Nothing {

@@ -85,7 +85,7 @@ class AppUpgradeService : Service() {
 
                 // 3. 在后台线程执行 APK 验证，避免 ANR（使用流式哈希计算避免内存溢出）
                 val isValid = withContext(Dispatchers.IO) {
-                    UpdateManager.verifyApk(filepath, apkHash)
+                    UpdateManager.verifyApk(applicationContext, filepath, apkHash)
                 }
 
                 // 4. 处理验证结果
@@ -94,6 +94,10 @@ class AppUpgradeService : Service() {
                     sendDownloadCompletedBroadcast(UpdateManager.STATUS_DOWNLOAD_SUCCESS, filepath, isForce)
                 }else{
                     L.i { "AppUpgradeService downloadApkAndInstall verifyApk error." }
+                    // 校验失败（hash 不符或签名不在白名单）删除坏文件，避免下次复用 + 被攻破服务端反复下发同包时的无谓重下循环。
+                    if (newFile.exists()) {
+                        newFile.delete()
+                    }
                     sendDownloadCompletedBroadcast(UpdateManager.STATUS_VERIFY_FAILED, filepath, isForce)
                 }
             } catch (error: Exception) {

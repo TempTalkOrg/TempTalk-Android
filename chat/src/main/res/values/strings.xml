@@ -2,6 +2,7 @@
     <!--    <string name="search_default_hint">Search for messages or users</string>-->
     <string name="search_default_hint">Search</string>
     <string name="attendee_external_label">EXT</string>
+    <string name="attendee_host_prefix">Host・</string>
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">Learn more</string>
     <string name="SpanUtil__read_more">Read more</string>
@@ -50,6 +51,12 @@
     <string name="contact_add_contacts">Add Contact</string>
     <string name="contact_add_contacts_contact_name_not_correct">The contact ID is not correct, please try again.</string>
     <string name="contact_add_contacts_code_not_correct">The code is not correct, please try again.</string>
+    <string name="weak_contact_remove_in_days">Removes in %1$d days</string>
+    <string name="weak_contact_remove_now">Remove Now</string>
+    <string name="weak_contact_remove_now_failed">Failed to remove, please try again.</string>
+    <string name="weak_contact_account_unavailable_title">Account unavailable</string>
+    <string name="weak_contact_account_unavailable_message">This account doesn\'t exist or is unavailable.</string>
+    <string name="weak_contact_account_unavailable_ok">OK</string>
     <string name="contact_unblock_users">Unblock</string>
     <string name="contact_offline_tips">This account has logged out and messages can not be reached.</string>
     <string name="contact_account_exception_tips">This account has been disabled and messages can not be reached.</string>
@@ -62,6 +69,8 @@
 
     <!-- Chat -->
     <string name="chat_chats">Chats</string>
+    <string name="chat_proxy_status">Proxy status</string>
+    <string name="chat_add_options">New chat</string>
     <string name="chat_message_input_hint">Message</string>
     <string name="chat_message_input_hint_confidential">Confidential Message</string>
     <string name="chat_message_confidential_tips">Swipe left to read, swipe right to turn pages.</string>
@@ -71,11 +80,10 @@
     <string name="chat_message_action_voice2text">Voice To text</string>
     <string name="chat_message_action_voice2text_off">Discard Convert</string>
     <string name="chat_message_action_voice2text_tip_title">Information</string>
-    <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Yelling server</string>
+    <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Quicall server</string>
     <string name="chat_message_action_voice2text_tip_ok">OK</string>
     <string name="chat_message_action_select_multiple">Select Multiple</string>
     <string name="chat_message_action_select_max_limit">Select up to 50 messages</string>
-    <string name="chat_message_action_combine_forward">Combine &amp; Forward</string>
     <string name="chat_message_action_quote">Quote</string>
     <string name="chat_message_action_recall">Recall</string>
     <string name="chat_message_action_save_to_photos">Save to Photos</string>
@@ -88,7 +96,11 @@
     <string name="chat_message_action_select_all">Select All</string>
     <string name="chat_message_attachment">[Attachment]</string>
     <string name="chat_message_image">[Image]</string>
+    <string name="chat_message_gif">[Gif]</string>
     <string name="chat_message_video">[Video]</string>
+    <!-- Generic fallback placeholder used in multi-select copy output for any
+         message type not explicitly handled in MessageCopyTextFormatter. -->
+    <string name="chat_message_short_for_generic">[Message]</string>
     <string name="chat_message_audio">[Audio]</string>
     <string name="chat_message_confidential_message">[Message]</string>
     <string name="chat_message_contact_card">[Contact Card]</string>
@@ -158,8 +170,13 @@
     <string name="chat_voice_hold_to_talk">Hold to talk</string>
     <string name="chat_voice_release_to_send">Release to send</string>
     <string name="chat_voice_release_to_cancel">Release to Cancel</string>
+    <string name="chat_voice_cancel">Cancel</string>
+    <string name="chat_voice_add_effect">Add effect</string>
     <string name="chat_voice_recording_too_short">Recording too short</string>
-    <string name="chat_voice_recording_will_stop">Recording will stop in %d seconds</string>
+    <plurals name="chat_voice_recording_will_stop">
+        <item quantity="one">Recording will stop in %d second</item>
+        <item quantity="other">Recording will stop in %d seconds</item>
+    </plurals>
     <string name="chat_voice_max_size_limit">The maximum recording file size is 10M</string>
     <string name="chat_voice_focus_denied_hint">Cannot record while another app is using audio. Pause music or end the call and try again.</string>
     <string name="chat_voice_record_failed">Voice recording failed. Please try again.</string>
@@ -285,7 +302,7 @@
 
     <!-- Voice changer (call) settings -->
     <string name="me_call_voice_changer">Voice Changer</string>
-    <string name="me_call_voice_changer_desc">Set the default voice changer for calls.</string>
+    <string name="me_call_voice_changer_desc">Default in calls, optional for voice messages.</string>
 
     <!-- Contact profile setting-->
     <string name="contact_profile_info">Profile</string>
@@ -302,6 +319,7 @@
     <string name="invalid_link">Invalid Link</string>
     <string name="not_supported_link">Not supported link. Please upgrade the client and try again.</string>
     <string name="unsupported_file_type">Unsupported file type</string>
+    <string name="file_unavailable">Unable to read this file. It may have been moved or deleted.</string>
 
     <!-- Forward message -->
     <string name="forwarded_message">Forwarded Message</string>
@@ -337,7 +355,7 @@
     <string name="invite_enter_hint">Enter a 4-digit code or contact ID</string>
     <string name="invite_button_add_friend">Search</string>
     <string name="invite_copy_link">Copy Link</string>
-    <string name="invite_tips">Chat with me on Yelling %s</string>
+    <string name="invite_tips">Chat with me on Quicall %s</string>
     <string name="invite_regenerate_dialog_title">Regenerate Invite Code</string>
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
     <string name="invite_regenerate_dialog_cancel">Cancel</string>
@@ -358,6 +376,7 @@
 
     <!--    scan-->
     <string name="scan_scan">Scan</string>
+    <string name="scan_camera_open_failed">Failed to open the camera. Please try again.</string>
     <string name="link_device">Link this device?</string>
     <string name="link_device_tips">This device will be able to see your groups and contacts, read all your messages, and send messages in your name.</string>
     <string name="link_new_device">Link New Device</string>
@@ -369,7 +388,10 @@
     <string name="search_title_group">Group</string>
     <string name="search_chat_history">Search chat history</string>
     <string name="search_messages_default_tips">Enter keywords to search</string>
-    <string name="search_related_messages">%d related messages</string>
+    <plurals name="search_related_messages">
+        <item quantity="one">%d related message</item>
+        <item quantity="other">%d related messages</item>
+    </plurals>
     <string name="max_support_file_size_limit">Sorry, the selected file exceeds the 200MB limit and cannot be sent.</string>
     <string name="text_file_exceeds_10mb_limit">Exceeding 10MB size limit</string>
     <string name="chat_settings_mute">Mute</string>
@@ -572,6 +594,14 @@
     <string name="group_encrypted_info_dismiss">OK</string>
     <!-- System message sent to group after upgrade -->
     <string name="group_encryption_hint_message">🔒 Group info has been upgraded to end-to-end encryption</string>
+    <!-- Crypto key reset (rotate) — system message + interim reset dialog -->
+    <string name="group_crypto_reset_hint_message">🔒 Group info encryption key has been reset</string>
+    <string name="group_crypto_reset_title">Reset encryption key</string>
+    <string name="group_crypto_reset_message">After reset, group info will use a new encryption key. Confirm the group photo and name.</string>
+    <string name="group_crypto_reset_confirm">Reset</string>
+    <string name="group_crypto_reset_success">Encryption key reset</string>
+    <string name="group_crypto_reset_failed">Couldn\'t reset. Try again later.</string>
+    <string name="group_crypto_reset_name_hint">Enter a group name</string>
     <!-- Placeholder group name when key unavailable -->
     <string name="group_name_encrypted_placeholder">🔒 Group</string>
     <!-- Toast when user tries to operate without key -->
@@ -591,17 +621,94 @@
     <string name="chat_archive_messages_expired">Earlier messages are no longer available</string>
     <!-- Forward notice (system message shown after a forward completes).
          Terminal punctuation is appended by ForwardNoticeRenderer: the plurals text
-         itself has none, so the renderer can choose "." for a fully rendered list, or
-         nothing when the list ends in "..." (ellipsis already closes the sentence). -->
+         itself has none, so the renderer always appends the locale terminator.
+         %3$s is the locale-formatted author list (no "from " prefix); the plurals
+         template owns the "from" / "来自" preamble. PRD v1.0 §5.4.2. -->
     <plurals name="chat_forward_notice">
         <item quantity="one">\"%1$s\" forwarded a message from %3$s</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s</item>
     </plurals>
-    <!-- Self-only variant: used when all distinct source authors are the current
-         user, so the "from You" suffix would be redundant. -->
+    <!-- Self-only variant: used when all distinct source authors (the OUTER bubble authors) are the
+         current user, so the "from You" suffix would be redundant. PRD v2.0 keeps this — it stays
+         reachable when the outer author is me but inner content is foreign (gating uses inner authors;
+         the source list uses outer authors), so an all-self source list renders the short form. -->
     <plurals name="chat_forward_notice_self_only">
         <item quantity="one">\"%1$s\" forwarded a message</item>
         <item quantity="other">\"%1$s\" forwarded %2$d messages</item>
     </plurals>
+    <!-- Combined-forward (chat history) variants — PRD v1.0 §5.4.2.
+         "chat history" naming chosen to match the bubble's user-facing label.
+         Used when the source selection is fully a CF (ALL_COMBINED_FORWARD), or
+         a single-bubble forward where that bubble IS a CF (CONTAINS_COMBINED_FORWARD,
+         count == 1). -->
+    <plurals name="chat_forward_notice_chat_history">
+        <item quantity="one">\"%1$s\" forwarded a chat history from %3$s</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d chat histories from %3$s</item>
+    </plurals>
+    <plurals name="chat_forward_notice_chat_history_self_only">
+        <item quantity="one">\"%1$s\" forwarded a chat history</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d chat histories</item>
+    </plurals>
+    <!-- Mixed variant — CONTAINS_COMBINED_FORWARD with count > 1: a selection that
+         contains BOTH regular messages and at least one CF bubble. -->
+    <plurals name="chat_forward_notice_plural_mixed">
+        <item quantity="one">\"%1$s\" forwarded a message (including chat history) from %3$s</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages (including chat history) from %3$s</item>
+    </plurals>
+    <plurals name="chat_forward_notice_plural_mixed_self_only">
+        <item quantity="one">\"%1$s\" forwarded a message (including chat history)</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages (including chat history)</item>
+    </plurals>
+    <!-- SUB_COMBINED_FORWARD — operation against a sub-message INSIDE a CF detail view. -->
+    <plurals name="chat_forward_notice_from_chat_history">
+        <item quantity="one">\"%1$s\" forwarded a message from %3$s\'s chat history</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages from %3$s\'s chat history</item>
+    </plurals>
+    <plurals name="chat_forward_notice_from_chat_history_self_only">
+        <item quantity="one">\"%1$s\" forwarded a message from a chat history</item>
+        <item quantity="other">\"%1$s\" forwarded %2$d messages from a chat history</item>
+    </plurals>
     <string name="chat_forward_notice_sentence_terminator">.</string>
+
+    <!-- Copy notice (system message shown after the user copies messages to clipboard).
+         Same conventions as chat_forward_notice. PRD v1.0 §5.4.1. -->
+    <plurals name="chat_copy_notice">
+        <item quantity="one">\"%1$s\" copied a message from %3$s</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages from %3$s</item>
+    </plurals>
+    <plurals name="chat_copy_notice_self_only">
+        <item quantity="one">\"%1$s\" copied a message</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages</item>
+    </plurals>
+    <!-- SUB_COMBINED_FORWARD — copy from inside a CF detail view. Main-conv copy
+         (UNKNOWN/CONTAINS/ALL) shares the base chat_copy_notice plural per PRD §5.4.1. -->
+    <plurals name="chat_copy_notice_from_chat_history">
+        <item quantity="one">\"%1$s\" copied a message from %3$s\'s chat history</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages from %3$s\'s chat history</item>
+    </plurals>
+    <plurals name="chat_copy_notice_from_chat_history_self_only">
+        <item quantity="one">\"%1$s\" copied a message from a chat history</item>
+        <item quantity="other">\"%1$s\" copied %2$d messages from a chat history</item>
+    </plurals>
+    <string name="chat_copy_notice_sentence_terminator">.</string>
+
+    <!-- GIF panel (M1: browse + search + send) -->
+    <string name="gif_search_hint">Search GIFs</string>
+    <string name="gif_no_result">No GIFs found</string>
+    <string name="gif_search_clear">Clear</string>
+    <string name="gif_tab_trending">Trending</string>
+
+    <!-- GIF favorites (M3: favorites data flow) -->
+    <string name="gif_favorites_empty">No favorites yet</string>
+    <!-- Unified favorite menu labels (message long-press menu + GIF grid long-press floating menu). -->
+    <string name="gif_favorites_add_full">Add to Favorites</string>
+    <string name="gif_favorites_remove">Remove from Favorites</string>
+    <string name="gif_favorites_added">Added to Favorites</string>
+    <string name="gif_favorites_failed">Couldn\'t add. Try again later.</string>
+    <string name="gif_favorites_add_size_limit">This GIF is too large to add to Favorites.</string>
+    <!-- Cap-reached confirm dialog (limit 200). Secondary "Cancel" just dismisses (current GIF not added). -->
+    <string name="gif_favorites_cap_title">Favorites Limit Reached</string>
+    <string name="gif_favorites_cap_message">You can save up to 200 favorites. Replace the oldest one or remove some favorites first.</string>
+    <string name="gif_favorites_cap_confirm">Replace Oldest</string>
+    <string name="gif_favorites_cap_cancel">Cancel</string>
 </resources>

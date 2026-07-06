@@ -1,9 +1,10 @@
 package com.difft.android.push
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -176,7 +177,7 @@ class PushUtil @Inject constructor(
         withContext(Dispatchers.IO) {
             try {
                 // 检查 BasicAuth 是否存在，不存在表示未登录
-                val basicAuth = SecureSharedPrefsUtil.getBasicAuth()
+                val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
                 if (TextUtils.isEmpty(basicAuth)) {
                     L.w { "[Push] User not logged in, skip binding token" }
                     return@withContext

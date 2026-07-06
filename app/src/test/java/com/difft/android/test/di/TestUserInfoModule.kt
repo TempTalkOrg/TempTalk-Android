@@ -1,5 +1,6 @@
 package com.difft.android.test.di
 
+import com.difft.android.base.di.module.StorageBindings
 import com.difft.android.base.di.module.UserInfoModule
 import com.difft.android.base.qualifier.User
 import com.difft.android.base.user.UserData
@@ -10,10 +11,17 @@ import dagger.hilt.components.SingletonComponent
 import dagger.hilt.testing.TestInstallIn
 import javax.inject.Singleton
 
+/**
+ * Test replacement for both [UserInfoModule] and [StorageBindings]
+ * (issue #725, Task 7). The production [StorageBindings] requires a fully
+ * wired [com.difft.android.base.storage.user.StorageBoundUserManagerImpl]
+ * (DataStores + AndroidX Keystore + Tink keysets), which most tests can't
+ * provide. The fake here implements the legacy [UserManager] contract only.
+ */
 @Module
 @TestInstallIn(
     components = [SingletonComponent::class],
-    replaces = [UserInfoModule::class]
+    replaces = [UserInfoModule::class, StorageBindings::class]
 )
 object TestUserInfoModule {
 
@@ -24,7 +32,6 @@ object TestUserInfoModule {
     fun provideUserManager(): UserManager = object : UserManager {
         private var userData: UserData? = UserData(
             account = TEST_USER_ID,
-            password = "test-password",
             baseAuth = "dGVzdC11c2VyLTAwMTp0ZXN0LXBhc3N3b3Jk",
             email = "test@temptalk.org"
         )

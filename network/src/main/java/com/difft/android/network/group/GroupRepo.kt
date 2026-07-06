@@ -58,6 +58,9 @@ interface GroupService {
     @PUT("v1/groups/{gid}/upgrade-to-encrypted")
     suspend fun upgradeToEncrypted(@Path("gid") gid: String, @Body req: UpgradeGroupToEncryptedReq): BaseResponse<GetGroupInfoResp>
 
+    @PUT("v1/groups/{gid}/rotate-crypto")
+    suspend fun rotateCrypto(@Path("gid") gid: String, @Body req: RotateGroupCryptoReq): BaseResponse<GetGroupInfoResp>
+
     @POST("v1/groups/{gid}/members/crypto-dispose")
     suspend fun cryptoDispose(@Path("gid") gid: String, @Body req: CryptoDisposeReq): BaseResponse<CryptoDisposeResp>
 }
@@ -98,6 +101,7 @@ constructor(
             this.groupCryptoMode = groupResp.groupCryptoMode
             this.encryptedName = groupResp.encryptedName
             this.encryptedAvatar = groupResp.encryptedAvatar
+            this.groupCryptoKeyVersion = groupResp.groupCryptoKeyVersion
         }
     }
 
@@ -147,6 +151,10 @@ constructor(
 
     suspend fun upgradeToEncrypted(gid: String, req: UpgradeGroupToEncryptedReq): BaseResponse<GetGroupInfoResp> {
         return groupService.upgradeToEncrypted(gid, req)
+    }
+
+    suspend fun rotateCrypto(gid: String, req: RotateGroupCryptoReq): BaseResponse<GetGroupInfoResp> {
+        return groupService.rotateCrypto(gid, req)
     }
 
     suspend fun cryptoDispose(gid: String, req: CryptoDisposeReq): BaseResponse<CryptoDisposeResp> {
@@ -216,6 +224,8 @@ data class GetGroupInfoResp(
     val encryptedName: String? = null,
     val encryptedAvatar: String? = null,
     val groupMemberVerifyPublicKey: String? = null,
+    // Server-authoritative crypto-key generation. null = un-rotated/legacy (== 0).
+    val groupCryptoKeyVersion: Int? = null,
 )
 
 data class Member(
@@ -252,6 +262,8 @@ data class GroupResp(
     val groupCryptoMode: Int? = null,
     val encryptedName: String? = null,
     val encryptedAvatar: String? = null,
+    // Server-authoritative crypto-key generation. null = un-rotated/legacy (== 0).
+    val groupCryptoKeyVersion: Int? = null,
 )
 
 data class GroupAvatarResponse(
@@ -332,6 +344,15 @@ data class UpgradeGroupToEncryptedReq(
     val encryptedName: String,
     val encryptedAvatar: String? = null,
     val groupMemberVerifyPublicKey: String,
+    val memberBindings: List<GroupMemberBinding>
+)
+
+data class RotateGroupCryptoReq(
+    val encryptedName: String,
+    val encryptedAvatar: String? = null,
+    val groupMemberVerifyPublicKey: String,
+    // CAS base: the current groupCryptoKeyVersion the client saw from GET before rotating.
+    val baseGroupCryptoKeyVersion: Int,
     val memberBindings: List<GroupMemberBinding>
 )
 

@@ -1,28 +1,21 @@
 package com.difft.android.call
 
 import android.annotation.SuppressLint
-import android.app.PictureInPictureParams
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
-import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
-import android.util.Rational
 import android.view.KeyEvent
-import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.annotation.RequiresApi
-import com.difft.android.base.BaseActivity
 import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.difft.android.base.BaseActivity
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
@@ -33,117 +26,89 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.WindowSizeClassUtil
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.databinding.CallActivityIncomingCallBinding
-import com.hi.dhl.binding.viewbind
-import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import javax.inject.Inject
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.CallRingtoneManager
 import com.difft.android.call.manager.CallVibrationManager
-import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.state.InComingCallStateManager
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.StringUtil
+import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.databinding.CallActivityIncomingCallBinding
+import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.hi.dhl.binding.viewbind
 import dagger.Lazy
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class LIncomingCallActivity : BaseActivity() {
 
-    @Inject
-    lateinit var callToChatController: LCallToChatController
+    // Owns its own orientation logic in onCreate (locks portrait unless dual-pane);
+    // opt out of BaseActivity policy to avoid double-assignment on sw=600-839dp.
+    override fun shouldApplyOrientationPolicy(): Boolean = false
 
-    @Inject
-    lateinit var onGoingCallStateManager: OnGoingCallStateManager
-
-    @Inject
-    lateinit var inComingCallStateManager: InComingCallStateManager
-
-    @Inject
-    lateinit var callDataManagerLazy: Lazy<CallDataManager>
-
-    @Inject
-    lateinit var callVibrationManager: CallVibrationManager
-
-    @Inject
-    lateinit var callRingtoneManager: CallRingtoneManager
+    @Inject lateinit var callToChatController: LCallToChatController
+    @Inject lateinit var onGoingCallStateManager: OnGoingCallStateManager
+    @Inject lateinit var inComingCallStateManager: InComingCallStateManager
+    @Inject lateinit var callDataManagerLazy: Lazy<CallDataManager>
+    @Inject lateinit var callVibrationManager: CallVibrationManager
+    @Inject lateinit var callRingtoneManager: CallRingtoneManager
+    @Inject lateinit var userManager: UserManager
 
     val binding: CallActivityIncomingCallBinding by viewbind()
 
-    private lateinit var pipBuilderParams: PictureInPictureParams.Builder
-
     private lateinit var callIntent: CallIntent
-
-    private val callType: CallType by lazy {
-        CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
-    }
-
     private lateinit var backPressedCallback: OnBackPressedCallback
-
     private lateinit var appUnlockListener: (Boolean) -> Unit
 
+    private val callType: CallType by lazy { CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE }
     private val callbackId = "LIncomingCallActivity_${System.identityHashCode(this)}"
-
-    @Inject
-    lateinit var userManager: UserManager
-
-    private val callDataManager: CallDataManager by lazy {
-        callDataManagerLazy.get()
-    }
+    private val callDataManager: CallDataManager by lazy { callDataManagerLazy.get() }
 
     private var isAcceptingCall = false
 
+    private val pipController by lazy {
+        IncomingCallPipController(this, binding) { hangUpTheCall("renderPipMode") }
+    }
+
+    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
 
-        // 仅在非宽屏设备上强制竖屏，宽屏设备允许自由旋转以撑满全屏
+        // Incoming call UI: lock to portrait on phones; tablets/foldables use unspecified.
         if (!WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
 
         initializeActivityState()
-
         registerIncomingCallReceiver()
-
         handleCallNotificationAction()
-
         initUI()
-
-        initializePictureInPictureParams()
-
+        pipController.initialize()
         setupCallControlMessageListener()
-
         registerOnBackPressedHandler()
-
         registerAppUnlockListener()
-
     }
 
     private fun initializeActivityState() {
         inComingCallStateManager.setIsActivityShowing(true)
-        callIntent = getCallIntent()
+        callIntent = CallIntent(intent)
 
         if (isAppLockEnabled()) {
             inComingCallStateManager.setNeedAppLock(callIntent.needAppLock)
         } else {
             inComingCallStateManager.setNeedAppLock(false)
         }
-
         inComingCallStateManager.setCurrentRoomId(callIntent.roomId)
-    }
-
-    private fun showNewCallToastAndHangUp() {
-        Toast.makeText(this, R.string.call_newcall_tip, Toast.LENGTH_LONG).show()
-        hangUpTheCall("reject: local reject the new call")
     }
 
     private fun setupCallControlMessageListener() {
@@ -161,23 +126,20 @@ class LIncomingCallActivity : BaseActivity() {
             L.i { "[Call] LIncomingCallActivity handleCallNotificationAction ACCEPT_CALL roomId:${callIntent.roomId}" }
             if (onGoingCallStateManager.isInCalling()) {
                 LCallManager.bringCallScreenToFront(this)
-                showNewCallToastAndHangUp()
+                Toast.makeText(this, R.string.call_newcall_tip, Toast.LENGTH_LONG).show()
+                hangUpTheCall("reject: local reject the new call")
             } else {
-                callToChatController.joinCall(applicationContext, callIntent.roomId, callIntent.roomName, callIntent.callerId, callType, callIntent.conversationId, inComingCallStateManager.isNeedAppLock()) { status ->
+                lifecycleScope.launch {
+                    val status = callToChatController.joinCall(
+                        applicationContext, callIntent.roomId, callIntent.roomName,
+                        callIntent.callerId, callType, callIntent.conversationId,
+                        inComingCallStateManager.isNeedAppLock(),
+                    )
                     handleJoinCallResponse(status)
                 }
             }
         }
     }
-
-    private fun logIntent(callIntent: CallIntent) {
-        L.d { "[Call] LIncomingCallActivity logIntent:$callIntent" }
-    }
-
-    private fun getCallIntent(): CallIntent {
-        return CallIntent(intent)
-    }
-
 
     private fun handleCallControlMessage(controlMessage: OnGoingCallStateManager.ControlMessage?) {
         if (controlMessage == null) return
@@ -188,23 +150,17 @@ class LIncomingCallActivity : BaseActivity() {
                     hangUpTheCall("LIncomingCallActivity hangUpTheCall actionType:${controlMessage.actionType}")
                 }
             }
-
             else -> {}
         }
     }
 
-
     @SuppressLint("WrongConstant")
     private fun registerIncomingCallReceiver() {
-        val filter = IntentFilter()
-        filter.addAction(LCallConstants.CALL_NOTIFICATION_OPERATION_ACCEPT_OTHER)
-        filter.addAction(LCallConstants.CALL_OPERATION_INVITED_DESTROY)
-        ContextCompat.registerReceiver(
-            this,
-            inComingCallReceiver,
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        val filter = IntentFilter().apply {
+            addAction(LCallConstants.CALL_NOTIFICATION_OPERATION_ACCEPT_OTHER)
+            addAction(LCallConstants.CALL_OPERATION_INVITED_DESTROY)
+        }
+        ContextCompat.registerReceiver(this, inComingCallReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     private val inComingCallReceiver = object : BroadcastReceiver() {
@@ -224,7 +180,6 @@ class LIncomingCallActivity : BaseActivity() {
             }
         }
     }
-
 
     private fun initUI() {
         lifecycleScope.launch {
@@ -250,13 +205,11 @@ class LIncomingCallActivity : BaseActivity() {
         }
 
         val roomName = StringUtil.truncateWithEllipsis(callIntent.roomName, 25)
-
-        val tipMessage = if (callType.isGroup()) {
+        binding.tipMessage.text = if (callType.isGroup()) {
             ResUtils.getString(com.difft.android.chat.R.string.call_invite_of_group) + ":" + roomName
         } else {
             ResUtils.getString(com.difft.android.chat.R.string.call_invite)
         }
-        binding.tipMessage.text = tipMessage
 
         binding.acceptCallBtn.setOnClickListener {
             if (isAcceptingCall) return@setOnClickListener
@@ -269,41 +222,31 @@ class LIncomingCallActivity : BaseActivity() {
                     L.i { "[Call] LIncomingCallActivity acceptCallBtn click: end current call before join." }
                     endCurrentCallAndWaitForRelease()
                 }
-
                 if (!canJoin) {
                     setAcceptLoading(false)
                     isAcceptingCall = false
                     return@launch
                 }
-
                 L.i { "[Call] LIncomingCallActivity initUI: acceptCallBtn click: callIntent:$callIntent" }
-                callToChatController.joinCall(
-                    applicationContext,
-                    callIntent.roomId,
-                    callIntent.roomName,
-                    callIntent.callerId,
-                    callType,
-                    callIntent.conversationId,
-                    inComingCallStateManager.isNeedAppLock()
-                ) { status ->
-                    handleJoinCallResponse(status)
-                }
+                val status = callToChatController.joinCall(
+                    applicationContext, callIntent.roomId, callIntent.roomName,
+                    callIntent.callerId, callType, callIntent.conversationId,
+                    inComingCallStateManager.isNeedAppLock(),
+                )
+                handleJoinCallResponse(status)
             }
         }
         binding.rejectCallBtn.setOnClickListener {
-            callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId) {
+            appScope.launch {
+                callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId)
                 if (callType == CallType.ONE_ON_ONE) {
                     callDataManager.removeCallData(callIntent.roomId)
                 }
                 hangUpTheCall("reject: local reject the call")
             }
         }
-
-        binding.windowZoomOut.setOnClickListener {
-            enterPipModeIfPossible(tag = "windowZoomOut")
-        }
+        binding.windowZoomOut.setOnClickListener { pipController.enterIfPossible("windowZoomOut") }
     }
-
 
     override fun onPause() {
         super.onPause()
@@ -317,91 +260,46 @@ class LIncomingCallActivity : BaseActivity() {
         inComingCallStateManager.setIsInForeground(true)
     }
 
-
     override fun onDestroy() {
         super.onDestroy()
         L.d { "[Call] LIncomingCallActivity onDestroy: onDestroy" }
         unregisterReceiver(inComingCallReceiver)
-        inComingCallStateManager.reset() // 一次性重置所有状态
+        inComingCallStateManager.reset()
         onGoingCallStateManager.clearControlMessage()
-        if (::backPressedCallback.isInitialized) {
-            backPressedCallback.remove()
-        }
+        if (::backPressedCallback.isInitialized) backPressedCallback.remove()
         AppLockCallbackManager.removeListener(callbackId)
         checkNotifyStateAndDismiss(callIntent.roomId)
     }
-
-
-    private var inInPipMode = false
 
     private fun hangUpTheCall(tag: String) {
         LCallManager.stopIncomingCallService(callIntent.roomId, tag)
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean, newConfig: Configuration
-    ) {
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        inInPipMode = isInPictureInPictureMode
-        renderPipMode(isInPictureInPictureMode)
+        pipController.onPipModeChanged(isInPictureInPictureMode)
     }
 
-    private fun renderPipMode(isInPictureInPictureMode: Boolean) {
-        if (lifecycle.currentState == Lifecycle.State.CREATED) {
-            finishAndRemoveTask()
-            //when user click on Close button of PIP this will trigger, do what you want here
-            hangUpTheCall(tag = "renderPipMode")
-        } else if (lifecycle.currentState == Lifecycle.State.STARTED) {
-            //when PIP maximize this will trigger
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean = when (keyCode) {
+        KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN -> {
+            callRingtoneManager.stopRingTone("Volume Key Pressed")
+            callVibrationManager.stopVibration()
+            true
         }
-
-        binding.windowZoomOut.isVisible = !isInPictureInPictureMode
-        if (isInPictureInPictureMode) {
-            binding.acceptCallBtn.visibility = View.INVISIBLE
-            binding.rejectCallBtn.visibility = View.INVISIBLE
-        } else {
-            binding.acceptCallBtn.visibility = View.VISIBLE
-            binding.rejectCallBtn.visibility = View.VISIBLE
-        }
-    }
-
-
-    // Purpose:在用户手动点击音量加减键的时候, 停掉铃声和震动, 按一下就停, 不是用把音量拉到最低 #1440
-    // Link to issue: https://github.com/difftim/difft-android/issues/1440
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        return when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> {
-                // 捕捉到音量增加键
-                callRingtoneManager.stopRingTone("Volume Up Pressed")
-                callVibrationManager.stopVibration()
-                true  // 返回 true 表示你已经处理了该事件
-            }
-
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                // 捕捉到音量减少键
-                callRingtoneManager.stopRingTone("Volume Up Pressed")
-                callVibrationManager.stopVibration()
-                true
-            }
-
-            else -> super.onKeyDown(keyCode, event)
-        }
+        else -> super.onKeyDown(keyCode, event)
     }
 
     @SuppressLint("MissingSuperCall")
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         L.i { "[Call] LIncomingCallActivity onUserLeaveHint" }
-        enterPipModeIfPossible(tag = "onUserLeaveHint")
+        pipController.enterIfPossible("onUserLeaveHint")
     }
 
     @SuppressLint("MissingSuperCall")
     override fun onBackPressed() {
         L.i { "[Call] LIncomingCallActivity onBackPressed" }
-        if (!enterPipModeIfPossible(tag = "onBackPressed")) {
-            super.onBackPressed()
-        }
+        if (!pipController.enterIfPossible("onBackPressed")) super.onBackPressed()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -414,68 +312,16 @@ class LIncomingCallActivity : BaseActivity() {
         }
     }
 
-
-    private fun isSystemPipEnabledAndAvailable(): Boolean {
-        return Build.VERSION.SDK_INT >= 26 && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
-    }
-
-    private fun tryToSetPictureInPictureParams() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                setPictureInPictureParams(pipBuilderParams.build())
-            } catch (e: Exception) {
-                L.i { "[call] tryToSetPictureInPictureParams System lied about having PiP available. $e" }
-            }
-        }
-    }
-
-    private fun initializePictureInPictureParams() {
-        if (isSystemPipEnabledAndAvailable()) {
-            val aspectRatio = Rational(16, 9)
-            pipBuilderParams = PictureInPictureParams.Builder()
-            pipBuilderParams.setAspectRatio(aspectRatio)
-
-            if (Build.VERSION.SDK_INT >= 31) {
-                lifecycleScope.launch {
-                    lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                        launch {
-                            pipBuilderParams.setAutoEnterEnabled(true)
-                            tryToSetPictureInPictureParams()
-                        }
-                    }
-                }
-            } else {
-                tryToSetPictureInPictureParams()
-            }
-        }
-    }
-
-    private fun enterPipModeIfPossible(tag: String? = null): Boolean {
-        L.i { "[Call] LCallActivity enterPipModeIfPossible tag:$tag" }
-        if (isSystemPipEnabledAndAvailable()) {
-            try {
-                enterPictureInPictureMode(pipBuilderParams.build())
-            } catch (e: Exception) {
-                L.i { "[Call] enterPipModeIfPossible Device lied to us about supporting PiP, $e" }
-                return false
-            }
-            return true
-        }
-        return false
-    }
-
     private fun handleJoinCallResponse(status: Boolean) {
         runOnUiThread {
             setAcceptLoading(false)
             isAcceptingCall = false
         }
-        if(!status) {
+        if (!status) {
             L.e { "[Call] LIncomingActivity join call failed." }
-            runOnUiThread {
-                ToastUtil.show(R.string.call_join_failed_tip)
-            }
+            runOnUiThread { ToastUtil.show(R.string.call_join_failed_tip) }
             hangUpTheCall("accept: join the call failed")
-        }else {
+        } else {
             hangUpTheCall("accept: join the call")
         }
     }
@@ -495,25 +341,20 @@ class LIncomingCallActivity : BaseActivity() {
             }
             ApplicationHelper.instance.sendBroadcast(intent)
         }
-
         return try {
             withTimeoutOrNull(15_000) {
                 onGoingCallStateManager.isInCalling.first { !it }
                 true
             } ?: run {
                 L.w { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease timeout." }
-                runOnUiThread {
-                    ToastUtil.show(R.string.call_join_failed_tip)
-                }
+                runOnUiThread { ToastUtil.show(R.string.call_join_failed_tip) }
                 false
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             L.e(e) { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease failed." }
-            runOnUiThread {
-                ToastUtil.show(R.string.call_join_failed_tip)
-            }
+            runOnUiThread { ToastUtil.show(R.string.call_join_failed_tip) }
             false
         }
     }
@@ -522,18 +363,15 @@ class LIncomingCallActivity : BaseActivity() {
         backPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 L.i { "[Call] LIncomingActivity onBackPressed" }
-                enterPipModeIfPossible("back pressed")
+                pipController.enterIfPossible("back pressed")
             }
         }
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
     }
 
     private fun registerAppUnlockListener() {
-        appUnlockListener = {
-            if (it) {
-                // 用户刚刚通过应用锁解锁
-                inComingCallStateManager.setNeedAppLock(false)
-            }
+        appUnlockListener = { unlocked ->
+            if (unlocked) inComingCallStateManager.setNeedAppLock(false)
         }
         AppLockCallbackManager.addListener(callbackId, appUnlockListener)
     }
@@ -541,9 +379,7 @@ class LIncomingCallActivity : BaseActivity() {
     private fun isAppLockEnabled(): Boolean {
         if (!::userManager.isInitialized) return false
         val user = userManager.getUserData() ?: return false
-        val hasPattern = !user.pattern.isNullOrEmpty()
-        val hasPasscode = !user.passcode.isNullOrEmpty()
-        return hasPattern || hasPasscode
+        return !user.pattern.isNullOrEmpty() || !user.passcode.isNullOrEmpty()
     }
 
     private fun checkNotifyStateAndDismiss(roomId: String) {

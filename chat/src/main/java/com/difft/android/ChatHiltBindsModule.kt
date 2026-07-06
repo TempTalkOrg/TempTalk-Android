@@ -1,8 +1,10 @@
 package com.difft.android
 
+import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.base.utils.IMessageNotificationUtil
 import com.difft.android.chat.common.ConversationManagerImpl
+import com.difft.android.chat.websocket.WebSocketManager
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Binds
 import dagger.Module
@@ -37,4 +39,8 @@ abstract class ChatHiltBindsModule {
     @Binds
     @Singleton
     abstract fun bindGlobalConfigsManager(globalConfigsManager: GlobalConfigsManager): IGlobalConfigsManager
+
+    @Binds
+    @Singleton
+    abstract fun bindConnectionRefresher(webSocketManager: WebSocketManager): IConnectionRefresher
 }

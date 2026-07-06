@@ -1,5 +1,7 @@
 package com.difft.android.chat.group
 
+import com.difft.android.base.utils.globalServices
+
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
@@ -54,6 +56,8 @@ import javax.inject.Singleton
  * The update is based on the specific group notification and group detail notification types received.
  */
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @Singleton
 class GroupUpdater @Inject constructor(
     @param:ApplicationContext
@@ -408,6 +412,12 @@ class GroupUpdater @Inject constructor(
                 notifyContent = context.getString(R.string.group_encryption_hint_message)
             }
 
+            GroupNotifyDetailType.RotateGroupCrypto.value -> {
+                L.i { "[GroupUpdater] Group crypto key rotated, groupID: $groupID" }
+                groupUtil.fetchAndSaveSingleGroupInfo(groupID, true)
+                notifyContent = context.getString(R.string.group_crypto_reset_hint_message)
+            }
+
             else -> {
                 L.w { "[GroupUpdater] Unknown groupDetailType: $groupDetailType for group $groupID, version: $groupVersion" }
             }
@@ -460,7 +470,7 @@ class GroupUpdater @Inject constructor(
 
 //    private suspend fun removeServerMessage(source: String, timestamp: Long) {
 //        kotlin.runCatching {
-//            val response = httpClient.httpService.removePendingMessage(SecureSharedPrefsUtil.getBasicAuth(), source, timestamp.toString()).await()
+//            val response = httpClient.httpService.removePendingMessage((globalServices.userManager.getUserData()?.baseAuth ?: ""), source, timestamp.toString()).await()
 //            if (response.status == 0) {
 //                L.i { "[GroupUpdater] remove Server Message success $timestamp" }
 //            } else {

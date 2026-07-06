@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg.setting"
     android:orientation="vertical">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -104,7 +103,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <!--        <androidx.appcompat.widget.AppCompatTextView-->
                 <!--            android:id="@+id/tv_full_screen_notification"-->
@@ -278,7 +277,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg.setting" />
+                    android:background="@color/bg" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_notification_display"

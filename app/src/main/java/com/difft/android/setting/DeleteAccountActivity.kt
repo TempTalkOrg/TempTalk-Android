@@ -9,7 +9,6 @@ import androidx.core.widget.addTextChangedListener
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.base.utils.globalServices
@@ -48,7 +47,7 @@ class DeleteAccountActivity : BaseActivity() {
 
     private val mBinding: ActivityDeleteAccountBinding by viewbind()
     val token: String by lazy {
-        SecureSharedPrefsUtil.getToken()
+        (userManager.getUserData()?.microToken ?: "")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,7 +80,7 @@ class DeleteAccountActivity : BaseActivity() {
                     lifecycleScope.launch {
                         try {
                             val result = withContext(Dispatchers.IO) {
-                                chatHttpClient.httpService.fetchDeleteAccount(SecureSharedPrefsUtil.getBasicAuth())
+                                chatHttpClient.httpService.fetchDeleteAccount((userManager.getUserData()?.baseAuth ?: ""))
                             }
                             mBinding.btnDone.isLoading = false
                             if (result.status == 0) {

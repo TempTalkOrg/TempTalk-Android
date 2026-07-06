@@ -27,6 +27,17 @@ object RoomChangeTracker {
     )
     val readInfoUpdates: SharedFlow<String> = _readInfoUpdates.asSharedFlow()
 
+    // Newly created (incl. re-created after delete) room ids, batched over 500ms.
+    // Consumers refetch the conversation's server config so settings survive delete + recreate.
+    // replay keeps recent batches so a consumer subscribing slightly late at startup is not missed.
+    private val createdChannel = Channel<String>(capacity = Channel.UNLIMITED)
+    private val _roomCreated = MutableSharedFlow<List<String>>(
+        replay = 8,
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val roomCreated: SharedFlow<List<String>> = _roomCreated.asSharedFlow()
+
     init {
         appScope.launch {
             // 用于批量收集变更的缓冲区，Set 自动去重
@@ -59,6 +70,27 @@ object RoomChangeTracker {
                 }
             }
         }
+
+        // Batch room-created events (same 500ms coalescing as above).
+        appScope.launch {
+            val buffer = mutableSetOf<String>()
+            while (true) {
+                buffer.add(createdChannel.receive())
+                delay(500)
+                while (true) {
+                    val result = createdChannel.tryReceive()
+                    if (result.isSuccess) {
+                        buffer.add(result.getOrThrow())
+                    } else {
+                        break
+                    }
+                }
+                if (buffer.isNotEmpty()) {
+                    _roomCreated.tryEmit(buffer.toList())
+                    buffer.clear()
+                }
+            }
+        }
     }
 
     fun trackRoom(roomId: String, type: RoomChangeType) {
@@ -67,8 +99,15 @@ object RoomChangeTracker {
         changeChannel.trySend(roomId to type)
     }
 
+    /** Mark a room as newly created (incl. re-created after delete), to refetch its server config. */
+    fun trackRoomCreated(roomId: String) {
+        L.i { "[Message][RoomChangeTracker] trackRoomCreated:$roomId" }
+        createdChannel.trySend(roomId)
+    }
+
     fun close() {
         changeChannel.close()
+        createdChannel.close()
     }
 
     suspend fun trackRoomReadInfoUpdate(roomId: String) {

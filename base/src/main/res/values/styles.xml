@@ -1,23 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Theme.Chative" parent="Theme.AppCompat.Light.NoActionBar">
-        <!-- Primary brand color. -->
-        <item name="colorPrimary">@android:color/transparent</item>
-        <item name="colorPrimaryVariant">@android:color/transparent</item>
-        <item name="colorOnPrimary">@android:color/transparent</item>
-        <!-- Secondary brand color. -->
-        <item name="colorSecondary">@android:color/transparent</item>
-        <item name="colorSecondaryVariant">@android:color/transparent</item>
-        <item name="colorOnSecondary">@android:color/transparent</item>
-        <!-- Status bar color. -->
-        <item name="android:windowBackground">@color/bg1</item>
-        <item name="android:statusBarColor">@color/bg1</item>
-        <item name="android:navigationBarColor">@color/bg1</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
-        <!-- Customize your theme here. -->
-    </style>
+
+    <!-- Base application theme (Theme.Chative) is defined in themes.xml (light) and values-night/themes.xml (dark). -->
+
     <declare-styleable name="ChativeButton" tools:ignore="ResourceName">
         <attr name="android:text" />
         <attr name="type" format="enum">

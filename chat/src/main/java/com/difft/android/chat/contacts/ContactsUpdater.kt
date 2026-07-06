@@ -18,12 +18,15 @@ import com.difft.android.websocket.api.messages.TTNotifyMessage
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// All wcdb calls in this class run on Dispatchers.IO.
+@Suppress("BlockingWcdbInSuspend")
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class ContactsUpdater @Inject constructor(
     private val userManager: UserManager,
     private val dbMessageStore: DBMessageStore,
     private val wcdb: WCDB,
+    private val weakContactReconciler: WeakContactReconciler,
 ) {
     private data class PendingContactMessage(
         val message: TTNotifyMessage,
@@ -103,15 +106,18 @@ class ContactsUpdater @Inject constructor(
                     }
                     ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
                     ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
+                    // Friend restored via directory action=0 (ct=1 no longer fires for restores).
+                    // Drop placeholder but keep the conversation.
+                    weakContactReconciler.clearWeakOnFriendRestored(member.number.toString())
                 }
 
                 1 -> {
                     val contact = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(member.number.toString()))
                     if (contact != null) {
                         val localHasAvatar = contact.avatar != null
-                        val localName = contact.name
+                        val localHasName = contact.name != null
                         contact.updateFrom(member)
-                        L.i { "[ContactsUpdater] action=1(Update) id:$memberId, localName:$localName, serverName:${member.name}, localHasAvatar:$localHasAvatar, serverHasAvatar:${member.avatar != null}, resultHasAvatar:${contact.avatar != null}" }
+                        L.i { "[ContactsUpdater] action=1(Update) id:$memberId, localHasName:$localHasName, serverHasName:${member.name != null}, localHasAvatar:$localHasAvatar, serverHasAvatar:${member.avatar != null}, resultHasAvatar:${contact.avatar != null}" }
                         try {
                             wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
                             wcdb.contactor.insertObject(contact)
@@ -124,22 +130,16 @@ class ContactsUpdater @Inject constructor(
                     }
                 }
 
-                2 -> {
-                    L.i { "[ContactsUpdater] action=2(DeleteByMe) id:$memberId" }
+                // action=2 (deleted by me) and action=3 (peer deregistered) both mean hard delete here.
+                // Weak state is handled independently by notifyType=25 and does not affect this path.
+                2, 3 -> {
+                    L.i { "[ContactsUpdater] action=$action(Delete) id:$memberId — hard delete (weak state handled independently by notifyType=25)" }
                     wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
                     dbMessageStore.removeRoomAndMessages(member.number.toString())
                     ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
                     ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
                 }
-                
-                3 -> {
-                    L.i { "[ContactsUpdater] action=3(DeleteByOther) id:$memberId" }
-                    wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
-                    dbMessageStore.removeRoomAndMessages(member.number.toString())
-                    ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
-                    ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
-                }
-                
+
                 else -> {
                     L.w { "[ContactsUpdater] Unknown action=$action id:$memberId, hasName:${member.name != null}, hasAvatar:${member.avatar != null}" }
                 }

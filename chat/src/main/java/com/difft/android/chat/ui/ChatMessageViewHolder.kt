@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,11 +15,16 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
+import com.bumptech.glide.Glide
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
+import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
+import com.difft.android.base.utils.windowWidthPx
+import com.difft.android.base.utils.getLifecycleOwner
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -30,6 +36,7 @@ import com.difft.android.chat.databinding.ChatItemChatMessageListNotifyBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextMineBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextOthersBinding
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.isAttachmentMessage
@@ -38,15 +45,31 @@ import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.difft.app.database.attachment
+import org.difft.app.database.forwardContext
+import org.difft.app.database.wcdb
 import org.difft.app.database.models.ContactorModel
+import org.difft.app.database.models.DBMessageModel
+import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.media.EncryptedAttachmentAccess
+import com.difft.android.chat.util.QuoteThumbnailBinder
 import com.difft.android.chat.util.Util
+import com.difft.android.chat.util.isHostActivityAlive
 import util.TimeFormatter
+import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 消息交互回调封装
@@ -189,6 +212,9 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
         private val quoteText: TextView
             get() = if (isMine) mineBinding!!.quoteText else othersBinding!!.quoteText
+
+        private val quoteThumbnail: ImageView
+            get() = if (isMine) mineBinding!!.quoteThumbnail else othersBinding!!.quoteThumbnail
 
         // 单条转发消息的信息头（时间+来源）
         private val forwardInfoZone: View
@@ -453,9 +479,27 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 }
                 quoteText.text = message.quote?.text
                 quoteZone.setOnClickListener { message.quote?.let { onQuoteClicked(it) } }
+
+                // Cap the wrap_content text column so a long caption ellipsizes instead of pushing
+                // the trailing thumbnail past the bubble's max width. Reserve the thumbnail width
+                // when an attachment preview shows (mirrors iOS measureSize).
+                val bubbleMaxWidth = (containerWidth.takeIf { it > 0 } ?: quoteText.windowWidthPx()) - 70.dp
+                val hasAttachment = message.quote?.attachments?.isNotEmpty() == true
+                // chrome = stripe + margins (+48 for thumbnail and its margin when shown)
+                val textMaxWidth = (bubbleMaxWidth - if (hasAttachment) 75.dp else 27.dp).coerceAtLeast(40.dp)
+                quoteAuthor.maxWidth = textMaxWidth
+                quoteText.maxWidth = textMaxWidth
+
+                bindQuoteThumbnail(quoteThumbnail, message.quote!!, forWhat)
             } else {
                 quoteZone.visibility = View.GONE
+                clearQuoteThumbnail()
             }
+        }
+
+        /** Recycle entry point: clears the thumbnail ImageView (delegates to the top-level fn). */
+        fun clearQuoteThumbnail() {
+            clearQuoteThumbnail(quoteThumbnail)
         }
 
         private fun bindForwardView(message: TextChatMessage, contactorCache: MessageContactsCacheUtil, shouldSaveToPhotos: Boolean) {
@@ -683,6 +727,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
+        // Numeric-only display (read-recipient count); no English text to translate.
+        @SuppressLint("SetTextI18n")
         private fun bindSendAndReadStatus(
             sendStatus: Int?,
             readStatus: Int,
@@ -789,6 +835,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
     // ============== 公共辅助方法（从旧代码复制） ==============
 
+    // Reaction count branch uses numeric-only display; no English text to translate.
+    @SuppressLint("SetTextI18n")
     fun initReactionView(
         root: View,
         reactionsView: FlowLayout,
@@ -861,11 +909,11 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 }
 
                 TranslateStatus.ShowEN -> {
-                    showContent(tvTranslateContent, it.translatedContentEN ?: "")
+                    showContent(tvTranslateContent, it.translatedContentEN ?: "", message)
                 }
 
                 TranslateStatus.ShowCN -> {
-                    showContent(tvTranslateContent, it.translatedContentCN ?: "")
+                    showContent(tvTranslateContent, it.translatedContentCN ?: "", message)
                 }
 
                 else -> {
@@ -899,7 +947,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
                 SpeechToTextStatus.Show -> {
                     if (message.attachment?.flags == 1) {
-                        showContent(tvSpeechToTextContent, it.speechToTextContent ?: "")
+                        showContent(tvSpeechToTextContent, it.speechToTextContent ?: "", message)
                         ivSpeech2textServerTipIcon.isVisible = true
                     } else {
                         pbSpeechToText.isVisible = false
@@ -916,10 +964,34 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
     }
 
-    private fun showContent(tvTranslateContent: AppCompatTextView, content: String) {
-        tvTranslateContent.text = content
-        tvTranslateContent.setOnLongClickListener {
-            Util.copyToClipboard(tvTranslateContent.context, content)
+    /** Bind derived-content (inline translate / speech-to-text) with long-press copy + notice (PRD §4). */
+    private fun showContent(
+        textView: AppCompatTextView,
+        content: String,
+        sourceMessage: TextChatMessage,
+    ) {
+        textView.text = content
+        textView.setOnLongClickListener {
+            Util.copyToClipboard(textView.context, content)
+            val conv = sourceMessage.forWhat
+            // PRD v2.0 §改动2: derived text (translate / STT) is real content; trace only if it
+            // belongs to someone else, judged by the ORIGINAL author (single-forward → inner author),
+            // consistent with the main copy paths.
+            val myId = globalServices.myId
+            if (conv != null && sourceMessage.authorId.isNotEmpty() &&
+                NoticeAggregator.copyCarriesForeignContent(listOf(sourceMessage), myId)
+            ) {
+                // PRD §5.1: derived-content copy (translate / STT) is NOT visible inside CF detail
+                // per spec → mode is always UNKNOWN. Pass explicitly to keep reviewer awareness.
+                ApplicationDependencies.getActivityNoticeDispatcher()
+                    .dispatchCopyNotice(
+                        sourceConversation = conv,
+                        sourceAuthorIds = listOf(sourceMessage.authorId),
+                        myId = myId,
+                        messageCount = 1,
+                        combinedForwardMode = CombinedForwardMode.UNKNOWN,
+                    )
+            }
             true
         }
     }
@@ -988,4 +1060,148 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
         return false
     }
+}
+
+// ============================================================================
+// Quote thumbnail rendering (⑤) — TOP-LEVEL package functions.
+// Deliberately NOT instance methods of the Message ViewHolder: top-level placement means they
+// capture neither `this` nor any ViewHolder field. The Message class exposes only the thin
+// `quoteThumbnail` accessor + a `clearQuoteThumbnail()` recycle entry that delegates here.
+// ============================================================================
+
+/**
+ * Monotonic per-bind recycle token source. A per-bind unique token (instead of `quote.id`, the
+ * original timestamp) prevents two quotes of the SAME original — visible and recycled together —
+ * from colliding on the same tag value and cross-applying each other's async thumbnail.
+ */
+private val quoteThumbnailTokenSeq = AtomicLong()
+
+/**
+ * Binds the first [Quote] attachment to [imageView] using a tiered source priority:
+ *   1. voice (`flags==1` or [MediaUtil.isAudioType]) → mic icon (CENTER)
+ *   2. image/video:
+ *        a. inline thumbnail bytes (difft-android senders) → rounded Glide load (CENTER_CROP)
+ *        b. else → async reverse-lookup of the LOCAL original message (iOS/Mac/TT senders carry no
+ *           bytes); found on disk → rounded Glide load, else → hide the thumbnail (text-only).
+ *   3. genuine file (pdf/doc/zip/etc.) → `ic_file` icon (CENTER, NEVER center-crop)
+ *
+ * Image-loading is gated behind [MediaUtil.isImageOrVideoType] so a real file never goes through
+ * the center-crop path (which would render a stretched/oversized icon).
+ *
+ * @param forWhat the conversation scope, used to scope the reverse-lookup to this room. Derived
+ *   from the ViewHolder's injected `forWhat` field (TextChatMessage has no roomId/roomType).
+ */
+internal fun bindQuoteThumbnail(imageView: ImageView, quote: Quote, forWhat: For?) {
+    val qa = quote.attachments?.firstOrNull()
+    if (qa == null) {
+        clearQuoteThumbnail(imageView)
+        return
+    }
+
+    val isVoice = qa.flags == 1 || MediaUtil.isAudioType(qa.contentType)
+    // Per-bind unique recycle token (not quote.id) — see [quoteThumbnailTokenSeq].
+    val token = quoteThumbnailTokenSeq.incrementAndGet()
+    imageView.setTag(R.id.quote_thumbnail_job, token)
+    when {
+        isVoice -> {
+            imageView.visibility = View.VISIBLE
+            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.chat_ic_quote_mic)
+        }
+        MediaUtil.isImageOrVideoType(qa.contentType) -> {
+            val thumbBytes = qa.thumbnail?.thumbnail?.takeIf { it.isNotEmpty() }
+            if (thumbBytes != null) {
+                // difft-android inline-bytes path.
+                imageView.visibility = View.VISIBLE
+                QuoteThumbnailBinder.loadRoundedThumbnail(imageView, thumbBytes)
+            } else {
+                // iOS / Mac / TempTalk: no bytes on the wire → reverse-look-up the local original.
+                // Stay GONE until/unless the lookup finds a file (avoids a flash of misleading icon).
+                // clearQuoteThumbnail nulls the recycle tag, so re-set it after the clear.
+                clearQuoteThumbnail(imageView)
+                imageView.setTag(R.id.quote_thumbnail_job, token)
+                resolveOriginalThumbnailAsync(imageView, quote.id, forWhat?.id, forWhat?.typeValue ?: 0, token)
+            }
+        }
+        else -> {
+            // Genuine file (pdf/doc/zip/etc.) → file icon, CENTER (never center-crop).
+            imageView.visibility = View.VISIBLE
+            QuoteThumbnailBinder.setTypeIcon(imageView, R.drawable.ic_file)
+        }
+    }
+}
+
+/**
+ * Reverse-looks-up the local original message (by timestamp + room) on [Dispatchers.IO] and, if a
+ * local image/video file is found, loads it as the quote thumbnail. Runs on the host Activity's
+ * lifecycle scope (resolved via [getLifecycleOwner] at bind time — NOT the fragment-view scope), so
+ * the launch is NOT auto-cancelled on item detach / recycle; staleness is instead guarded by
+ * re-checking the recycle [token] (the `quote_thumbnail_job` tag) and [isHostActivityAlive] before
+ * touching the view. No-ops (leaves text-only) when no original is found locally.
+ */
+private fun resolveOriginalThumbnailAsync(
+    imageView: ImageView,
+    originalTimestamp: Long,
+    roomId: String?,
+    roomType: Int,
+    token: Long,
+) {
+    if (roomId.isNullOrEmpty()) return
+    // getLifecycleOwner() resolves via view-tree first, then the context chain (Activity) — needed
+    // because findViewTreeLifecycleOwner() alone is null during onBindViewHolder (item not yet
+    // attached), which would otherwise make the image reverse-lookup never run.
+    val owner = imageView.getLifecycleOwner() ?: return
+    owner.lifecycleScope.launch {
+        val path = withContext(Dispatchers.IO) {
+            findOriginalAttachmentPath(originalTimestamp, roomId, roomType)
+        } ?: return@launch
+        // Back on Main: only apply if this view still represents the same quote and host is alive.
+        if (imageView.getTag(R.id.quote_thumbnail_job) == token && imageView.isHostActivityAlive()) {
+            imageView.visibility = View.VISIBLE
+            // Encrypted-at-rest images resolve to a decrypting content uri; legacy plaintext stays a File.
+            QuoteThumbnailBinder.loadRoundedThumbnail(imageView, EncryptedAttachmentAccess.imageGlideModel(path))
+        }
+    }
+}
+
+/**
+ * Finds the on-disk path of the original quoted message's image/video attachment, forward-aware.
+ * - Normal attachment message: file under `getMessageAttachmentFilePath(message.id)`.
+ * - Single-forward message: the forwarded file lives under the attachment's `authorityId` directory
+ *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment image-preview.
+ * Returns the path only if the file exists AND the attachment is image/video; else null (text-only).
+ */
+internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomType: Int): String? = runCatching {
+    val original = wcdb.message.getFirstObject(
+        DBMessageModel.roomId.eq(roomId)
+            .and(DBMessageModel.roomType.eq(roomType))
+            .and(DBMessageModel.timeStamp.eq(timestamp))
+    ) ?: return null
+
+    // Single-forward original → forwarded attachment under its authorityId directory.
+    val forward = original.forwardContext()?.forwards?.takeIf { it.size == 1 }?.firstOrNull()
+    if (forward != null) {
+        val att = forward.attachments?.firstOrNull() ?: return null
+        if (!MediaUtil.isImageOrVideoType(att.contentType)) return null
+        val fileName = att.fileName ?: return null
+        val path = FileUtil.getMessageAttachmentFilePath(att.authorityId.toString()) + fileName
+        // isReadable (not File.exists): encrypted-at-rest media has only the .encrypt on disk; the
+        // loader resolves it to a decrypting content uri via imageGlideModel.
+        return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
+    }
+
+    // Normal attachment original → file under message.id directory.
+    val att = original.attachment()?.takeIf { MediaUtil.isImageOrVideoType(it.contentType) } ?: return null
+    val fileName = att.fileName ?: return null
+    val path = FileUtil.getMessageAttachmentFilePath(original.id) + fileName
+    path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
+}.onFailure {
+    L.w { "[QuoteThumb] findOriginalAttachmentPath failed ts=$timestamp: ${it.stackTraceToString()}" }
+}.getOrNull()
+
+/** Clears the thumbnail [imageView]: invalidates any in-flight lookup, clears Glide and hides it. */
+internal fun clearQuoteThumbnail(imageView: ImageView) {
+    imageView.setTag(R.id.quote_thumbnail_job, null)
+    if (imageView.isHostActivityAlive()) Glide.with(imageView).clear(imageView)
+    imageView.setImageDrawable(null)
+    imageView.visibility = View.GONE
 }

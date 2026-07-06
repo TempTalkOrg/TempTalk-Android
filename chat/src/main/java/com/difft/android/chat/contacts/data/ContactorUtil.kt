@@ -9,7 +9,6 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
-import com.difft.android.base.utils.SecureSharedPrefsUtil
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.sideBar.CharacterParser
@@ -27,7 +26,6 @@ import com.difft.android.network.responses.AddContactorResponse
 import com.difft.android.network.responses.AvatarResponse
 import com.difft.android.network.responses.ContactResponse
 import com.difft.android.network.responses.ContactsDataResponse
-import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -55,6 +53,9 @@ import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
 import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.contacts.WeakContactReconciler
+import com.difft.android.messageserialization.db.store.PendingRemovalContactRepository
+import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.base.utils.Base64
 import java.util.Locale
 import java.util.Optional
@@ -73,6 +74,12 @@ object ContactorUtil {
         fun getUserManager(): UserManager
 
         fun getPushTextSendJobFactory(): PushTextSendJobFactory
+
+        fun getWeakContactReconciler(): WeakContactReconciler
+
+        fun getPendingRemovalContactRepository(): PendingRemovalContactRepository
+
+        fun getDBMessageStore(): DBMessageStore
     }
 
     private val mContactsUpdateSubject = MutableSharedFlow<List<String>>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -176,15 +183,19 @@ object ContactorUtil {
         }
         val contacts = fetchContactors(listOf(id), context)
         if (contacts.isNotEmpty()) {
-            Optional.ofNullable(contacts.first())
-        } else {
-            Optional.empty()
+            return@withContext Optional.ofNullable(contacts.first())
         }
+        // Weak-snapshot fallback: lowest priority (after live contactor / groupMember / network).
+        // Keeps the name from degrading to a bare UID when the account is gone entirely.
+        context.getEntryPoint().getPendingRemovalContactRepository().getSnapshot(id)?.let {
+            return@withContext Optional.of(it)
+        }
+        Optional.empty()
     }
 
 
     suspend fun fetchContactors(ids: List<String>, context: Context): List<ContactorModel> =
-        fetchContactors(context, ids, SecureSharedPrefsUtil.getBasicAuth())
+        fetchContactors(context, ids, (globalServices.userManager.getUserData()?.baseAuth ?: ""))
 
     private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> = withContext(Dispatchers.IO) {
         try {
@@ -312,10 +323,14 @@ object ContactorUtil {
                 .collectLatest { forceRefresh ->
                     try {
                         val httpService = application.getEntryPoint().getHttpClient().httpService
-                        val contactsResponse = httpService.fetchAllContactors(baseAuth = SecureSharedPrefsUtil.getBasicAuth())
+                        val contactsResponse = httpService.fetchAllContactors(baseAuth = (globalServices.userManager.getUserData()?.baseAuth ?: ""))
 
                         val contacts = contactsResponse.data?.contacts?.toMutableList() ?: mutableListOf()
                         val directoryVersion = contactsResponse.data?.directoryVersion ?: 0
+
+                        // Gate for mechanism-3 sweep: null data = server error (200 with no body). Captured
+                        // before the official-bot is appended so the bot doesn't mask an absent list.
+                        val serverReturnedFriendList = contactsResponse.data?.contacts != null
 
                         // 检查是否需要跳过处理
                         val currentVersion = globalServices.userManager.getUserData()?.directoryVersionForContactors ?: 0
@@ -340,7 +355,7 @@ object ContactorUtil {
                         if (contacts.none { it.number == officialBotId }) {
                             try {
                                 val response = httpService.fetchContactors(
-                                    baseAuth = SecureSharedPrefsUtil.getBasicAuth(),
+                                    baseAuth = (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                                     body = ContactsRequestBody(listOf(officialBotId))
                                 )
 
@@ -358,7 +373,10 @@ object ContactorUtil {
 
                         val noAvatarIds = contacts.filter { it.avatar == null }.map { it.number ?: "null" }
                         L.i { "[ContactorUtil] fetchAndSaveContactors total:${contacts.size}, withoutAvatar:${noAvatarIds.size}, ids:$noAvatarIds" }
-                        
+
+                        // Snapshot prior friend ids before the table is wiped (both ≤1000 and streaming paths).
+                        val oldContactorIds = wcdb.contactor.allObjects.map { it.id }.toSet()
+
                         wcdb.contactor.deleteObjects()
 
                         if (contacts.size > 1000) {
@@ -382,6 +400,38 @@ object ContactorUtil {
                         }
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors complete" + contacts.size }
+                        // Reconcile synchronously before the sweep so the weak set is up-to-date.
+                        val reconcileOk = application.getEntryPoint().getWeakContactReconciler().reconcile("fullSync")
+
+                        // Mechanism 3: sweep rooms for friends removed while a notify was missed.
+                        // Only ex-friends (in oldContactorIds but absent from the new list) and not
+                        // in the weak table are swept. Gate on serverReturnedFriendList: null data
+                        // (error as HTTP 200) would make every old friend look vanished.
+                        // Also gate on reconcileOk: if reconcile failed/was incomplete the weak table is
+                        // stale/empty, so isPending checks below would read false for genuinely-weak uids
+                        // and the sweep would delete their rooms by mistake (worst at first launch / flaky net).
+                        val newFriendIds = contacts.mapNotNull { it.number }.toSet()
+                        val vanishedFriends = oldContactorIds - newFriendIds
+                        if (vanishedFriends.isNotEmpty()) {
+                            if (!serverReturnedFriendList) {
+                                // data==null: skip sweep — never delete conversations off an absent list.
+                                L.w { "[ContactorUtil] fullSync: server returned no friend list (data null), skip room sweep (${vanishedFriends.size} would-be vanished)" }
+                            } else if (!reconcileOk) {
+                                L.w { "[ContactorUtil] fullSync: reconcile failed, skip mechanism-3 room sweep to avoid false deletions (${vanishedFriends.size} would-be vanished)" }
+                            } else {
+                                val entryPoint = application.getEntryPoint()
+                                val pendingRepo = entryPoint.getPendingRemovalContactRepository()
+                                val dbMessageStore = entryPoint.getDBMessageStore()
+                                // One batch read of the weak uid set (uid+expireAt columns only, no snapshot
+                                // deserialization) instead of N serial isPending() getFirstObject queries.
+                                val pendingUids = pendingRepo.getAllExpireAt().keys
+                                val swept = (vanishedFriends - pendingUids).toList()
+                                swept.forEach { uid -> dbMessageStore.removeRoomAndMessages(uid) }
+                                if (swept.isNotEmpty()) {
+                                    L.i { "[ContactorUtil] fullSync swept rooms for vanished non-weak friends: count=${swept.size}" }
+                                }
+                            }
+                        }
                         emitGetContactsStatusUpdate(true)
 
                     } catch (e: Exception) {
@@ -401,11 +451,10 @@ object ContactorUtil {
 
     fun updateContactRequestStatus(contactID: String, isDelete: Boolean = false) {
         try {
-            val gson = Gson()
             val type = object : TypeToken<MutableSet<String>>() {}.type
             val userManager = EntryPointAccessors.fromApplication<EntryPoint>(application).getUserManager()
             val set: MutableSet<String> = userManager.getUserData()?.contactRequestStatus?.let {
-                gson.fromJson(it, type)
+                globalServices.gson.fromJson(it, type)
             } ?: mutableSetOf()
             if (isDelete) {
                 set.remove(contactID)
@@ -413,7 +462,7 @@ object ContactorUtil {
                 set.add(contactID)
             }
             userManager.update {
-                this.contactRequestStatus = gson.toJson(set, type)
+                this.contactRequestStatus = globalServices.gson.toJson(set, type)
             }
         } catch (e: Exception) {
             L.w(e) { "[ContactorUtil] processContactorFlow error:" }
@@ -421,11 +470,10 @@ object ContactorUtil {
     }
 
     fun hasContactRequest(contactID: String): Boolean {
-        val gson = Gson()
         val type = object : TypeToken<MutableSet<String>>() {}.type
         val userManager = EntryPointAccessors.fromApplication<EntryPoint>(application).getUserManager()
         val set: MutableSet<String> = userManager.getUserData()?.contactRequestStatus?.let {
-            gson.fromJson(it, type)
+            globalServices.gson.fromJson(it, type)
         } ?: mutableSetOf()
         return set.contains(contactID)
     }
@@ -603,7 +651,7 @@ object FriendSourceType {
 
 fun String?.getContactAvatarData(): AvatarResponse? {
     return try {
-        Gson().fromJson(this, AvatarResponse::class.java)
+        globalServices.gson.fromJson(this, AvatarResponse::class.java)
     } catch (e: Exception) {
         L.e(e) { "[ContactorUtil] parse avatar data fail: $this ===" }
         null

@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg.setting"
     android:orientation="vertical">
 
     <RelativeLayout
@@ -55,7 +54,7 @@
                 android:id="@+id/rel_info"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@color/bg.setting.item"
+                android:background="@color/bg.elevated"
                 android:padding="16dp">
 
                 <LinearLayout
@@ -130,7 +129,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.setting.item"
+                android:background="@color/bg.elevated"
                 android:orientation="vertical">
 
                 <LinearLayout
@@ -191,7 +190,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.setting.item"
+                android:background="@color/bg.elevated"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp">
 
@@ -205,6 +204,7 @@
 
                 <TextView
                     android:id="@+id/tv_common_group_count"
+                    tools:ignore="RelativeOverlap"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_centerVertical="true"
@@ -232,7 +232,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.setting.item"
+                android:background="@color/bg.elevated"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -246,7 +246,7 @@
                         style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@color/bg.setting.item"
+                        android:background="@color/bg.elevated"
                         android:checked="false"
                         android:text="@string/chat_stick"
                         android:textSize="16sp"
@@ -269,7 +269,7 @@
                         style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="@color/bg.setting.item"
+                        android:background="@color/bg.elevated"
                         android:checked="false"
                         android:text="@string/chat_settings_mute"
                         android:textColor="@color/t.primary"
@@ -299,6 +299,7 @@
 
                     <TextView
                         android:id="@+id/save_to_photos_text"
+                        tools:ignore="RelativeOverlap"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
@@ -337,6 +338,7 @@
 
                     <TextView
                         android:id="@+id/disappearing_time_text"
+                        tools:ignore="RelativeOverlap"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
@@ -372,6 +374,7 @@
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
                         android:text="@string/notification_message_sounds"
+                        tools:ignore="RelativeOverlap"
                         android:textColor="@color/t.primary"
                         android:textSize="16sp" />
 
@@ -392,7 +395,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.setting.item"
+                android:background="@color/bg.elevated"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp">
 
@@ -426,7 +429,7 @@
                 android:id="@+id/rel_remove"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:background="@color/bg.setting.item"
+                android:background="@color/bg.elevated"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp"
                 android:visibility="gone"

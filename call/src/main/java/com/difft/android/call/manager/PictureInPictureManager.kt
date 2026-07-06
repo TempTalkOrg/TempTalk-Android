@@ -4,12 +4,13 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.os.Handler
-import android.os.Looper
 import android.util.Rational
-import androidx.annotation.RequiresApi
 import androidx.lifecycle.Lifecycle
 import com.difft.android.base.log.lumberjack.L
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * 管理画中画（Picture-in-Picture）模式
@@ -18,13 +19,14 @@ import com.difft.android.base.log.lumberjack.L
 class PictureInPictureManager(
     private val activity: Activity,
     private val lifecycle: Lifecycle,
+    private val scope: CoroutineScope,
     private val onPipModeChanged: (Boolean) -> Unit,
     private val onPipClosed: (() -> Unit)?
 ) {
     private lateinit var pipBuilderParams: PictureInPictureParams.Builder
     private var isInitialized = false
     private var isPipParamsSet = false
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pipParamsJob: Job? = null
 
     /**
      * 初始化 PIP 参数
@@ -49,8 +51,7 @@ class PictureInPictureManager(
             pipBuilderParams.setAutoEnterEnabled(false)
         }
 
-        // Post 到主线程队列末尾，避免阻塞 Activity 启动关键路径
-        mainHandler.post { tryToSetPictureInPictureParams() }
+        pipParamsJob = scope.launch(Dispatchers.Main) { tryToSetPictureInPictureParams() }
 
         isInitialized = true
         L.i { "[Call] PictureInPictureManager initialized" }
@@ -60,8 +61,7 @@ class PictureInPictureManager(
      * 检查系统是否支持 PIP
      */
     fun isSystemPipEnabledAndAvailable(): Boolean {
-        return android.os.Build.VERSION.SDK_INT >= 26 &&
-                activity.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        return activity.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
     /**
@@ -69,7 +69,6 @@ class PictureInPictureManager(
      * @param tag 调用标签，用于日志记录
      * @return 是否成功进入 PIP 模式
      */
-    @RequiresApi(android.os.Build.VERSION_CODES.O)
     fun enterPipMode(tag: String? = null): Boolean {
         L.i { "[Call] PictureInPictureManager enterPipMode tag:$tag" }
         
@@ -101,7 +100,6 @@ class PictureInPictureManager(
      * @param newConfig 新的配置
      * @param isScreenLocked 屏幕是否锁定（由调用方提供）
      */
-    @RequiresApi(android.os.Build.VERSION_CODES.O)
     fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
         newConfig: Configuration,
@@ -133,7 +131,6 @@ class PictureInPictureManager(
     /**
      * 尝试设置 PIP 参数（Binder IPC，可能耗时较长）
      */
-    @RequiresApi(android.os.Build.VERSION_CODES.O)
     private fun tryToSetPictureInPictureParams() {
         if (isPipParamsSet) return
         try {
@@ -151,7 +148,8 @@ class PictureInPictureManager(
     fun release() {
         isInitialized = false
         isPipParamsSet = false
-        mainHandler.removeCallbacksAndMessages(null)
+        pipParamsJob?.cancel()
+        pipParamsJob = null
         L.i { "[Call] PictureInPictureManager released" }
     }
 }

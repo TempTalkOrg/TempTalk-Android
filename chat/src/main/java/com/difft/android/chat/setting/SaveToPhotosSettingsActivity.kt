@@ -44,7 +44,6 @@ import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 /**
@@ -113,7 +112,7 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
 
         val composeView = ComposeView(this)
         composeView.setContent {
-            DifftTheme(useSecondaryBackground = true) {
+            DifftTheme {
                 MainContent()
             }
         }
@@ -122,10 +121,9 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
 
     @Composable
     private fun MainContent() {
-        // Get current saveToPhotos value from ViewModel
-        val selectedValue = chatSettingViewModel.conversationSet
-            .map { it?.saveToPhotos }
-            .collectAsState(initial = null)
+        // Collect from ViewModel-exposed saveToPhotos StateFlow; avoids invoking flow
+        // operators inside composition (lint: FlowOperatorInvokedInComposition).
+        val selectedValue = chatSettingViewModel.saveToPhotos.collectAsState()
 
         Column(
             Modifier.fillMaxSize().systemBarsPadding()
@@ -168,7 +166,7 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
         val bgItem = remember {
             Color(
                 ContextCompat.getColor(
-                    context, com.difft.android.base.R.color.bg_setting_item
+                    context, com.difft.android.base.R.color.bg_elevated
                 )
             )
         }
@@ -237,7 +235,7 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
                                     Color(
                                         ContextCompat.getColor(
                                             context,
-                                            com.difft.android.base.R.color.bg_setting
+                                            com.difft.android.base.R.color.bg
                                         )
                                     )
                                 )

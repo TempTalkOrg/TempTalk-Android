@@ -30,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallFeedbackRequestBody
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.difft.android.call.data.FeedbackCallInfo
@@ -62,7 +62,7 @@ internal fun CallQuestionView(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .background(color = colorResource(id = com.difft.android.base.R.color.bg_popup), shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
+            .background(color = DifftTheme.colors.backgroundPopup, shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
         verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Top),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -88,7 +88,7 @@ internal fun CallQuestionView(
                         lineHeight = 24.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(510),
-                        color = colorResource(id = com.difft.android.base.R.color.t_primary),
+                        color = DifftTheme.colors.textPrimary,
                         textAlign = TextAlign.Center,
                     )
                 )
@@ -105,7 +105,7 @@ internal fun CallQuestionView(
                         .tabIndicatorOffset(tabPositions[selectedTabIndex])
                         .height(2.dp)
                         .padding(horizontal = 30.dp),
-                    color = colorResource(id = com.difft.android.base.R.color.t_primary)
+                    color = DifftTheme.colors.textPrimary
                 )
             }
         ) {
@@ -122,9 +122,9 @@ internal fun CallQuestionView(
                                 fontFamily = FontFamily.Default,
                                 fontWeight = FontWeight(400),
                                 color = if (selectedTabIndex == index)
-                                    colorResource(id = com.difft.android.base.R.color.t_primary)
+                                    DifftTheme.colors.textPrimary
                                 else
-                                    colorResource(id = com.difft.android.base.R.color.t_third)
+                                    DifftTheme.colors.textTertiary
                             )
                         )
                     }
@@ -161,11 +161,11 @@ internal fun CallQuestionView(
                         checked = selectedReasons.contains(reason),
                         onCheckedChange = null,
                         colors = CheckboxDefaults.colors(
-                            checkedColor = colorResource(id = com.difft.android.base.R.color.primary),
-                            uncheckedColor = colorResource(id = com.difft.android.base.R.color.t_disable)
+                            checkedColor = DifftTheme.colors.primary,
+                            uncheckedColor = DifftTheme.colors.textDisabled
                         )
                     )
-                    Text(text = reason, color = colorResource(id = com.difft.android.base.R.color.t_primary), fontSize = 15.sp)
+                    Text(text = reason, color = DifftTheme.colors.textPrimary, fontSize = 15.sp)
                 }
             }
         }
@@ -180,7 +180,7 @@ internal fun CallQuestionView(
         ) {
             Row(
                 modifier = Modifier
-                    .border(width = 1.dp, color = colorResource(id = com.difft.android.base.R.color.line), shape = RoundedCornerShape(size = 8.dp))
+                    .border(width = 1.dp, color = DifftTheme.colors.line, shape = RoundedCornerShape(size = 8.dp))
                     .weight(1f)
                     .height(48.dp)
                     .clickable {
@@ -196,7 +196,7 @@ internal fun CallQuestionView(
                         lineHeight = 24.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
-                        color = colorResource(id = com.difft.android.base.R.color.t_primary),
+                        color = DifftTheme.colors.textPrimary,
                         textAlign = TextAlign.Center,
                     )
                 )
@@ -206,7 +206,7 @@ internal fun CallQuestionView(
                 modifier = Modifier
                     .weight(1f)
                     .height(48.dp)
-                    .background(color = if (selectedReasons.isEmpty()) colorResource(id = com.difft.android.base.R.color.bg_disable) else colorResource(id = com.difft.android.base.R.color.primary), shape = RoundedCornerShape(size = 8.dp))
+                    .background(color = if (selectedReasons.isEmpty()) DifftTheme.colors.backgroundDisabled else DifftTheme.colors.primary, shape = RoundedCornerShape(size = 8.dp))
                     .clickable {
                         val reasonIndexMap = tabs.flatMap { tab ->
                             tab.reasons.mapIndexed { index, reason ->
@@ -239,7 +239,7 @@ internal fun CallQuestionView(
                         lineHeight = 24.sp,
                         fontFamily = FontFamily.Default,
                         fontWeight = FontWeight(400),
-                        color = if (selectedReasons.isEmpty()) colorResource(id = com.difft.android.base.R.color.t_disable) else colorResource(id = com.difft.android.base.R.color.t_white),
+                        color = if (selectedReasons.isEmpty()) DifftTheme.colors.textDisabled else Color.White,
                         textAlign = TextAlign.Center,
                     )
                 )

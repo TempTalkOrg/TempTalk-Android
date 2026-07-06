@@ -1,11 +1,11 @@
 package com.difft.android.websocket.api.util
 
 import com.difft.android.base.call.CallActionType
+import com.difft.android.base.call.CallEncryptOutcome
 import com.difft.android.base.call.CallEncryptResult
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.CipherMessage
-import com.difft.android.base.call.EMPTY_CALL_ENCRYPT_RESULT
 import com.difft.android.base.call.EncInfo
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
@@ -56,7 +56,7 @@ class CallMessageCreator @Inject constructor(
         callUidList: List<String> = emptyList(),
         createCallMsg: Boolean = false,
         createdAt: Long = 0L,
-    ): CallEncryptResult {
+    ): CallEncryptOutcome {
         var publicKeyInfos: List<PublicKeyInfo>? = null
         if ((callType.isGroup() || callType.isOneOnOne())) {
             if (callActionType?.isJoined() == true && forWhat != null) {
@@ -101,7 +101,7 @@ class CallMessageCreator @Inject constructor(
 
         if (publicKeyInfos.isNullOrEmpty()) {
             L.w { "[Call] publicKeyInfos is null" }
-            return EMPTY_CALL_ENCRYPT_RESULT
+            return CallEncryptOutcome.Failed("publicKeyInfos is null or empty")
         }
 
         // Filter out PublicKeyInfo with empty identityKey to prevent rust encryption exception
@@ -115,7 +115,7 @@ class CallMessageCreator @Inject constructor(
 
         if (publicKeyInfos.isEmpty()) {
             L.e { "[Call] No valid public key info available after filtering (all identityKeys were empty)" }
-            return EMPTY_CALL_ENCRYPT_RESULT
+            return CallEncryptOutcome.Failed("all identityKeys were empty after filtering")
         }
 
         val publishKeys: Map<String, String> = publicKeyInfos.associate { it.uid to it.identityKey }
@@ -126,7 +126,7 @@ class CallMessageCreator @Inject constructor(
 
         if (encInfos.isNullOrEmpty()) {
             L.w { "[Call] call encInfos is null" }
-            return EMPTY_CALL_ENCRYPT_RESULT
+            return CallEncryptOutcome.Failed("encInfos is null or empty after encryptCallKey")
         }
 
         var cipherMessages: MutableList<CipherMessage> = publicKeyInfos.map { publicKeyInfo ->
@@ -266,7 +266,9 @@ class CallMessageCreator @Inject constructor(
             cipherMessages.removeIf { it.uid != myUid }
         }
 
-        return CallEncryptResult(cipherMessages, encInfos, Base64.encodeBytes(encryptCallKeyResult.eKey))
+        return CallEncryptOutcome.Success(
+            CallEncryptResult(cipherMessages, encInfos, Base64.encodeBytes(encryptCallKeyResult.eKey))
+        )
     }
 
     private fun intsToByteHigh(highValue: Int, lowValue: Int): Byte {

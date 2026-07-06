@@ -2,7 +2,6 @@ package com.difft.android.messageserialization.db.store
 
 import android.content.Context
 import kotlinx.coroutines.test.TestScope
-import org.difft.app.database.DatabaseRecoveryPreferences
 import org.difft.app.database.WCDB
 
 /**
@@ -25,7 +24,6 @@ object TestWcdbFactory {
         return WCDB(
             context,
             TestScope(),
-            DatabaseRecoveryPreferences(context),
         )
     }
 }

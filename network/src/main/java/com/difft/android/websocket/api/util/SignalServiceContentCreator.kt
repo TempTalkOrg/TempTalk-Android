@@ -29,6 +29,10 @@ class SignalServiceContentCreator(
         return enforceMaxContentSize(content { forwardNotice = message })
     }
 
+    fun createFrom(message: SignalServiceProtos.MessageActivityNotice): Content {
+        return enforceMaxContentSize(content { activityNotice = message })
+    }
+
     private fun createMessageContent(message: SignalServiceProtos.DataMessage): Content {
         return enforceMaxContentSize(content { dataMessage = message })
     }

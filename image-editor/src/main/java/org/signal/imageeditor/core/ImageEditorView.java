@@ -1,5 +1,6 @@
 package org.signal.imageeditor.core;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
@@ -114,6 +115,8 @@ public final class ImageEditorView extends FrameLayout {
     init(attrs);
   }
 
+  // setOnTouchListener forwards to a double-tap gesture detector — no whole-view click semantics.
+  @SuppressLint("ClickableViewAccessibility")
   private void init(@Nullable AttributeSet attributeSet) {
     setWillNotDraw(false);
 
@@ -264,6 +267,8 @@ public final class ImageEditorView extends FrameLayout {
     }
   }
 
+  // Image-editor drawing/manipulation gestures — no whole-view click semantics.
+  @SuppressLint("ClickableViewAccessibility")
   @Override
   public boolean onTouchEvent(MotionEvent event) {
     switch (event.getActionMasked()) {

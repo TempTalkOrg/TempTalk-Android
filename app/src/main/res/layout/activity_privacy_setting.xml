@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg.setting"
     android:orientation="vertical">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -110,6 +109,73 @@
         android:textSize="12sp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/ib_back" />
+
+    <LinearLayout
+        android:id="@+id/ll_use_proxy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginTop="25dp"
+        android:layout_marginRight="16dp"
+        android:background="@drawable/chat_group_info_bg"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_use_proxy"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:text="@string/proxy_use_proxy"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="@+id/iv_use_proxy_arrow"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/iv_use_proxy_arrow" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_proxy_status"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="4dp"
+                android:gravity="center_vertical"
+                android:textColor="@color/t.secondary"
+                android:textSize="14sp"
+                app:layout_constraintBottom_toBottomOf="@+id/iv_use_proxy_arrow"
+                app:layout_constraintEnd_toStartOf="@+id/iv_use_proxy_arrow"
+                app:layout_constraintTop_toTopOf="@+id/iv_use_proxy_arrow"
+                tools:text="Off" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_use_proxy_arrow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/chat_ic_arrow_right"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_use_proxy_tips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:background="@null"
+        android:paddingStart="32dp"
+        android:paddingEnd="28dp"
+        android:text="@string/proxy_use_proxy_setting_desc"
+        android:textColor="@color/t.secondary"
+        android:textSize="12sp" />
 
     <LinearLayout
         android:id="@+id/cl_renew_identity_key"

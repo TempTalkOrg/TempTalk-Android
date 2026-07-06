@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -35,9 +36,9 @@ import org.difft.app.database.models.MessageModel
 import util.TimeFormatter
 import util.TimeUtils
 import com.difft.android.chat.util.Util
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.shareFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
-import java.io.File
 
 @AndroidEntryPoint
 class MessageDetailActivity : BaseActivity() {
@@ -81,6 +82,8 @@ class MessageDetailActivity : BaseActivity() {
         super.onDestroy()
     }
 
+    // Numeric-only display (expires-in seconds); no English text to translate.
+    @SuppressLint("SetTextI18n")
     private fun initView(message: MessageModel) {
         if (message.fromWho == globalServices.myId) {
             MessageDetailBitmapHolder.getBitmap()?.let {
@@ -123,7 +126,7 @@ class MessageDetailActivity : BaseActivity() {
 
             lifecycleScope.launch {
                 val sender = withContext(Dispatchers.IO) {
-                    wcdb.getContactorsFromAllTable(listOf(message.fromWho)).firstOrNull()
+                    wcdb.getContactorsFromAllTable(listOfNotNull(message.fromWho)).firstOrNull()
                 }
                 binding.tvSenderName.text = sender?.getDisplayNameForUI()
             }
@@ -147,9 +150,16 @@ class MessageDetailActivity : BaseActivity() {
                 binding.tvFileName.text = attachment.fileName
 
                 val attachmentPath = FileUtil.getMessageAttachmentFilePath(message.id) + attachment.fileName
-                if (File(attachmentPath).exists()) {
+                // A confidential attachment must not be shared out of the app — hide the share entry
+                // (consistent with confidential messages getting no copy/forward/save elsewhere).
+                val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
+                if (EncryptedAttachmentAccess.isReadable(attachmentPath) && !isConfidential) {
                     binding.llShare.visibility = View.VISIBLE
                     binding.ivShare.setOnClickListener {
+                        // shareFile is the single chokepoint: it routes encrypted-at-rest attachments
+                        // (image/audio) through the decrypting content provider and falls back to a
+                        // FileProvider uri only for plaintext files — so no plaintext leaves the
+                        // sandbox and a transient/missing plaintext file can't cause ENOENT.
                         this.shareFile(attachmentPath)
                     }
                 } else {
@@ -168,12 +178,12 @@ class MessageDetailActivity : BaseActivity() {
             val receiverIds = if (message.roomType == 1) {
                 parseReceiverIds(message.receiverIds) ?: emptyList()
             } else {
-                listOf(message.roomId)
+                listOfNotNull(message.roomId)
             }
 
             var receivers = wcdb.getContactorsFromAllTable(receiverIds)
 
-            val readInfoList = wcdb.getReadInfoList(message.roomId).filter { it.readPosition >= message.systemShowTimestamp }
+            val readInfoList = wcdb.getReadInfoList(message.roomId ?: "").filter { it.readPosition >= message.systemShowTimestamp }
 
             // 普通群消息：如果 receiverIds 缺失但有 readInfoList，直接用 readInfoList 中的 uid 获取联系人（排除自己）
             if (message.roomType == 1 && message.mode != SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {

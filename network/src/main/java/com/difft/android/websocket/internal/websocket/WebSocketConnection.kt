@@ -4,9 +4,14 @@ import android.content.Context
 import android.os.Bundle
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.CertValidationFailureDetector
+import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.websocket.api.util.TlsSocketFactory
 import com.difft.android.websocket.internal.util.Util
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
+import com.difft.android.network.proxy.ProxyConfigProvider
+import com.difft.android.network.proxy.ProxyTunnelDns
+import com.difft.android.network.proxy.ProxyTunnelSocketFactory
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.protobuf.InvalidProtocolBufferException
 import dagger.assisted.Assisted
@@ -20,7 +25,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import okhttp3.ConnectionSpec
 import okhttp3.ConnectionSpec.Companion.RESTRICTED_TLS
-import okhttp3.Dns.Companion.SYSTEM
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -38,7 +42,6 @@ import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSo
 import org.whispersystems.signalservice.internal.websocket.webSocketMessage
 import java.io.IOException
 import java.net.UnknownHostException
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
@@ -55,6 +58,7 @@ class WebSocketConnection @AssistedInject constructor(
     private val healthMonitor: HealthMonitor,
     @param:ApplicationContext
     private val context: Context,
+    private val proxyConfigProvider: ProxyConfigProvider,
 ) : WebSocketListener() {
 
     private val incomingRequests = LinkedBlockingQueue<WebSocketRequestMessage>()
@@ -72,7 +76,10 @@ class WebSocketConnection @AssistedInject constructor(
 
         val clientBuilder: OkHttpClient.Builder = OkHttpClient.Builder()
             .connectionSpecs(Util.immutableList(customConnectionSpec))
-            .dns(SYSTEM)
+            // Tunnels the WSS through the self-hosted proxy when enabled;
+            // falls back to system DNS + plain socket otherwise.
+            .dns(ProxyTunnelDns(proxyConfigProvider))
+            .socketFactory(ProxyTunnelSocketFactory(proxyConfigProvider))
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
@@ -92,7 +99,8 @@ class WebSocketConnection @AssistedInject constructor(
         clientBuilder.build()
     }
 
-    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = ConcurrentHashMap()
+    // Guarded by synchronized(this) at every access site.
+    private val outgoingRequests: MutableMap<Long, OutgoingRequest> = HashMap()
 
     val name: String = "[ws][chat:" + System.identityHashCode(this) + "]"
 
@@ -192,6 +200,23 @@ class WebSocketConnection @AssistedInject constructor(
         }
     }
 
+    /**
+     * Forces OkHttp to drop all idle pooled sockets so the next `newWebSocket()` call
+     * builds a fresh TCP+TLS connection via [ProxyTunnelSocketFactory] / [ProxyTunnelDns].
+     *
+     * Defense-in-depth for the proxy-toggle reconnect path: even though [cancelConnection]
+     * closes the active socket, pooled idle entries (rare on a single-WS client but
+     * possible during handshake / before connect completes) could otherwise be reused
+     * by OkHttp's connection-pool fast-path, bypassing the updated proxy state.
+     *
+     * Cheap and idempotent — typically a no-op since this client has at most one
+     * connection at a time. Safe to call from any thread.
+     */
+    fun evictConnectionPool() {
+        L.i { "$name evictConnectionPool — flushing pooled idle sockets" }
+        okHttpClient.connectionPool.evictAll()
+    }
+
     fun readRequest(): WebSocketRequestMessage {
         return incomingRequests.take()
     }
@@ -210,7 +235,9 @@ class WebSocketConnection @AssistedInject constructor(
 
         val deferred = CompletableDeferred<WebsocketResponse>()
 
-        outgoingRequests[request.requestId] = OutgoingRequest(deferred)
+        synchronized(this) {
+            outgoingRequests[request.requestId] = OutgoingRequest(deferred)
+        }
 
         try {
             if (currentWebsocket?.send(ByteString.of(*message.toByteArray())) != true) {
@@ -221,7 +248,9 @@ class WebSocketConnection @AssistedInject constructor(
                 deferred.await()
             }
         } finally {
-            outgoingRequests.remove(request.requestId)
+            synchronized(this) {
+                outgoingRequests.remove(request.requestId)
+            }
         }
     }
 
@@ -299,7 +328,10 @@ class WebSocketConnection @AssistedInject constructor(
             if (message.type.number == WebSocketMessage.Type.REQUEST_VALUE) {
                 incomingRequests.add(message.request)
             } else if (message.type.number == WebSocketMessage.Type.RESPONSE_VALUE) {
-                outgoingRequests.remove(message.response.requestId)?.onSuccess(
+                val pending = synchronized(this) {
+                    outgoingRequests.remove(message.response.requestId)
+                }
+                pending?.onSuccess(
                     WebsocketResponse(
                         message.response.status,
                         String(message.response.body.toByteArray()),
@@ -344,6 +376,11 @@ class WebSocketConnection @AssistedInject constructor(
             L.i { "$name onFailure() Canceled, ignore this call back as all cancel is handled manually" }
             return
         }
+        // The WebSocket always pins trust to the chative CA (OfficialSSLSocketFactoryCreator),
+        // so a certificate validation failure here is a possible MITM attack.
+        if (CertValidationFailureDetector.isCertValidationFailure(t)) {
+            NetworkRiskNotifier.onCertValidationFailed("websocket")
+        }
         cleanupAfterShutdown()
 
         if (response != null && (response.code == 401 || response.code == 403)) {
@@ -361,21 +398,24 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     private fun cleanupAfterShutdown() {
-        // Handle outgoing requests
-        // Create a copy of the keys to avoid ConcurrentModificationException
-        val requestIds = outgoingRequests.keys.toList()
-        for (requestId in requestIds) {
-            try {
-                outgoingRequests.remove(requestId)?.onError(IOException("$name Closed unexpectedly"))
-            } catch (e: Exception) {
-                L.e(e) { "[WebSocketConnection] $name Error while cleaning up request $requestId" }
-            }
-        }
-
+        // Snapshot + clear first, then iterate the snapshot to fire onError.
+        // Decouples the iteration from the map so the map is in a clean state
+        // even if onError throws, and matches the onMessage pattern of
+        // extract-under-lock + invoke-callback-on-a-local-reference.
+        val pending = outgoingRequests.entries.toList()
+        outgoingRequests.clear()
         currentWebsocket = null // Allow garbage collection
         currentWebsocketListener?.invalidate()
         currentWebsocketListener = null
         L.i { "$name WebSocket connection cleaned up and set to null." }
+        val error = IOException("$name Closed unexpectedly")
+        for ((requestId, request) in pending) {
+            try {
+                request.onError(error)
+            } catch (e: Exception) {
+                L.e(e) { "[WebSocketConnection] $name Error while cleaning up request $requestId" }
+            }
+        }
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {

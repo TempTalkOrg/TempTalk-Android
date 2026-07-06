@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import androidx.annotation.IntegerRes
+import androidx.core.content.res.ResourcesCompat
 import java.util.Locale
 
 object ResUtils {
@@ -35,7 +36,8 @@ object ResUtils {
 //    }
 
     fun getDrawable(id: Int): Drawable {
-        return application.resources.getDrawable(id)
+        return ResourcesCompat.getDrawable(application.resources, id, application.theme)
+            ?: throw android.content.res.Resources.NotFoundException("Drawable resource ID #0x${id.toString(16)}")
     }
 
     fun getDimenPx(resId: Int): Int {
@@ -44,13 +46,6 @@ object ResUtils {
 
     fun getColorStateList(id: Int): ColorStateList {
         return application.resources.getColorStateList(id)
-    }
-
-    fun getIdentifier(name: String?, defType: String?): Int {
-        return application.resources.getIdentifier(
-            name, defType,
-            application.applicationContext.packageName
-        )
     }
 
     fun getInteger(@IntegerRes id: Int): Int {

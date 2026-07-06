@@ -2,7 +2,7 @@ package com.difft.android.chat.data
 
 import android.os.Parcelable
 import com.difft.android.base.log.lumberjack.L
-import com.google.gson.Gson
+import com.difft.android.base.utils.globalServices
 import kotlinx.parcelize.Parcelize
 
 
@@ -21,7 +21,7 @@ data class PushCustomContent(
     val passthroughData: Passthrough?
         get() = passthrough?.let {
             try {
-                Gson().fromJson(passthrough, Passthrough::class.java)
+                globalServices.gson.fromJson(passthrough, Passthrough::class.java)
             } catch (e: Exception) {
                 L.i { "[fcm] parse passthroughData error:" + e.stackTraceToString() }
                 null
