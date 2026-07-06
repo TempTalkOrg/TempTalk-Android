@@ -91,6 +91,18 @@ object FilePathManager {
     }
 
     /**
+     * Decrypted favorite-gif disk cache directory (separate from message attachments, keyed by
+     * attachmentId). Mirrors the message-media cache: a hit lets the favorites grid skip the
+     * download/decrypt round-trip.
+     */
+    val gifFavoritesDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        File(baseDir, FileUtil.FILE_DIR_GIF_FAVORITES).also {
+            ensureExists(it)
+            L.d { "Initialized gifFavoritesDir: ${it.absolutePath}" }
+        }
+    }
+
+    /**
      * Ensure directory exists, create if needed
      * Safe to call with I/O because this only happens once during lazy initialization
      */
@@ -114,6 +126,7 @@ object FilePathManager {
         FileUtil.FILE_DIR_ATTACHMENT -> attachmentDir
         FileUtil.FILE_DIR_UPGRADE -> upgradeDir
         FileUtil.DRAFT_ATTACHMENTS_DIRECTORY -> draftAttachmentsDir
+        FileUtil.FILE_DIR_GIF_FAVORITES -> gifFavoritesDir
         else -> null
     }
 

@@ -5,7 +5,6 @@ import android.util.Base64
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.sanitizeUrl
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.RecallResultTracker
@@ -15,13 +14,9 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.fileshare.AttachmentUploadType
-import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
-import com.difft.android.chat.fileshare.UploadInfoReq
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.message.LocalMessageCreator
-import com.difft.android.network.requests.ProgressListener
-import com.difft.android.network.requests.ProgressRequestBody
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
@@ -43,8 +38,8 @@ import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioMessage
+import difft.android.messageserialization.model.keepEncryptedAtRest
 import kotlinx.coroutines.launch
-import okhttp3.RequestBody
 import org.difft.app.database.delete
 import org.difft.app.database.members
 import org.difft.app.database.models.DBAttachmentModel
@@ -55,19 +50,8 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.util.DataMessageCreator
-import util.FileUtils
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.IOException
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
-import javax.crypto.Cipher
-import javax.crypto.CipherInputStream
-import javax.crypto.Mac
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
 import kotlin.properties.Delegates
 
 // All wcdb calls in this class run on Dispatchers.IO.
@@ -91,7 +75,11 @@ class PushTextSendJob @AssistedInject constructor(
     @InstallIn(SingletonComponent::class)
     interface EntryPoint {
         val fileShareRepo: FileShareRepo
+        val attachmentUploadHelper: com.difft.android.chat.gif.favorite.AttachmentUploadHelper
     }
+
+    private val attachmentUploadHelper: com.difft.android.chat.gif.favorite.AttachmentUploadHelper
+        get() = EntryPointAccessors.fromApplication<EntryPoint>(context).attachmentUploadHelper
 
     private var startExecuteTime by Delegates.notNull<Long>()
 
@@ -326,179 +314,69 @@ class PushTextSendJob @AssistedInject constructor(
 
     private suspend fun uploadAttachment() {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
-        attachment.path ?: return
+        val path = attachment.path ?: return
 
         attachment.status = AttachmentStatus.LOADING.code
         updateAttachment(attachment)
         FileUtil.emitProgressUpdate(textMessage.id, 0)
 
-        val buffer = ByteArray(8192)
-        var bytesRead: Int
+        val file = File(path)
+        val isAudio = attachment.isAudioMessage()
+        // Encrypted-at-rest types (audio + images) keep the .encrypt file on disk (read on demand via
+        // the EncryptedAttachmentProvider) and delete the plaintext original. Non-at-rest types
+        // (video / generic files) delete the ciphertext after upload and keep the plaintext. The
+        // ciphertext path stays "<path>.encrypt".
+        val keepEncrypted = textMessage.attachments?.firstOrNull()?.keepEncryptedAtRest() == true
+        val encryptPath = "$path.encrypt"
 
-        val file = File(attachment.path ?: "")
-        var inputStream: FileInputStream? = null
-        val encryptFile = File(attachment.path + ".encrypt")
-        val encryptOutputStream = FileOutputStream(encryptFile)
-        val encryptInputStream = FileInputStream(encryptFile)
+        val recipientIds = ArrayList<String>()
+        if (textMessage.forWhat is For.Account) {
+            recipientIds.add(textMessage.forWhat.id)
+            recipientIds.add(globalServices.myId)
+        } else {
+            val group = groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false)
+            group?.members?.forEach { member -> member.id?.let { recipientIds.add(it) } }
+        }
 
-        var cipherInputStream: CipherInputStream? = null
+        val attachmentType = when {
+            isAudio -> AttachmentUploadType.VOICE
+            attachment.size > 200 * 1024 * 1024 -> AttachmentUploadType.LARGE
+            else -> AttachmentUploadType.NORMAL
+        }
 
-        val fileShareRepo = EntryPointAccessors.fromApplication<EntryPoint>(context).fileShareRepo
+        // Progress throttling (every 50ms or >=5% delta) preserved from the original inline path.
+        var lastEmitTime = System.currentTimeMillis()
+        var lastEmitProgress = 0
 
         try {
-            val digest512 = MessageDigest.getInstance("SHA-512")
-            inputStream = FileInputStream(file)
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                digest512.update(buffer, 0, bytesRead)
-            }
-
-            val originKey = digest512.digest()
-            val digest256 = MessageDigest.getInstance("SHA-256")
-            digest256.update(originKey)
-            val fileHashByte = digest256.digest()
-            val fileHash = com.difft.android.base.utils.Base64.encodeBytes(fileHashByte)
-
-            val iv = ByteArray(16)
-            SecureRandom().nextBytes(iv)
-            val ivParameterSpec = IvParameterSpec(iv)
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-            val aesKeySpec = SecretKeySpec(originKey, 0, 32, "AES")
-            cipher.init(Cipher.ENCRYPT_MODE, aesKeySpec, ivParameterSpec)
-            val mac = Mac.getInstance("HmacSHA256")
-            val macKeySpec = SecretKeySpec(originKey, 32, 32, "HmacSHA256")
-            mac.init(macKeySpec)
-            mac.update(iv)
-
-            encryptOutputStream.write(iv)
-
-            inputStream = FileInputStream(file)
-            cipherInputStream = CipherInputStream(inputStream, cipher)
-
-            while (cipherInputStream.read(buffer).also { bytesRead = it } != -1) {
-                encryptOutputStream.write(buffer, 0, bytesRead)
-                mac.update(buffer, 0, bytesRead)
-            }
-
-            val macDigest = mac.doFinal()
-            encryptOutputStream.write(macDigest)
-
-            val fileSize = Math.toIntExact(attachment.size.toLong())
-            val recipientIds = ArrayList<String>()
-            if (textMessage.forWhat is For.Account) {
-                recipientIds.add(textMessage.forWhat.id)
-                recipientIds.add(globalServices.myId)
-            } else {
-                val group = groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false)
-                group?.members?.forEach { member ->
-                    member.id?.let { recipientIds.add(it) }
-                }
-            }
-
-            var lastEmitTime = System.currentTimeMillis()
-            var lastEmitProgress = 0
-            val fileExistResponse = fileShareRepo.isExist(FileExistReq((globalServices.userManager.getUserData()?.microToken ?: ""), fileHash, recipientIds)).execute()
-            if (fileExistResponse.isSuccessful) {
-                fileExistResponse.body()?.data?.let { res ->
-                    if (!res.exists) {
-                        // 获取URL列表，优先使用urls数组，回退到单个url
-                        val urlsToTry = res.urls?.takeIf { it.isNotEmpty() } ?: listOf(res.url)
-                        L.i { "[PushTextSendJob] Upload API response: using ${if (res.urls?.isNotEmpty() == true) "urls array" else "fallback url"}, total URLs: ${urlsToTry.size}, messageId: ${textMessage.id}" }
-
-                        var uploadSuccess = false
-                        var lastUploadException: Exception? = null
-
-                        for ((index, urlString) in urlsToTry.withIndex()) {
-                            try {
-                                L.i { "[PushTextSendJob] Attempting upload with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: ${urlString.sanitizeUrl()}" }
-
-                                val body: RequestBody = ProgressRequestBody(encryptFile, null, object : ProgressListener {
-                                    override fun onProgress(bytesRead: Long, contentLength: Long, progress: Int) {
-                                        val currentTime = System.currentTimeMillis()
-                                        // Update every 50ms or when progress changes by >=5%
-                                        if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
-                                            FileUtil.emitProgressUpdate(textMessage.id, progress)
-                                            lastEmitTime = currentTime
-                                            lastEmitProgress = progress
-                                        }
-                                    }
-                                })
-
-                                val uploadToOSSCallResponse = fileShareRepo.uploadToOSS(urlString, body).execute()
-
-                                if (uploadToOSSCallResponse.isSuccessful) {
-                                    L.i { "[PushTextSendJob] Upload successful with URL ${index + 1}/${urlsToTry.size}, messageId: ${textMessage.id}, url: ${urlString.sanitizeUrl()}" }
-                                    uploadSuccess = true
-                                    break
-                                } else {
-                                    L.w { "[PushTextSendJob] Upload failed with URL ${index + 1}/${urlsToTry.size}: ${uploadToOSSCallResponse.message}, messageId: ${textMessage.id}, url: ${urlString.sanitizeUrl()}" }
-                                    lastUploadException = IOException("uploadToOSSCall execute fail: ${uploadToOSSCallResponse.message}")
-                                }
-                            } catch (e: Exception) {
-                                L.e { "[PushTextSendJob] Upload exception ${e::class.simpleName} ${index + 1}/${urlsToTry.size} messageId=${textMessage.id} url=${urlString.sanitizeUrl()}\n${e.stackTraceToString().sanitizeUrl()}" }
-                                lastUploadException = e
-                            }
-                        }
-
-                        if (!uploadSuccess) {
-                            throw lastUploadException ?: IOException("All upload URLs failed")
-                        }
-
-                        val md5 = MessageDigest.getInstance("md5")
-                        while (encryptInputStream.read(buffer).also { bytesRead = it } != -1) {
-                            md5.update(buffer, 0, bytesRead)
-                        }
-                        attachment.digest = md5.digest()
-
-                        // 判断附件类型
-                        val attachmentType = when {
-                            attachment.isAudioMessage() -> AttachmentUploadType.VOICE
-                            fileSize > 200 * 1024 * 1024 -> AttachmentUploadType.LARGE
-                            else -> AttachmentUploadType.NORMAL
-                        }
-
-                        val uploadInfoCallResponse = fileShareRepo.uploadInfo(
-                            UploadInfoReq(
-                                token = (globalServices.userManager.getUserData()?.microToken ?: ""),
-                                numbers = recipientIds,
-                                attachmentId = res.attachmentId,
-                                fileHash = fileHash,
-                                cipherHash = FileUtils.bytesToHex(attachment.digest),
-                                cipherHashType = "MD5",
-                                hashAlg = "SHA-256",
-                                keyAlg = "SHA-512",
-                                encAlg = "AES-CBC-256",
-                                fileSize = fileSize,
-                                attachmentType = attachmentType
-                            )
-                        ).execute()
-                        if (uploadInfoCallResponse.isSuccessful) {
-                            attachment.authorityId = uploadInfoCallResponse.body()?.data?.authorizeId?.takeIf { it != 0L }
-                                ?: throw IOException("uploadInfo response has invalid authorizeId, messageId: ${textMessage.id}")
-                        } else {
-                            L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} upload attachment fail${uploadInfoCallResponse.message()}" }
-                            throw IOException("upload attachment fail" + uploadInfoCallResponse.message())
-                        }
-                    } else {
-                        if (res.authorizeId == 0L) {
-                            throw IOException("isExist response has invalid authorizeId for existing file, messageId: ${textMessage.id}")
-                        }
-                        attachment.digest = FileUtils.decodeDigestHex(res.cipherHash)
-                        attachment.authorityId = res.authorizeId
+            val uploaded = attachmentUploadHelper.encryptAndUpload(
+                file = file,
+                recipients = recipientIds,
+                attachmentType = attachmentType,
+                encryptPath = encryptPath,
+                // At-rest types (audio + images) must RETAIN the ciphertext on disk for on-demand
+                // decryption; only non-at-rest types delete it after upload. (Deleting it here for
+                // images left neither ciphertext nor plaintext -> broken image on reopen.)
+                deleteEncryptFile = !keepEncrypted,
+                onProgress = { progress ->
+                    val now = System.currentTimeMillis()
+                    if ((now - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
+                        FileUtil.emitProgressUpdate(textMessage.id, progress)
+                        lastEmitTime = now
+                        lastEmitProgress = progress
                     }
-                } ?: throw IOException("isExist response data is null, messageId: ${textMessage.id}")
-            } else {
-                L.w { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} upload attachment fail${fileExistResponse.message()}" }
-                throw IOException("check attachment is exist fail" + fileExistResponse.message())
-            }
-            attachment.key = originKey
+                }
+            )
+
+            attachment.digest = uploaded.digest
+            attachment.authorityId = uploaded.authorizeId
+            attachment.key = uploaded.key
             attachment.status = AttachmentStatus.SUCCESS.code
             updateAttachment(attachment)
 
-            if (textMessage.attachments?.firstOrNull()?.isAudioMessage() == true) {
-                // 语音消息：保留 .encrypt 用于回放，删除明文原始文件
+            if (keepEncrypted) {
+                // Keep the .encrypt file for on-demand decryption (bubble, preview, share, save to gallery); delete the plaintext original.
                 file.delete()
-            } else {
-                encryptFile.delete()
             }
             FileUtil.emitProgressUpdate(textMessage.id, 100)
         } catch (e: Exception) {
@@ -507,11 +385,6 @@ class PushTextSendJob @AssistedInject constructor(
             updateAttachment(attachment)
             FileUtil.emitProgressUpdate(textMessage.id, -1)
             throw e
-        } finally {
-            inputStream?.close()
-            cipherInputStream?.close()
-            encryptOutputStream.close()
-            encryptInputStream.close()
         }
     }
 

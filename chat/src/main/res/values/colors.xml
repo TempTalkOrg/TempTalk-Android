@@ -26,7 +26,6 @@
 
     <!-- Special colors for chat UI -->
     <color name="transparent_white_0">#00FFFFFF</color>
-    <color name="scan_corner_color">#f57257</color>
     <color name="scan_mask_color">#33FFFFFF</color>
     <color name="progress_bg_white_25">#40FFFFFF</color>
     <color name="live_tag_border">#CC5E6673</color>

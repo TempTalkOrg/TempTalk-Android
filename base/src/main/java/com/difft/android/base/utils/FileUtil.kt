@@ -41,6 +41,7 @@ object FileUtil {
     const val FILE_DIR_ATTACHMENT = "attachment"
     const val FILE_DIR_UPGRADE = "upgrade"
     const val DRAFT_ATTACHMENTS_DIRECTORY: String = "draft_blobs"
+    const val FILE_DIR_GIF_FAVORITES = "gif_favorites"
 
     /** Large file threshold for manual download prompt (10MB) */
     const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024

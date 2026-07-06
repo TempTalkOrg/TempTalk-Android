@@ -195,24 +195,22 @@
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/button_media"
+            <!-- GIF panel entry: opens/closes the inline GIF panel, mutually exclusive with
+                 keyboard and the more-actions panel. Sits directly after the more-actions column;
+                 the photo/media entry moved into the more-actions grid (M2). -->
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/button_gif"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
+                android:contentDescription="@string/gif_tab_trending"
+                android:paddingStart="0dp"
+                android:paddingEnd="10dp"
+                android:paddingVertical="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/chat_ic_gif_button"
+                android:tint="@color/icon"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toEndOf="@+id/cl_left_actions">
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_media"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:enabled="false"
-                    android:paddingVertical="10dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="10dp"
-                    android:src="@drawable/chat_button_media"
-                    android:tint="@color/icon" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                app:layout_constraintStart_toEndOf="@+id/cl_left_actions" />
 
 
             <androidx.constraintlayout.widget.ConstraintLayout
@@ -222,7 +220,7 @@
                 android:background="@drawable/chat_msg_input_field_bg"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/cl_right_actions"
-                app:layout_constraintStart_toEndOf="@+id/button_media"
+                app:layout_constraintStart_toEndOf="@+id/button_gif"
                 app:layout_goneMarginEnd="12dp"
                 app:layout_goneMarginStart="12dp">
 
@@ -320,7 +318,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingHorizontal="16dp"
-            android:paddingVertical="20dp"
+            android:paddingVertical="16dp"
             android:visibility="gone"
             tools:visibility="visible">
 
@@ -332,44 +330,46 @@
                 android:visibility="gone"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <!--            <LinearLayout-->
-            <!--                android:id="@+id/button_media"-->
-            <!--                android:layout_width="wrap_content"-->
-            <!--                android:layout_height="wrap_content"-->
-            <!--                android:gravity="center_horizontal"-->
-            <!--                android:orientation="vertical">-->
+            <!-- Photo/media entry, moved from the input row into the more-actions grid as the
+                 first item (M2). Click logic mirrors the former standalone button_media. -->
+            <LinearLayout
+                android:id="@+id/button_photo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-            <!--                <androidx.constraintlayout.widget.ConstraintLayout-->
-            <!--                    android:id="@+id/cl_media"-->
-            <!--                    android:layout_width="64dp"-->
-            <!--                    android:layout_height="64dp"-->
-            <!--                    android:background="@drawable/chat_msg_input_bg"-->
-            <!--                    android:orientation="horizontal"-->
-            <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                    app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                    app:layout_constraintStart_toStartOf="parent">-->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/cl_media"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/chat_msg_input_bg"
+                    android:orientation="horizontal"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent">
 
-            <!--                    <androidx.appcompat.widget.AppCompatImageView-->
-            <!--                        android:layout_width="24dp"-->
-            <!--                        android:layout_height="24dp"-->
-            <!--                        android:src="@drawable/chat_bottom_photos"-->
-            <!--                        android:tint="@color/icon"-->
-            <!--                        app:layout_constraintBottom_toBottomOf="parent"-->
-            <!--                        app:layout_constraintEnd_toEndOf="parent"-->
-            <!--                        app:layout_constraintStart_toStartOf="parent"-->
-            <!--                        app:layout_constraintTop_toTopOf="parent" />-->
-            <!--                </androidx.constraintlayout.widget.ConstraintLayout>-->
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/chat_bottom_photos"
+                        android:tint="@color/icon"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
-            <!--                <androidx.appcompat.widget.AppCompatTextView-->
-            <!--                    android:layout_width="70dp"-->
-            <!--                    android:layout_height="40dp"-->
-            <!--                    android:layout_marginTop="5dp"-->
-            <!--                    android:gravity="center_horizontal"-->
-            <!--                    android:text="@string/chat_action_photo"-->
-            <!--                    android:textColor="@color/icon"-->
-            <!--                    android:textSize="12sp"-->
-            <!--                    app:layout_constraintTop_toBottomOf="@+id/cl_media" />-->
-            <!--            </LinearLayout>-->
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="70dp"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center_horizontal"
+                    android:text="@string/chat_action_photo"
+                    android:textColor="@color/icon"
+                    android:textSize="12sp"
+                    app:layout_constraintTop_toBottomOf="@+id/cl_media" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/button_contact"
@@ -446,7 +446,7 @@
                     android:text="@string/chat_action_file"
                     android:textColor="@color/icon"
                     android:textSize="12sp"
-                    app:layout_constraintTop_toBottomOf="@+id/button_at" />
+                    app:layout_constraintTop_toBottomOf="@+id/cl_attachment" />
             </LinearLayout>
 
             <!--            <LinearLayout-->
@@ -606,23 +606,11 @@
                     app:layout_constraintTop_toBottomOf="@+id/cl_at_image" />
             </LinearLayout>
 
-            <View
-                android:id="@+id/placeholder1"
-                android:layout_width="70dp"
-                android:layout_height="0dp"
-                android:visibility="invisible" />
-
-            <View
-                android:id="@+id/placeholder2"
-                android:layout_width="70dp"
-                android:layout_height="0dp"
-                android:visibility="invisible" />
-
             <androidx.constraintlayout.helper.widget.Flow
                 android:id="@+id/flow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:constraint_referenced_ids="button_contact,button_attachment,button_at,placeholder1,placeholder2"
+                app:constraint_referenced_ids="button_photo,button_contact,button_attachment,button_at"
                 app:flow_horizontalAlign="start"
                 app:flow_horizontalStyle="spread_inside"
                 app:flow_maxElementsWrap="4"
@@ -630,6 +618,26 @@
                 app:flow_verticalGap="0dp"
                 app:flow_wrapMode="aligned"
                 app:layout_constraintTop_toBottomOf="@+id/v_chat_actions_line" />
+
+            <!-- GIF inline panel (M1): hosted in the same ll_chat_actions container as the
+                 more-actions grid, shown mutually exclusive with it (and with keyboard). -->
+            <!-- Height is set to the keyboard height in code (toggleGifPanel) so the inner
+                 LazyVerticalStaggeredGrid (fillMaxSize) gets a BOUNDED height and fills exactly the
+                 keyboard slot instead of expanding to the whole screen. hideGifPanel restores the
+                 default below. The more-actions grid does not use this view, so its layout is
+                 unaffected. -->
+            <!-- Negative top margin (-20dp) cancels the shared ll_chat_actions top padding
+                 (paddingVertical=20dp) for the GIF panel only, so the GIF Column's own 16dp top
+                 inset is the single gap from the input row to the tab bar (Issue 2). The
+                 more-actions grid keeps the 20dp padding (it does not use this view). -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/gif_panel_compose"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 

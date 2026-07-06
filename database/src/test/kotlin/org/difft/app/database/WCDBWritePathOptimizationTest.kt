@@ -33,14 +33,14 @@ import kotlin.test.assertTrue
  *
  * **Currently @Ignore-d** — same constraint documented on [WCDBPagedMessageAccessTest] /
  * [QuoteAttachmentRoundTripTest]: WCDB (Tencent SQLite wrapper) loads native libraries via
- * `System.loadLibrary`, which are not available to host JVM unit tests. [convertToMessageModel]
+ * `System.loadLibrary`, which are not available to host JVM unit tests. [insertChildrenAndBuildMessageModel]
  * additionally reads the `globalServices` global (myId / gson) which needs a Hilt-wired app.
  * The cases remain as compilation guards + documented expected behavior; they must run under
  * instrumentation (`:database:connectedDebugAndroidTest`) to execute.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
-@Ignore("WCDB native library not loadable in JVM unit tests; convertToMessageModel binds the globalServices global. Run via instrumentation test instead.")
+@Ignore("WCDB native library not loadable in JVM unit tests; insertChildrenAndBuildMessageModel binds the globalServices global. Run via instrumentation test instead.")
 class WCDBWritePathOptimizationTest {
 
     private lateinit var wcdb: WCDB

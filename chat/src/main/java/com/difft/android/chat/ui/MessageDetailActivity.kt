@@ -36,9 +36,9 @@ import org.difft.app.database.models.MessageModel
 import util.TimeFormatter
 import util.TimeUtils
 import com.difft.android.chat.util.Util
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.shareFile
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
-import java.io.File
 
 @AndroidEntryPoint
 class MessageDetailActivity : BaseActivity() {
@@ -153,9 +153,13 @@ class MessageDetailActivity : BaseActivity() {
                 // A confidential attachment must not be shared out of the app — hide the share entry
                 // (consistent with confidential messages getting no copy/forward/save elsewhere).
                 val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
-                if (File(attachmentPath).exists() && !isConfidential) {
+                if (EncryptedAttachmentAccess.isReadable(attachmentPath) && !isConfidential) {
                     binding.llShare.visibility = View.VISIBLE
                     binding.ivShare.setOnClickListener {
+                        // shareFile is the single chokepoint: it routes encrypted-at-rest attachments
+                        // (image/audio) through the decrypting content provider and falls back to a
+                        // FileProvider uri only for plaintext files — so no plaintext leaves the
+                        // sandbox and a transient/missing plaintext file can't cause ENOENT.
                         this.shareFile(attachmentPath)
                     }
                 } else {

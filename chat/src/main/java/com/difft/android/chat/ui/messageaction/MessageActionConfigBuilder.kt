@@ -7,8 +7,9 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canDownloadFile
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isLongTextAttachment
+import com.difft.android.chat.message.singleForwardableAttachment
 import difft.android.messageserialization.model.SpeechToTextStatus
-
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
@@ -137,12 +138,18 @@ class MessageActionConfigBuilder(
         if (hasTextContent(message) || message.canDownloadFile() || message.isLongTextAttachment()) {
             actions.add(MessageAction.copy())
         }
-        
+
+        // Add to Fav - for gif/webp messages (same as normal mode, §5.3): forwarded/combined-forward
+        // detail views expose it too, mirroring Save.
+        if (isAnimatedImageMessage(message)) {
+            actions.add(MessageAction.favoriteGif())
+        }
+
         // Forward - for non-audio messages
         if (message.attachment?.isAudioMessage() != true) {
             actions.add(MessageAction.forward())
         }
-        
+
         // Save - for downloadable files
         if (message.canDownloadFile()) {
             val isMediaFile = isMediaFile(message)
@@ -168,7 +175,13 @@ class MessageActionConfigBuilder(
             if (hasTextContent(message) || message.canDownloadFile() || message.isLongTextAttachment()) {
                 actions.add(MessageAction.copy())
             }
-            
+
+            // Add to Fav - for gif/webp messages (M3, §5.3). Positioned right after quote+copy,
+            // before translate/forward (Issue 6c).
+            if (isAnimatedImageMessage(message)) {
+                actions.add(MessageAction.favoriteGif())
+            }
+
             // Forward - for non-audio messages
             if (message.attachment?.isAudioMessage() != true) {
                 actions.add(MessageAction.forward())
@@ -259,6 +272,14 @@ class MessageActionConfigBuilder(
         return System.currentTimeMillis() - message.systemShowTimestamp <= recallTimeoutInterval
     }
     
+    /** True when the (direct or single-forward) attachment is an animated image (gif or animated
+     *  webp), per the unified [Attachment.isAnimatedImage] predicate (GIF flag + image/gif fallback).
+     *  Drives the "Add to Fav" menu visibility. A single forward wraps its gif in forwardContext
+     *  (attachment == null), so a naive message.attachment check misses it; singleForwardableAttachment
+     *  resolves both. A static webp with no GIF flag no longer shows "Add to Fav". */
+    private fun isAnimatedImageMessage(message: TextChatMessage): Boolean =
+        message.singleForwardableAttachment()?.isAnimatedImage() == true
+
     /**
      * Check if the downloadable file is a media file (image/video)
      */

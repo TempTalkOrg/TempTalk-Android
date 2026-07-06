@@ -3,6 +3,7 @@ package com.difft.android.network.speedtest
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
+import com.difft.android.network.ServiceUrlResolver
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.proxy.ProxyConfigProvider
 import dagger.Lazy
@@ -50,7 +51,6 @@ class DomainSpeedTestCoordinator @Inject constructor(
     private fun isProxyActive(): Boolean = proxyConfigProvider.get().isEnabled
     companion object {
         private const val TAG = "SpeedTest"
-        private const val SERVICE_TYPE_CHAT = "chat"
 
         private const val THROTTLE_MS = 30_000L
         private const val INITIAL_DELAY_MS = 10_000L
@@ -70,6 +70,9 @@ class DomainSpeedTestCoordinator @Inject constructor(
     fun initialize() {
         L.i { "[$TAG] initialize" }
         appScope.launch(Dispatchers.IO) {
+            // StoragePreloader pre-warms the global config before this 10s-delayed
+            // first run, so getNewGlobalConfigs() resolves synchronously from
+            // memory/assets and getChatHostsFromConfig() is non-empty (design MED-1).
             delay(INITIAL_DELAY_MS)
             runSpeedTest()
         }
@@ -274,11 +277,19 @@ class DomainSpeedTestCoordinator @Inject constructor(
         }
     }
 
-    private fun getChatHostsFromConfig(): List<String> {
-        return globalConfigsManager.get().getNewGlobalConfigs()
-            ?.data?.hosts
-            ?.filter { it.servTo == SERVICE_TYPE_CHAT }
-            ?.mapNotNull { it.name?.takeIf { name -> name.isNotBlank() } }
-            .orEmpty()
-    }
+    /**
+     * Chat speed-test host pool, resolved from the `services` + `domains` model
+     * via [ServiceUrlResolver] (same source as the URL path resolver, so the
+     * speed-test pool and routed URLs never diverge). No legacy
+     * `hosts(servTo==chat)` fallback: the assets default config always carries
+     * services + domains, so there is no reachable "hosts-but-no-services" state,
+     * and mixing models would let failover hit a host the server has retired.
+     * Returns empty when unresolved; the empty case is
+     * logged once at each decision point ([runSpeedTest] / [getBestHostSync]),
+     * not here — this shared accessor stays silent to avoid hot-path log spam.
+     */
+    private fun getChatHostsFromConfig(): List<String> =
+        ServiceUrlResolver.resolve(
+            globalConfigsManager.get().getNewGlobalConfigs()?.data, ServiceUrlResolver.SERVICE_NAME_CHAT
+        )?.hosts.orEmpty()
 }

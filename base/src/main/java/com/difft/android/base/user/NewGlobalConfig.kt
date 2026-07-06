@@ -50,12 +50,23 @@ data class TunnelDomains(
     val call: List<String>? = null
 )
 
+/**
+ * Legacy host list (paired with the old `srvs` routing via `servTo`). No longer
+ * read for URL building in this app — routing now uses `services` + `domains`
+ * (see ServiceUrlResolver), aligned with iOS/Desktop. Kept only for
+ * cross-platform config parity (server still sends it).
+ */
 data class Host(
     val certType: String? = null,
     val name: String? = null,
     val servTo: String? = null
 )
 
+/**
+ * Legacy service-path config. No longer read for URL building in this app —
+ * routing now uses `services` + `domains` (see ServiceUrlResolver), aligned with
+ * iOS/Desktop. Kept only for cross-platform config parity (server still sends it).
+ */
 data class Srvs(
     val chat: String? = null,
     val voice: String? = null,

@@ -2,7 +2,7 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>LongMethod:WCDBExtensions.kt:fun WCDB.convertToMessageModel: MessageModel</ID>
+    <ID>LongMethod:WCDBExtensions.kt:fun WCDB.insertChildrenAndBuildMessageModel: MessageModel</ID>
     <ID>LongMethod:WCDBUpdateService.kt:WCDBUpdateService$fun updatingRooms</ID>
   </CurrentIssues>
 </SmellBaseline>

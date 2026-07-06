@@ -208,6 +208,28 @@
             android:foregroundServiceType="remoteMessaging"
             android:stopWithTask="false" />
 
+        <!-- Streams decrypted attachment bytes on demand (no plaintext on disk). Not exported:
+             only this app and grantees of a per-uri read permission can read. -->
+        <provider
+            android:name=".media.EncryptedAttachmentProvider"
+            android:authorities="${applicationId}.encryptedattachment"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- Streams decrypted favorite-GIF bytes on demand (favorites analogue of the above). -->
+        <provider
+            android:name=".media.FavoriteEncryptedAttachmentProvider"
+            android:authorities="${applicationId}.favoriteattachment"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- Streams decrypted avatar-cache bytes on demand (avatar analogue of the above). -->
+        <provider
+            android:name=".media.AvatarEncryptedProvider"
+            android:authorities="${applicationId}.avatarcache"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
     </application>
 
     <queries>

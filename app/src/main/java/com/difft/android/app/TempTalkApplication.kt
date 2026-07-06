@@ -8,7 +8,11 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.ui.graphics.Color
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
@@ -17,6 +21,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.difft.android.base.log.LogHelper
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.NetworkRiskNotifier
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.storage.PendingLastUseTime
 import com.difft.android.base.storage.StoragePreloader
 import com.difft.android.base.storage.di.AppStateDataStore
@@ -177,6 +183,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 LanguageUtils.reapplyLocaleToAppResources(this@TempTalkApplication)
             }
             .addNonBlocking("cleanup legacy sqlcipher", this::cleanupLegacySqlCipherArtifacts)
+            .addNonBlocking("sweep avatar crop temp", this::sweepAvatarCropTemp)
             // Probe DB health early (off main, individually guarded) so DB-touching consumers
             // below can fast-skip a corrupt DB via wcdb.dbCorrupted. Best-effort ordering, NOT a
             // barrier — consumer-side safety (runCatching in ContactRemarkCache.preload, the
@@ -196,6 +203,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addNonBlocking("monitor main thread blocking") { monitorMainThreadBlocking() }
             .addNonBlocking("init contactor") { ContactorUtil.init() }
             .addNonBlocking("init global configs") { initGlobalConfigs() }
+            .addNonBlocking("observe network risk") { observeNetworkRiskWarning() }
             .addNonBlocking("init coordinator") { coordinator.get().initialize() }
             // Already on Dispatchers.IO per AppStartup; single runBlocking bridge, no re-dispatch.
             .addNonBlocking("probe process exit reasons") {
@@ -243,6 +251,67 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     private fun cleanupLegacySqlCipherArtifacts() {
         com.difft.android.app.startup.cleanupLegacySqlCipherArtifacts(applicationContext)
+    }
+
+    private fun sweepAvatarCropTemp() {
+        com.difft.android.app.startup.sweepAvatarCropTemp(applicationContext)
+    }
+
+    /**
+     * Bridge the background-thread MITM signal ([NetworkRiskNotifier]) to the foreground UI.
+     * When a warning is raised while an Activity is resumed we show it immediately here;
+     * if none is resumed yet, [onActivityResumed] retries once the app returns to foreground.
+     */
+    private fun observeNetworkRiskWarning() {
+        appScope.launch {
+            NetworkRiskNotifier.warningPending.collect { pending ->
+                if (!pending) return@collect
+                withContext(Dispatchers.Main) {
+                    currentResumedActivity?.get()?.let { showNetworkRiskWarningIfNeeded(it) }
+                }
+            }
+        }
+    }
+
+    /** Must run on the main thread. Shows the MITM warning once, reusing the shared dialog. */
+    private fun showNetworkRiskWarningIfNeeded(activity: FragmentActivity) {
+        if (!NetworkRiskNotifier.warningPending.value || NetworkRiskNotifier.isDialogShowing) return
+        if (activity.isFinishing || activity.isDestroyed) return
+
+        NetworkRiskNotifier.markDialogShown()
+        // If the host Activity is destroyed before the user decides (e.g. a config change tears
+        // down the ComposeView), re-arm so the next foreground Activity re-shows the warning.
+        activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                owner.lifecycle.removeObserver(this)
+                NetworkRiskNotifier.onDialogDismissed()
+            }
+        })
+        ComposeDialogManager.showMessageDialog(
+            context = activity,
+            title = activity.getString(com.difft.android.base.R.string.net_risk_warning_title),
+            message = activity.getString(com.difft.android.base.R.string.net_risk_warning_message),
+            // "Quit" is the highlighted primary action (safer default than ignoring the risk).
+            confirmText = activity.getString(com.difft.android.base.R.string.net_risk_warning_quit),
+            cancelText = activity.getString(com.difft.android.base.R.string.net_risk_warning_ignore),
+            showCancel = true,
+            cancelable = false,
+            confirmButtonColor = Color(ContextCompat.getColor(activity, com.difft.android.base.R.color.primary)),
+            onConfirm = { quitApp(activity) },
+            onCancel = { NetworkRiskNotifier.ignoreForSession() },
+            onDismiss = { NetworkRiskNotifier.onDialogDismissed() }
+        )
+    }
+
+    private fun quitApp(activity: Activity) {
+        NetworkRiskNotifier.onDialogDismissed()
+        try {
+            activity.finishAffinity()
+        } catch (e: Exception) {
+            L.w { "[NetworkRisk] finishAffinity failed: ${e.message}" }
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
+        kotlin.system.exitProcess(0)
     }
 
     /**
@@ -444,6 +513,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                     // 刷新截屏状态（根据屏幕锁决定）
                     SecureModeUtil.refreshByScreenLock(activity)
+
+                    // 网络层在后台线程检测到证书失败时只置位标志；待前台 Activity 可用再弹窗
+                    showNetworkRiskWarningIfNeeded(activity)
                 }
 
                 // 原有的 Call 反馈逻辑

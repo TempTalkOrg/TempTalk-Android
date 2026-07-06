@@ -2,9 +2,11 @@ package com.difft.android.chat.widget
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Outline
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.View
+import android.view.ViewOutlineProvider
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
@@ -13,16 +15,14 @@ import com.difft.android.base.utils.getSafeContext
 import com.difft.android.base.utils.windowHeightPx
 import com.difft.android.base.utils.windowWidthPx
 import com.bumptech.glide.Glide
-import com.bumptech.glide.integration.webp.decoder.WebpDrawable
-import com.bumptech.glide.integration.webp.decoder.WebpDrawableTransformation
 import com.bumptech.glide.load.DataSource
-import com.bumptech.glide.load.MultiTransformation
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.engine.GlideException
-import com.bumptech.glide.load.resource.bitmap.CenterCrop
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.bumptech.glide.signature.ObjectKey
+import com.difft.android.base.glide.EncryptedByteBufferResourceEncoder
+import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.DownloadAttachmentJob
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.MediaUtil
 import java.io.File
 import kotlin.math.max
@@ -61,6 +62,20 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     private var currentShouldSaveToPhotos: Boolean = false
     private var currentContainerWidth: Int = 0
 
+    /**
+     * Rounds the image corners at the VIEW level (6dp) — the sole corner mechanism, since no Glide
+     * transform is applied. Corners can't be a Glide transform here because the encrypted RESOURCE
+     * cache stores animated (gif/webp) content as untransformed source bytes, so a bitmap corner
+     * transform would diverge on a cache hit (issue #1002: animated bubbles rendered square). A view
+     * clip rounds ANY drawable (static / animated) regardless of the cache path; getOutline re-runs
+     * on layout so it tracks the image's changing size. Cropping is handled by centerCrop scaleType.
+     */
+    private val roundedCornerOutline = object : ViewOutlineProvider() {
+        override fun getOutline(view: View, outline: Outline) {
+            outline.setRoundRect(0, 0, view.width, view.height, 6.dp.toFloat())
+        }
+    }
+
     @SuppressLint("SetTextI18n")
     fun setupImageView(message: TextChatMessage, shouldSaveToPhotos: Boolean = false, containerWidth: Int = 0) {
         currentShouldSaveToPhotos = shouldSaveToPhotos
@@ -68,6 +83,11 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         val previousAttachmentId = currentAttachmentId
         currentAttachmentId = message.id
         currentMessage = message
+
+        // Round the image corners via a view-level outline clip (see [roundedCornerOutline]) — the
+        // sole corner mechanism now that no Glide transform is applied. Idempotent per bind.
+        binding.imageView.outlineProvider = roundedCornerOutline
+        binding.imageView.clipToOutline = true
 
         // Reset status views every bind. Only clear the bitmap when the bubble is being rebound
         // to a DIFFERENT attachment (ViewHolder reuse during scroll) — same-attachment rebinds
@@ -89,7 +109,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         setupImageDimensions(attachment, attachmentPath, isVideo)
 
         val progress = message.getAttachmentProgress()
-        val isFileValid = FileUtil.isFileValid(attachmentPath)
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
         val isCurrentDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
 
         // Distinguish upload/download state based on whether sent from current device
@@ -284,8 +304,21 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             effectiveWidth = attachment.width
             effectiveHeight = attachment.height
         } else {
-            val mimeType = MediaUtil.getMimeType(context, attachmentPath.toUri()) ?: ""
-            val actualDimensions = MediaUtil.getMediaWidthAndHeight(attachmentPath, mimeType)
+            // Encrypted-at-rest (no plaintext on disk): decode dimensions through the decrypting
+            // content uri. decodeFile() on the missing plaintext path would return 0 and the bubble
+            // would fall back to a default aspect ratio (e.g. a too-narrow image with a right gap,
+            // common on forwarded images whose forward payload omits width/height).
+            val actualDimensions = if (
+                !EncryptedAttachmentAccess.hasPlaintext(attachmentPath) &&
+                EncryptedAttachmentAccess.hasEncrypted(attachmentPath)
+            ) {
+                val uri = EncryptedAttachmentAccess.contentUriFromBasePath(attachmentPath)
+                val mimeType = MediaUtil.getMimeType(context, uri) ?: attachment.contentType ?: ""
+                MediaUtil.getMediaWidthAndHeight(context, uri, mimeType)
+            } else {
+                val mimeType = MediaUtil.getMimeType(context, attachmentPath.toUri()) ?: ""
+                MediaUtil.getMediaWidthAndHeight(attachmentPath, mimeType)
+            }
             effectiveWidth = actualDimensions.first
             effectiveHeight = actualDimensions.second
         }
@@ -326,6 +359,24 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             finalHeight = (finalWidth / defaultRatio).toInt()
         }
 
+        // Universal min display width for ALL thumbnail media so small items don't squeeze the
+        // overlays (timestamp / send status / download progress). Fixed 150dp (not screen/3, which
+        // grew too large on tablets/foldables) matches Signal/iOS; clamped to maxWidth.
+        if (effectiveWidth > 0 && effectiveHeight > 0) {
+            val minWidth = 150.dp
+            if (finalWidth < minWidth) {
+                val ratio = max(minAspectRatio, min(maxAspectRatio, effectiveWidth.toFloat() / effectiveHeight))
+                finalWidth = minOf(minWidth, maxWidth)
+                finalHeight = (finalWidth / ratio).toInt()
+                if (finalHeight > maxHeight) {
+                    // Very tall item: cap height but KEEP min width — the centerCrop ImageView crops
+                    // the vertical overflow (opens full on tap) instead of shrinking to a thin strip,
+                    // so both min-width and max-height hold and the overlays still fit. Mirrors Signal.
+                    finalHeight = maxHeight
+                }
+            }
+        }
+
         val layoutParams = binding.imageView.layoutParams
         layoutParams.width = finalWidth
         layoutParams.height = finalHeight
@@ -362,20 +413,74 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     private fun loadImage(attachmentPath: String, expectedSize: Int, contentType: String) {
         loadImageJob?.cancel()
         loadImageJob = getLifecycleOwner()?.lifecycleScope?.launch {
-            val file = File(attachmentPath)
-            val (fileLastModified, actualFileSize) = withContext(Dispatchers.IO) {
-                file.lastModified() to file.length()
+            val plainFile = File(attachmentPath)
+            val encryptedFile = EncryptedAttachmentAccess.encryptedFile(attachmentPath)
+
+            // Cap the decode resolution at the (already screen-bounded) display size computed by
+            // setupImageDimensions. A large user-picked gif/webp otherwise decodes at native
+            // resolution (decode memory = w*h*4*frames), risking jank/OOM. This is the size Glide
+            // already targets via into(view) for static images, but made EXPLICIT so the animated
+            // gif/webp decoders honor it too. == the view size, so zero visual change.
+            val targetW = binding.imageView.layoutParams?.width ?: 0
+            val targetH = binding.imageView.layoutParams?.height ?: 0
+
+            // Encrypted-at-rest image/video (no plaintext on disk): load via the decrypting provider.
+            // For video, Glide decodes the first frame through the provider's seekable proxy fd; for
+            // images it decodes the bitmap. While a fresh send is still uploading the plaintext coexists
+            // with the ciphertext, so prefer the plaintext here (instant sender preview via Glide, which
+            // tolerates the file being deleted mid-load and simply rebinds once only the ciphertext remains).
+            val isEncryptedMedia = (contentType.contains("image") || contentType.contains("video")) &&
+                !plainFile.exists() && encryptedFile.exists()
+
+            // For encrypted images we may use Glide's RESOURCE disk cache, but the cached bytes are
+            // themselves encrypted (see MyAppGlideModule) so plaintext is never persisted. Both static
+            // (decoded bitmap) and animated gif/webp (untransformed source bytes) are cacheable. Restrict it to:
+            //  - non-confidential messages: confidential content must never persist in Glide's cache;
+            //  - Keystore key available: otherwise fall back to NONE (zero regression).
+            val isAnimatedType = contentType.contains("gif") || contentType.contains("webp")
+            val useEncryptedResourceCache = isEncryptedMedia &&
+                currentMessage?.isConfidential() != true &&
+                GlideCacheKeyManager.isAvailable(context)
+
+            val (model: Any, fileLastModified: Long, actualFileSize: Long) = withContext(Dispatchers.IO) {
+                if (isEncryptedMedia) {
+                    val uri = EncryptedAttachmentAccess.contentUri(
+                        currentMessage?.id ?: "",
+                        plainFile.name
+                    )
+                    Triple(uri as Any, encryptedFile.lastModified(), encryptedFile.length())
+                } else {
+                    Triple(attachmentPath as Any, plainFile.lastModified(), plainFile.length())
+                }
             }
 
-            // Shared crop + corner spec so static/GIF bitmaps and animated WebP render identically.
-            val imageTransform = MultiTransformation(CenterCrop(), RoundedCorners(6.dp))
-
             Glide.with(context.getSafeContext())
-                .load(attachmentPath)
+                .load(model)
+                // Bound the decode resolution to the display size (see targetW/targetH above).
+                .apply { if (targetW > 0 && targetH > 0) override(targetW, targetH) }
+                .apply {
+                    when {
+                        // Encrypted RESOURCE cache: persists only encrypted resources (a decoded bitmap
+                        // for static, untransformed source bytes for animated gif/webp).
+                        useEncryptedResourceCache -> diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                        // Encrypted source but cache disabled (confidential / no key): never cache.
+                        isEncryptedMedia -> diskCacheStrategy(DiskCacheStrategy.NONE)
+                        // Plaintext image: leave Glide's default (AUTOMATIC) behavior unchanged.
+                    }
+                }
+                // Signature keys the in-memory cache; use the backing file's lastModified so an
+                // updated attachment invalidates the cached bitmap.
                 .signature(ObjectKey(fileLastModified))
-                .transform(imageTransform)
-                // optionalTransform targets WebpDrawable; without it animated WebP loses corners/crop or freezes on first frame.
-                .optionalTransform(WebpDrawable::class.java, WebpDrawableTransformation(imageTransform))
+                .apply {
+                    // No Glide transform is applied on any path: crop is handled by the ImageView's
+                    // centerCrop scaleType and rounded corners by the view-level outline clip
+                    // (roundedCornerOutline), both independent of the cache — so a RESOURCE cache hit can
+                    // never diverge from the first render (the encrypted animated cache stores
+                    // untransformed source bytes). Animated content just opts into that encoder.
+                    if (useEncryptedResourceCache && isAnimatedType) {
+                        set(EncryptedByteBufferResourceEncoder.ENCRYPT_ANIMATED_CACHE, true)
+                    }
+                }
                 .listener(object : RequestListener<Drawable> {
                     override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
                         L.e { "[MediaMsg] Load FAILED - path: $attachmentPath, contentType: $contentType, expectedSize: $expectedSize, actualFileSize: $actualFileSize, lastModified: $fileLastModified, error: ${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }

@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.core.net.toUri
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.CertValidationFailureDetector
+import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.call.LCallConstants
@@ -87,6 +89,17 @@ internal class CallConnectionCoordinator(
     private fun embeddedServiceUrlsFallbackOrNull(): ServiceUrls? =
         if (ProxyConfigProvider.isProxyActiveForCall) null
         else DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
+
+    /**
+     * Call media TLS pins trust to the chative CA; a certificate validation failure on any
+     * connect attempt (failover or user-initiated manual switch) is a possible MITM attack,
+     * so surface it to the shared [NetworkRiskNotifier].
+     */
+    private fun reportCertRiskIfNeeded(t: Throwable, serverHost: String) {
+        if (CertValidationFailureDetector.isCertValidationFailure(t)) {
+            NetworkRiskNotifier.onCertValidationFailed("call:$serverHost")
+        }
+    }
 
     /**
      * Failover & retry strategy:
@@ -176,6 +189,7 @@ internal class CallConnectionCoordinator(
                     L.e { "[Call] connect exception url=${att.connectUrl} err=${t}" }
                     when (t) {
                         is SocketTimeoutException, is RoomException.ConnectTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
+                            reportCertRiskIfNeeded(t, att.serverHost)
                             LCallEngine.reportConnectionFailure(att.connectUrl)
                             roomCtl.room.disconnect()
                             transientErrorMsg = "${t.javaClass.simpleName}: ${t.message.orEmpty()}"
@@ -292,6 +306,7 @@ internal class CallConnectionCoordinator(
             when (e) {
                 is SocketTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
                     L.e { "[Call] manualSwitch transient url=$connectUrl err=${e.message}" }
+                    reportCertRiskIfNeeded(e, serverHost)
                     LCallEngine.reportConnectionFailure(connectUrl)
                     roomCtl.room.disconnect()
                     failWith(ServerConnectionException(getString(R.string.call_connect_timeout_tip)))

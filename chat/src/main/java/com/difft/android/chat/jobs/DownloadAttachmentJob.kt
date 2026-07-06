@@ -17,6 +17,7 @@ import org.difft.app.database.models.DBAttachmentModel
 import util.FileUtils
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.SaveAttachmentUtil
@@ -173,32 +174,41 @@ class DownloadAttachmentJob private constructor(
                         continue
                     }
 
+                    val contentLength = downLoadResponseBody.contentLength()
+                    var totalBytesRead: Long = 0
                     downLoadResponseBody.byteStream().let { inputStream ->
                         val encryptOutputStream = FileOutputStream(encryptFile)
 
                         try {
                             var bytesRead: Int
-                            var totalBytesRead: Long = 0
                             var lastEmitTime = System.currentTimeMillis()
                             var lastEmitProgress = 0
 
                             while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                                 encryptOutputStream.write(buffer, 0, bytesRead)
                                 totalBytesRead += bytesRead
-                                val progress = (100.0 * totalBytesRead / downLoadResponseBody.contentLength()).toInt().coerceAtMost(99)
+                                val progress = (100.0 * totalBytesRead / contentLength).toInt().coerceAtMost(99)
                                 val currentTime = System.currentTimeMillis()
                                 // Update every 50ms or when progress changes by >=5%
                                 if ((currentTime - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
-                                    L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/${downLoadResponseBody.contentLength()} = $progress%" }
+                                    L.d { "[DownloadAttachmentJob] download progress: $totalBytesRead/$contentLength = $progress%" }
                                     FileUtil.emitProgressUpdate(messageId, progress)
                                     lastEmitTime = currentTime
                                     lastEmitProgress = progress
                                 }
                             }
+                            encryptOutputStream.flush()
                         } finally {
                             inputStream.close()
                             encryptOutputStream.close()
                         }
+                    }
+
+                    // Guard against a silently-truncated stream (early EOF on a dropped connection):
+                    // an incomplete .encrypt would later decrypt to garbage. Treat it as a failure so
+                    // we fall through to the next URL / retry instead of persisting a corrupt file.
+                    if (contentLength > 0 && totalBytesRead != contentLength) {
+                        throw IOException("[DownloadAttachmentJob] incomplete download: $totalBytesRead/$contentLength bytes, messageId: $messageId")
                     }
 
                     L.i { "[DownloadAttachmentJob] Download successful with URL ${index + 1}/${urlsToTry.size}, messageId: $messageId, url: ${url.sanitizeUrl()}" }
@@ -239,6 +249,13 @@ class DownloadAttachmentJob private constructor(
                     realFile.delete()
                     throw e
                 }
+            } else {
+                // Encrypted-at-rest (image / voice): keep the ciphertext on disk and decrypt on
+                // demand. Verify integrity ONCE now so consumers can read later without re-verifying.
+                if (fileKey.size >= 64 && !FileDecryptionUtil.verifyMac(encryptFile, fileKey)) {
+                    encryptFile.delete()
+                    throw SecurityException("[DownloadAttachmentJob] MAC verification failed, messageId: $messageId")
+                }
             }
 
             // Auto save to photos if enabled
@@ -250,8 +267,17 @@ class DownloadAttachmentJob private constructor(
             if (autoSave) {
                 L.i { "[DownloadAttachmentJob] auto save to photos: $filePath" }
                 if (FileUtil.canWriteToMediaStore()) {
-                    if (File(filePath).exists()) {
-                        val fileUri = File(filePath).toUri()
+                    val plainExists = File(filePath).exists()
+                    val encryptedExists = EncryptedAttachmentAccess.hasEncrypted(filePath)
+                    if (plainExists || encryptedExists) {
+                        // Prefer the durable ciphertext (content uri) when present; only fall back to
+                        // the plaintext file for legacy plaintext-only data. Reading the .encrypt on
+                        // demand avoids racing with any concurrent plaintext deletion.
+                        val fileUri = if (encryptedExists) {
+                            EncryptedAttachmentAccess.contentUri(messageId, File(filePath).name)
+                        } else {
+                            File(filePath).toUri()
+                        }
                         val attachment = SaveAttachmentUtil.Attachment(
                             uri = fileUri,
                             contentType = MediaUtil.getMimeType(context, fileUri) ?: "",

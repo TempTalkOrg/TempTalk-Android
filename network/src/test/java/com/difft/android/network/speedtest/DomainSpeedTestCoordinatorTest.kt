@@ -1,5 +1,9 @@
 package com.difft.android.network.speedtest
 
+import com.difft.android.base.user.Data
+import com.difft.android.base.user.Domain
+import com.difft.android.base.user.NewGlobalConfig
+import com.difft.android.base.user.Service
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.network.config.GlobalConfigsManager
@@ -101,6 +105,20 @@ class DomainSpeedTestCoordinatorTest {
     @Test
     fun `getBestHostSync returns null when everything exhausted`() {
         assertNull(coordinator.getBestHostSync())
+    }
+
+    @Test
+    fun `getBestHostSync falls back to resolver host from global config`() {
+        // Snapshot empty + no persisted host → level-3 fallback resolves the chat
+        // host pool from services + domains via ServiceUrlResolver.
+        every { mockGlobalConfigsManager.getNewGlobalConfigs() } returns NewGlobalConfig(
+            data = Data(
+                domains = listOf(Domain(label = "chat1", domain = "chat.chative.im", certType = "self")),
+                services = listOf(Service(name = "chat", path = "/chat", domains = listOf("chat1"))),
+            )
+        )
+
+        assertEquals("chat.chative.im", coordinator.getBestHostSync())
     }
 
     // -- markHostUnavailable --

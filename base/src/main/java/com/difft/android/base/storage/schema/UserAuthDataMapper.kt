@@ -4,7 +4,7 @@ import com.difft.android.base.user.UserData
 
 /**
  * Bidirectional mapping between the legacy [UserData] blob and the encrypted
- * [UserAuthData] payload (17 fields: 15 auth/identity + 2 self-hosted-proxy).
+ * [UserAuthData] payload (20 fields: 15 auth/identity + 3 self-hosted-proxy + 3 favorites favKey).
  *
  * Used by:
  *  1. [com.difft.android.base.storage.migration.SecureUserSpMigration] — projects
@@ -18,7 +18,7 @@ import com.difft.android.base.user.UserData
  * [UserAuthData], this mapper, and [com.difft.android.base.storage.user.UserDataFieldRouter]
  * (Task 7) — guarded by a Robolectric round-trip test.
  *
- * **Field count invariant**: 17 fields mapped both directions. The non-auth UX fields
+ * **Field count invariant**: 20 fields mapped both directions. The non-auth UX fields
  * are preserved verbatim from the `base` argument in [toUserData]; they never
  * round-trip through this mapper.
  */
@@ -50,10 +50,13 @@ object UserAuthDataMapper {
         proxyShareLink = auth.proxyShareLink.nullIfEmpty(),
         proxyEnabled = auth.proxyEnabled,
         proxyProtectCallIp = auth.proxyProtectCallIp,
+        favKey = auth.favKey.nullIfEmpty(),
+        favKeyId = auth.favKeyId.nullIfEmpty(),
+        favKeyVersion = auth.favKeyVersion,
     )
 
     /**
-     * Extract the 17 auth + proxy fields from [userData]. The
+     * Extract the 20 auth + proxy + favKey fields from [userData]. The
      * [UserAuthData.migrationV1Completed] marker is left at its default `false` —
      * only set during the migration path via [fromLegacyComplete].
      *
@@ -80,6 +83,9 @@ object UserAuthDataMapper {
         proxyShareLink = userData.proxyShareLink.orEmpty(),
         proxyEnabled = userData.proxyEnabled,
         proxyProtectCallIp = userData.proxyProtectCallIp,
+        favKey = userData.favKey.orEmpty(),
+        favKeyId = userData.favKeyId.orEmpty(),
+        favKeyVersion = userData.favKeyVersion,
     )
 
     private fun String.nullIfEmpty(): String? = if (this.isEmpty()) null else this

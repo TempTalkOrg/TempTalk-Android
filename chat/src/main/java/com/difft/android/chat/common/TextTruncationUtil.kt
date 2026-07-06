@@ -15,13 +15,13 @@ import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.chat.R
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.buildForwardData
 import com.difft.android.chat.ui.textpreview.TextPreviewActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * 文本截断工具类
@@ -273,9 +273,10 @@ object TextTruncationUtil {
             return
         }
 
+        val context = view.context.applicationContext
         appScope.launch {
             val content = withContext(Dispatchers.IO) {
-                readTextFileContent(filePath)
+                readTextFileContent(context, filePath)
             }
             withContext(Dispatchers.Main) {
                 showFullTextDialog(view, content.ifEmpty { fallbackText }, mentions, sourceMessage)
@@ -284,11 +285,11 @@ object TextTruncationUtil {
     }
 
     /**
-     * 读取文本文件内容
+     * 读取长文本附件内容：明文优先，否则经加密 Provider 顺序解密读回（明文不落盘）。
      */
-    private fun readTextFileContent(filePath: String): String {
+    private fun readTextFileContent(context: Context, filePath: String): String {
         return try {
-            File(filePath).readText(Charsets.UTF_8)
+            EncryptedAttachmentAccess.readDecryptedText(context, filePath) ?: ""
         } catch (e: Exception) {
             L.e(e) { "[LongText] Failed to read text file: ${e.message}" }
             ""

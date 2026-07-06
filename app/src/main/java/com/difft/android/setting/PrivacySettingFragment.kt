@@ -28,6 +28,7 @@ import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.util.KeyHelper
 import com.difft.android.chat.crypto.IdentityKeyUtil
 import com.difft.android.chat.cryptonew.EncryptionDataManager
+import com.difft.android.chat.gif.favorite.FavoriteWriteRepository
 import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,6 +60,9 @@ class PrivacySettingFragment : Fragment() {
 
     @Inject
     lateinit var proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider
+
+    @Inject
+    lateinit var favoriteWriteRepo: FavoriteWriteRepository
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -162,6 +166,19 @@ class PrivacySettingFragment : Fragment() {
                     encryptionDataManager.updateAciIdentityKey(newIdentityKeyPair)
                     userManager.update {
                         this.aciIdentityKeyGenTime = currentTimeMillis
+                    }
+
+                    // Re-wrap the favorites key under the new identity while the old private key is
+                    // still available, so linked devices (e.g. desktop) can recover the favorites
+                    // list after they re-link with the rotated identity. Best-effort: a failure here
+                    // must not fail the identity reset itself.
+                    try {
+                        favoriteWriteRepo.rewrapOnMasterKeyRotation(
+                            currentIdentityKeyPair.privateKey.serialize(),
+                            newIdentityKeyPair.privateKey.serialize()
+                        )
+                    } catch (e: Exception) {
+                        L.w { "[PrivacySetting] favorites rewrap after identity reset failed: ${e.message}" }
                     }
 
                     // 更新UI显示新的身份密钥创建时间

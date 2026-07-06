@@ -10,6 +10,7 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutAttachMessageViewBinding
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.shouldDecrypt
@@ -52,7 +53,11 @@ class AttachMessageView @JvmOverloads constructor(
         binding.attachmentSize.text = FileUtil.readableFileSize(attachment.size.toLong())
 
         val progress = message.getAttachmentProgress()
-        val isFileValid = FileUtil.isFileValid(attachmentPath)
+        // Encrypted-at-rest types (e.g. long text) keep only "<path>.encrypt" on disk, so a
+        // plaintext-only isFileValid() would report "not downloaded" and trigger an endless
+        // re-download loop (each re-download resets status to LOADING), which in turn keeps the
+        // long-text Read-more gate closed → only the 2KB preview shows. Gate on isReadable instead.
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
         val isCurrentDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
         if (!isCurrentDeviceSend) {
@@ -131,9 +136,14 @@ class AttachMessageView @JvmOverloads constructor(
                                 val attachment = it.attachment
                                 if (attachment?.isLongText() == true) {
                                     val path = FileUtil.getMessageAttachmentFilePath(it.id) + (attachment.fileName ?: "")
-                                    val isFileValid = FileUtil.isFileValid(path)
+                                    // Mirror AttachContentBinder.isLongTextDownloaded exactly: a valid
+                                    // ".encrypt" alone means done (see isLongTextReady), while the
+                                    // status/progress signal only gates legacy plaintext. Keeping these two
+                                    // in lockstep is what lets forwarded long text hide the card AND expose
+                                    // full Read-more instead of the 2KB preview.
                                     val progress = it.getAttachmentProgress()
-                                    val isComplete = isFileValid && (attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)
+                                    val plaintextStatusReady = attachment.status == AttachmentStatus.SUCCESS.code || progress == 100
+                                    val isComplete = EncryptedAttachmentAccess.isLongTextReady(path, plaintextStatusReady)
                                     if (isComplete) {
                                         visibility = GONE
                                     }

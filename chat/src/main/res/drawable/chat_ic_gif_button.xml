@@ -1,0 +1,19 @@
+<!-- Ported from tmp/gif-favorite/assets/btn-gif.svg (Gif). The SVG <rect x=3 y=4
+     w=18 h=16 rx=3 stroke-width=2> is expressed as a rounded-rect stroke path; the
+     inner "GIF" wordmark path is stroke-width 1.67. Monochrome; tinted via @color/icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M6 4H18A3 3 0 0 1 21 7V17A3 3 0 0 1 18 20H6A3 3 0 0 1 3 17V7A3 3 0 0 1 6 4Z"
+        android:strokeColor="@color/icon"
+        android:strokeWidth="2" />
+    <path
+        android:pathData="M8.99316 9.38403H7.49316C7.09534 9.38403 6.71381 9.54207 6.4325 9.82337C6.1512 10.1047 5.99316 10.4862 5.99316 10.884V13.884C5.99316 14.2819 6.1512 14.6634 6.4325 14.9447C6.71381 15.226 7.09534 15.384 7.49316 15.384H8.99316V12.384H8.24316M11.9932 9.38403V15.384M14.9932 12.384H17.2432M17.9932 9.38403H14.9932V15.384"
+        android:strokeColor="@color/icon"
+        android:strokeWidth="1.67"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

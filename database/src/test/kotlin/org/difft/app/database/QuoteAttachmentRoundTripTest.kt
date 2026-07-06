@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
  * D7-D9 — Integration round-trip for the quote-media data layer (③ write ↔ ④ read ↔ delete).
  *
  * Persists a [TextMessage] whose `quote.attachments` carry inline thumbnails via the REAL
- * [WCDB.convertToMessageModel] (③), then reconstructs the [QuotedAttachment] list by the same
+ * [WCDB.insertChildrenAndBuildMessageModel] (③), then reconstructs the [QuotedAttachment] list by the same
  * FK query the REAL [MessageModel.quote] (④) uses, asserting render-relevant fields survive
  * the write→read round-trip (§7 of the design). Also guards the pre-existing delete path
  * (`:885-888`, D8) and the text-only no-regression case (D9).
@@ -123,7 +123,7 @@ class QuoteAttachmentRoundTripTest {
             )
         )
 
-        val model = wcdb.convertToMessageModel(textMessage("m1", 1000L, quote))
+        val model = wcdb.insertChildrenAndBuildMessageModel(textMessage("m1", 1000L, quote))
         wcdb.message.insertObject(model)
         val qId = model.quoteDatabaseId!!
 
@@ -146,7 +146,7 @@ class QuoteAttachmentRoundTripTest {
             id = 2000L, author = "bob", text = "yo",
             attachments = listOf(QuotedAttachment("image/png", "x.png", imageAttachment(byteArrayOf(9)), 0))
         )
-        val model2 = wcdb.convertToMessageModel(textMessage("m2", 2000L, quote2))
+        val model2 = wcdb.insertChildrenAndBuildMessageModel(textMessage("m2", 2000L, quote2))
         wcdb.message.insertObject(model2)
         assertEquals(3, readQuoteAttachments(qId).size) // first quote still exactly 3
         assertEquals(1, readQuoteAttachments(model2.quoteDatabaseId!!).size)
@@ -159,7 +159,7 @@ class QuoteAttachmentRoundTripTest {
             id = 3000L, author = "a", text = "t",
             attachments = listOf(QuotedAttachment("image/jpeg", "p.jpg", imageAttachment(byteArrayOf(7, 7)), 0))
         )
-        val model = wcdb.convertToMessageModel(textMessage("m3", 3000L, quote))
+        val model = wcdb.insertChildrenAndBuildMessageModel(textMessage("m3", 3000L, quote))
         wcdb.message.insertObject(model)
         val qId = model.quoteDatabaseId!!
         assertEquals(1, readQuoteAttachments(qId).size)
@@ -176,7 +176,7 @@ class QuoteAttachmentRoundTripTest {
     @Test
     fun `D9 text-only quote persists no attachment rows`() {
         val quote = Quote(id = 4000L, author = "a", text = "just text", attachments = null)
-        val model = wcdb.convertToMessageModel(textMessage("m4", 4000L, quote))
+        val model = wcdb.insertChildrenAndBuildMessageModel(textMessage("m4", 4000L, quote))
         wcdb.message.insertObject(model)
         val qId = model.quoteDatabaseId!!
 

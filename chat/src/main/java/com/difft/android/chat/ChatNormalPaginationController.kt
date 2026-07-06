@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
 import org.difft.app.database.models.DBMessageModel
@@ -391,12 +392,17 @@ class ChatNormalPaginationController @AssistedInject constructor(
     }
 
     override fun addOneMessage(messageModel: MessageModel) {
-        val currentMessages = chatMessagesStateFlow.value?.messageList ?: emptyList()
-        val newMessageList = (currentMessages + messageModel)
-        _chatMessagesStateFlow.value = ChatMessageListBehavior(
-            messageList = newMessageList,
-            scrollAction = ScrollAction.ToBottom, // 发送消息后滚动到底部
-            updateTimestamp = System.currentTimeMillis()
-        )
+        // Atomic read-modify-write: this runs on Dispatchers.IO and shares the flow with the
+        // observer's writer, so update{} avoids the lost-update window a .value read-then-set has.
+        _chatMessagesStateFlow.update { current ->
+            val currentMessages = current?.messageList ?: emptyList()
+            // Skip if the observer re-query already surfaced it, to avoid a duplicate list bubble.
+            if (currentMessages.any { it.id == messageModel.id }) return@update current
+            ChatMessageListBehavior(
+                messageList = currentMessages + messageModel,
+                scrollAction = ScrollAction.ToBottom, // 发送消息后滚动到底部
+                updateTimestamp = System.currentTimeMillis()
+            )
+        }
     }
 }

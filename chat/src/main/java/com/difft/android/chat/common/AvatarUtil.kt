@@ -7,6 +7,7 @@ import android.text.TextUtils
 import android.util.Base64
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
+import com.difft.android.chat.media.AvatarEncryptedProvider
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import dagger.hilt.InstallIn
@@ -78,6 +79,16 @@ object AvatarUtil {
         return File(FileUtil.getAvatarCachePath(), fileName)
     }
 
+    /**
+     * A decrypting `content://` uri for the cached avatar at [url], or null when not cached yet.
+     * Consumers (Glide / PictureSelector) read decrypted bytes through [AvatarEncryptedProvider] so
+     * plaintext is never materialised on disk. See docs §15.
+     */
+    fun cacheContentUri(url: String): android.net.Uri? {
+        val file = getCacheFile(url) ?: return null
+        return AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_AVATAR, file.name)
+    }
+
 
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -120,9 +131,9 @@ object AvatarUtil {
             // Download and decrypt
             val bytes = fetchAvatar(context, url, key)
             
-            // Save to cache
+            // Save to cache (encrypted-at-rest, see docs §15)
             val cacheFile = getNewCacheFile(url)
-            cacheFile.writeBytes(bytes)
+            AvatarCacheCipher.writeEncrypted(cacheFile, bytes)
             return@withContext cacheFile
         } catch (e: Exception) {
             L.e { "[AvatarUtil] ensureCached failed: ${e.message}" }
@@ -130,7 +141,7 @@ object AvatarUtil {
             try {
                 val bytes = fetchAvatar(context, url, key)
                 val cacheFile = getNewCacheFile(url)
-                cacheFile.writeBytes(bytes)
+                AvatarCacheCipher.writeEncrypted(cacheFile, bytes)
                 return@withContext cacheFile
             } catch (retryException: Exception) {
                 L.e { "[AvatarUtil] ensureCached retry also failed: ${retryException.message}" }

@@ -11,9 +11,14 @@ import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
@@ -32,6 +37,9 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
+import com.difft.android.chat.message.singleForwardableAttachment
+import com.difft.android.chat.gif.favorite.collectFavoriteEffects
+import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.chat.ui.messageaction.MessageAction
 import com.difft.android.chat.ui.messageaction.MessageActionCoordinator
@@ -52,7 +60,10 @@ import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.isAudioMessage
+import com.difft.android.chat.media.AttachmentPreview
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import difft.android.messageserialization.model.isImage
+import difft.android.messageserialization.model.keepEncryptedAtRest
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
 import com.difft.android.chat.dependencies.ApplicationDependencies
@@ -76,6 +87,9 @@ class ChatForwardMessageFragment : Fragment() {
     private val messageActionHelper by lazy {
         MessageActionHelper(requireActivity(), viewLifecycleOwner.lifecycleScope, selectChatsUtils)
     }
+
+    // Fragment-scoped: the forward screen has no GIF panel to share it with (unlike the chat).
+    private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels()
 
     /** Outer combined-forward message context — source attribution for copy/forward notices. */
     private val outerSourceConversation: difft.android.messageserialization.For?
@@ -137,6 +151,9 @@ class ChatForwardMessageFragment : Fragment() {
         }
 
         initView()
+
+        // Favorites effects (cap dialog / toast) — no GIF panel here, so wire our own collection.
+        collectFavoriteEffects(favoriteViewModel)
     }
 
     override fun onDestroyView() {
@@ -261,33 +278,80 @@ class ChatForwardMessageFragment : Fragment() {
         pendingSaveAttachmentMessage = null
     }
 
-    private fun saveAttachment(data: TextChatMessage) {
-        val attachment = when {
-            data.isAttachmentMessage() -> data.attachment
-            data.forwardContext?.forwards?.size == 1 -> data.forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
-            else -> null
+    private fun favoriteGif(message: TextChatMessage) {
+        // Gif is encrypted at rest: gate on isReadable, then decrypt to a temp when only ciphertext
+        // exists. Shares resolveActionAttachment with saveAttachment so the file path can't drift.
+        val (attachment, messageId) = resolveActionAttachment(message) ?: return
+        // Reject oversized gifs up front using the known attachment size — avoids decrypting a large
+        // file just to reject it (the write path also enforces MAX_FAVORITE_ASSET_BYTES as a backstop).
+        if (attachment.size > MAX_FAVORITE_ASSET_BYTES) {
+            L.w { "[ChatForwardMessageFragment] favorite gif: too large size=${attachment.size} messageId=$messageId" }
+            ToastUtil.show(getString(R.string.gif_favorites_add_size_limit))
+            return
         }
-
-        attachment?.let {
-            val attachmentPath = FileUtil.getMessageAttachmentFilePath(data.id) + it.fileName
-            val progress = data.getAttachmentProgress()
-
-            if (File(attachmentPath).exists() && (progress == null || progress == 100)) {
-                val attachment = SaveAttachmentUtil.Attachment(
-                    uri = File(attachmentPath).toUri(),
-                    contentType = it.contentType,
-                    date = System.currentTimeMillis(),
-                    fileName = it.fileName
-                )
-                viewLifecycleOwner.lifecycleScope.launch {
-                    SaveAttachmentUtil.saveWithUI(requireContext(), attachment)
-                }
-            } else {
-                L.i { "save attachment error,exists:" + File(attachmentPath).exists() + " download completed:" + (progress == null || progress == 100) }
-                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+        val fileName = attachment.fileName ?: return
+        val basePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+        if (!EncryptedAttachmentAccess.isReadable(basePath)) {
+            L.w { "[ChatForwardMessageFragment] favorite gif: not readable messageId=$messageId" }
+            ToastUtil.show(getString(R.string.gif_favorites_failed))
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val resolved = withContext(Dispatchers.IO) {
+                com.difft.android.chat.gif.favorite.resolveMessageGifPlaintext(requireContext(), basePath, attachment.key)
             }
+            if (resolved == null) {
+                L.w { "[ChatForwardMessageFragment] favorite gif: decrypt failed messageId=${message.id}" }
+                ToastUtil.show(getString(R.string.gif_favorites_failed))
+                return@launch
+            }
+            val (file, isTemp) = resolved
+            favoriteViewModel.dispatch(
+                com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(
+                    com.difft.android.chat.gif.favorite.FavoriteSource.FromMessageFile(
+                        file, attachment.width, attachment.height, deleteAfterUse = isTemp
+                    )
+                )
+            )
         }
     }
+
+    private fun saveAttachment(data: TextChatMessage) {
+        val (attachment, messageId) = resolveActionAttachment(data) ?: return
+        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+        val progress = data.getAttachmentProgress()
+
+        // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
+        // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
+        // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
+        if (EncryptedAttachmentAccess.isReadable(attachmentPath) && (progress == null || progress == 100)) {
+            // Prefer the durable ciphertext (content uri) over the plaintext file — a self-sent
+            // attachment's plaintext is deleted right after upload, so a plaintext uri resolved here
+            // can ENOENT by the time this async save reads it. See EncryptedAttachmentAccess.exportContentUriIfEncrypted.
+            val saveUri = EncryptedAttachmentAccess.exportContentUriIfEncrypted(messageId, attachmentPath)
+                ?: File(attachmentPath).toUri()
+            val attachmentToSave = SaveAttachmentUtil.Attachment(
+                uri = saveUri,
+                contentType = attachment.contentType,
+                date = System.currentTimeMillis(),
+                fileName = attachment.fileName
+            )
+            viewLifecycleOwner.lifecycleScope.launch {
+                SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave)
+            }
+        } else {
+            L.w { "[ChatForwardMessageFragment] save attachment error, readable=" + EncryptedAttachmentAccess.isReadable(attachmentPath) + " downloadCompleted=" + (progress == null || progress == 100) }
+            ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+        }
+    }
+
+    /**
+     * Resolve the actionable attachment + its on-disk storage messageId — the SINGLE source of truth
+     * shared by save AND favorite in the forward detail so their file-path resolution can never
+     * diverge. Here both a direct attachment and a single-forward are stored under this message's id.
+     */
+    private fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? =
+        message.singleForwardableAttachment()?.let { it to message.id }
 
     /**
      * Check if attachment needs manual download
@@ -308,7 +372,7 @@ class ChatForwardMessageFragment : Fragment() {
         val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
         val fileName = attachment.fileName ?: ""
         val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        val isFileValid = FileUtil.isFileValid(attachmentPath)
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
         return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
     }
@@ -327,7 +391,7 @@ class ChatForwardMessageFragment : Fragment() {
                 filePath,
                 attachment.authorityId,
                 attachment.key ?: byteArrayOf(),
-                !attachment.isAudioMessage(),
+                !attachment.keepEncryptedAtRest(),
                 autoSave
             )
         )
@@ -442,6 +506,9 @@ class ChatForwardMessageFragment : Fragment() {
                         override fun onDeleteSaved(message: TextChatMessage) {}
                         override fun onRecall(message: TextChatMessage) {}
                         override fun onMoreInfo(message: TextChatMessage) {}
+                        override fun onFavoriteGif(message: TextChatMessage) {
+                            favoriteGif(message)
+                        }
                         override fun onDismiss() {}
                     })
                 }
@@ -567,12 +634,17 @@ class ChatForwardMessageFragment : Fragment() {
 
     private fun openPreview(message: TextChatMessage) {
         val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
-        if (!FileUtil.isFileValid(filePath)) {
+        if (!EncryptedAttachmentAccess.isReadable(filePath)) {
             ToastUtil.showLong(R.string.file_load_error)
             return
         }
+        val attachment = message.attachment
         val list = arrayListOf<LocalMedia>().apply {
-            this.add(LocalMedia.generateLocalMedia(requireContext(), filePath))
+            if (attachment != null) {
+                this.add(AttachmentPreview.localMediaFor(message.id, attachment))
+            } else {
+                this.add(LocalMedia.generateLocalMedia(requireContext(), filePath))
+            }
         }
         PictureSelector.create(requireActivity())
             .openPreview()

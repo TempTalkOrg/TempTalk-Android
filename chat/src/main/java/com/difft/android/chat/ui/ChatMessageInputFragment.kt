@@ -28,6 +28,7 @@ import androidx.fragment.app.Fragment
 import androidx.core.text.getSpans
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -35,6 +36,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
+import com.bumptech.glide.integration.webp.WebpHeaderParser
 import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
@@ -53,6 +55,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.chat.gif.favorite.collectFavoriteEffects
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
@@ -98,6 +101,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.FLAG_GIF
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import difft.android.messageserialization.model.Draft
 import difft.android.messageserialization.model.Forward
@@ -148,6 +153,7 @@ import com.difft.android.chat.mediasend.MediaSendActivityResult
 import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
 import com.difft.android.chat.message.getRelevantAttachment
 import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.QuoteThumbnailBinder
 import com.difft.android.chat.util.isHostActivityAlive
 import com.difft.android.chat.util.ServiceUtil
@@ -179,6 +185,29 @@ class ChatMessageInputFragment : Fragment() {
     private val draftViewModel: DraftViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
+
+    // GIF inline-panel VM, scoped to this input fragment (the full-screen search dialog
+    // owns a separate instance so its results never leak into the inline panel).
+    private val gifPanelViewModel: com.difft.android.chat.gif.GifPanelViewModel by viewModels()
+
+    // Favorites VM (M3), scoped to the parent (chat) fragment so the long-press "add to favorites"
+    // entry in the message list fragment shares the same instance. Init pulls + reconciles.
+    private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels(
+        ownerProducer = { parentFragment ?: requireActivity() }
+    )
+
+    @Inject
+    lateinit var gifSendUseCase: com.difft.android.chat.gif.GifSendUseCase
+
+    /**
+     * Single source of truth for what occupies the ll_chat_actions container.
+     * NONE = collapsed (keyboard or nothing), MORE = more-actions grid, GIF = inline GIF panel.
+     * Drives [syncActionButtons], which is the only place that mutates the left-button
+     * (more / more-close) visibility and switches the container's sub-content.
+     */
+    private enum class PanelMode { NONE, MORE, GIF }
+
+    private var panelMode: PanelMode = PanelMode.NONE
 
     private lateinit var binding: ChatFragmentInputBinding
 
@@ -262,7 +291,8 @@ class ChatMessageInputFragment : Fragment() {
         val filePath: String,
         val fileName: String,
         val mimeType: String,
-        val isAudioMessage: Boolean = false
+        val isAudioMessage: Boolean = false,
+        val isGif: Boolean = false
     )
 
     override fun onCreateView(
@@ -281,6 +311,8 @@ class ChatMessageInputFragment : Fragment() {
         isGroup = chatViewModel.forWhat is For.Group
 
         initView()
+
+        setupGifPanel()
 
         chatViewModel.chatUIData.filterNotNull().onEach { data ->
             chatUIData = data
@@ -586,8 +618,7 @@ class ChatMessageInputFragment : Fragment() {
                     }
                 }
 
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
+                syncActionButtons(PanelMode.NONE)
 
                 updateSubmitButtonView()
             }
@@ -658,7 +689,6 @@ class ChatMessageInputFragment : Fragment() {
             binding.clRightActions.visibility = View.GONE
             binding.buttonVoice.visibility = View.GONE
             binding.buttonKeyboard.visibility = View.GONE
-            binding.buttonMedia.visibility = View.GONE
             if (!TextUtils.isEmpty(message)) {
                 binding.clRightActions.visibility = View.VISIBLE
                 binding.buttonSubmit.visibility = View.VISIBLE
@@ -677,12 +707,10 @@ class ChatMessageInputFragment : Fragment() {
                     binding.buttonSubmit.visibility = View.VISIBLE
                     binding.buttonVoice.visibility = View.GONE
                     binding.buttonKeyboard.visibility = View.GONE
-                    binding.buttonMedia.visibility = View.GONE
                 } else {
                     binding.buttonSubmit.visibility = View.GONE
                     binding.buttonVoice.visibility = View.VISIBLE
                     binding.buttonKeyboard.visibility = View.GONE
-                    binding.buttonMedia.visibility = View.VISIBLE
                 }
             }
         }
@@ -801,7 +829,9 @@ class ChatMessageInputFragment : Fragment() {
             }
         }
 
-        binding.buttonMedia.setOnClickListener {
+        // Photo entry moved into the more-actions grid (M2); same behavior as the former
+        // standalone button_media in the input row.
+        binding.buttonPhoto.setOnClickListener {
             if (!checkCanSpeak()) return@setOnClickListener
             // check permission
             // callback to select picture in onPicturePermissionForMessageResult
@@ -862,10 +892,17 @@ class ChatMessageInputFragment : Fragment() {
             val root = parentFragment?.view as? InsetAwareConstraintLayout
 
             if (binding.llChatActions.isVisible) {
-                // Panel already behind keyboard — just hide keyboard to reveal it
-                ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+                // Panel already on-screen. Switching GIF -> MORE (or refreshing MORE) must ONLY swap
+                // content in place; re-running showPanel would replay the 0->height animation and
+                // make the panel collapse+re-expand (Issue 1). syncActionButtons(MORE) hides the GIF
+                // ComposeView and shows the grid; no re-animation, no re-freeze.
+                if (panelMode == PanelMode.MORE) {
+                    // Already MORE but behind the keyboard -> just hide keyboard to reveal it.
+                    ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+                }
+                syncActionButtons(PanelMode.MORE)
             } else {
-                // Enter panel mode: freeze padding, show panel, hide keyboard
+                // Panel not visible: enter panel mode fresh (animate), freeze padding, hide keyboard.
                 val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
                     ?.isVisible(WindowInsetsCompat.Type.ime()) == true
                 root?.freezeKeyboardPadding()
@@ -873,14 +910,13 @@ class ChatMessageInputFragment : Fragment() {
                 if (keyboardHeight > 0) {
                     binding.llChatActions.minHeight = keyboardHeight
                 }
+                syncActionButtons(PanelMode.MORE)
                 showPanel(animated = !hasKeyboard)
                 chatViewModel.setVoiceVisibility(false)
                 chatViewModel.showChatActions()
                 ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
             }
 
-            binding.buttonMoreActions.visibility = View.GONE
-            binding.buttonMoreActionsClose.visibility = View.VISIBLE
             isVoiceMode = false
             updateSubmitButtonView()
         }
@@ -888,12 +924,16 @@ class ChatMessageInputFragment : Fragment() {
         binding.buttonMoreActionsClose.setOnClickListener {
             // Show keyboard to replace panel — keyboard slides up as overlay,
             // panel dismissed in onKeyboardAnimationEnded (same as tapping EditText)
-            binding.buttonMoreActions.visibility = View.VISIBLE
-            binding.buttonMoreActionsClose.visibility = View.GONE
+            syncActionButtons(PanelMode.NONE)
 
             isVoiceMode = false
             updateSubmitButtonView()
             ViewUtil.focusAndShowKeyboard(binding.edittextInput)
+        }
+
+        binding.buttonGif.setOnClickListener {
+            if (!checkCanSpeak()) return@setOnClickListener
+            toggleGifPanel()
         }
 
         binding.buttonVoice.setOnClickListener {
@@ -911,9 +951,8 @@ class ChatMessageInputFragment : Fragment() {
                 hidePanel {
                     (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
                 }
-
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
+                // Voice is mutually exclusive with any panel: collapse to NONE.
+                syncActionButtons(PanelMode.NONE)
             }
         }
 
@@ -1099,10 +1138,14 @@ class ChatMessageInputFragment : Fragment() {
                 insertTextToEdittext("@")
 
                 hidePanel(animated = false)
+                syncActionButtons(PanelMode.NONE)
                 ViewUtil.focusAndShowKeyboard(binding.edittextInput)
             }
         } else {
-            binding.buttonAt.visibility = View.GONE
+            // Group-only: hide via INVISIBLE (not GONE) so button_at still occupies its grid cell in
+            // the more-actions Flow. This keeps photo/contact/attachment left-aligned at their fixed
+            // grid columns (same positions as in a group) instead of collapsing/redistributing.
+            binding.buttonAt.visibility = View.INVISIBLE
         }
 
         binding.rvAt.apply {
@@ -1372,7 +1415,9 @@ class ChatMessageInputFragment : Fragment() {
 
     private fun createQuoteContent(message: TextChatMessage): String {
         val text = if (message.isAttachmentMessage()) {
-            if (message.attachment?.isImage() == true) {
+            if (message.attachment?.isAnimatedImage() == true) {
+                ResUtils.getString(R.string.chat_message_gif)
+            } else if (message.attachment?.isImage() == true) {
                 ResUtils.getString(R.string.chat_message_image)
             } else if (message.attachment?.isVideo() == true) {
                 ResUtils.getString(R.string.chat_message_video)
@@ -1386,9 +1431,10 @@ class ChatMessageInputFragment : Fragment() {
             if (forwardContext?.forwards?.size == 1) {
                 val forward = forwardContext.forwards?.firstOrNull()
                 if (!forward?.attachments.isNullOrEmpty()) {
-                    // Type-specific label (image/video/audio) for a forwarded media message,
+                    // Type-specific label (gif/image/video/audio) for a forwarded media message,
                     // matching the normal-attachment branch above instead of a generic "[Attachment]".
-                    getString(MediaUtil.quoteTypeLabelRes(forward?.attachments?.firstOrNull()?.contentType))
+                    val att = forward.attachments?.firstOrNull()
+                    getString(MediaUtil.quoteTypeLabelRes(att?.contentType, att?.flags ?: 0))
                 } else {
                     forward?.text
                 }
@@ -1427,14 +1473,16 @@ class ChatMessageInputFragment : Fragment() {
      * - Normal attachment: `getMessageAttachmentFilePath(message.id) + fileName`.
      * - Single-forward: the forwarded file lives under the attachment's `authorityId` directory
      *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment:1774.
-     * Returns null if the resolved file does not exist on disk.
+     * Returns null if the resolved media is not readable on disk (plaintext or ciphertext).
      */
     private fun quoteLocalAttachmentPath(message: TextChatMessage, attachment: Attachment): String? {
         val forwards = message.forwardContext?.forwards
         val dirId = if (forwards?.size == 1) attachment.authorityId.toString() else message.id
         val fileName = attachment.fileName ?: return null
         val path = FileUtil.getMessageAttachmentFilePath(dirId) + fileName
-        return path.takeIf { File(it).exists() }
+        // isReadable (not File.exists): encrypted-at-rest media keeps only the .encrypt on disk; the
+        // loader resolves it to a decrypting content uri via imageGlideModel.
+        return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
     }
 
     /** Clears the Glide load and hides the quote thumbnail ImageView (does NOT touch quoteZone). */
@@ -1499,7 +1547,7 @@ class ChatMessageInputFragment : Fragment() {
                 return@launch
             }
             binding.quoteThumbnail.visibility = View.VISIBLE
-            QuoteThumbnailBinder.loadRoundedThumbnail(binding.quoteThumbnail, File(path))
+            QuoteThumbnailBinder.loadRoundedThumbnail(binding.quoteThumbnail, EncryptedAttachmentAccess.imageGlideModel(path))
         }
     }
 
@@ -2138,7 +2186,8 @@ class ChatMessageInputFragment : Fragment() {
                         "".toByteArray(),
                         "".toByteArray(),
                         info.fileName,
-                        if (info.isAudioMessage) 1 else 0,
+                        // Mutually exclusive: gif marks the GIF bit, voice keeps 1, else 0.
+                        if (info.isGif) FLAG_GIF else if (info.isAudioMessage) 1 else 0,
                         mediaWidthAndHeight.first,
                         mediaWidthAndHeight.second,
                         info.filePath,
@@ -2177,6 +2226,7 @@ class ChatMessageInputFragment : Fragment() {
 
             ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, textMessage))
 
+            // Optimistic add so the sent message renders instantly. Recall/reaction add no bubble.
             if (reactions.isEmpty() && recall == null) {
                 chatViewModel.addOneMessage(textMessage)
             }
@@ -2269,11 +2319,273 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    // ==================== GIF panel (M1) ====================
+
+    /**
+     * Wire the inline GIF panel ComposeView, collect its SendGif effect, and listen for the
+     * full-screen search dialog's result. Called once from onViewCreated.
+     */
+    private fun setupGifPanel() {
+        binding.gifPanelCompose.setViewCompositionStrategy(
+            androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.gifPanelCompose.setContent {
+            com.difft.android.base.ui.theme.DifftTheme {
+                com.difft.android.chat.gif.compose.GifInlinePanel(
+                    viewModel = gifPanelViewModel,
+                    favoriteViewModel = favoriteViewModel,
+                    onOpenSearch = { openGifSearchDialog() },
+                    onPickFavorite = { item -> onFavoritePicked(item) }
+                )
+            }
+        }
+
+        // Inline-panel pick -> send the resolved gif.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                gifPanelViewModel.effect.collect { effect ->
+                    when (effect) {
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.SendGif ->
+                            onGifPicked(effect.uri)
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.ShowError ->
+                            L.w { "[ChatMessageInputFragment] gif inline effect error" }
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.FavoriteRemote ->
+                            // Long-press add-to-favorites (Issue 5): forward the raw item to
+                            // FavoriteViewModel as FromRemote — the placeholder + toast are instant
+                            // and the download + trans-store + CAS PUT run in the background.
+                            favoriteViewModel.dispatch(
+                                com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(
+                                    com.difft.android.chat.gif.favorite.FavoriteSource.FromRemote(
+                                        effect.giphyId, effect.previewUrl, effect.width, effect.height
+                                    )
+                                )
+                            )
+                    }
+                }
+            }
+        }
+
+        // Favorites effects (cap dialog / toast).
+        collectFavoriteEffects(favoriteViewModel)
+
+        // Full-screen search dialog result -> send the picked gif.
+        childFragmentManager.setFragmentResultListener(
+            com.difft.android.chat.gif.GifSearchDialogFragment.RESULT_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val pick = androidx.core.os.BundleCompat.getParcelable(
+                bundle,
+                com.difft.android.chat.gif.GifSearchDialogFragment.RESULT_PICK,
+                com.difft.android.chat.gif.GifSearchDialogFragment.GifPick::class.java
+            ) ?: return@setFragmentResultListener
+            onGifPicked(pick.uri.toUri())
+        }
+    }
+
+    private fun openGifSearchDialog() {
+        if (childFragmentManager.findFragmentByTag(
+                com.difft.android.chat.gif.GifSearchDialogFragment.TAG
+            ) != null
+        ) {
+            return
+        }
+        com.difft.android.chat.gif.GifSearchDialogFragment.newInstance()
+            .show(childFragmentManager, com.difft.android.chat.gif.GifSearchDialogFragment.TAG)
+    }
+
+    /**
+     * Send a resolved gif Uri as an image/webp attachment (v2 sends webp), then collapse the panel.
+     * Width/height ride the SendGif effect for forward use but are not needed here:
+     * the attachment pipeline derives dimensions from the file itself.
+     */
+    private fun onGifPicked(uri: Uri) {
+        // Known-animated GIPHY webp — mark it directly, no header inspection needed.
+        prepareSendAttachmentPush(uri, "image/webp", "gif_${System.currentTimeMillis()}.webp", isGif = true)
+        hideGifPanel()
+    }
+
+    /**
+     * Send a favorited gif. Resolve the decrypted file by fileHash the same way the grid cell does
+     * (cache hit → no network, else download + decrypt) rather than trusting [item.localPath], which
+     * is absent once a row is rebuilt from the server blob (e.g. after a fresh sync / rewrap) — that
+     * was silently throwing and doing nothing.
+     */
+    private fun onFavoritePicked(item: com.difft.android.chat.gif.favorite.FavoriteGifUiItem) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Optimistic placeholder (upload not done yet): send from the preview URL, same as a
+                // search send (works before the ciphertext exists). Confirmed rows decrypt the
+                // encrypted-at-rest attachment via its content:// uri.
+                val sourceUrl = item.sourceUrl
+                val input = if (sourceUrl != null && item.attachmentId == null) {
+                    com.difft.android.chat.gif.GifSendInput.FromUrl(sourceUrl, item.width, item.height)
+                } else {
+                    val contentUri = favoriteViewModel.resolveGif(item.fileHash)
+                    if (contentUri == null) {
+                        L.w { "[ChatMessageInputFragment] favorite pick: resolve failed hash=${item.fileHash}" }
+                        return@launch
+                    }
+                    com.difft.android.chat.gif.GifSendInput.FromFavorite(contentUri.toString(), item.width, item.height)
+                }
+                val uri = gifSendUseCase.resolveSendable(input)
+                onGifPicked(uri)
+            } catch (e: Exception) {
+                L.w { "[ChatMessageInputFragment] favorite pick send failed: ${e.stackTraceToString()}" }
+            }
+        }
+    }
+
+    /**
+     * Toggle the inline GIF panel. Mutually exclusive with the keyboard and the more-actions
+     * grid: shows the GIF ComposeView (hiding the grid Flow) inside the shared ll_chat_actions
+     * container, mirroring the more-actions panel's freeze/showPanel/hideKeyboard handshake.
+     */
+    private fun toggleGifPanel() {
+        if (panelMode == PanelMode.GIF && binding.llChatActions.isVisible) {
+            // GIF panel already open -> return to keyboard.
+            ViewUtil.focusAndShowKeyboard(binding.edittextInput)
+            return
+        }
+
+        // Deferred initial trending load: fire only when the panel is shown, not on VM
+        // creation (conversation open). Idempotent across re-opens.
+        gifPanelViewModel.onPanelShown()
+
+        if (binding.llChatActions.isVisible) {
+            // Panel already on-screen (switching MORE -> GIF): ONLY swap content in place; do not
+            // re-run showPanel (it would replay the 0->height animation and jump). syncActionButtons
+            // (via setActionContentMode) re-applies the GIF ComposeView keyboard-height bound (Issue 1).
+            syncActionButtons(PanelMode.GIF)
+        } else {
+            // Panel not visible: enter GIF panel mode fresh (animate when no keyboard to displace).
+            val root = parentFragment?.view as? InsetAwareConstraintLayout
+            val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            root?.freezeKeyboardPadding()
+            // Use a fallback height when the IME height isn't known yet (keyboard never shown this
+            // session) so the panel is bounded — otherwise the GIF lazy grid fills the whole screen.
+            binding.llChatActions.minHeight = gifPanelHeightPx()
+            syncActionButtons(PanelMode.GIF)
+            showPanel(animated = !hasKeyboard)
+            chatViewModel.setVoiceVisibility(false)
+            ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
+        }
+
+        isVoiceMode = false
+        updateSubmitButtonView()
+    }
+
+    private fun hideGifPanel() {
+        if (panelMode != PanelMode.GIF) return
+        hidePanel {
+            (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+        }
+        // Restore the GIF ComposeView's default height so the shared ll_chat_actions container and
+        // the more-actions grid path are unaffected by the keyboard-height bound set on show.
+        binding.gifPanelCompose.updateLayoutParams {
+            height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        syncActionButtons(PanelMode.NONE)
+    }
+
+    /**
+     * Single point that mutates the left action buttons and the ll_chat_actions sub-content for
+     * the given [mode]. Replaces the previously scattered direct `buttonMoreActions`/
+     * `buttonMoreActionsClose` visibility writes and the M1 `setGifPanelContentVisible` helper,
+     * so the panel state never drifts across the keyboard / list-tap / voice / mention / send
+     * dismiss paths.
+     *
+     * - NONE: collapsed. more->VISIBLE, moreClose->GONE, content reset to the grid (so a fresh
+     *   more-actions tap shows the grid, not a stale GIF panel).
+     * - MORE: more-actions grid. more->GONE, moreClose->VISIBLE, grid content shown.
+     * - GIF:  inline GIF panel. more->VISIBLE, moreClose->GONE so the user can tap "+" to switch
+     *   from the GIF panel to the more-actions grid (the GIF button carries its own highlight).
+     *   Tapping "+" routes through the existing MORE path (onClickMoreActions), which sets
+     *   PanelMode.MORE and swaps the content cleanly.
+     */
+    private fun syncActionButtons(mode: PanelMode) {
+        panelMode = mode
+        when (mode) {
+            PanelMode.NONE -> {
+                binding.buttonMoreActions.visibility = View.VISIBLE
+                binding.buttonMoreActionsClose.visibility = View.GONE
+                setActionContentMode(gif = false)
+            }
+            PanelMode.MORE -> {
+                binding.buttonMoreActions.visibility = View.GONE
+                binding.buttonMoreActionsClose.visibility = View.VISIBLE
+                setActionContentMode(gif = false)
+            }
+            PanelMode.GIF -> {
+                binding.buttonMoreActions.visibility = View.VISIBLE
+                binding.buttonMoreActionsClose.visibility = View.GONE
+                setActionContentMode(gif = true)
+            }
+        }
+    }
+
+    /**
+     * Switch ll_chat_actions content between the GIF panel ([gif] = true) and the more-actions
+     * grid ([gif] = false). The grid is driven by the Flow's referenced ids, so the Flow and all
+     * grid items toggle together against the GIF ComposeView.
+     *
+     * Owns the GIF ComposeView fixed height so an IN-PLACE swap into GIF (from a visible MORE panel)
+     * still bounds the grid to the keyboard slot (Issue 1): on [gif] = true it (re)applies
+     * keyboardHeight minus the container's top+bottom padding (the ComposeView sits inside both, so
+     * the panel total still equals keyboardHeight); on [gif] = false it resets to WRAP_CONTENT so the
+     * more-grid / collapsed paths are unaffected.
+     */
+    /**
+     * Height (px) for the GIF panel. Uses the measured IME height when known; otherwise falls back to
+     * a sane default so the panel's lazy grid is bounded instead of filling the screen (the IME height
+     * is unavailable until the keyboard has been shown at least once this session).
+     */
+    private fun gifPanelHeightPx(): Int {
+        val kb = InsetAwareConstraintLayout.getKeyboardHeight(requireContext())
+        return if (kb > 0) kb else (280 * resources.displayMetrics.density).toInt()
+    }
+
+    private fun setActionContentMode(gif: Boolean) {
+        binding.gifPanelCompose.visibility = if (gif) View.VISIBLE else View.GONE
+        if (gif) {
+            val verticalPadding = binding.llChatActions.paddingTop + binding.llChatActions.paddingBottom
+            binding.gifPanelCompose.updateLayoutParams {
+                // Always bind an explicit height (with fallback when the IME height is unknown) so the
+                // lazy grid is bounded; otherwise the GIF panel fills the whole screen.
+                height = (gifPanelHeightPx() - verticalPadding).coerceAtLeast(0)
+            }
+        } else {
+            binding.gifPanelCompose.updateLayoutParams {
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+        }
+        val gridVisibility = if (gif) View.GONE else View.VISIBLE
+        binding.flow.visibility = gridVisibility
+        binding.buttonPhoto.visibility = gridVisibility
+        binding.buttonContact.visibility = gridVisibility
+        binding.buttonAttachment.visibility = gridVisibility
+        // @-mention is group-only. In the grid, a single chat uses INVISIBLE (not GONE) so button_at
+        // still holds its Flow grid cell and the other entries stay at fixed columns; GIF mode hides
+        // the whole grid so GONE is fine there.
+        binding.buttonAt.visibility = when {
+            gif -> View.GONE
+            isGroup -> View.VISIBLE
+            else -> View.INVISIBLE
+        }
+    }
+
+    /**
+     * @param isGif set when the caller already knows the attachment is an animated gif (e.g. the
+     * GIPHY picker). When false and the mime is an image type, the just-copied plaintext file header
+     * is inspected off the main thread to auto-detect an animated gif/webp, so gallery/camera/sticker
+     * image sends carry the GIF flag too.
+     */
     private fun prepareSendAttachmentPush(
         attachmentUri: Uri?,
         mimeType: String,
         originalFileName: String? = null,
-        isAudioMessage: Boolean = false
+        isAudioMessage: Boolean = false,
+        isGif: Boolean = false
     ) {
         attachmentUri ?: return
 
@@ -2284,10 +2596,18 @@ class ChatMessageInputFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val isAnimatedImage = withContext(Dispatchers.IO) {
                     FileUtils.copy(attachmentUri.path, filePath)
+                    // Known-gif callers skip inspection; otherwise auto-detect on image sends only.
+                    if (isGif) true
+                    else if (MediaUtil.isImageType(mimeType)) detectAnimatedImage(filePath, mimeType)
+                    else false
                 }
                 FileUtil.deleteTempFile(FileUtils.getFileName(attachmentUri.path))
+                // Our gif send-cache staging file holds decrypted plaintext; delete it once copied into
+                // the encrypted attachment dir so it never lingers in cache (deleteTempFile above does
+                // not cover the cacheDir/gif_send dir).
+                attachmentUri.path?.takeIf { it.contains("/gif_send/") }?.let { runCatching { File(it).delete() } }
                 sendTextPush(
                     timeStamp = timeStamp,
                     messageId = messageId,
@@ -2295,7 +2615,8 @@ class ChatMessageInputFragment : Fragment() {
                         filePath = filePath,
                         fileName = fileName,
                         mimeType = mimeType,
-                        isAudioMessage = isAudioMessage
+                        isAudioMessage = isAudioMessage,
+                        isGif = isAnimatedImage
                     )
                 )
             } catch (e: CancellationException) {
@@ -2303,6 +2624,36 @@ class ChatMessageInputFragment : Fragment() {
             } catch (e: Exception) {
                 L.w { "[ChatMessageInputFragment] prepareSendAttachmentPush error: ${e.stackTraceToString()}" }
             }
+        }
+    }
+
+    /**
+     * Reads only the file header (never the whole file) to decide whether an outgoing image is an
+     * animated gif/webp. `image/gif` is animated by convention; webp is probed with [WebpHeaderParser].
+     * MUST be called off the main thread. Detection failures default to false (never blocks the send).
+     */
+    private fun detectAnimatedImage(filePath: String, mimeType: String): Boolean {
+        if (mimeType.trim() == MediaUtil.IMAGE_GIF) return true
+        return try {
+            val header = ByteArray(WebpHeaderParser.MAX_WEBP_HEADER_SIZE)
+            // read() may return fewer bytes than requested even mid-stream; a short first read could
+            // truncate the header before the VP8X animation flag and misclassify an animated webp as
+            // static. Loop until the buffer is full or EOF.
+            val read = File(filePath).inputStream().use { input ->
+                var off = 0
+                while (off < header.size) {
+                    val n = input.read(header, off, header.size - off)
+                    if (n < 0) break
+                    off += n
+                }
+                off
+            }
+            if (read <= 0) return false
+            val bytes = if (read == header.size) header else header.copyOf(read)
+            WebpHeaderParser.isAnimatedWebpType(WebpHeaderParser.getType(bytes))
+        } catch (e: Exception) {
+            L.w { "[ChatMessageInputFragment] detectAnimatedImage failed mime=$mimeType: ${e.stackTraceToString()}" }
+            false
         }
     }
 
@@ -2738,8 +3089,8 @@ class ChatMessageInputFragment : Fragment() {
                 if (!panelVisible) {
                     hidePanel(animated = false)
                 }
-                binding.buttonMoreActions.visibility = View.VISIBLE
-                binding.buttonMoreActionsClose.visibility = View.GONE
+                // Keyboard is mutually exclusive with any panel (MORE or GIF): collapse to NONE.
+                syncActionButtons(PanelMode.NONE)
                 updateSubmitButtonView()
             }
             override fun onKeyboardHidden() {
@@ -2752,6 +3103,9 @@ class ChatMessageInputFragment : Fragment() {
                 if (isKeyboardVisible && panelVisible) {
                     hidePanel(animated = false)
                     insetLayout.releaseKeyboardPaddingFreeze()
+                    // Keyboard replaced the panel: reset content to the grid so the next
+                    // more-actions tap shows the grid, not a stale GIF panel.
+                    syncActionButtons(PanelMode.NONE)
                 }
             }
         }.also { insetLayout.addKeyboardStateListener(it) }

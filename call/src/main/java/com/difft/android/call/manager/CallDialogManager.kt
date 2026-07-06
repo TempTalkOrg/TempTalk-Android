@@ -23,6 +23,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.DialogActionType
+import io.livekit.android.room.participant.RemoteParticipant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,7 +76,10 @@ class CallDialogManager(
 
         // 创建新对话框
         isShowCallingEndReminder = true
-        val title = if (viewModel.room.remoteParticipants.isEmpty()) {
+        // Use the participants StateFlow (local + remotes) instead of the fail-loud room
+        // getter: this dialog can be shown during teardown, where room is already released.
+        val hasRemote = viewModel.participants.value.any { it is RemoteParticipant }
+        val title = if (!hasRemote) {
             activity.getString(R.string.call_single_person_timeout_reminder)
         } else {
             activity.getString(R.string.call_all_mute_timeout_reminder)
@@ -97,7 +101,7 @@ class CallDialogManager(
             onConfirm = {
                 viewModel.resetNoBodySpeakCheck()
                 if (viewModel.callType.value == CallType.ONE_ON_ONE.type) {
-                    viewModel.room.remoteParticipants.values.firstOrNull()?.let { participant ->
+                    viewModel.participants.value.firstOrNull { it is RemoteParticipant }?.let { participant ->
                         viewModel.rtm.sendContinueCallRtmMessage(participant)
                     }
                 }

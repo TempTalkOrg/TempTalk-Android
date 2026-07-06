@@ -1,6 +1,8 @@
 package com.difft.android.network
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.CertValidationFailureDetector
+import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
@@ -28,8 +30,14 @@ import java.io.IOException
  * 2. Host failover - Switch to backup hosts when request fails (response code not in [100, 499])
  * 3. Response handling - Handle 204 No Content, transform non-success responses
  * 4. Error reporting - Record network errors to Firebase Crashlytics
+ *
+ * @param pinnedConnection True when this client pins trust to the embedded chative CA
+ * (useCustomCa). Only failures on such channels are treated as a possible MITM attack;
+ * system-CA clients (public CDN/OSS) can legitimately hit certificate errors.
  */
-class HttpClientInterceptor : Interceptor {
+class HttpClientInterceptor(
+    private val pinnedConnection: Boolean = true
+) : Interceptor {
 
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -183,6 +191,11 @@ class HttpClientInterceptor : Interceptor {
     }
 
     private fun handleException(e: Exception, request: Request?) {
+        // On a pinned channel a certificate validation failure is a possible MITM attack.
+        // Detection is centralized here because every catch path funnels through handleException.
+        if (pinnedConnection && CertValidationFailureDetector.isCertValidationFailure(e)) {
+            NetworkRiskNotifier.onCertValidationFailed("http:${request?.url?.host ?: "unknown"}")
+        }
         if (needHandleException(e)) {
             recordNetworkException(e, request)
         }

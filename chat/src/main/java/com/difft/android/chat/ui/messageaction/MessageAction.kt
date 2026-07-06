@@ -32,6 +32,7 @@ data class MessageAction(
         DELETE_SAVED,
         RECALL,
         MORE_INFO,
+        FAVORITE_GIF,  // Add a gif message to GIF favorites (M3)
         
         // Special
         MORE,  // Opens more actions sheet
@@ -121,6 +122,12 @@ data class MessageAction(
             type = Type.MORE_INFO,
             iconRes = R.drawable.chat_message_action_more,
             labelRes = R.string.chat_message_action_more_info
+        )
+
+        fun favoriteGif() = MessageAction(
+            type = Type.FAVORITE_GIF,
+            iconRes = R.drawable.chat_message_action_favorite_star,
+            labelRes = R.string.gif_favorites_add_full
         )
         
         fun more() = MessageAction(

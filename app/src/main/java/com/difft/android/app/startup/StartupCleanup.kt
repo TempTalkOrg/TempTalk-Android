@@ -3,6 +3,7 @@ package com.difft.android.app.startup
 import android.app.Application
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.dependencies.ApplicationDependencyProvider
 import dagger.hilt.android.EntryPointAccessors
 
@@ -81,4 +82,18 @@ fun sweepStaleSendingMessages(app: Application) {
         .fromApplication(app, ApplicationDependencyProvider.DepsEntryPoint::class.java)
         .wcdbJobStorage()
     wcdbJobStorage.sweepStaleSendingMessages()
+}
+
+/**
+ * Cold-start fallback sweep for the plaintext image temps PictureSelector's pick → crop → compress
+ * pipeline leaves behind: UCrop output in `files/Pictures/CROP_*.jpg` and Luban compression output
+ * in `cache/luban_disk_cache/`. Avatar flows already delete their own crop output the moment picking
+ * finishes ([AvatarPickTempCleaner.deleteCropTemp]); this sweep clears the compressed copies (only
+ * removable once the flow is done) plus any residue left by a crash mid-flow or an older build.
+ *
+ * Called from `AppStartup.addNonBlocking`, which dispatches on `Dispatchers.IO`. Non-fatal and
+ * self-guarded — leftover files cost only a few KB and never affect correctness.
+ */
+fun sweepAvatarCropTemp(ctx: Context) {
+    AvatarPickTempCleaner.sweepPickTempDirs(ctx)
 }

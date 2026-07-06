@@ -50,6 +50,7 @@ import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.TranslateStatus
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -138,6 +139,10 @@ fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
     // Weak-snapshot fallback: keeps message rendering from degrading to a bare UID after the peer deregisters.
     return pendingRemovalContact.getFirstObject(DBPendingRemovalContactModel.uid.eq(id))?.deserializeSnapshot()
 }
+
+/** Fetch a single message row by id. */
+fun WCDB.getMessageById(id: String): MessageModel? =
+    message.getFirstObject(DBMessageModel.id.eq(id))
 
 fun WCDB.getContactorsFromAllTable(ids: List<String>, preferredGid: String? = null): List<ContactorModel> {
     val foundContactors = contactor.getAllObjects(DBContactorModel.id.`in`(ids))
@@ -617,11 +622,16 @@ private fun WCDB.putMessage(message: Message, roomReadPosition: Long = 0L) {
 }
 
 private fun WCDB.putTextMessage(message: TextMessage, roomReadPosition: Long = 0L) {
-    val messageModel = convertToMessageModel(message, roomReadPosition)
+    val messageModel = insertChildrenAndBuildMessageModel(message, roomReadPosition)
     this.message.insertObject(messageModel)
 }
 
-fun WCDB.convertToMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
+/**
+ * Builds the [MessageModel] AND inserts all its child-table rows (attachments/quote/forward/
+ * mentions/reactions/sharedContact/...) as a side effect. Does NOT insert the message row — go
+ * through [putMessageIfNotExists] so the id existence-check prevents duplicate children (#997).
+ */
+fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPosition: Long = 0L): MessageModel {
     val quoteDatabaseId = message.quote?.let { quote ->
         val quoteModel = QuoteModel().apply {
             id = quote.id
@@ -1061,7 +1071,9 @@ fun MessageModel.previewContent(): String {
     } else {
         if (isAttachmentMessage()) {
             val attachment = attachment()
-            if (attachment?.isImage() == true) {
+            if (attachment?.isAnimatedImage() == true) {
+                senderName + ResUtils.getString(R.string.chat_message_gif)
+            } else if (attachment?.isImage() == true) {
                 senderName + ResUtils.getString(R.string.chat_message_image)
             } else if (attachment?.isVideo() == true) {
                 senderName + ResUtils.getString(R.string.chat_message_video)

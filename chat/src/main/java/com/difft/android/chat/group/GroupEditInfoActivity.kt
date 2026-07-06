@@ -11,6 +11,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.crypto.GroupCrypto
 import com.difft.android.chat.crypto.GroupCryptoRepo
 import com.difft.android.chat.databinding.ChatActivityGroupEditInfoBinding
@@ -204,6 +205,8 @@ class GroupEditInfoActivity : BaseActivity() {
                 if (response.status == 0) {
                     binding.groupAvatar.setAvatar(path) // immediate feedback
                     groupUtil.fetchAndSaveSingleGroupInfo(groupId, true)
+                    // Uploaded + server avatar rendered: drop the plaintext compress/crop temp.
+                    AvatarPickTempCleaner.deleteUploadedTemp(this@GroupEditInfoActivity, path)
                 } else {
                     L.w { "[GroupEditInfoActivity] avatar change failed: status=${response.status}, reason=${response.reason}" }
                     showErrorToast(response.reason)
@@ -280,6 +283,8 @@ class GroupEditInfoActivity : BaseActivity() {
                 override fun onResult(result: ArrayList<LocalMedia>) {
                     val media = result.firstOrNull() ?: return
                     val path = media.compressPath ?: media.realPath ?: return
+                    // Upload uses compressPath/realPath; drop the plaintext crop output immediately.
+                    AvatarPickTempCleaner.deleteCropTemp(media, keepPath = path)
                     onAvatarPicked(path)
                 }
 

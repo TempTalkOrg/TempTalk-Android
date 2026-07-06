@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Content layout for GifSearchDialogFragment, hosted in BaseBottomSheetDialogFragment's default
+     container (drag handle + 16dp rounded top). A single ComposeView renders GifSearchScreen
+     (search row + grid). (Issue 3) -->
+<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/gif_search_compose"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

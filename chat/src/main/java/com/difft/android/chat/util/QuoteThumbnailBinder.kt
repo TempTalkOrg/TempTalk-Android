@@ -3,17 +3,20 @@ package com.difft.android.chat.util
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.Outline
+import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.widget.ImageView
 import androidx.annotation.DrawableRes
 import com.bumptech.glide.Glide
-import com.bumptech.glide.integration.webp.decoder.WebpDrawable
-import com.bumptech.glide.integration.webp.decoder.WebpDrawableTransformation
-import com.bumptech.glide.load.MultiTransformation
-import com.bumptech.glide.load.resource.bitmap.CenterCrop
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.difft.android.base.utils.dp
-import com.difft.android.chat.R
 
 /**
  * Shared render slice for quote media previews, consumed by both the message-list ViewHolder (⑤)
@@ -22,6 +25,18 @@ import com.difft.android.chat.R
  * DB reverse-lookup (list-only) intentionally stay in their respective owners.
  */
 object QuoteThumbnailBinder {
+
+    /**
+     * View-level outline clip that rounds the thumbnail corners (4dp) independently of the Glide
+     * decode/cache path — so it rounds ANY drawable (static bitmap / animated WebP / GifDrawable)
+     * without a BitmapTransformation, which cannot be applied to a WebpDrawable. Mirrors
+     * ImageAndVideoMessageView so quote and bubble share one corner mechanism (no duplicate logic).
+     */
+    private val roundedCornerOutline = object : ViewOutlineProvider() {
+        override fun getOutline(view: View, outline: Outline) {
+            outline.setRoundRect(0, 0, view.width, view.height, 4.dp.toFloat())
+        }
+    }
 
     /**
      * Loads [source] into [imageView] as a 4dp rounded center-crop thumbnail. No-ops if the host
@@ -33,22 +48,33 @@ object QuoteThumbnailBinder {
     fun loadRoundedThumbnail(imageView: ImageView, source: Any) {
         if (!imageView.isHostActivityAlive()) return
         imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-        // Shared crop+corner spec applied to BOTH static bitmaps (.transform) AND animated WebP
-        // (.optionalTransform). Without the WebpDrawable branch, a BitmapTransformation on an
-        // animated WebP throws "Unable to convert WebpDrawable to a Bitmap" → the load fails and
-        // falls back to .error(ic_file) rendered at CENTER_CROP (an oversized file icon). Mirrors
-        // ImageAndVideoMessageView.
-        val transform = MultiTransformation(CenterCrop(), RoundedCorners(4.dp))
+        // Corners come from a view-level outline clip (see [roundedCornerOutline]), NOT a Glide
+        // transform — so no BitmapTransformation is applied to any drawable, and animated WebP plays
+        // without the "Unable to convert WebpDrawable to a Bitmap" freeze. Crop stays on CENTER_CROP.
+        imageView.outlineProvider = roundedCornerOutline
+        imageView.clipToOutline = true
         Glide.with(imageView)
             .load(source)
-            .transform(transform)
-            .optionalTransform(WebpDrawable::class.java, WebpDrawableTransformation(transform))
-            .error(R.drawable.ic_file)
+            // A content Uri here is the decrypting attachment provider — never let Glide persist the
+            // decrypted source/result to its disk cache (would defeat encrypted-at-rest storage).
+            .apply { if (source is Uri) diskCacheStrategy(DiskCacheStrategy.NONE) }
+            // This view is used ONLY for image/video quotes. On failure (e.g. a self-sent attachment
+            // whose plaintext was deleted post-upload before the .encrypt was resolvable, or a decode
+            // error) do NOT fall back to a file icon: it is semantically wrong AND, at CENTER_CROP,
+            // rendered oversized. Hide the thumbnail so the quote degrades cleanly to text-only.
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
+                    imageView.visibility = View.GONE
+                    return true // handled — suppress the default error drawable
+                }
+
+                override fun onResourceReady(resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean): Boolean = false
+            })
             .into(imageView)
     }
 
     /**
-     * Sets a static type icon (e.g. mic for voice, [R.drawable.ic_file] for file/other) on
+     * Sets a static type icon (e.g. mic for voice, ic_file for file/other) on
      * [imageView] at CENTER scale. Clears any pending Glide load first so a recycled view does not
      * flash a stale thumbnail before the icon resolves.
      *
@@ -59,6 +85,9 @@ object QuoteThumbnailBinder {
      */
     fun setTypeIcon(imageView: ImageView, @DrawableRes resId: Int) {
         if (imageView.isHostActivityAlive()) Glide.with(imageView).clear(imageView)
+        // Reset the outline clip a prior thumbnail bind may have left on this recycled view: type
+        // icons render at CENTER with no rounding (matching the pre-view-clip behavior).
+        imageView.clipToOutline = false
         imageView.scaleType = ImageView.ScaleType.CENTER
         imageView.setImageResource(resId)
     }

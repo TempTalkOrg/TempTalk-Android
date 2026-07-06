@@ -50,6 +50,8 @@ import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.media.LegacyPlaintextAttachmentMigration
+import com.difft.android.chat.media.LegacyPlaintextAvatarCleanup
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupChatFragment
 import com.difft.android.chat.group.GroupUtil
@@ -500,6 +502,10 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         lifecycleScope.launch(Dispatchers.IO) {
             FileUtil.clearDraftAttachmentsDirectory()
             FileUtil.deleteMessageAttachmentEmptyDirectories()
+            // One-time purge of legacy plaintext media (re-encrypt to .encrypt, delete plaintext).
+            LegacyPlaintextAttachmentMigration.runIfNeeded()
+            // One-time purge of legacy plaintext avatar cache (delete; re-downloads encrypted, docs §15).
+            LegacyPlaintextAvatarCleanup.runIfNeeded()
         }
     }
 
@@ -980,14 +986,50 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         val fileName = "shared_file_${System.currentTimeMillis()}.$extension"
         val file = File(cacheDir, fileName)
 
-        contentResolver.openInputStream(uri)?.use { inputStream ->
-            file.outputStream().use { outputStream ->
-                inputStream.copyTo(outputStream)
-            }
+        // Copy the bytes, capturing the exact failure so "unsupported file type" reports have a root
+        // cause in logcat. Try openInputStream first, then fall back to openFileDescriptor — some
+        // providers (e.g. our decrypting EncryptedAttachmentProvider, OEM file managers) succeed on
+        // one path but not the other.
+        if (!copyUriContent(uri, file)) {
+            file.delete()
+            throw java.io.FileNotFoundException("[IndexActivity] no readable stream for shared uri=${uri.redactedForLog()} (mime=$mimeType)")
         }
 
         return file
     }
+
+    private fun copyUriContent(uri: Uri, target: File): Boolean {
+        runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { input.copyTo(it) }
+                return true
+            }
+            L.w { "[IndexActivity] openInputStream returned null for ${uri.redactedForLog()}" }
+        }.onFailure {
+            L.w { "[IndexActivity] openInputStream failed for ${uri.redactedForLog()}: ${it.stackTraceToString()}" }
+        }
+
+        runCatching {
+            contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).use { input ->
+                    target.outputStream().use { input.copyTo(it) }
+                }
+                return true
+            }
+        }.onFailure {
+            L.e { "[IndexActivity] openFileDescriptor failed for ${uri.redactedForLog()}: ${it.stackTraceToString()}" }
+        }
+
+        return false
+    }
+
+    /**
+     * Redacts a shared uri for logging: keep only scheme + authority (the provider identity, needed to
+     * diagnose "unsupported file type" reports). The path/query segments are dropped because they may
+     * carry a full attachment filename (our `content://<pkg>.encryptedattachment/m/<id>/<name>`) or
+     * another app's identifiers — both blacklisted by the logging standard for persisted logs.
+     */
+    private fun Uri.redactedForLog(): String = "$scheme://$authority/…"
 
     private fun initWCDB() {
         lifecycleScope.launch(Dispatchers.IO) {

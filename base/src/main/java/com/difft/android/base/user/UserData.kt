@@ -44,6 +44,13 @@ data class UserData(
     var proxyShareLink: String? = null, // self-hosted proxy share link (ytp://config?d=...). Contains TURN secret when set.
     var proxyEnabled: Boolean = false,   // self-hosted proxy on/off toggle. Orthogonal to whether proxyShareLink parses successfully.
     var proxyProtectCallIp: Boolean = false, // route call/meeting network through the proxy only when ON. Gated by proxyEnabled; meaningless while the proxy is off.
+    // Favorites (GIF) account-level secret. favKey decrypts the server-held favorites blob, so it
+    // is account-level secret material (like baseAuth/identity keys) and lives in the encrypted
+    // secure_user half — decoupled from WCDB health, so a DB corruption-recovery reset does not
+    // lose it (the blob is re-pullable from the server with the surviving key).
+    var favKey: String? = null,          // Base64 NO_WRAP of the raw 32-byte AES-256 favKey
+    var favKeyId: String? = null,        // favKey fingerprint (presence = "a key is stored")
+    var favKeyVersion: Int = 0,          // monotonic version gate (server-assigned)
 
     // ═══════════════════════════════════════════════════════════════
     // [app_state.preferences_pb] Plain key-value, grouped by domain

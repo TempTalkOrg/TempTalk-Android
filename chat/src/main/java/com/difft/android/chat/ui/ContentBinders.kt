@@ -27,6 +27,7 @@ import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.chat.widget.ImageAndVideoMessageView
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.widget.VoiceMessageView
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
@@ -301,11 +302,9 @@ object AttachContentBinder : ContentBinder {
         if (isLongText) {
             val fileName = attachment?.fileName ?: ""
             longTextPath = FileUtil.getMessageAttachmentFilePath(textMessage.id) + fileName
-            val isCurrentDeviceSend = textMessage.isMine && textMessage.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
-            val isFileValid = FileUtil.isFileValid(longTextPath)
-            val progress = textMessage.getAttachmentProgress()
-
-            isLongTextDownloaded = isFileValid && (attachment?.status == AttachmentStatus.SUCCESS.code || progress == 100 || isCurrentDeviceSend)
+            // A complete ".encrypt" alone counts as downloaded (see longTextReady); the status/progress
+            // signal only gates legacy plaintext — forwarded long text never flips status to SUCCESS.
+            isLongTextDownloaded = longTextReady(textMessage, longTextPath)
 
             if (isLongTextDownloaded) {
                 attachContentView.visibility = View.GONE
@@ -347,7 +346,10 @@ object AttachContentBinder : ContentBinder {
                     // Long-text body is only a 2KB preview — always expose Read More (aligns with iOS/Mac).
                     alwaysShowReadMore = isLongText
                 ) {
-                    if (isLongTextDownloaded && longTextPath != null) {
+                    // Recompute readiness at click time (not bind time): forwarded long text
+                    // auto-downloads on first view and the row may not rebind, so a bind-time value
+                    // would stay stale and keep showing the 2KB preview even after ".encrypt" lands.
+                    if (longTextReady(textMessage, longTextPath)) {
                         TextTruncationUtil.showFullTextDialogFromFile(
                             textView,
                             longTextPath,
@@ -393,6 +395,21 @@ object AttachContentBinder : ContentBinder {
             coverView.setOnClickListener(null)
             coverView.setOnLongClickListener(null)
         }
+    }
+
+    /**
+     * Long-text "fully downloaded" gate. A complete, MAC-verified ".encrypt" alone counts as ready
+     * (see [EncryptedAttachmentAccess.isLongTextReady]); the status/progress/own-send signal only
+     * guards LEGACY PLAINTEXT files, since forwarded long text keeps its attachment inside the
+     * serialized forwardContext and never flips its status to SUCCESS.
+     */
+    private fun longTextReady(message: TextChatMessage, longTextPath: String?): Boolean {
+        if (longTextPath == null) return false
+        val progress = message.getAttachmentProgress()
+        val ownDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+        val plaintextStatusReady = message.attachment?.status == AttachmentStatus.SUCCESS.code ||
+            progress == 100 || ownDeviceSend
+        return EncryptedAttachmentAccess.isLongTextReady(longTextPath, plaintextStatusReady)
     }
 
 }

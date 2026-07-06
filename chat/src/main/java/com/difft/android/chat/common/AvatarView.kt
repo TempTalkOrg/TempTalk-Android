@@ -9,10 +9,14 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.getLifecycleOwner
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
+import com.bumptech.glide.signature.ObjectKey
+import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.media.AvatarEncryptedProvider
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -183,9 +187,18 @@ class AvatarView @JvmOverloads constructor(
      */
     private fun loadImageWithGlide(file: File, url: String, key: String?, targetSizePx: Int?) {
         // Use the View (this) for Glide lifecycle binding instead of context
-        // This ensures proper lifecycle management especially in Compose AndroidView
+        // This ensures proper lifecycle management especially in Compose AndroidView.
+        // Load through the decrypting content:// provider (plaintext never on disk, docs §15). A
+        // stable uri key + lastModified signature keeps Glide's memory / encrypted-RESOURCE caches
+        // working and invalidates a re-downloaded same-name file.
+        val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_AVATAR, file.name)
         val requestBuilder = Glide.with(this)
-            .load(file)
+            .load(uri)
+            .signature(ObjectKey(file.lastModified()))
+            .diskCacheStrategy(
+                if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                else DiskCacheStrategy.NONE
+            )
             .listener(object : RequestListener<Drawable> {
                 override fun onLoadFailed(
                     e: GlideException?,
@@ -238,8 +251,14 @@ class AvatarView @JvmOverloads constructor(
                 AvatarUtil.ensureCached(context.applicationContext, url, key ?: "")
             }
             if (downloadedFile != null && currentLoadingUrl == url && isAttachedToWindow) {
+                val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_AVATAR, downloadedFile.name)
                 Glide.with(this@AvatarView)
-                    .load(downloadedFile)
+                    .load(uri)
+                    .signature(ObjectKey(downloadedFile.lastModified()))
+                    .diskCacheStrategy(
+                        if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                        else DiskCacheStrategy.NONE
+                    )
                     .into(binding.ivAvatar)
                 binding.ivAvatar.visibility = VISIBLE
                 crossfadeToImage()

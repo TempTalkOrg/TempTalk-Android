@@ -2,6 +2,7 @@ package com.difft.android.network
 
 import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.user.Data
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.proxy.ProxyConfigProvider
@@ -12,10 +13,6 @@ import javax.inject.Inject
 
 private interface UrlProtocol {
     val defaultHost: String
-    val default: String
-    val chat: String
-    val call: String
-    val fileSharing: String
     val avatarStorage: String
     val inviteGroupUrl: String
     val installationGuideUrl: String
@@ -24,12 +21,6 @@ private interface UrlProtocol {
 
 private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val defaultHost = "chat.chative.im"
-    private val defaultChatUrl = "https://$defaultHost"
-
-    override val default: String = defaultChatUrl
-    override val chat: String = "$defaultChatUrl/chat/"
-    override val call: String = "$defaultChatUrl/call/"
-    override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
     override val inviteGroupUrl: String = "https://quicall.app/"
     override val installationGuideUrl: String = "https://quicall.app"
@@ -38,12 +29,6 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
 
 private class ChativeDevelopmentUrlProtocol : UrlProtocol {
     override val defaultHost = "chat.test.chative.im"
-    private val defaultChatUrl = "https://$defaultHost"
-
-    override val default: String = defaultChatUrl
-    override val chat: String = "$defaultChatUrl/chat/"
-    override val call: String = "$defaultChatUrl/call/"
-    override val fileSharing: String = "$defaultChatUrl/fileshare/"
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
     override val inviteGroupUrl: String = "https://quicall.app/"
     override val installationGuideUrl: String = "https://quicall.app"
@@ -67,9 +52,20 @@ class UrlManager @Inject constructor(
     @Volatile
     private var lastConnectedWsHost: String? = null
 
-    private val newGlobalConfig by lazy {
-        globalConfigsManager.get().getNewGlobalConfigs()
-    }
+    /**
+     * Reads the live global config [Data] fresh on every call (NOT cached in a
+     * `by lazy`). The previous `by lazy` was a `@Singleton`-scoped freeze: it
+     * pinned service paths to the config snapshot present at DI time, so a live
+     * config refresh would move `getBestHost()` (real-time) while paths stayed
+     * frozen → `https://{liveHost}{frozenPath}/` could route 404. Reading fresh
+     * removes that permanent freeze so the path tracks the live config. It does
+     * NOT make host (from the speed-test coordinator) and path (from config) a
+     * single atomic read — a config push landing between the two reads inside
+     * [serviceUrl] can transiently pair a new host with an old path, self-correcting
+     * on the next access. The underlying manager caches by config identity, so
+     * this stays O(1) in steady state.
+     */
+    private fun configData(): Data? = globalConfigsManager.get().getNewGlobalConfigs()?.data
 
     /**
      * Chat-module proxy tunnel domains (`proxy.tunnelDomains.chat`, live-preferred
@@ -134,11 +130,15 @@ class UrlManager @Inject constructor(
     // embedded bundle would only risk a proxy-only breakage if the server ever
     // changes a path. Only the HOST is forced to the embedded set (see getBestHost).
 
-    private fun chatPath(): String = newGlobalConfig?.data?.srvs?.chat ?: "/chat"
-
-    private fun callPath(): String = newGlobalConfig?.data?.srvs?.call ?: "/call"
-
-    private fun fileSharingPath(): String = newGlobalConfig?.data?.srvs?.fileSharing ?: "/fileshare"
+    /**
+     * Resolves a service path from the live config via [ServiceUrlResolver.resolvePath]
+     * (`services` + `domains` model), falling back to the [default] end string when
+     * unresolved or blank. Path-only — independent of host-label resolution, so a
+     * server-configured path is honored even if its domains don't resolve. 2-tier
+     * (resolver → default); the legacy `srvs` is no longer read here.
+     */
+    private fun servicePath(name: String, default: String): String =
+        ServiceUrlResolver.resolvePath(configData(), name)?.takeIf { it.isNotBlank() } ?: default
 
     /**
      * Marks a host as unavailable for this session.
@@ -165,26 +165,33 @@ class UrlManager @Inject constructor(
             return "https://$host/"
         }
 
+    /**
+     * Builds a service base URL `https://{getBestHost()}{servicePath}/`. Shared by
+     * the chat/call/fileSharing getters so host selection + concatenation live in
+     * one place (the getters differ only by service name + default path).
+     */
+    private fun serviceUrl(name: String, defaultPath: String): String =
+        "https://${getBestHost()}${servicePath(name, defaultPath)}/"
+
     val chat: String
-        get() {
-            val host = getBestHost()
-            val path = chatPath()
-            return "https://$host$path/"
-        }
+        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_CHAT, "/chat")
 
     val call: String
-        get() {
-            val host = getBestHost()
-            val path = callPath()
-            return "https://$host$path/"
-        }
+        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_CALL, "/call")
 
     val fileSharing: String
-        get() {
-            val host = getBestHost()
-            val path = fileSharingPath()
-            return "https://$host$path/"
-        }
+        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_FILE_SHARING, "/fileshare")
+
+    /**
+     * GIF proxy base URL. GIF trending/search ride the server `/gifs/` proxy (masks
+     * client IP / search terms from GIPHY). `gifs` is a first-class entry in the live
+     * `services` config (path `/gifs`, sharing the chat domain), so it resolves through
+     * [serviceUrl] like chat/call/fileSharing: host from the speed-ranked/proxy host,
+     * path from live config (default `/gifs`). Endpoints declare relative paths
+     * (`v1/gifs/trending`) that resolve under this base.
+     */
+    val gifs: String
+        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_GIFS, "/gifs")
 
     // ==================== WebSocket ====================
 
@@ -195,7 +202,7 @@ class UrlManager @Inject constructor(
     fun getChatWebsocketUrl(): String {
         val chatHost = getBestHost()
         lastConnectedWsHost = chatHost
-        val path = chatPath()
+        val path = servicePath(ServiceUrlResolver.SERVICE_NAME_CHAT, "/chat")
         return "wss://$chatHost$path/v1/websocket/"
     }
 
@@ -211,7 +218,7 @@ class UrlManager @Inject constructor(
     // ==================== Other ====================
 
     private val avatarStorage
-        get() = newGlobalConfig?.data?.avatarFile ?: protocol.avatarStorage
+        get() = configData()?.avatarFile ?: protocol.avatarStorage
 
     val inviteGroupUrl
         get() = protocol.inviteGroupUrl

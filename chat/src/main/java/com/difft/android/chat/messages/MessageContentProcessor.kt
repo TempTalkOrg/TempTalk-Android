@@ -65,6 +65,8 @@ import org.difft.app.database.wcdb
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.MessageNotificationUtil
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -603,9 +605,10 @@ class MessageContentProcessor @Inject constructor(
             var text = quoteMessage.text
             if (TextUtils.isEmpty(quoteMessage.text)) {
                 // No quote body (typical for media quotes from iOS/Mac) → show a precise type label
-                // (image/video/audio) instead of a generic "[Attachment]", matching the conversation
+                // (gif/image/video/audio) instead of a generic "[Attachment]", matching the conversation
                 // preview (MessageModel.previewContent).
-                text = context.getString(MediaUtil.quoteTypeLabelRes(quotedAttachments.firstOrNull()?.contentType))
+                val qa = quotedAttachments.firstOrNull()
+                text = context.getString(MediaUtil.quoteTypeLabelRes(qa?.contentType, qa?.flags ?: 0))
             }
             quote = Quote(quoteMessage.id, quoteMessage.author, text, quotedAttachments.ifEmpty { null })
         }

@@ -18,7 +18,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import cn.bingoogolapple.qrcode.zxing.QRCodeEncoder
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.dp
@@ -32,6 +31,8 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.getAvatarData
+import com.difft.android.chat.qr.QrEncoder
+import com.difft.android.chat.qr.QrErrorCorrection
 import com.difft.android.chat.ui.ChatBackgroundDrawable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.UrlManager
@@ -94,7 +95,8 @@ class InviteUtils @Inject constructor() {
                     currentAutoRefreshTimes++
 
                     result.data?.inviteLink?.let { url ->
-                        imageViewQR?.setImageBitmap(createQRBitmap(context, url))
+                        val bmp = createQRBitmap(context, url)   // suspends; encode runs on Default inside
+                        imageViewQR?.setImageBitmap(bmp)         // back on main (lifecycleScope = Main)
 
                         val content = context.getString(R.string.invite_tips, url)
                         clShare?.setOnClickListener {
@@ -211,17 +213,25 @@ class InviteUtils @Inject constructor() {
         }
     }
 
-    private fun createQRBitmap(context: Activity, url: String): Bitmap? {
-        val logoBitmap = androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_invite_qr_logo)?.let {
-            val bitmap = createBitmap(it.intrinsicWidth, it.intrinsicHeight)
-            val canvas = android.graphics.Canvas(bitmap)
-            it.setBounds(0, 0, canvas.width, canvas.height)
-            it.draw(canvas)
-            bitmap
+    // Logo build + QR encode are CPU work; run them off the main thread. setImageBitmap stays on the
+    // caller's main context (see both callers below).
+    private suspend fun createQRBitmap(context: Activity, url: String): Bitmap? =
+        withContext(Dispatchers.Default) {
+            val logoBitmap = androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.ic_invite_qr_logo)?.let {
+                val bitmap = createBitmap(it.intrinsicWidth, it.intrinsicHeight)
+                val canvas = android.graphics.Canvas(bitmap)
+                it.setBounds(0, 0, canvas.width, canvas.height)
+                it.draw(canvas)
+                bitmap
+            }
+            QrEncoder.encode(
+                content = url,
+                sizePx = 200.dp,
+                foreground = ContextCompat.getColor(context, com.difft.android.base.R.color.bg2_night),
+                errorCorrection = QrErrorCorrection.HIGH,   // preserves BGA's hardcoded ErrorCorrectionLevel.H
+                logo = logoBitmap,
+            )
         }
-        val bitmap = QRCodeEncoder.syncEncodeQRCode(url, 200.dp, ContextCompat.getColor(context, com.difft.android.base.R.color.bg2_night), logoBitmap)
-        return bitmap
-    }
 
     fun queryByInviteCode(activity: FragmentActivity, inviteCode: String, needFinish: Boolean = false) {
         activity.lifecycleScope.launch {
@@ -276,8 +286,10 @@ class InviteUtils @Inject constructor() {
         currentAutoRefreshTimes = 0
     }
 
+    // context is a FragmentActivity (not plain Activity) so context.lifecycleScope resolves
+    // (lifecycleScope is an extension on LifecycleOwner). The sole caller passes requireActivity().
     fun getGroupInviteCode(
-        context: Activity,
+        context: FragmentActivity,
         inviteCode: String,
         myName: String,
         groupName: String,
@@ -289,7 +301,23 @@ class InviteUtils @Inject constructor() {
         val url = "${urlManager.inviteGroupUrl.trimEnd('/')}/u/g.html?i=$inviteCode"
         val content = context.getString(R.string.invite_group_tips, myName, groupName, url)
 
-        imageView?.setImageBitmap(createQRBitmap(context, url))
+        context.lifecycleScope.launch {                  // ties the encode to the FragmentActivity
+            try {
+                val bmp = createQRBitmap(context, url)    // suspends; encode runs on Default inside
+                if (bmp != null) {
+                    imageView?.setImageBitmap(bmp)        // setImageBitmap on Main
+                } else {
+                    // Encode failed — keep the placeholder rather than clearing to a blank QR. No content.
+                    L.w { "[InviteUtils] group invite QR encode returned null" }
+                }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e                                   // never swallow structured-concurrency cancellation
+            } catch (e: Exception) {
+                // A throw before QrEncoder's own catch (e.g. zero-dim logo bitmap, OOM) would otherwise
+                // surface as an uncaught coroutine exception and crash the app. No content logged.
+                L.e { "[InviteUtils] getGroupInviteCode QR build failed: ${e.stackTraceToString()}" }
+            }
+        }
 
         clShare?.setOnClickListener {
             context.shareText(content)

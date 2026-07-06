@@ -25,6 +25,7 @@ import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.TextMessage
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -269,7 +270,9 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
         when (record) {
             is TextMessage -> {
                 if (record.isAttachmentMessage()) {
-                    if (record.attachments?.firstOrNull()?.isImage() == true) {
+                    if (record.attachments?.firstOrNull()?.isAnimatedImage() == true) {
+                        senderName + ResUtils.getString(R.string.chat_message_gif)
+                    } else if (record.attachments?.firstOrNull()?.isImage() == true) {
                         senderName + ResUtils.getString(R.string.chat_message_image)
                     } else if (record.attachments?.firstOrNull()?.isVideo() == true) {
                         senderName + ResUtils.getString(R.string.chat_message_video)

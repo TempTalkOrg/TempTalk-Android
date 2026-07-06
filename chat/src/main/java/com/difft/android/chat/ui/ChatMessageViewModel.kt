@@ -78,9 +78,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.difft.app.database.convertToMessageModel
 import org.difft.app.database.forEachMessagePaged
 import org.difft.app.database.convertToTextMessage
+import org.difft.app.database.getMessageById
+import org.difft.app.database.putMessageIfNotExists
 import org.difft.app.database.delete
 import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.getGroupMemberCount
@@ -319,14 +320,23 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
+
+    /**
+     * Optimistic add: persist the sent message off-main then append it to the list so it renders
+     * instantly, bypassing JobManager scheduling + the throttled observer re-query. Goes through
+     * putMessageIfNotExists so onAdded() finds the row and skips — no duplicate child rows (#997).
+     */
     fun addOneMessage(message: TextMessage) {
-        _chatMessageListUIState.value?.chatMessages?.lastOrNull()?.systemShowTimestamp?.let {
-            if (message.systemShowTimestamp < it) {
-                message.systemShowTimestamp = it + 1
+        viewModelScope.launch(Dispatchers.IO) {
+            _chatMessageListUIState.value?.chatMessages?.lastOrNull()?.systemShowTimestamp?.let {
+                if (message.systemShowTimestamp < it) {
+                    message.systemShowTimestamp = it + 1
+                }
             }
+            wcdb.putMessageIfNotExists(message)
+            val messageModel = wcdb.getMessageById(message.id) ?: return@launch
+            this@ChatMessageViewModel.addOneMessage(messageModel)
         }
-        val messageModel = wcdb.convertToMessageModel(message)
-        this.addOneMessage(messageModel)
     }
 
     fun setChatUIData(data: ChatUIData) {

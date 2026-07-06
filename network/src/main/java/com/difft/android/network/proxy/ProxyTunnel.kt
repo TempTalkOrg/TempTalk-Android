@@ -1,5 +1,6 @@
 package com.difft.android.network.proxy
 
+import android.os.Looper
 import com.difft.android.base.log.lumberjack.L
 import okhttp3.Dns
 import java.io.InputStream
@@ -9,6 +10,8 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketAddress
 import java.security.SecureRandom
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.SocketFactory
@@ -62,6 +65,11 @@ internal class TlsTunnelSocket(
     private val provider: ProxyConfigProvider,
 ) : Socket() {
     private var delegate: Socket? = null
+
+    // Set the moment close() is invoked so isClosed() reflects the intent even while
+    // the actual SSLSocket close runs on a background thread (main-thread cancel path).
+    @Volatile
+    private var closed = false
 
     override fun connect(endpoint: SocketAddress?) = connect(endpoint, 0)
 
@@ -134,7 +142,11 @@ internal class TlsTunnelSocket(
     override fun getInputStream(): InputStream = active().inputStream
     override fun getOutputStream(): OutputStream = active().outputStream
     override fun isConnected(): Boolean = delegate?.isConnected ?: false
-    override fun isClosed(): Boolean = delegate?.isClosed ?: super.isClosed()
+    // close() may complete asynchronously on the main-thread cancel path, so reflect
+    // the close *intent* immediately — otherwise callers polling between close() and
+    // the background close completing (e.g. OkHttp connection health checks) would see
+    // a stale `false` and treat a being-cancelled connection as reusable.
+    override fun isClosed(): Boolean = closed || (delegate?.isClosed ?: super.isClosed())
     override fun isInputShutdown(): Boolean = delegate?.isInputShutdown ?: false
     override fun isOutputShutdown(): Boolean = delegate?.isOutputShutdown ?: false
     override fun getRemoteSocketAddress(): SocketAddress? = delegate?.remoteSocketAddress
@@ -144,12 +156,42 @@ internal class TlsTunnelSocket(
     override fun setTcpNoDelay(on: Boolean) { delegate?.tcpNoDelay = on }
     override fun getTcpNoDelay(): Boolean = delegate?.tcpNoDelay ?: false
     override fun setKeepAlive(on: Boolean) { delegate?.keepAlive = on }
-    override fun close() { delegate?.close() ?: super.close() }
+
+    override fun close() {
+        closed = true
+        val socket = delegate ?: return super.close()
+        // The outer-tunnel delegate is a Conscrypt SSLSocket whose close() drains
+        // the outgoing queue (writes a TLS close_notify alert) — a BLOCKING network
+        // write. OkHttp's ConnectPlan.cancel() closes this socket via closeQuietly()
+        // inline on whichever thread cancels the call; when a lifecycle-scoped
+        // coroutine (repeatOnLifecycle / lifecycleScope) is cancelled during
+        // onStop/onDestroyView, that thread is the MAIN thread — so a synchronous
+        // close here throws NetworkOnMainThreadException (a plain TCP socket's close
+        // never did network I/O, which is why this only breaks the proxy path).
+        // Offload to a background thread when called on the main looper; keep the
+        // synchronous (graceful) close everywhere else.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            CLOSE_EXECUTOR.execute {
+                runCatching { socket.close() }
+                    .onFailure { L.w { "[Proxy] async tunnel close failed: ${it.stackTraceToString()}" } }
+            }
+        } else {
+            socket.close()
+        }
+    }
 
     private companion object {
         // Shared across all tunnel connections — SecureRandom is thread-safe and
         // seeding from /dev/urandom per connection is avoidable.
         private val RNG = SecureRandom()
+
+        // Off-main-thread closer for the tunnel SSLSocket (see close()). Cached pool
+        // with daemon threads: closes are short-lived and rare (only the main-thread
+        // cancel path lands here), so idle threads are reclaimed after the keep-alive
+        // and never keep the process alive.
+        private val CLOSE_EXECUTOR: Executor = Executors.newCachedThreadPool { r ->
+            Thread(r, "proxy-tunnel-close").apply { isDaemon = true }
+        }
 
         // Cache the pinned factory: in steady state the SPKI pin is constant, so
         // rebuilding SSLContext + TrustManager on every tunnel connection is wasted

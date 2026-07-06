@@ -4,6 +4,7 @@ import android.content.Context
 import com.difft.android.chat.R
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.TextMessage
+import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
@@ -89,6 +90,7 @@ object MessageCopyTextFormatter {
         val attachment = msg.attachments?.firstOrNull()
         if (attachment != null) {
             return when {
+                attachment.isAnimatedImage() -> context.getString(R.string.chat_message_gif)
                 attachment.isImage() -> context.getString(R.string.chat_message_image)
                 attachment.isVideo() -> context.getString(R.string.chat_message_video)
                 // Voice messages are excluded from multi-select (PRD §2.1), so this is a

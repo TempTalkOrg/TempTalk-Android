@@ -41,6 +41,8 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.common.AvatarUtil
+import com.difft.android.chat.media.AvatarEncryptedProvider
+import com.difft.android.chat.media.AvatarPreview
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
@@ -331,7 +333,7 @@ class MeFragment : Fragment() {
             } ?: return@launch
 
             val list = arrayListOf<LocalMedia>().apply {
-                this.add(LocalMedia.generateLocalMedia(requireActivity(), file.path))
+                this.add(AvatarPreview.localMediaFor(AvatarEncryptedProvider.DIR_AVATAR, file))
             }
             PictureSelector.create(requireActivity())
                 .openPreview()

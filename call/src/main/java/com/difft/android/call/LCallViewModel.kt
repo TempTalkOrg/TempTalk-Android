@@ -65,6 +65,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
 import kotlinx.coroutines.Dispatchers
@@ -368,7 +369,12 @@ class LCallViewModel @AssistedInject constructor(
 
     fun getCallRoomName(): String {
         val name = instantCallConverter.currentRoomName
-        val participantNum = room.remoteParticipants.size + 1
+        // Read the participants StateFlow (already includes the local participant, so its
+        // size equals room.remoteParticipants.size + 1) instead of touching the fail-loud
+        // room getter. This Composable is invoked imperatively during recomposition and can
+        // race with call teardown (releaseLocked sets released=true before callStatus flips
+        // to DISCONNECTED); reading room there crashes with "room accessed after release".
+        val participantNum = participants.value.size.coerceAtLeast(1)
         return if (getCurrentCallType() == CallType.ONE_ON_ONE.type) name else "$name ($participantNum)"
     }
 
@@ -398,9 +404,12 @@ class LCallViewModel @AssistedInject constructor(
     }
 
     fun resetNoBodySpeakCheck() {
-        val hasRemote = room.remoteParticipants.isNotEmpty()
-        val allParticipants = listOf<Participant>(room.localParticipant) + room.remoteParticipants.values
-        val isSilent = allParticipants.firstOrNull { it.isMicrophoneEnabled } == null || activeSpeakers.value.isEmpty()
+        // Read the participants StateFlow (local + remotes) instead of the fail-loud room
+        // getter: this is invoked from the end-reminder dialog's "Continue" path and from
+        // 1v1 room events, both of which can race with call teardown (released=true).
+        val snapshot = participants.value
+        val hasRemote = snapshot.any { it is RemoteParticipant }
+        val isSilent = snapshot.firstOrNull { it.isMicrophoneEnabled } == null || activeSpeakers.value.isEmpty()
         speakerState.reset(hasRemote, isSilent, callConfig)
     }
 
@@ -467,10 +476,14 @@ class LCallViewModel @AssistedInject constructor(
     fun hasOtherActiveSpeaker(): Boolean = speakerState.hasOtherActiveSpeaker()
     fun addAwaitingJoinInvitees(inviteeIds: List<String>) = participantManager.addAwaitingJoinInvitees(inviteeIds)
 
-    fun getCurrentCallUidList(): List<String> = room.remoteParticipants.map { (identity, _) ->
-        val userId = identity.value
-        if (userId.contains(".")) userId.split(".")[0] else userId
-    }
+    // Uses the participants StateFlow rather than the fail-loud room getter: this is invoked
+    // from CallExitHandler's async hangup callback, which can run after a concurrent path has
+    // already released the room (remote onLeave / onCleared / cleanup). The snapshot also
+    // retains the last-known remotes even after room.remoteParticipants is cleared by disconnect.
+    fun getCurrentCallUidList(): List<String> = participants.value
+        .filterIsInstance<RemoteParticipant>()
+        .mapNotNull { it.identity?.value }
+        .map { userId -> if (userId.contains(".")) userId.split(".")[0] else userId }
 
     suspend fun handleCriticalAlertNew(gid: String? = null): Boolean = criticalAlertDispatcher.send(gid)
 

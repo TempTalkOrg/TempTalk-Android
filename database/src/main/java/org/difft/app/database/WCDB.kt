@@ -11,6 +11,7 @@ import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBDraftModel
 import org.difft.app.database.models.DBFailedMessageModel
+import org.difft.app.database.models.DBFavoriteGifModel
 import org.difft.app.database.models.DBForwardContextModel
 import org.difft.app.database.models.DBGroupCryptoKeysModel
 import org.difft.app.database.models.DBForwardModel
@@ -359,6 +360,11 @@ class WCDB @Inject constructor(
         db.getTable("pending_removal_contact", DBPendingRemovalContactModel)
     }
 
+    val favoriteGifs by lazy {
+        db.createTable("favorite_gifs", DBFavoriteGifModel)
+        db.getTable("favorite_gifs", DBFavoriteGifModel)
+    }
+
     // Map from lowercase tableName to the actual table
     val tablesMap by lazy {
         listOf(
@@ -386,7 +392,8 @@ class WCDB @Inject constructor(
             publicKeyInfo,
             jobSpec,
             jobConstraint,
-            pendingRemovalContact
+            pendingRemovalContact,
+            favoriteGifs
         ).associateBy { it.tableName.lowercase() }
     }
     fun deleteDatabaseFile() {

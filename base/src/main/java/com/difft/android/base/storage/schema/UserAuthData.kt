@@ -42,9 +42,10 @@ import kotlinx.serialization.protobuf.ProtoNumber
  *
  * **Tag stability contract (`@ProtoNumber`)**: explicit field numbers below match the
  * implicit declaration-order tags that PR #789 shipped (1..16); tags 17..19 were
- * appended later for self-hosted proxy state. Tags 1..19 are stable now — any future
- * schema change MUST preserve them; wire format on every deployed device depends on them.
- *  - **Add a field**: append at the bottom with the next unused tag (20+).
+ * appended later for self-hosted proxy state, tags 20..22 for the favorites favKey.
+ * Tags 1..22 are stable now — any future schema change MUST preserve them; wire format
+ * on every deployed device depends on them.
+ *  - **Add a field**: append at the bottom with the next unused tag (23+).
  *  - **Remove a field**: delete the line; **never reuse** the freed tag number.
  *  - **Rename a field**: free — tag is the contract, not the Kotlin name.
  *  - **Reorder fields**: free — `@ProtoNumber` decouples wire format from declaration order.
@@ -94,6 +95,18 @@ data class UserAuthData(
      * in the encrypted half alongside the other proxy state for lifecycle isolation.
      */
     @ProtoNumber(19) val proxyProtectCallIp: Boolean = false,
+    /**
+     * Favorites (GIF) account-level secret. [favKey] decrypts the server-held favorites blob —
+     * account-level secret material, so it lives in the encrypted half (same protection as
+     * baseAuth/identity keys). Stored Base64 NO_WRAP of the raw 32-byte AES-256 key. Empty string
+     * = absent (mapper boundary converts to `null`). Decoupled from WCDB health so a DB
+     * corruption-recovery reset does not lose it (the blob is re-pullable + re-decryptable).
+     */
+    @ProtoNumber(20) val favKey: String = "",
+    /** favKey fingerprint. Non-empty = "a key is stored" (the version gate keys off presence). */
+    @ProtoNumber(21) val favKeyId: String = "",
+    /** Monotonic key-version gate (server-assigned). Meaningless unless [favKeyId] is non-empty. */
+    @ProtoNumber(22) val favKeyVersion: Int = 0,
 ) {
     companion object {
         val EMPTY = UserAuthData()

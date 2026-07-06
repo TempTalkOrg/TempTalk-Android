@@ -7,9 +7,14 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.widget.ImageView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.signature.ObjectKey
+import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
+import com.difft.android.base.utils.application
 import com.difft.android.base.utils.getSafeContext
+import com.difft.android.chat.media.AvatarEncryptedProvider
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -33,7 +38,8 @@ object GroupAvatarUtil {
 
     private fun saveToCache(attachmentId: String, bytes: ByteArray) {
         try {
-            getNewCacheFile(attachmentId).writeBytes(bytes)
+            // Encrypted-at-rest, see docs §15.
+            AvatarCacheCipher.writeEncrypted(getNewCacheFile(attachmentId), bytes)
         } catch (e: Exception) {
             L.e { "[GroupAvatarUtil] saveToCache error: ${e.message}" }
         }
@@ -63,6 +69,15 @@ object GroupAvatarUtil {
     private fun getNewCacheFile(attachmentId: String): File {
         val fileName = "avatar_$attachmentId"
         return File(FileUtil.getFilePath(FileUtil.FILE_DIR_GROUP_AVATAR), fileName)
+    }
+
+    /**
+     * A decrypting `content://` uri for the cached group avatar [attachmentId], or null when not
+     * cached yet. Reads decrypted bytes through [AvatarEncryptedProvider] (plaintext never on disk).
+     */
+    fun cacheContentUri(attachmentId: String): android.net.Uri? {
+        val file = getCacheFile(attachmentId) ?: return null
+        return AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_GROUP_AVATAR, file.name)
     }
 
     @dagger.hilt.EntryPoint
@@ -129,9 +144,9 @@ object GroupAvatarUtil {
             // Download and decrypt
             val bytes = fetchGroupAvatar(context, groupAvatarData)
             
-            // Save to cache
+            // Save to cache (encrypted-at-rest, see docs §15)
             val cacheFile = getNewCacheFile(serverId)
-            cacheFile.writeBytes(bytes)
+            AvatarCacheCipher.writeEncrypted(cacheFile, bytes)
             return@withContext cacheFile
         } catch (e: Exception) {
             L.e { "[GroupAvatarUtil] ensureCached failed: ${e.message}" }
@@ -139,7 +154,7 @@ object GroupAvatarUtil {
             try {
                 val bytes = fetchGroupAvatar(context, groupAvatarData)
                 val cacheFile = getNewCacheFile(serverId)
-                cacheFile.writeBytes(bytes)
+                AvatarCacheCipher.writeEncrypted(cacheFile, bytes)
                 return@withContext cacheFile
             } catch (retryException: Exception) {
                 L.e { "[GroupAvatarUtil] ensureCached retry also failed: ${retryException.message}" }
@@ -168,9 +183,7 @@ object GroupAvatarUtil {
             if (!forceRefresh && cacheFile != null) {
                 withContext(Dispatchers.Main) {
                     imageView.visibility = android.view.View.VISIBLE
-                    Glide.with(context.getSafeContext())
-                        .load(cacheFile)
-                        .into(imageView)
+                    loadEncryptedInto(context, imageView, cacheFile)
                 }
                 return@withContext true
             }
@@ -185,9 +198,7 @@ object GroupAvatarUtil {
             val newCacheFile = getNewCacheFile(serverId)
             withContext(Dispatchers.Main) {
                 imageView.visibility = android.view.View.VISIBLE
-                Glide.with(context.getSafeContext())
-                    .load(newCacheFile)
-                    .into(imageView)
+                loadEncryptedInto(context, imageView, newCacheFile)
             }
             return@withContext true
         } catch (e: Exception) {
@@ -199,9 +210,7 @@ object GroupAvatarUtil {
                 val newCacheFile = getNewCacheFile(serverId)
                 withContext(Dispatchers.Main) {
                     imageView.visibility = android.view.View.VISIBLE
-                    Glide.with(context.getSafeContext())
-                        .load(newCacheFile)
-                        .into(imageView)
+                    loadEncryptedInto(context, imageView, newCacheFile)
                 }
                 return@withContext true
             } catch (retryException: Exception) {
@@ -211,6 +220,24 @@ object GroupAvatarUtil {
         }
     }
 
+
+    /**
+     * Load a group-avatar cache file via the decrypting `content://` provider. Uses a stable uri key
+     * (so Glide's memory / encrypted-RESOURCE caches work) + a `lastModified` signature (so a
+     * re-downloaded same-name file invalidates the old cache). The RESOURCE disk cache is only enabled
+     * when the Keystore key is available (else it would persist a plaintext bitmap). See docs §15.
+     */
+    private fun loadEncryptedInto(context: Context, imageView: ImageView, cacheFile: File) {
+        val uri = AvatarEncryptedProvider.contentUri(AvatarEncryptedProvider.DIR_GROUP_AVATAR, cacheFile.name)
+        Glide.with(context.getSafeContext())
+            .load(uri)
+            .signature(ObjectKey(cacheFile.lastModified()))
+            .diskCacheStrategy(
+                if (GlideCacheKeyManager.isAvailable(application)) DiskCacheStrategy.RESOURCE
+                else DiskCacheStrategy.NONE
+            )
+            .into(imageView)
+    }
 
     private fun decryptGroupAvatar(
         dataToDecrypt: ByteArray,

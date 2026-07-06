@@ -63,6 +63,7 @@ import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBMessageModel
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.util.MediaUtil
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.QuoteThumbnailBinder
 import com.difft.android.chat.util.Util
 import com.difft.android.chat.util.isHostActivityAlive
@@ -1156,7 +1157,8 @@ private fun resolveOriginalThumbnailAsync(
         // Back on Main: only apply if this view still represents the same quote and host is alive.
         if (imageView.getTag(R.id.quote_thumbnail_job) == token && imageView.isHostActivityAlive()) {
             imageView.visibility = View.VISIBLE
-            QuoteThumbnailBinder.loadRoundedThumbnail(imageView, File(path))
+            // Encrypted-at-rest images resolve to a decrypting content uri; legacy plaintext stays a File.
+            QuoteThumbnailBinder.loadRoundedThumbnail(imageView, EncryptedAttachmentAccess.imageGlideModel(path))
         }
     }
 }
@@ -1182,14 +1184,16 @@ internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomTyp
         if (!MediaUtil.isImageOrVideoType(att.contentType)) return null
         val fileName = att.fileName ?: return null
         val path = FileUtil.getMessageAttachmentFilePath(att.authorityId.toString()) + fileName
-        return path.takeIf { File(it).exists() }
+        // isReadable (not File.exists): encrypted-at-rest media has only the .encrypt on disk; the
+        // loader resolves it to a decrypting content uri via imageGlideModel.
+        return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
     }
 
     // Normal attachment original → file under message.id directory.
     val att = original.attachment()?.takeIf { MediaUtil.isImageOrVideoType(it.contentType) } ?: return null
     val fileName = att.fileName ?: return null
     val path = FileUtil.getMessageAttachmentFilePath(original.id) + fileName
-    path.takeIf { File(it).exists() }
+    path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
 }.onFailure {
     L.w { "[QuoteThumb] findOriginalAttachmentPath failed ts=$timestamp: ${it.stackTraceToString()}" }
 }.getOrNull()

@@ -96,6 +96,7 @@
     <string name="chat_message_action_select_all">Select All</string>
     <string name="chat_message_attachment">[Attachment]</string>
     <string name="chat_message_image">[Image]</string>
+    <string name="chat_message_gif">[Gif]</string>
     <string name="chat_message_video">[Video]</string>
     <!-- Generic fallback placeholder used in multi-select copy output for any
          message type not explicitly handled in MessageCopyTextFormatter. -->
@@ -375,6 +376,7 @@
 
     <!--    scan-->
     <string name="scan_scan">Scan</string>
+    <string name="scan_camera_open_failed">Failed to open the camera. Please try again.</string>
     <string name="link_device">Link this device?</string>
     <string name="link_device_tips">This device will be able to see your groups and contacts, read all your messages, and send messages in your name.</string>
     <string name="link_new_device">Link New Device</string>
@@ -689,4 +691,24 @@
         <item quantity="other">\"%1$s\" copied %2$d messages from a chat history</item>
     </plurals>
     <string name="chat_copy_notice_sentence_terminator">.</string>
+
+    <!-- GIF panel (M1: browse + search + send) -->
+    <string name="gif_search_hint">Search GIFs</string>
+    <string name="gif_no_result">No GIFs found</string>
+    <string name="gif_search_clear">Clear</string>
+    <string name="gif_tab_trending">Trending</string>
+
+    <!-- GIF favorites (M3: favorites data flow) -->
+    <string name="gif_favorites_empty">No favorites yet</string>
+    <!-- Unified favorite menu labels (message long-press menu + GIF grid long-press floating menu). -->
+    <string name="gif_favorites_add_full">Add to Favorites</string>
+    <string name="gif_favorites_remove">Remove from Favorites</string>
+    <string name="gif_favorites_added">Added to Favorites</string>
+    <string name="gif_favorites_failed">Couldn\'t add. Try again later.</string>
+    <string name="gif_favorites_add_size_limit">This GIF is too large to add to Favorites.</string>
+    <!-- Cap-reached confirm dialog (limit 200). Secondary "Cancel" just dismisses (current GIF not added). -->
+    <string name="gif_favorites_cap_title">Favorites Limit Reached</string>
+    <string name="gif_favorites_cap_message">You can save up to 200 favorites. Replace the oldest one or remove some favorites first.</string>
+    <string name="gif_favorites_cap_confirm">Replace Oldest</string>
+    <string name="gif_favorites_cap_cancel">Cancel</string>
 </resources>

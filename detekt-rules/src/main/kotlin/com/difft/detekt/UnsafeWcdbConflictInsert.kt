@@ -127,6 +127,7 @@ class UnsafeWcdbConflictInsert(config: Config) : Rule(
             "pendingRemovalContact", // pending_removal_contact — PK uid (isPrimary = true, #917)
             "jobSpec",               // job_spec — PK id (isPrimary = true)
             "jobConstraint",         // job_constraint — multiPrimaries(jobSpecId, factoryKey)
+            "favoriteGifs",          // favorite_gifs — PK fileHash (isPrimary = true, GIF favorites M3)
         )
     }
 }

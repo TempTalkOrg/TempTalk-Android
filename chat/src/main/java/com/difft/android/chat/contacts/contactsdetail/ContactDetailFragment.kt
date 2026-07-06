@@ -27,7 +27,10 @@ import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarCacheCipher
 import com.difft.android.chat.common.AvatarUtil
+import com.difft.android.chat.media.AvatarEncryptedProvider
+import com.difft.android.chat.media.AvatarPreview
 import com.difft.android.chat.contacts.contactsremark.ContactSetRemarkActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
@@ -335,7 +338,7 @@ class ContactDetailFragment : Fragment() {
             L.i { "[ContactDetailFragment] Original avatar not cached, downloading in background..." }
             try {
                 val bytes = AvatarUtil.fetchAvatar(requireContext(), avatarUrl, avatarData.encKey ?: "")
-                originalFile.writeBytes(bytes)
+                AvatarCacheCipher.writeEncrypted(originalFile, bytes)
                 L.i { "[ContactDetailFragment] Original avatar downloaded and cached" }
             } catch (e: Exception) {
                 L.e { "[ContactDetailFragment] Failed to download original avatar: ${e.message}" }
@@ -654,7 +657,7 @@ class ContactDetailFragment : Fragment() {
                 AvatarUtil.getCacheFile(url)
             }
             if (cacheFile != null) {
-                openAvatarPreview(cacheFile.path)
+                openAvatarPreview(cacheFile)
                 return@launch
             }
 
@@ -667,7 +670,7 @@ class ContactDetailFragment : Fragment() {
                         com.difft.android.base.utils.FileUtil.getAvatarCachePath(),
                         "avatar_${url.substringAfterLast("/")}"
                     )
-                    newCacheFile.writeBytes(bytes)
+                    AvatarCacheCipher.writeEncrypted(newCacheFile, bytes)
                     true
                 } catch (e: Exception) {
                     L.e { "[ContactDetailFragment] Failed to download avatar: ${e.message}" }
@@ -679,15 +682,15 @@ class ContactDetailFragment : Fragment() {
             val newFile = withContext(Dispatchers.IO) {
                 AvatarUtil.getCacheFile(url)
             } ?: return@launch
-            openAvatarPreview(newFile.path)
+            openAvatarPreview(newFile)
         }
     }
 
-    private fun openAvatarPreview(filePath: String) {
+    private fun openAvatarPreview(cacheFile: java.io.File) {
         if (!isAdded || activity == null) return
 
         val list = arrayListOf<LocalMedia>().apply {
-            add(LocalMedia.generateLocalMedia(requireActivity(), filePath))
+            add(AvatarPreview.localMediaFor(AvatarEncryptedProvider.DIR_AVATAR, cacheFile))
         }
 
         PictureSelector.create(requireActivity())

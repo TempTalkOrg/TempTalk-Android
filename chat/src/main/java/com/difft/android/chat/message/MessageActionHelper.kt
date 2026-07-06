@@ -3,6 +3,7 @@ package com.difft.android.chat.message
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipDescription
+import android.net.Uri
 import android.os.Build
 import android.os.PersistableBundle
 import androidx.core.content.FileProvider
@@ -10,6 +11,7 @@ import androidx.lifecycle.LifecycleCoroutineScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.ui.SelectChatsUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,7 +58,8 @@ class MessageActionHelper(
 
         val content = withContext(Dispatchers.IO) {
             try {
-                File(fileInfo.filePath).takeIf { it.exists() }?.readText() ?: ""
+                // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
+                EncryptedAttachmentAccess.readDecryptedText(activity, fileInfo.filePath) ?: ""
             } catch (e: Exception) {
                 L.e { "Failed to read long text file: ${e.message}" }
                 ""
@@ -72,18 +75,25 @@ class MessageActionHelper(
         return true
     }
 
-    /** Returns false if the underlying file is missing on disk. */
+    /** Returns false if the underlying attachment is not readable (neither plaintext nor ciphertext). */
     private fun copyFileToClipboard(data: TextChatMessage): Boolean {
         val fileInfo = data.getFileInfoForCopy() ?: return false
-        val file = File(fileInfo.filePath)
-        if (!file.exists()) return false
+        val basePath = fileInfo.filePath
+        // Attachments are now stored encrypted-at-rest: on disk usually only "<basePath>.encrypt"
+        // exists. Mirror saveAttachment/shareFile — gate on isReadable (plaintext OR ciphertext) and
+        // hand out the decrypting content:// uri when only the ciphertext is present, instead of the
+        // old plaintext-only file.exists() check that silently failed for encrypted images.
+        if (!EncryptedAttachmentAccess.isReadable(basePath)) return false
 
-        // Use FileProvider to generate a secure URI
-        val uri = FileProvider.getUriForFile(
-            activity,
-            "${activity.packageName}.provider",
-            file
-        )
+        // Prefer the durable ciphertext (content uri): a self-sent attachment's plaintext is deleted
+        // right after upload, so a FileProvider uri to it can ENOENT by the time the receiver reads
+        // the clipboard. The .encrypt copy decrypts on demand and never goes missing (mirrors share).
+        val uri: Uri = EncryptedAttachmentAccess.exportContentUriIfEncrypted(fileInfo.messageId, basePath)
+            ?: FileProvider.getUriForFile(
+                activity,
+                "${activity.packageName}.provider",
+                File(basePath)
+            )
         // Copy file to clipboard with special label for identification
         val clipboard = ServiceUtil.getClipboardManager(activity)
         val clipData = ClipData.newUri(

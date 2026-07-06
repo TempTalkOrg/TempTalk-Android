@@ -1,0 +1,21 @@
+<!-- Ported from tmp/gif-favorite/assets/tab-trending.svg (tabler:trending-up).
+     SVG viewBox is 0 0 20 12; keep that viewport so path coords map exactly.
+     Monochrome stroke icon; color applied via tint at render time. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="12dp"
+    android:viewportWidth="20"
+    android:viewportHeight="12">
+    <path
+        android:pathData="M1 11L7 5L11 9L19 1"
+        android:strokeColor="@color/icon"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M12 1H19V8"
+        android:strokeColor="@color/icon"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

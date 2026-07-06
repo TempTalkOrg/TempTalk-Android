@@ -15,6 +15,7 @@ import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.common.upload.ContactAvatarUploader
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.databinding.ChatActivityContactRemarkBinding
@@ -245,6 +246,8 @@ class ContactSetRemarkActivity : BaseActivity() {
                         ContactorUtil.updateRemarkAvatar(contactId, encrypted)
                     }
                     refreshContactAndRender()
+                    // Rendered from server data now — drop the plaintext compress/crop temp.
+                    AvatarPickTempCleaner.deleteUploadedTemp(this@ContactSetRemarkActivity, filePath)
                 } else {
                     L.w { "[ContactSetRemark] save avatar failed status=${result.status} reason=${result.reason} uid=$contactId" }
                     showErrorToast(result.reason)
@@ -326,6 +329,8 @@ class ContactSetRemarkActivity : BaseActivity() {
                 override fun onResult(result: ArrayList<LocalMedia>) {
                     val media = result.firstOrNull() ?: return
                     val path = media.compressPath ?: media.realPath ?: return
+                    // Upload uses compressPath/realPath; drop the plaintext crop output immediately.
+                    AvatarPickTempCleaner.deleteCropTemp(media, keepPath = path)
                     onAvatarPicked(path)
                 }
 

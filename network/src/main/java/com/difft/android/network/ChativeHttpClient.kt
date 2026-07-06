@@ -65,7 +65,7 @@ class ChativeHttpClient(
                 addInterceptor(HeaderInterceptor(authProvider))
             }
             if (useHttpClientInterceptor) {
-                addInterceptor(HttpClientInterceptor())
+                addInterceptor(HttpClientInterceptor(pinnedConnection = useCustomCa))
             }
             if (BuildConfig.DEBUG) {
                 //如果想使用抓包工具获取接口数据，可以开启这个

@@ -28,6 +28,7 @@ import com.difft.android.chat.crypto.IdentityKeyUtil
 import com.difft.android.chat.util.Util
 import javax.inject.Inject
 import com.difft.android.chat.cryptonew.EncryptionDataManager
+import com.difft.android.chat.gif.favorite.FavoriteWriteRepository
 import com.difft.android.websocket.internal.push.PreKeyState
 import com.difft.android.base.utils.Base64
 
@@ -47,6 +48,9 @@ class LoginViewModel @Inject constructor() : ViewModel() {
     @Inject
     @ChativeHttpClientModule.Chat
     lateinit var httpClient: dagger.Lazy<ChativeHttpClient>
+
+    @Inject
+    lateinit var favoriteWriteRepo: dagger.Lazy<FavoriteWriteRepository>
 
     private val mInviteCodeLiveData = MutableLiveData<Resource<Any>>()
     internal val inviteCodeLiveData: LiveData<Resource<Any>> = mInviteCodeLiveData
@@ -190,6 +194,15 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                     throw NetworkException(signInResult.status, signInResult.reason ?: "")
                 }
 
+                // Capture the previous aci identity private key BEFORE registerPreKeys overwrites it.
+                // Needed to decide the favorites key action after login (design §3.4): if the old key
+                // survived (passive re-login) the favorites list can be preserved via rewrap; if it is
+                // gone (fresh install / cleared storage) the list must be reset. Unrecoverable once the
+                // new identity is written, so it must be read here.
+                val oldAciPriv = runCatching {
+                    encryptionDataManager.get().getAciIdentityKey().privateKey.serialize()
+                }.getOrNull()
+
                 // Step 2: Register pre keys
                 val preKeyResult = registerPreKeys(basicAuth)
                 if (preKeyResult.status != 0) {
@@ -209,6 +222,16 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                         this.phoneNumber = phone
                     }
                     mSignInLiveData.postValue(Resource.success(AccountData(newUser)))
+
+                    // Favorites key action after primary login (design §3.4). The new aci identity is
+                    // now in place; decide rewrap (old key survived -> list preserved) vs reset (old
+                    // key gone -> list cleared). Best-effort — must never fail the login itself.
+                    try {
+                        val newAciPriv = encryptionDataManager.get().getAciIdentityKey().privateKey.serialize()
+                        favoriteWriteRepo.get().onPrimaryLogin(oldAciPriv, newAciPriv)
+                    } catch (e: Exception) {
+                        L.w { "[login] favorites key action after login failed: ${e.message}" }
+                    }
                 } else {
                     L.e { "[login] signIn -> fetchAuthToken failed, status=${tokenResult.status}, reason=${tokenResult.reason}" }
                     mSignInLiveData.postValue(Resource.error(NetworkException(message = tokenResult.reason ?: "")))

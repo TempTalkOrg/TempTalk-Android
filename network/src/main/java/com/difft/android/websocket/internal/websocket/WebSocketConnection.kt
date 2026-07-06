@@ -3,6 +3,8 @@ package com.difft.android.websocket.internal.websocket
 import android.content.Context
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.network.CertValidationFailureDetector
+import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.websocket.api.util.TlsSocketFactory
 import com.difft.android.websocket.internal.util.Util
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
@@ -366,6 +368,11 @@ class WebSocketConnection @AssistedInject constructor(
         if (t is IOException && t.message == "Canceled") {
             L.i { "$name onFailure() Canceled, ignore this call back as all cancel is handled manually" }
             return
+        }
+        // The WebSocket always pins trust to the chative CA (OfficialSSLSocketFactoryCreator),
+        // so a certificate validation failure here is a possible MITM attack.
+        if (CertValidationFailureDetector.isCertValidationFailure(t)) {
+            NetworkRiskNotifier.onCertValidationFailed("websocket")
         }
         cleanupAfterShutdown()
 

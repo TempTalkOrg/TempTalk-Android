@@ -72,6 +72,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.chat.common.GroupAvatarUtil
 import com.difft.android.chat.common.GroupAvatarView
@@ -707,6 +708,8 @@ class GroupInfoActivity : BaseActivity() {
                     if (result.isNotEmpty()) {
                         val localMedia = result[0]
                         resetAvatarPath.value = localMedia.compressPath ?: localMedia.realPath
+                        // Upload uses compressPath/realPath; drop the plaintext crop output immediately.
+                        AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = resetAvatarPath.value)
                     }
                 }
 
@@ -971,6 +974,9 @@ class GroupInfoActivity : BaseActivity() {
                         L.e { "[GE] rotate succeeded server-side but local apply failed gid=$groupId: ${e.stackTraceToString()}" }
                         ToastUtil.showLong(R.string.group_crypto_reset_failed)
                     }
+                    // Uploaded to the server — drop the plaintext compress/crop temp of the pick
+                    // (no-op for the current-avatar or generated-default paths).
+                    AvatarPickTempCleaner.deleteUploadedTemp(this@GroupInfoActivity, pickedAvatarPath)
                 } else {
                     // Already refetched + retried once above for a CAS conflict; if still
                     // failing, just surface the error (attemptRotate refetches a fresh base
