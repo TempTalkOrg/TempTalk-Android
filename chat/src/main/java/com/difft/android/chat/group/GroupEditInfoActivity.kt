@@ -5,7 +5,7 @@ import android.view.View
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
+import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.widget.ComposeDialogManager
@@ -88,7 +88,8 @@ class GroupEditInfoActivity : BaseActivity() {
 
         binding.groupAvatar.setOnClickListener {
             if (!avatarEditable) return@setOnClickListener
-            onPicturePermissionForAvatar.launchMultiplePermission(PermissionUtil.picturePermissions)
+            // Open directly when media is already usable (full/partial); else request.
+            onPicturePermissionForAvatar.launchMediaSelectionOrOpen { openPictureSelector() }
         }
 
         binding.btnEditName.setOnClickListener {

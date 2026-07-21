@@ -91,6 +91,12 @@ constructor(
 
     override fun deleteMessage(messageIds: List<String>) {
         appScope.launch {
+            // Fail-soft: skip if the cipher key is unavailable. Guarded before the catch below so
+            // WCDBKeyUnavailableException isn't silently swallowed there, losing fail-soft telemetry.
+            if (wcdb.isDbInaccessible) {
+                L.w { "[Message] skip deleteMessage, DB inaccessible" }
+                return@launch
+            }
             try {
                 wcdb.message.getAllObjects(DBMessageModel.id.`in`(messageIds)).forEach {
                     it.delete()
@@ -116,6 +122,13 @@ constructor(
         }
         appScope.launch {
             try {
+                // Fail-soft: skip if the cipher key is unavailable. Guard must be the first
+                // statement INSIDE try (not before it) so return@launch still runs the finally
+                // below that releases deletingRoomIds.
+                if (wcdb.isDbInaccessible) {
+                    L.w { "[Message] skip removeRoomAndMessages, DB inaccessible: $roomId" }
+                    return@launch
+                }
                 // Snapshot the upper bound BEFORE deleting anything, so concurrent inserts during
                 // the paged delete (room still valid + server still pushing) are NOT swept in. The
                 // match set is fixed at snapshot time (databaseId is the monotonic autoincrement PK)
@@ -324,18 +337,20 @@ constructor(
         )?.int ?: 0
     }
 
-    override suspend fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long) {
+    override suspend fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long, readAt: Long) {
         val expression = DBMessageModel.roomId.eq(conversationId)
             .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
             .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
         // #909 #4: drop the unbounded getAllObjects load — updateValue is a no-op on an
         // empty match set, so the isNotEmpty() guard was pure overhead. No load needed.
+        // #1020 Phase 2: SET readTime = readAt (actual read moment); readMaxTimestamp only bounds
+        // row selection. The readTime==0 guard above keeps it write-once.
         wcdb.message.updateValue(
-            readMaxTimestamp,
+            readAt,
             DBMessageModel.readTime,
             expression
         )
-        L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp}" }
+        L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp} readAt:${readAt}" }
     }
 
     override fun savePendingMessage(messageId: String, originalMessageTimeStamp: Long, messageEnvelopBytes: ByteArray) {

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 14+ "Select photos" partial-access hint bar. Shown only when
+  media access is PARTIAL (see PermissionUtil.MediaAccessState). Visuals reuse
+  :base theme tokens (bg / t.secondary / t.info) so dark mode follows the app
+  DayNight theme automatically with no selector values-night resources.
+  Extracted as a standalone layout so it can be inflated in isolation for
+  cross-module screenshot tests (:chat host).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ps_partial_access_bar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="10dp">
+
+    <TextView
+        android:id="@+id/ps_partial_access_tips"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="@string/ps_partial_access_tips"
+        android:textColor="@color/t.secondary"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/ps_partial_access_manage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:paddingStart="8dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="4dp"
+        android:text="@string/ps_partial_access_manage"
+        android:textColor="@color/t.info"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

@@ -151,7 +151,7 @@ class InviteCallHandler(
             try {
                 val allContacts = withContext(Dispatchers.IO) {
                     wcdb.contactor.allObjects
-                        .filter { !callToChatController.isBotId(it.id) && it.id != globalServices.myId }
+                        .filter { !callToChatController.isOfficialAccount(it.id) && it.id != globalServices.myId }
                 }
                 _contacts.value = allContacts
                 updateFilteredContacts()

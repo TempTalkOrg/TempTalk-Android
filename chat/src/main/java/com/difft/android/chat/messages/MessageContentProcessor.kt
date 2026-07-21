@@ -1,7 +1,6 @@
 package com.difft.android.chat.messages
 
 import android.content.Context
-import android.os.SystemClock
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
@@ -12,7 +11,6 @@ import com.difft.android.call.LCallManager
 import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
-import com.difft.android.base.utils.weakcontact.WeakContactClock
 import com.difft.android.chat.contacts.ContactsUpdater
 import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -164,7 +162,18 @@ class MessageContentProcessor @Inject constructor(
                                 firstReadMessage.readPosition.maxServerTime,
                                 firstReadMessage.readPosition.maxSequenceId
                             )
-                            messageStore.updateMessageReadTime(forWhat.id, firstReadMessage.timestamp)
+                            // #1020 Phase 2: readTime = actual read moment, clamped by the server-assigned
+                            // systemShowTimestamp (see SyncReadTimeResolver). WHERE bound stays maxServerTime.
+                            val resolvedReadAt = SyncReadTimeResolver.resolveSyncReadAt(
+                                payloadReadAt = firstReadMessage.readPosition.readAt,
+                                envelopeServerTimestamp = content.signalServiceEnvelope.systemShowTimestamp,
+                                fallback = firstReadMessage.timestamp
+                            )
+                            messageStore.updateMessageReadTime(
+                                forWhat.id,
+                                firstReadMessage.readPosition.maxServerTime,
+                                resolvedReadAt
+                            )
                         }
                     }
                 } else if (serviceContent.syncMessage.hasActivityNoticeSync()) {
@@ -519,7 +528,7 @@ class MessageContentProcessor @Inject constructor(
             attachmentList.add(attachment)
         }
 
-        val mentions: ArrayList<Mention> = ArrayList()
+        val mentions = ArrayList<Mention>()
         if (message.mentionsCount > 0) {
             L.d { "[Message][${tag}] Found mentions in handle text message" }
             message.mentionsList.forEach {
@@ -542,7 +551,13 @@ class MessageContentProcessor @Inject constructor(
                 }
                 val avatar = if (it.hasAvatar()) {
                     val attachment: Attachment = it.avatar.avatar.let { attachment1 ->
-                        val fileName = if (attachment1.fileName.isNullOrEmpty().not()) attachment1.fileName else attachment1.id.toString()
+                        var fileName = if (attachment1.fileName.isNullOrEmpty().not()) attachment1.fileName else attachment1.id.toString()
+                        fileName = if (FileUtil.isFileNameValid(fileName)) {
+                            fileName
+                        } else {
+                            L.e { "Illegal file name: $fileName" }
+                            attachment1.id.toString()
+                        }
                         val filePath = "${FileUtil.getFilePath(FileUtil.FILE_DIR_AVATAR)}$fileName"
                         createAttachmentFormPointer(attachment1.id.toString() + "", attachment1, fileName, filePath)
                     }
@@ -901,9 +916,8 @@ class MessageContentProcessor @Inject constructor(
                     L.w { "[Message][${tag}] weakContact missing uid, skip. changeType=${data?.changeType}" }
                     return
                 }
-                if (data.serverTimestamp > 0L) {
-                    WeakContactClock.update(data.serverTimestamp, SystemClock.elapsedRealtime())
-                }
+                // Do NOT feed the trusted-time anchor here: a notify's serverTimestamp is its GENERATION
+                // time, which from offline backlog can be days old and would rewind the global clock.
                 L.i { "[Message][${tag}] weakContact notify uid=$uid changeType=${data.changeType} reason=${data.reason} expireTime=${data.expireTime}" }
                 when (data.changeType) {
                     0 -> {

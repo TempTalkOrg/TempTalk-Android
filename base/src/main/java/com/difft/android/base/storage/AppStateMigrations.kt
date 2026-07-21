@@ -255,11 +255,12 @@ internal object AppStateMigrations {
                 return mut.toPreferences()
             }
 
-            // Project 26 UX fields.
+            // Project the legacy UX fields. SYNCED_CONTACTS_V5 is intentionally NOT projected: the
+            // legacy blob only carried the retired v4 flag, so legacy-SP upgraders must re-sync once
+            // (absent v5 key → read-fallback false → one full re-pull that seeds publicAccountType).
             mut[AppStateKeys.SEARCH_BY_CUSTOM_UID] = legacy.searchByCustomUid
             mut[AppStateKeys.DIRECTORY_VERSION_FOR_CONTACTORS] = legacy.directoryVersionForContactors
             legacy.mostUseEmojis?.let { mut[AppStateKeys.MOST_USE_EMOJIS] = it }
-            mut[AppStateKeys.SYNCED_CONTACTS_V4] = legacy.syncedContactsV4
             mut[AppStateKeys.SYNCED_GROUP_AND_MEMBERS] = legacy.syncedGroupAndMembers
             mut[AppStateKeys.PASSCODE_TIMEOUT] = legacy.passcodeTimeout
             mut[AppStateKeys.PASSCODE_ATTEMPTS] = legacy.passcodeAttempts

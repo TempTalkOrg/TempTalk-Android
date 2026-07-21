@@ -33,4 +33,5 @@ data class PublicConfigs(
     val meetingVersion: Int? = null,
     val publicName: String? = null,
     val criticalAlert: Boolean = false,
+    val publicAccountType: Int? = null,   // null = server did not send it → do not overwrite
 )

@@ -200,11 +200,6 @@ class PendingMessageHelper @Inject constructor(
                 timestamp = message.timestamp
                 message.source?.let(::source::set)
                 sourceDevice = message.sourceDevice
-                message.message?.let {
-                    Base64.decode(it)?.let { legacyData ->
-                        legacyMessage = ByteString.copyFrom(legacyData)
-                    }
-                }
                 message.content?.let {
                     Base64.decode(it)?.let { contentData ->
                         content = ByteString.copyFrom(contentData)

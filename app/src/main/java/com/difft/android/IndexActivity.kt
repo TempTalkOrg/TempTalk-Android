@@ -38,7 +38,7 @@ import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.utils.openExternalBrowser
+import com.difft.android.base.security.SafeLinkOpener
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -51,6 +51,7 @@ import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.media.LegacyPlaintextAttachmentMigration
+import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.chat.media.LegacyPlaintextAvatarCleanup
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupChatFragment
@@ -73,7 +74,7 @@ import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.databinding.ActivityIndexBinding
 import com.difft.android.login.repo.LoginRepo
 import com.difft.android.me.MeFragment
-import com.difft.android.messageserialization.db.store.formatBase58Id
+import com.difft.android.network.ServerTimeSyncer
 import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.config.UserAgentManager
@@ -188,6 +189,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
     @Inject
     lateinit var weakContactReconciler: WeakContactReconciler
+
+    @Inject
+    lateinit var serverTimeSyncer: ServerTimeSyncer
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -496,9 +500,17 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
     private fun checkDisappearingMessage() {
         messageArchiveManager.startCheckTask()
+        // Explicitly anchor server time at cold start; races the startup API wave harmlessly. Silent on failure.
+        lifecycleScope.launch(Dispatchers.IO) {
+            serverTimeSyncer.ensureAnchored()
+        }
     }
 
     private fun startFileCleanupTask() {
+        // Warm up the Glide cache master key off the main thread. First keystore key generation is a
+        // slow synchronous binder call; resolving it here (before avatars render) keeps the main-thread
+        // UI path (GlideCacheKeyManager.isCacheKeyReady) non-blocking and preserves cache hits.
+        GlideCacheKeyManager.warmUp(applicationContext)
         lifecycleScope.launch(Dispatchers.IO) {
             FileUtil.clearDraftAttachmentsDirectory()
             FileUtil.deleteMessageAttachmentEmptyDirectories()
@@ -754,20 +766,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                         } else {
                             ToastUtil.showLong(R.string.invalid_link)
                         }
-                    } else if (uri.host?.equals("group") == true) {
-                        //chative://group/join?inviteCode=xHJ6Pw7n
-                        val inviteCode = uri.getQueryParameter("inviteCode")
-                        if (!TextUtils.isEmpty(inviteCode) && ValidatorUtil.isInviteCode(inviteCode.toString())) {
-                            inviteUtils.joinGroupByInviteCode(inviteCode ?: "", this)
-                        } else {
-                            ToastUtil.showLong(R.string.invalid_link)
-                        }
                     } else {
                         ToastUtil.showLong(R.string.invalid_link)
                     }
                 } else if (uri.scheme?.equals("http") == true || uri.scheme?.equals("https") == true) {
                     val url = uri.toString()
-                    this.openExternalBrowser(url)
+                    SafeLinkOpener.open(this, url)
                 } else {
                     ToastUtil.showLong(R.string.not_supported_link)
                 }

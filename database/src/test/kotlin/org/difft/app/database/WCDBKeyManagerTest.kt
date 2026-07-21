@@ -2,6 +2,7 @@ package org.difft.app.database
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.difft.android.base.log.WCDBKeyUnavailableException
 import org.junit.After
 import org.junit.Before
 import org.junit.Ignore

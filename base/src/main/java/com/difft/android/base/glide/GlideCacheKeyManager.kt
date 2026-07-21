@@ -4,9 +4,12 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.appScope
+import kotlinx.coroutines.launch
 import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -41,21 +44,83 @@ object GlideCacheKeyManager {
     @Volatile
     private var cached: ByteArray? = null
 
-    /** @return the 32-byte cache master key, or null when the Keystore is unavailable. */
+    // Non-blocking readiness state for main-thread UI callers. The blocking keystore path
+    // (getKeyOrNull) runs the expensive AndroidKeyStore key generation via a synchronous binder call,
+    // which must NEVER happen on the main thread (it caused an ANR during RecyclerView layout, see
+    // GroupAvatarView). UI decides its Glide DiskCacheStrategy via [isCacheKeyReady], which only reads
+    // this volatile state and offloads the actual work to [warmUp].
+    private const val STATE_UNKNOWN = 0
+    private const val STATE_READY = 1
+    private const val STATE_UNAVAILABLE = 2
+
+    @Volatile
+    private var warmState = STATE_UNKNOWN
+
+    private val warming = AtomicBoolean(false)
+
+    /**
+     * @return the 32-byte cache master key, or null when the Keystore is unavailable.
+     *
+     * BLOCKING — performs keystore + file I/O. Only call off the main thread (Glide module init,
+     * cipher writes, background cleanup). Main-thread UI must use [isCacheKeyReady] instead.
+     */
     fun getKeyOrNull(context: Context): ByteArray? {
         cached?.let { return it }
         return synchronized(this) {
             cached?.let { return it }
             try {
-                loadOrCreate(context.applicationContext).also { cached = it }
+                loadOrCreate(context.applicationContext).also {
+                    cached = it
+                    warmState = STATE_READY
+                }
             } catch (e: Throwable) {
+                // Only downgrade readiness while we have never succeeded; once cached is set the fast
+                // path above returns early and this branch is unreachable, so READY is never lost.
+                warmState = STATE_UNAVAILABLE
                 L.w(e) { "[GlideCacheKey] key unavailable, encrypted cache disabled" }
                 null
             }
         }
     }
 
+    /**
+     * BLOCKING availability check (delegates to [getKeyOrNull]). Only for background callers that need
+     * an accurate answer (e.g. LegacyPlaintextAvatarCleanup on Dispatchers.IO). Main-thread UI MUST
+     * use [isCacheKeyReady].
+     */
     fun isAvailable(context: Context): Boolean = getKeyOrNull(context) != null
+
+    /**
+     * NON-BLOCKING readiness for main-thread UI. Never touches the keystore synchronously:
+     *  - READY → true (key resolved and available);
+     *  - UNAVAILABLE → false (resolved, keystore not usable — cache stays disabled this session);
+     *  - UNKNOWN → kicks off an async [warmUp] and returns false for now (this one load falls back to
+     *    DiskCacheStrategy.NONE; subsequent binds pick up the resolved state).
+     *
+     * The cache is a pure performance optimization, so a transient false is always safe.
+     */
+    fun isCacheKeyReady(context: Context): Boolean = when (warmState) {
+        STATE_READY -> true
+        STATE_UNAVAILABLE -> false
+        else -> {
+            warmUp(context)
+            false
+        }
+    }
+
+    /** Resolve the key off the main thread (idempotent, de-duplicated). Safe to call eagerly at startup. */
+    fun warmUp(context: Context) {
+        if (warmState != STATE_UNKNOWN) return
+        if (!warming.compareAndSet(false, true)) return
+        val appContext = context.applicationContext
+        appScope.launch {
+            try {
+                getKeyOrNull(appContext)
+            } finally {
+                warming.set(false)
+            }
+        }
+    }
 
     private fun loadOrCreate(context: Context): ByteArray {
         val keyFile = File(context.filesDir, KEY_FILE_NAME)

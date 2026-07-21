@@ -88,7 +88,7 @@ interface LCallToChatController {
 
     suspend fun inviteCall(roomId: String, roomName: String?, callType: String?, mKey: ByteArray?, inviteMembers: ArrayList<String>, conversationId: String?): InviteRequestState
 
-    fun isBotId(id: String): Boolean
+    fun isOfficialAccount(id: String): Boolean
 
     fun contactorListSortedByPinyin(list : List<ContactorModel>): List<ContactorModel>
 }

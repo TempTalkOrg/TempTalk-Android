@@ -43,13 +43,35 @@ import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.QueryMap
+import retrofit2.http.Streaming
 import retrofit2.http.Url
 
 
 interface HttpService {
 
+    /**
+     * Lightweight probe used only to anchor [com.difft.android.base.utils.time.ServerTimeProvider]:
+     * the response is a BaseResponse envelope whose outer serverTimestamp is captured by the
+     * ServerTimeCaptureConverterFactory hook. The body payload itself is unused here.
+     */
+    @GET("v1/health")
+    suspend fun health(): BaseResponse<Any>
+
     @GET
     suspend fun getResponseBody(
+        @Url url: String,
+        @HeaderMap headers: Map<String, String>,
+        @QueryMap params: Map<String, String>
+    ): ResponseBody
+
+    /**
+     * Streaming GET: @Streaming keeps Retrofit from buffering the whole body into memory,
+     * so contentLength() reflects the response header and byteStream() reads incrementally.
+     * Required for real download progress and to avoid OOM on large files (e.g. APK upgrades).
+     */
+    @Streaming
+    @GET
+    suspend fun getResponseBodyStreaming(
         @Url url: String,
         @HeaderMap headers: Map<String, String>,
         @QueryMap params: Map<String, String>

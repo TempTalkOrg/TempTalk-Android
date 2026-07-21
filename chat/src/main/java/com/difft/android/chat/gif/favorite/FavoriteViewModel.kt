@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import java.io.File
 import javax.inject.Inject
 
 /** Max plaintext size of a gif that can be added to favorites (10 MB). Larger ones are rejected.
@@ -31,6 +30,7 @@ const val MAX_FAVORITE_ASSET_BYTES = 10 * 1024 * 1024
 class FavoriteViewModel @Inject constructor(
     private val syncRepo: FavoriteSyncRepository,
     private val writeRepo: FavoriteWriteRepository,
+    private val optimisticWriter: FavoriteOptimisticWriter,
     private val gifLoader: FavoriteGifLoader
 ) : ViewModel() {
 
@@ -61,7 +61,9 @@ class FavoriteViewModel @Inject constructor(
             FavoriteContract.Intent.OpenFavorites -> ensureKeyAndReconcile()
             is FavoriteContract.Intent.Favorite -> onFavorite(intent.source)
             is FavoriteContract.Intent.Unfavorite ->
-                launchSafely("unfavorite") { writeRepo.unfavorite(intent.fileHash) }
+                // Optimistic: hides instantly (tombstone), syncs the removal in the background. Toast-free
+                // — the instant disappearance IS the feedback. Fixes the old silent-fail-offline bug.
+                launchSafely("unfavorite") { optimisticWriter.unfavorite(intent.fileHash) }
             is FavoriteContract.Intent.EvictOldestThenFavorite ->
                 launchSafely("evictOldest") { intent.onEvict() }
         }
@@ -90,57 +92,98 @@ class FavoriteViewModel @Inject constructor(
         // offline pull (IOException) would leave the panel blank even though favorites are cached locally.
         syncRepo.refreshObservable()
         // Establish the favKey (unwrap-first / first-create), pull + decrypt the server blob into the
-        // cache, then flush any optimistic pending rows so a deferred add never leaks forever. Offline /
-        // API failure here just keeps the cache already shown above (incl. optimistic pending rows).
-        writeRepo.ensureFavKey()
-        syncRepo.pullAndDecrypt()
-        writeRepo.flushPendingFavorites()
+        // cache, then flush any optimistic pending rows so a deferred add never leaks forever. Each step
+        // has its OWN guard so a failed key/pull (offline / transient GET) cannot skip the flush — the
+        // flush has its own no-key/offline guards and is idempotent, so it's always safe to run. Offline
+        // just keeps the cache already shown above (incl. optimistic pending rows), retrying next open.
+        runCatching { writeRepo.ensureFavKey() }
+            .onFailure { L.w { "[FavoriteVM] ensureFavKey failed: ${it.message}" } }
+        runCatching { syncRepo.pullAndDecrypt() }
+            .onFailure { L.w { "[FavoriteVM] pull failed: ${it.message}" } }
+        runCatching { writeRepo.flushPendingFavorites() }
+            .onFailure { L.w { "[FavoriteVM] flush failed: ${it.message}" } }
     }
 
     private fun onFavorite(source: FavoriteSource) = launchSafely("favorite") {
-        // Panel/search optimistic favorite: insert the placeholder + toast instantly; the real
-        // download + trans-store + CAS PUT run app-scoped in the background (no size guard — GIPHY
-        // previews are always small; no blocking).
-        if (source is FavoriteSource.FromRemote) {
-            writeRepo.favoriteOptimistic(source.giphyId, source.previewUrl, source.width, source.height)
-            _effect.send(FavoriteContract.Effect.ShowToast(com.difft.android.chat.R.string.gif_favorites_added))
-            return@launchSafely
-        }
-        val file: File
-        val width: Int
-        val height: Int
-        val deleteAfterUse: Boolean
         when (source) {
-            is FavoriteSource.FromFile -> {
-                file = source.file; width = source.width; height = source.height; deleteAfterUse = false
+            is FavoriteSource.FromRemote -> {
+                // Panel/search optimistic favorite: placeholder + toast instantly; the real download +
+                // trans-store + CAS PUT run app-scoped in the background (no size guard — GIPHY previews
+                // are always small; no blocking). Toast the SUCCESS string only when the optimistic
+                // enqueue actually succeeds; a thrown failure (e.g. WCDB upsert) shows the failure toast.
+                emitFavoriteResult {
+                    optimisticWriter.favoriteRemote(source.giphyId, source.previewUrl, source.width, source.height)
+                }
             }
-            is FavoriteSource.FromMessageFile -> {
-                file = source.file; width = source.width; height = source.height; deleteAfterUse = source.deleteAfterUse
+            is FavoriteSource.FromMessageRef -> {
+                // Message gif optimistic favorite (favorite-without-download): placeholder + toast
+                // instantly, background resolve (isExist fast-pass, download only on a miss). Cap is
+                // deferred to the confirm-time FIFO eviction (matches the Giphy optimistic path).
+                if (source.size > MAX_FAVORITE_ASSET_BYTES) {
+                    L.w { "[FavoriteVM] favorite message rejected: size=${source.size} exceeds $MAX_FAVORITE_ASSET_BYTES" }
+                    _effect.send(FavoriteContract.Effect.ShowToast(com.difft.android.chat.R.string.gif_favorites_add_size_limit))
+                    return@launchSafely
+                }
+                val accountFileHash = android.util.Base64.encodeToString(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(source.key),
+                    android.util.Base64.NO_WRAP
+                )
+                val ref = PendingSource.Message(
+                    messageId = source.messageId, fileName = source.fileName,
+                    attachmentId = source.attachmentId, authorizeId = source.authorizeId,
+                    key = source.key, digest = source.digest, accountFileHash = accountFileHash
+                )
+                // Same optimistic contract as FromRemote: success toast only on success; a thrown
+                // failure (defensive — favoriteMessage is throw-free after the local-bump fix) toasts
+                // the failure string instead of skipping feedback.
+                emitFavoriteResult {
+                    optimisticWriter.favoriteMessage(ref, source.width, source.height, source.size, source.contentType)
+                }
             }
-            is FavoriteSource.FromRemote -> return@launchSafely // handled above (unreachable)
+            is FavoriteSource.FromFile -> favoriteFromFile(source)
         }
-        // Reject oversized gifs up front (before any upload/store); clean up the transient temp if any.
+        L.i { "[FavoriteVM] favorite done" }
+    }
+
+    /**
+     * Run an optimistic favorite [block] and surface the outcome consistently: [gif_favorites_added]
+     * on success, [gif_favorites_failed] if the block throws. Keeps the Remote/Message optimistic
+     * paths from emitting a success toast after a call that can fail (Bug E). Cancellation propagates.
+     */
+    private suspend fun emitFavoriteResult(block: suspend () -> Unit) {
+        try {
+            block()
+            _effect.send(FavoriteContract.Effect.ShowToast(com.difft.android.chat.R.string.gif_favorites_added))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.w { "[FavoriteVM] optimistic favorite failed: ${e.stackTraceToString()}" }
+            _effect.send(FavoriteContract.Effect.ShowToast(com.difft.android.chat.R.string.gif_favorites_failed))
+        }
+    }
+
+    /**
+     * Blocking panel favorite path for a resolved plaintext file (kept for compatibility; the message
+     * entries now use the optimistic [FavoriteSource.FromMessageRef] path). Surfaces the interactive
+     * cap dialog on CapReached.
+     */
+    private suspend fun favoriteFromFile(source: FavoriteSource.FromFile) {
+        val file = source.file
+        // Reject oversized gifs up front (before any upload/store).
         if (file.length() > MAX_FAVORITE_ASSET_BYTES) {
             L.w { "[FavoriteVM] favorite rejected: size=${file.length()} exceeds $MAX_FAVORITE_ASSET_BYTES" }
-            if (deleteAfterUse) runCatching { file.delete() }
             _effect.send(FavoriteContract.Effect.ShowToast(com.difft.android.chat.R.string.gif_favorites_add_size_limit))
-            return@launchSafely
+            return
         }
-        // A CapReached outcome re-dispatches this same source after the user confirms eviction, so the
-        // (possibly temp) file must survive for that retry — only delete it on a terminal outcome.
-        var reused = false
         try {
-            when (val r = writeRepo.favorite(file, width, height)) {
-                is FavResult.CapReached -> {
-                    reused = true
-                    _effect.send(
-                        // Confirm dialog: "Replace oldest" evicts + re-runs the favorite; "Cancel" just dismisses.
-                        FavoriteContract.Effect.ShowCapDialog(onEvictOldest = {
-                            r.onEvictOldest()
-                            dispatch(FavoriteContract.Intent.Favorite(source))
-                        })
-                    )
-                }
+            when (val r = writeRepo.favorite(file, source.width, source.height)) {
+                is FavResult.CapReached -> _effect.send(
+                    // Confirm dialog: "Replace oldest" evicts + re-runs the favorite; "Cancel" just dismisses.
+                    FavoriteContract.Effect.ShowCapDialog(onEvictOldest = {
+                        r.onEvictOldest()
+                        dispatch(FavoriteContract.Intent.Favorite(source))
+                    })
+                )
                 // Kept locally as an optimistic pending row (rare: identity-rotation window / CAS
                 // contention prevented server confirmation). Re-syncs silently on the next
                 // favorites-tab open (flushPendingFavorites) — no user-facing toast.
@@ -155,15 +198,9 @@ class FavoriteViewModel @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // e.g. network failure during trans-store/upload — surface a toast instead of crashing
-            // (the upload runs before the optimistic row is added, so there is nothing to roll back).
+            // e.g. network failure during trans-store/upload — surface a toast instead of crashing.
             L.w { "[FavoriteVM] favorite failed: ${e.stackTraceToString()}" }
             _effect.send(FavoriteContract.Effect.ShowToast(com.difft.android.chat.R.string.gif_favorites_failed))
-        } finally {
-            // Delete the transient decrypted-from-message temp once consumed (not on CapReached, which
-            // reuses it on retry). Runs on terminal success/failure/cancellation.
-            if (deleteAfterUse && !reused) runCatching { file.delete() }
         }
-        L.i { "[FavoriteVM] favorite done" }
     }
 }

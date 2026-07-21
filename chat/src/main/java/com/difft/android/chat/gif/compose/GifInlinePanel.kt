@@ -81,6 +81,7 @@ fun GifInlinePanel(
                 onLoadNextPage = { viewModel.dispatch(GifPanelContract.Intent.LoadNextPage) },
                 contentPadding = PaddingValues(bottom = 16.dp),
                 isLoading = state.isLoading,
+                loadError = state.loadError,
                 onAddToFavorite = { item -> viewModel.dispatch(GifPanelContract.Intent.FavoriteGif(item)) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )

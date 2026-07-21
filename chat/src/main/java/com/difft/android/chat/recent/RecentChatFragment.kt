@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
 import kotlinx.coroutines.withContext
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.members
 import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.GroupModel
@@ -412,6 +413,13 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
         TextSizeUtil.textSizeState
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { mAdapter.notifyDataSetChanged() }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
+
+        // Re-bind the official-account badge when the cache populates (preload / full sync).
+        // StateFlow replays the current value so a collector started before preload self-heals.
+        OfficialAccountCache.state
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { mAdapter.notifyDataSetChanged() }
             .launchIn(viewLifecycleOwner.lifecycleScope)

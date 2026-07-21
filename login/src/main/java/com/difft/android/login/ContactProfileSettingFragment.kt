@@ -16,7 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
+import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
@@ -210,9 +210,8 @@ class ContactProfileSettingFragment : Fragment() {
         }
 
         binding.clAvatar.setOnClickListener {
-            // check permission
-            // callback to select picture in onPicturePermissionForAvatarResult
-            onPicturePermissionForAvatar.launchMultiplePermission(PermissionUtil.picturePermissions)
+            // Open directly when media is already usable (full/partial); else request.
+            onPicturePermissionForAvatar.launchMediaSelectionOrOpen { createPictureSelector() }
         }
     }
 

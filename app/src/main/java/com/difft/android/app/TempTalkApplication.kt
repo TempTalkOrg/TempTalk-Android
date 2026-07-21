@@ -30,7 +30,9 @@ import com.difft.android.base.storage.user.StorageBoundUserManagerImpl
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppStartup
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
 import org.difft.app.database.DbHealth
+import org.difft.app.database.probeHealthy
 import org.difft.app.database.wcdb
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
@@ -84,7 +86,7 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
 @HiltAndroidApp
-class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")), AppForegroundObserver.Listener, androidx.work.Configuration.Provider {
+class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")).plus(dbKeyFailSoftExceptionHandler), AppForegroundObserver.Listener, androidx.work.Configuration.Provider {
     // On-demand WorkManager init: WorkManagerInitializer is disabled in the manifest, so this lets
     // WorkManager self-initialize lazily if a still-merged component (e.g. SystemForegroundService)
     // calls getInstance(), instead of crashing. Never invoked on the normal startup path.
@@ -437,7 +439,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             fgBgMutex.withLock {
                 recordLastUseTime()
                 scheduleGrayConfigUpdateCheck()
-                LCallManager.restoreIncomingCallScreenIfActive()
+                // NOTE: incoming-call restore is intentionally NOT triggered here. On a cold start this
+                // fires too early — the launcher's IndexActivity + the app lock come up afterwards and
+                // bury the ringing screen. Restore now runs at the end of scheduleQuickScreenLockCheck,
+                // i.e. AFTER the app-lock decision, so the call reliably ends up above the lock.
                 LCallManager.onAppForegroundedForCallServiceUrls()
                 globalConfigsManager.get().onAppStateChanged(isForeground = true)
                 messageArchiveManager.get().onAppStateChanged(isForeground = true)
@@ -466,7 +471,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
      */
     private fun onAppForeground() {
         L.d { "[ScreenLock] onForeground called" }
-        scheduleQuickScreenLockCheck()
+        // Genuine app foreground entry (cold start / return from background): after the app-lock
+        // decision, (re)surface any active incoming call above the lock. Other callers of
+        // scheduleQuickScreenLockCheck (call-end re-lock, in-call re-check) must NOT restore, or a
+        // just-rejected call whose notifying flag hasn't cleared yet would be relaunched.
+        scheduleQuickScreenLockCheck(restoreIncomingCallAfterCheck = true)
     }
 
     /**
@@ -542,6 +551,26 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 AppForegroundObserver.notifyActivityStopped()
                 L.d { "[ScreenLock] onActivityStopped: ${activity::class.simpleName}, count=$startedActivityCount" }
 
+                // Clear the temporary bypass flag whenever a call/incoming-call screen LEAVES the foreground
+                // (stopped), not only when it finishes. wakeUpDevice sets this flag to true while showing the
+                // call screen in the foreground; it is only meaningful while that screen is actually visible.
+                // If we cleared it just on isFinishing, minimizing the call (swipe up to home / launcher —
+                // a stop that is NOT finishing) would leave the flag true, and returning via the launcher icon
+                // would short-circuit shouldShowScreenLock at the "temporarily disabled" check (before the
+                // isInForeground branch) and skip the app lock, briefly exposing the main UI. Clearing on any
+                // stop also covers the finishing case (last Activity → count reaches zero below).
+                //
+                // Important: do NOT proactively re-apply the app lock here. The lock state during a call is
+                // decided by the back stack:
+                //  · Locked before the call (cold start / already locked): the app lock already sits beneath
+                //    the call screen and is revealed automatically once the call finishes.
+                //  · Already unlocked in the foreground before the call: leaving returns to the previous
+                //    screen, and we must never conjure a lock out of nowhere (otherwise rejecting an incoming
+                //    call while unlocked in the foreground would wrongly pop the app lock).
+                if (activity is LIncomingCallActivity || activity is LCallActivity) {
+                    ScreenLockUtil.temporarilyDisabled = false
+                }
+
                 // 从前台进入后台：计数从 1 变为 0
                 if (startedActivityCount == 0) {
                     onAppBackground()
@@ -593,11 +622,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     /**
-     * 前后台切换时检查是否显示锁屏
-     *  Deeplink 场景会在 handleDeeplink() 中再次触发检查
+     * Check whether to show the screen lock on foreground/background transitions.
+     * The deeplink flow re-triggers this check in handleDeeplink().
      */
-    private fun scheduleQuickScreenLockCheck() {
-        // 取消之前的检查
+    private fun scheduleQuickScreenLockCheck(restoreIncomingCallAfterCheck: Boolean = false) {
+        // Cancel the previous check
         lockCheckJob?.cancel()
 
         lockCheckJob = launch(Dispatchers.Main) {
@@ -605,8 +634,20 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             L.d { "[ScreenLock] Quick check after 100ms" }
             showScreenLockIfNeeded()
 
-            // 检查完成后重置临时豁免标志
+            // Reset the temporary bypass flag once the check is done
             ScreenLockUtil.temporarilyDisabled = false
+
+            // Only on a genuine foreground entry, after the lock decision is done, bring the incoming
+            // call screen to the front so it stays above the app lock (telephony-style). Launching it
+            // too early in onForeground on a cold start would get it buried by IndexActivity + the app
+            // lock; doing it here (lock already up) reliably keeps the call screen on top. No-op when
+            // there is no active incoming call.
+            // Note: other callers (call-end re-lock, in-call re-check) must NOT restore, otherwise a
+            // just-rejected call whose notifying flag hasn't cleared yet would be relaunched (showing
+            // "app lock + another incoming-call screen").
+            if (restoreIncomingCallAfterCheck) {
+                LCallManager.restoreIncomingCallScreenIfActive()
+            }
         }
     }
 
@@ -669,13 +710,36 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             return false
         }
 
-        if (onGoingCallStateManager.get().isInCalling() && !onGoingCallStateManager.get().needAppLock) {
-            L.d { "[ScreenLock] Skip: in call" }
+        // Telephony-style: the incoming / ongoing call screen is always kept above the app lock
+        // (visible and answerable without unlocking first), regardless of needAppLock. When the app
+        // was locked before the call, ScreenLockActivity is shown underneath (by the foreground lock
+        // check, before the call is restored on top) and is revealed again once the call finishes —
+        // so the app content behind the call stays protected without any extra re-lock.
+        //
+        // Skip only while the ongoing call is actually full-screen in the foreground (isInForeground),
+        // NOT merely while a call exists (isInCalling). When the call is minimized to the background or
+        // to a PIP window and the user opens app content via the launcher, that content must still be
+        // gated by the app lock ("must unlock before reaching app content"). A PIP call window keeps
+        // floating above the lock by the system, so the call itself stays visible/answerable while the
+        // app content behind it is protected.
+        if (onGoingCallStateManager.get().isInForeground()) {
+            L.d { "[ScreenLock] Skip: in call (foreground)" }
             return false
         }
 
-        if (inComingCallStateManager.get().isActivityShowing() && !inComingCallStateManager.get().isNeedAppLock()) {
-            L.d { "[ScreenLock] Skip: incoming call" }
+        // Skip the app lock only while the incoming-call screen is actually visible in the foreground
+        // (telephony-style: the call screen always stays above the lock and can be seen/answered
+        // without unlocking first). This must use isInForeground, not isActivityShowing:
+        //  · isActivityShowing means the Activity merely exists (between onCreate and onDestroy).
+        //    Minimizing it (top-left back button / swipe up to home) only triggers onPause/onStop —
+        //    the Activity is not destroyed, so isActivityShowing stays true.
+        //  · Using it here would wrongly match this branch when the user re-opens the app from the
+        //    launcher icon after minimizing the call, skipping the lock and exposing app content while
+        //    a lock is configured.
+        // isInForeground is set true in onResume and false in onPause, which exactly represents
+        // whether the incoming-call screen is currently visible in the foreground.
+        if (inComingCallStateManager.get().isInForeground()) {
+            L.d { "[ScreenLock] Skip: incoming call (foreground)" }
             return false
         }
 

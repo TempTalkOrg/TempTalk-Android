@@ -3,6 +3,7 @@ package com.difft.android.chat.ui.messageaction
 import android.graphics.Rect
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.canDownloadFile
 import com.difft.android.chat.message.isAttachmentMessage
@@ -269,7 +270,7 @@ class MessageActionConfigBuilder(
      */
     private fun isWithinRecallTimeout(message: TextChatMessage): Boolean {
         val recallTimeoutInterval = (globalConfigsManager.getNewGlobalConfigs()?.data?.recall?.timeoutInterval ?: (24 * 60 * 60)) * 1000L
-        return System.currentTimeMillis() - message.systemShowTimestamp <= recallTimeoutInterval
+        return ServerTimeProvider.nowMillis() - message.systemShowTimestamp <= recallTimeoutInterval
     }
     
     /** True when the (direct or single-forward) attachment is an animated image (gif or animated

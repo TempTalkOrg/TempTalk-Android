@@ -36,8 +36,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
-import com.difft.android.chat.contacts.data.isBotId
-import com.difft.android.chat.contacts.data.isOfficialBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatInputFocusable
@@ -58,18 +57,22 @@ import com.luck.picture.lib.pictureselector.GlideEngine
 import com.luck.picture.lib.pictureselector.PictureSelectorUtils
 import com.difft.android.chat.util.Util
 import android.content.Context
-import com.difft.android.base.utils.openExternalBrowser
+import com.difft.android.base.security.SafeLinkOpener
 import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.ForwardContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.cache.ContactRemarkCache
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.convertToContactorModel
 import org.difft.app.database.getCommonGroupsCount
 import org.difft.app.database.models.ContactorModel
@@ -360,6 +363,19 @@ class ContactDetailFragment : Fragment() {
                 initData()
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
+
+        // Self-heal if the official-account cache populates after this screen was built during the
+        // pre-preload window. initData() rebuilds the UiState, so isOfficialAccount + the derived
+        // website/label recompute.
+        OfficialAccountCache.state
+            .map { contactId in it }
+            .distinctUntilChanged()
+            .drop(1)
+            .onEach {
+                if (!isAdded || view == null) return@onEach
+                initData()
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
     /**
@@ -483,7 +499,7 @@ class ContactDetailFragment : Fragment() {
 
     private fun handleWebsiteClick() {
         val website = uiState.website ?: return
-        requireContext().openExternalBrowser(website)
+        SafeLinkOpener.open(requireContext(), website)
     }
 
     private fun shareContact() {
@@ -510,8 +526,7 @@ class ContactDetailFragment : Fragment() {
         }
 
         val isSelf = globalServices.myId == contactId
-        val isBot = contactor.id.isBotId()
-        val isOfficialBot = contactor.id.isOfficialBotId()
+        val isOfficialAccount = contactor.id.isOfficialAccount()
         // Mirror the priority chain that getDisplayNameForUI() walks for remarks
         // so hasRemark reflects what displayName actually surfaces, otherwise the
         // "原名" line under displayName would be dropped when remark only lives on
@@ -542,8 +557,7 @@ class ContactDetailFragment : Fragment() {
             isFriend = isFriend,
             isWeakPending = isWeakPending,
             isSelf = isSelf,
-            isBot = isBot,
-            isOfficialBot = isOfficialBot,
+            isOfficialAccount = isOfficialAccount,
             displayName = displayName,
             originalName = originalName,
             hasRemark = hasRemark,
@@ -553,7 +567,7 @@ class ContactDetailFragment : Fragment() {
             joinedAt = contactor.joinedAt,
             sourceDescribe = if (!isSelf) contactor.sourceDescribe else null,
             commonGroupsCount = commonGroupsCount,
-            website = if (isOfficialBot) urlManager.installationGuideUrl else null
+            website = if (isOfficialAccount) urlManager.installationGuideUrl else null
         )
     }
 

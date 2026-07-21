@@ -150,6 +150,7 @@ fun GifSearchScreen(
             onPick = onPick,
             onLoadNextPage = { viewModel.dispatch(GifPanelContract.Intent.LoadNextPage) },
             isLoading = state.isLoading,
+            loadError = state.loadError,
             onAddToFavorite = { item -> viewModel.dispatch(GifPanelContract.Intent.FavoriteGif(item)) },
             // Top = 0: the 8dp gap to the search box comes solely from the search row's bottom padding
             // (the grid's default 16dp top would otherwise stack with it to 24dp). Sides/bottom keep 16.

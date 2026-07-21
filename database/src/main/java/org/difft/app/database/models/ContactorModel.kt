@@ -55,6 +55,9 @@ class ContactorModel {
     @WCDBField
     var customUid: String? = null
 
+    @WCDBField
+    var publicAccountType: Int = PublicAccountType.NORMAL   // 0=NORMAL, 1=OFFICIAL (server-driven)
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || javaClass != other.javaClass) return false
@@ -73,12 +76,14 @@ class ContactorModel {
                 sourceDescribe == other.sourceDescribe &&
                 findyouDescribe == other.findyouDescribe &&
                 groupMemberContactor == other.groupMemberContactor &&
-                customUid == other.customUid
+                customUid == other.customUid &&
+                publicAccountType == other.publicAccountType
     }
 
     // exclude databaseId: rowid must not affect content equality, #901
     override fun hashCode(): Int = Objects.hash(
         id, name, email, avatar, meetingVersion, publicName, timeZone, remark,
-        remarkAvatar, joinedAt, sourceDescribe, findyouDescribe, groupMemberContactor, customUid
+        remarkAvatar, joinedAt, sourceDescribe, findyouDescribe, groupMemberContactor, customUid,
+        publicAccountType
     )
 }

@@ -84,6 +84,11 @@
     <string name="status_upgrade_button_cancle">取消</string>
     <string name="status_upgrade_verify_failed">更新包校验失败</string>
     <string name="status_upgrade_param_exception">更新包参数异常</string>
+    <string name="upgrade_notification_channel_name">应用更新</string>
+    <string name="upgrade_notification_downloading">正在下载新版本…</string>
+    <string name="upgrade_notification_verifying">正在校验…</string>
+    <string name="upgrade_notification_complete">下载完成，点击安装</string>
+    <string name="upgrade_notification_failed">下载失败，点击重试</string>
     <string name="me_text_size">字体大小</string>
     <string name="me_text_size_default">默认</string>
     <string name="me_text_size_lage">大</string>
@@ -93,6 +98,10 @@
     <string name="db_recovery_please_wait">请稍候，这可能需要一点时间…</string>
     <string name="db_recovery_resync_message">数据库已重置，正在重新同步你的账号；本地聊天记录无法恢复。</string>
     <string name="db_recovery_unrecoverable_message">无法恢复数据库，请重新登录。</string>
+    <string name="db_key_unavailable_title">安全存储暂不可用</string>
+    <string name="db_key_unavailable_message">设备的安全密钥库暂时不可用，加密数据库无法打开。你的本地数据未被删除。请重试。</string>
+    <string name="db_key_unavailable_retry">重试</string>
+
     <string name="dual_pane_divider_drag_hint">拖动以调整面板宽度</string>
 
     <!-- 自建代理 -->
@@ -138,4 +147,18 @@
     <string name="proxy_protect_call">保护通话 IP 地址</string>
     <string name="proxy_protect_call_desc">开启后，通话也会通过代理连接，向 Quicall 隐藏真实 IP，可能降低通话质量。</string>
     <string name="proxy_protect_call_enable_proxy_first">请先开启“使用代理”。</string>
+
+    <!-- Linked Devices -->
+    <string name="linked_devices_title">已绑定的设备</string>
+    <string name="linked_devices_link_new_title">绑定新设备</string>
+    <string name="linked_devices_link_new_subtitle">扫描二维码</string>
+    <string name="linked_devices_linked_at">已绑定: %1$s</string>
+    <string name="linked_devices_last_active">最新活动设备: %1$s</string>
+    <string name="linked_devices_unnamed">未命名设备</string>
+    <string name="linked_devices_unlink_action">解绑</string>
+    <string name="linked_devices_unlink_cancel">取消</string>
+    <string name="linked_devices_unlink_confirm_title">确定解绑 \"%1$s\"?</string>
+    <string name="linked_devices_unlink_confirm_body">被解绑的设备将无法接收和发送消息。</string>
+    <string name="linked_devices_unlink_failed">解绑设备失败。</string>
+    <string name="linked_devices_list_update_failed">设备列表更新失败。</string>
 </resources>

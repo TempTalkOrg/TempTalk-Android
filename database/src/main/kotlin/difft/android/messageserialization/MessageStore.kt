@@ -28,7 +28,12 @@ interface MessageStore {
 
     fun deleteDatabase()
 
-    suspend fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long)
+    /**
+     * @param readMaxTimestamp row-selection bound (server axis).
+     * @param readAt value written to readTime — the actual read moment (#1020 Phase 2), kept separate
+     *   from the selection bound.
+     */
+    suspend fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long, readAt: Long)
 
     fun savePendingMessage(messageId: String, originalMessageTimeStamp: Long, messageEnvelopBytes: ByteArray)
 }

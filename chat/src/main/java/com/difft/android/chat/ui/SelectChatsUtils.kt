@@ -20,6 +20,7 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
@@ -35,7 +36,7 @@ import com.difft.android.chat.common.GroupAvatarView
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getFirstLetter
@@ -384,7 +385,9 @@ class SelectChatsUtils @Inject constructor(
                 }
                 textViewName.text = chatsContact.name
                 val contentText = title ?: content
-                textContent.text = contentText
+                // Display-only normalize: this preview bypasses setMarkdownToTextview. Only the bound
+                // value is normalized; `content` is reused as the sent payload below and stays raw.
+                textContent.text = contentText.normalizeNewlines()
             },
             onConfirm = {
                 val message = etMessage?.text.toString().trim()
@@ -412,7 +415,7 @@ class SelectChatsUtils @Inject constructor(
                                 val memberCount = wcdb.getGroupMemberCount(chatsContact.id)
                                 val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
                                 if (memberCount >= limit) mode = 0
-                            } else if (chatsContact.id.isBotId()) {
+                            } else if (chatsContact.id.isOfficialAccount()) {
                                 mode = 0
                             }
                         }
@@ -966,7 +969,7 @@ class SelectChatsUtils @Inject constructor(
                         val memberCount = wcdb.getGroupMemberCount(accountID)
                         val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
                         if (memberCount >= limit) mode = 0
-                    } else if (accountID.isBotId()) {
+                    } else if (accountID.isOfficialAccount()) {
                         mode = 0
                     }
                 }
@@ -1023,7 +1026,7 @@ class SelectChatsUtils @Inject constructor(
                     val memberCount = wcdb.getGroupMemberCount(accountID)
                     val limit = globalConfigsManager.getGroupConfidentialMemberLimit()
                     if (memberCount >= limit) mode = 0
-                } else if (accountID.isBotId()) {
+                } else if (accountID.isOfficialAccount()) {
                     mode = 0
                 }
             }

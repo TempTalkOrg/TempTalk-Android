@@ -3,11 +3,6 @@ package com.difft.android.chat.gif.favorite
 import android.net.Uri
 import android.util.Base64
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.FilePathManager
-import com.difft.android.base.utils.sanitizeUrl
-import com.difft.android.chat.fileshare.DownloadReq
-import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.media.FavoriteEncryptedAttachmentProvider
 import kotlinx.coroutines.Dispatchers
@@ -17,8 +12,6 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBFavoriteGifModel
 import org.difft.app.database.models.FavoriteGifModel
 import org.difft.app.database.wcdb
-import java.io.File
-import java.io.FileOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,8 +29,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class FavoriteGifLoader @Inject constructor(
-    private val fileShareRepo: FileShareRepo,
-    private val userManager: UserManager,
+    private val ciphertextFetcher: FavoriteCiphertextFetcher,
 ) {
     // One Mutex per in-flight fileHash so concurrent cells don't double-download the same gif.
     private val inFlightLock = Mutex()
@@ -74,53 +66,10 @@ class FavoriteGifLoader @Inject constructor(
             if (EncryptedAttachmentAccess.isStructurallyCompleteCiphertext(encFile)) {
                 return@withLock FavoriteEncryptedAttachmentProvider.contentUri(attachmentId) // cache hit
             }
-            if (!downloadCiphertext(row, attachmentId, encFile, fileHash)) return@withLock null
+            // Download the ciphertext AS-IS (already `[IV16][AES-CBC][HMAC32]` under the 64-byte
+            // attachment key) via the shared fetcher; no decryption to disk.
+            if (!ciphertextFetcher.downloadCiphertextTo(row.authorizeId, fileHash, encFile)) return@withLock null
             FavoriteEncryptedAttachmentProvider.contentUri(attachmentId)
-        }
-    }
-
-    /**
-     * Download the encrypted attachment and keep it AS-IS (it is already `[IV16][AES-CBC][HMAC32]`
-     * ciphertext under the 64-byte attachment key), storing it at [encFile]. No decryption to disk.
-     */
-    private fun downloadCiphertext(
-        row: FavoriteGifModel,
-        attachmentId: String,
-        encFile: File,
-        fileHash: String,
-    ): Boolean {
-        val tempFile = File(FilePathManager.gifFavoritesDir, "$attachmentId.encrypt.part")
-        try {
-            val token = userManager.getUserData()?.microToken ?: ""
-            val resp = fileShareRepo.download(DownloadReq(token, row.authorizeId, fileHash, "")).execute()
-            val body = resp.body()
-            if (!resp.isSuccessful || body?.status != 0) {
-                L.w { "[FavoriteGifLoader] download meta failed fileHash=$fileHash http=${resp.code()} status=${body?.status}" }
-                return false
-            }
-            val urls = body.data?.urls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(body.data?.url)
-            if (urls.isEmpty()) {
-                L.w { "[FavoriteGifLoader] no download urls fileHash=$fileHash" }
-                return false
-            }
-
-            if (!fetchToFile(urls, tempFile, fileHash)) return false
-            if (!EncryptedAttachmentAccess.isStructurallyCompleteCiphertext(tempFile)) {
-                L.w { "[FavoriteGifLoader] downloaded ciphertext malformed fileHash=$fileHash len=${tempFile.length()}" }
-                return false
-            }
-
-            encFile.delete()
-            if (!tempFile.renameTo(encFile)) {
-                tempFile.copyTo(encFile, overwrite = true)
-            }
-            return true
-        } catch (e: Exception) {
-            L.w { "[FavoriteGifLoader] resolve failed fileHash=$fileHash: ${e.stackTraceToString()}" }
-            encFile.delete()
-            return false
-        } finally {
-            tempFile.delete()
         }
     }
 
@@ -129,28 +78,6 @@ class FavoriteGifLoader @Inject constructor(
         val enc = row.encKey
         if (enc.isNullOrEmpty()) return false
         return runCatching { Base64.decode(enc, Base64.NO_WRAP).size }.getOrDefault(0) >= 64
-    }
-
-    /** Try each pre-signed URL until one downloads the encrypted bytes into [tempFile]. */
-    private fun fetchToFile(urls: List<String>, tempFile: File, fileHash: String): Boolean {
-        for (url in urls) {
-            try {
-                val ossResp = fileShareRepo.downloadFromOSS(url).execute()
-                val ossBody = ossResp.body
-                if (!ossResp.isSuccessful || ossBody == null) {
-                    L.w { "[FavoriteGifLoader] OSS download failed fileHash=$fileHash url=${url.sanitizeUrl()}" }
-                    continue
-                }
-                ossBody.byteStream().use { input ->
-                    FileOutputStream(tempFile).use { output -> input.copyTo(output) }
-                }
-                return true
-            } catch (e: Exception) {
-                L.w { "[FavoriteGifLoader] OSS download exception fileHash=$fileHash url=${url.sanitizeUrl()}: ${e.message}" }
-                if (tempFile.exists()) tempFile.delete()
-            }
-        }
-        return false
     }
 
     // Per-fileHash Mutex so concurrent cells coalesce onto one download. The map is bounded by the

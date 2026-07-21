@@ -440,7 +440,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             val isAnimatedType = contentType.contains("gif") || contentType.contains("webp")
             val useEncryptedResourceCache = isEncryptedMedia &&
                 currentMessage?.isConfidential() != true &&
-                GlideCacheKeyManager.isAvailable(context)
+                GlideCacheKeyManager.isCacheKeyReady(context)
 
             val (model: Any, fileLastModified: Long, actualFileSize: Long) = withContext(Dispatchers.IO) {
                 if (isEncryptedMedia) {

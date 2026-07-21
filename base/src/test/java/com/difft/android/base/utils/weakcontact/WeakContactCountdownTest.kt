@@ -1,6 +1,7 @@
 package com.difft.android.base.utils.weakcontact
 
 import android.os.SystemClock
+import com.difft.android.base.utils.time.ServerTimeProvider
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,8 +28,8 @@ class WeakContactCountdownTest {
 
     @After
     fun tearDown() {
-        // Clock is a process-singleton; reset so other tests in the same JVM see a clean anchor.
-        WeakContactClock.update(0L, 0L) // serverNow<=0 → no-op, but documents intent
+        // ServerTimeProvider is a process-singleton; unanchor so sibling tests see a clean state.
+        clearClockAnchor()
     }
 
     // ---- pure daysLeft combinations -----------------------------------------------------
@@ -140,24 +141,21 @@ class WeakContactCountdownTest {
         assertEquals(3, after)
     }
 
-    // ---- daysLeftFromClock null-anchor fallback -----------------------------------------
+    // ---- daysLeftFromClock unanchored fallback (routes through ServerTimeProvider.nowMillis) --------
 
     @Test
-    fun `daysLeftFromClock falls back to wall clock when anchor is null`() {
-        // No anchor set (process just restarted) → falls back to System.currentTimeMillis().
-        // expireAt 3 days in the future from wall clock → ceil ~3 (allow 2..3 for sub-ms drift).
-        // Ensure no stale anchor from a sibling test.
-        clearAnchorReflectively()
-        val expireAt = System.currentTimeMillis() + (dayMs * 3) - 1
+    fun `daysLeftFromClock uses ServerTimeProvider nowMillis when unanchored`() {
+        // No L1 anchor: nowMillis falls through to L2/L3 (wall + offset). Inject a deterministic wall
+        // clock so the countdown is exact. expireAt 3 days out (minus 1ms) → ceil = 3.
+        val now = 1_700_000_000_000L
+        ServerTimeProvider.resetForTest(wallClock = { now }, elapsedClock = { 0L })
+        val expireAt = now + (dayMs * 3) - 1
         val result = WeakContactCountdown.daysLeftFromClock(expireAt)
-        // 3 days minus 1ms → ceil = 3.
         assertEquals(3, result)
     }
 
-    /** WeakContactClock has no public clear; reset its anchor to null via reflection for isolation. */
-    private fun clearAnchorReflectively() {
-        val field = WeakContactClock::class.java.getDeclaredField("anchor")
-        field.isAccessible = true
-        field.set(WeakContactClock, null)
+    /** Reset ServerTimeProvider to an unanchored state so sibling tests see a clean process-singleton. */
+    private fun clearClockAnchor() {
+        ServerTimeProvider.resetForTest(wallClock = { 0L }, elapsedClock = { 0L })
     }
 }

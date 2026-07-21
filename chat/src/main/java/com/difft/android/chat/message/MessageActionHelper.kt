@@ -9,6 +9,7 @@ import android.os.PersistableBundle
 import androidx.core.content.FileProvider
 import androidx.lifecycle.LifecycleCoroutineScope
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.media.EncryptedAttachmentAccess
@@ -42,7 +43,8 @@ class MessageActionHelper(
     suspend fun copyMessageContent(data: TextChatMessage): Boolean {
         if (data.isLongTextAttachment()) return copyLongTextContent(data)
         if (data.canDownloadFile()) return copyFileToClipboard(data)
-        val text = data.getCopyableTextContent() ?: return false
+        // Copy-only normalize so the clipboard matches the displayed text (nested Forward.text is raw).
+        val text = data.getCopyableTextContent()?.normalizeNewlines() ?: return false
         Util.copyToClipboard(activity, text)
         return true
     }

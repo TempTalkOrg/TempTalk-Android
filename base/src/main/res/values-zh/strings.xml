@@ -35,4 +35,10 @@
     <string name="net_risk_warning_message">应用可能正遭受中间人攻击！</string>
     <string name="net_risk_warning_ignore">忽略</string>
     <string name="net_risk_warning_quit">退出</string>
+
+    <!-- Suspicious link (homograph / phishing) open confirmation -->
+    <string name="link_safety_warning_title">安全提示</string>
+    <string name="link_safety_confirm_message">不确定此链接是否安全，确认要打开吗？\n%1$s</string>
+    <string name="link_safety_open_anyway">打开</string>
+    <string name="link_safety_cancel">取消</string>
 </resources>

@@ -11,7 +11,6 @@ data class PendingMessage(
     val timestamp: Long,
     val source: String?,
     val sourceDevice: Int,
-    val message: String?,
     val content: String?,
     val systemShowTimestamp: Long,
     val sequenceId: Long,

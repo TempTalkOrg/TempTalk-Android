@@ -1,6 +1,8 @@
 package org.difft.app.database
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
+import com.difft.android.base.log.WCDBKeyUnavailableException
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.database.BuildConfig
 import com.tencent.wcdb.core.Database
@@ -34,21 +36,18 @@ import org.difft.app.database.models.DBSharedContactModel
 import org.difft.app.database.models.DBSharedContactPhoneModel
 import org.difft.app.database.models.DBSpeechToTextModel
 import org.difft.app.database.models.DBTranslateModel
-import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicBoolean
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
-import com.tencent.wcdb.base.WCDBException
-
-/** Result of a database health probe — see [WCDB.probeHealthy]. */
-enum class DbHealth { HEALTHY, CORRUPT }
 
 @Singleton
 class WCDB @Inject constructor(
-    @param:ApplicationContext private val context: Context,
+    // internal (was private): the probe/telemetry extensions in WCDBHealthProbe.kt
+    // (same module :database) read `context` via the WCDB receiver.
+    @param:ApplicationContext internal val context: Context,
     @param:Named("application") private val applicationScope: CoroutineScope,
 ) {
 
@@ -86,37 +85,39 @@ class WCDB @Inject constructor(
     }
 
     /**
+     * Fail-soft cipher-key-unavailable flag, distinct from file corruption ([dbCorrupted]). The
+     * wipe trigger reads [dbCorrupted] only — never this flag, never [isDbInaccessible] — so a
+     * key failure never wipes. One-way / process-lifetime; resets on the next cold start.
+     */
+    @Volatile
+    var keyUnavailable: Boolean = false
+        private set
+
+    /** Monotonic set-true helper for [keyUnavailable]; also called by the probes in WCDBHealthProbe.kt. */
+    internal fun markKeyUnavailable() {
+        keyUnavailable = true
+    }
+
+    /** Fast-skip predicate for early/headless DB consumers. The wipe trigger must not read this — it reads [dbCorrupted] only. */
+    val isDbInaccessible: Boolean get() = dbCorrupted || keyUnavailable
+
+    /**
      * Telemetry: `true` once [probeHealthy] has confirmed the DB readable this process.
      * Lets [reportCorruptionOnce] classify a later corruption as genuinely *mid-session*
      * (corruption appeared AFTER a healthy probe) vs *startup_open* (corrupt at first open).
      */
+    // internal (was private): read/written by probeHealthy/reportCorruptionOnce in WCDBHealthProbe.kt.
     @Volatile
-    private var healthyProbePassed = false
+    internal var healthyProbePassed = false
 
     /**
      * One-shot guard — the WCDB corruption notification can fire repeatedly AND
      * [reportCorruptionOnce] is called from two threads (IO probe + WCDB notification
      * callback). AtomicBoolean.compareAndSet makes the check-then-set atomic so only one
-     * corruption log line is emitted per process.
+     * Crashlytics non-fatal is emitted per process.
      */
-    private val corruptionReported = AtomicBoolean(false)
-
-    /**
-     * Observability for DB corruption. Logs exactly once per process so we can measure
-     * real-world corruption frequency and, crucially, the mid-session vs startup-open
-     * split. No sensitive data — only sizes / backup presence / phase.
-     */
-    private fun reportCorruptionOnce(source: String) {
-        if (!corruptionReported.compareAndSet(false, true)) return
-        val dbFile = context.getDatabasePath(DATABASE_NAME)
-        val phase = if (healthyProbePassed) "mid_session" else "startup_open"
-        val firstMaterial = File("${dbFile.absolutePath}-first.material").exists()
-        val lastMaterial = File("${dbFile.absolutePath}-last.material").exists()
-        L.e {
-            "[WCDB][DBRecovery] corruption detected source=$source phase=$phase " +
-                "dbSizeBytes=${dbFile.length()} firstMaterial=$firstMaterial lastMaterial=$lastMaterial"
-        }
-    }
+    // internal (was private): read by reportCorruptionOnce in WCDBHealthProbe.kt.
+    internal val corruptionReported = AtomicBoolean(false)
 
     /**
      * Process-lifetime one-shot cache of the cipher-key resolution outcome (success →
@@ -127,11 +128,22 @@ class WCDB @Inject constructor(
     @Volatile
     private var cipherKeyResult: Result<ByteArray>? = null
 
-    private fun resolveCipherKeyOnce(): ByteArray {
-        cipherKeyResult?.let { return it.getOrThrow() }
+    @VisibleForTesting // was private — internal so the cache+cause contract is unit-testable
+    @Synchronized // cheap defensive guard against any future second entry point bypassing the db-lazy lock
+    internal fun resolveCipherKeyOnce(): ByteArray {
+        cipherKeyResult?.let { cached ->
+            return cached.getOrElse { cachedFailure ->
+                // Cache holds the original failure Result; rethrow a new exception here so the
+                // stack captures this call site.
+                throw WCDBKeyUnavailableException(
+                    "WCDB cipher key unavailable (rethrow of cached failure)", cachedFailure
+                )
+            }
+        }
         val r = runCatching { WCDBKeyManager.getOrCreateKey(context) } // hits Keystore at most ONCE per process
         cipherKeyResult = r
-        return r.getOrThrow()
+        if (r.isFailure) markKeyUnavailable()
+        return r.getOrThrow() // first-time throw already has a live stack
     }
 
     /**
@@ -192,43 +204,6 @@ class WCDB @Inject constructor(
                 L.w { "[WCDB] synchronous NOT NORMAL on write handle (value=$onWriteHandle), perf fix may be inert" }
             }
         }.onFailure { L.w { "[WCDB] synchronous verify failed: ${it.stackTraceToString()}" } }
-    }
-
-    /**
-     * Forces the lazy open and runs a lightweight `PRAGMA journal_mode` to detect
-     * corruption / wrong cipher. Single owner of the probe logic — called by both the
-     * MainActivity recovery gate and the early "probe db health" startup task.
-     *
-     * Short-circuits when [dbCorrupted] is already set (RACE-3) so a known-corrupt DB
-     * is never re-probed (avoids redundant open attempts on a doomed handle and racing
-     * recovery). Sets [dbCorrupted] on any corruption / key-unavailable / unexpected
-     * error so consumers fast-skip.
-     */
-    fun probeHealthy(): DbHealth {
-        if (dbCorrupted) return DbHealth.CORRUPT
-        return try {
-            db.execute("PRAGMA journal_mode") // forces lazy open + detects corruption / wrong cipher
-            healthyProbePassed = true // telemetry: confirms readable → later corruption counts as mid-session
-            DbHealth.HEALTHY
-        } catch (e: WCDBException) {
-            val corruption = e.code == WCDBException.Code.Corrupt || e.code == WCDBException.Code.NotADatabase
-            L.e { "[WCDB][DBRecovery] probe failed code=${e.code} corrupt=$corruption msg=${e.message}" }
-            if (corruption) {
-                reportCorruptionOnce("probe")
-                dbCorrupted = true
-                DbHealth.CORRUPT
-            } else {
-                DbHealth.HEALTHY // Busy etc. = transient, proceed
-            }
-        } catch (e: WCDBKeyUnavailableException) {
-            L.e { "[WCDB][DBRecovery] cipher key unavailable: ${e.stackTraceToString()}" }
-            dbCorrupted = true
-            DbHealth.CORRUPT // cipher gone ≡ unreadable → recovery
-        } catch (e: Throwable) {
-            L.e { "[WCDB][DBRecovery] probe unexpected error: ${e.stackTraceToString()}" }
-            dbCorrupted = true
-            DbHealth.CORRUPT // fail safe → recovery (can still delete+resync)
-        }
     }
 
     val attachment by lazy {

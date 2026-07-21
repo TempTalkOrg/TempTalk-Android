@@ -245,6 +245,7 @@ class LCallViewModel @AssistedInject constructor(
         RoomEventHost(
             showBarrageFn = { p, m, t -> showCallBarrageMessage(p, m, t) },
             setMicEnabledFn = { e, pm, sb -> setMicEnabled(e, pm, sb) },
+            setCameraEnabledFn = { e -> setCameraEnabled(e) },
             resetNoBodySpeakCheckFn = ::resetNoBodySpeakCheck,
             sendHangUpBroadcastFn = ::sendHangUpBroadcast,
             stopRingToneAndTimeoutCheckFn = ::stopRingToneAndTimeoutCheck,
@@ -496,8 +497,11 @@ class LCallViewModel @AssistedInject constructor(
     fun isInstantCriticalAlertEnable(awaitingJoinInvitees: List<String>): Boolean =
         CriticalAlertVisibility.forInstant(callType.value, awaitingJoinInvitees)
 
+    // Uses the non-throwing roomStateOrNull() rather than the fail-loud room getter: this runs from a
+    // touch handler that can legitimately race with call teardown (cleanup/onLeave releasing the room).
+    // A released/not-yet-created room reads null here → button treated as not clickable, instead of crashing.
     fun isControlButtonClickEnabled(): Boolean = if (callType.value == CallType.ONE_ON_ONE.type)
-        room.state == Room.State.CONNECTED
+        roomCtl.roomStateOrNull() == Room.State.CONNECTED
     else
         callStatus.value == CallStatus.CONNECTED || callStatus.value == CallStatus.RECONNECTED
 

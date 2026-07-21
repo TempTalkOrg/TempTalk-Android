@@ -14,6 +14,8 @@ import com.difft.android.chat.jobs.ReactionSendCoordinator
 import com.difft.android.chat.jobs.RuntimeTypeAdapterFactory
 import com.difft.android.chat.util.ByteUnit
 import com.difft.android.websocket.util.ByteStringTypeAdapter
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,5 +52,5 @@ object ChatHiltProvidesModule {
     @Singleton
     @Named(ReactionSendCoordinator.REACTION_COORDINATOR_SCOPE)
     fun provideReactionCoordinatorScope(): CoroutineScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName(ReactionSendCoordinator.REACTION_COORDINATOR_SCOPE) + dbKeyFailSoftExceptionHandler)
 }

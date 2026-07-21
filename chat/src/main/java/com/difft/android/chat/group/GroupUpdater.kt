@@ -93,6 +93,16 @@ class GroupUpdater @Inject constructor(
         while (true) {
             delay(3000) // Wait for 3 seconds before processing the next batch
 
+            // Fail-soft: the cipher key is unavailable (one-way flag that never clears in-process),
+            // so no batch can ever be processed again this process. Log once and BREAK to stop the
+            // 3s poll entirely (rather than re-logging every 3s forever). Incoming notifies are
+            // dropped by the producer guard in handleGroupNotifyMessage so nothing strands in the
+            // buffered channel; group state is re-fetched from the server on the next cold start.
+            if (wcdb.isDbInaccessible) {
+                L.w { "[GroupUpdater] DB inaccessible, stopping notify poll for this process" }
+                break
+            }
+
             val batch = mutableListOf<PendingGroupMessage>()
             // Drain the channel and collect messages into the batch
             while (!notifyMessageChannel.isEmpty) {
@@ -163,6 +173,12 @@ class GroupUpdater @Inject constructor(
         message: TTNotifyMessage,
         wrapperData: SignalServiceDataClass
     ) {
+        // Fail-soft: the consumer loop breaks once DB is inaccessible, so drop the enqueue to avoid
+        // filling the buffered channel with messages nothing will ever drain (back-pressure guard).
+        if (wcdb.isDbInaccessible) {
+            L.w { "[GroupUpdater] skip enqueue, DB inaccessible" }
+            return
+        }
         val groupVersion = message.data?.groupVersion ?: 0
         notifyMessageChannel.send(PendingGroupMessage(message, wrapperData, groupVersion))
     }
@@ -193,6 +209,10 @@ class GroupUpdater @Inject constructor(
                 notifyContent = context.getString(R.string.group_create_a_group, operatorName)
                 // Then create group in parallel
                 appScope.launch {
+                    if (wcdb.isDbInaccessible) {
+                        L.w { "[GroupUpdater] skip createNewGroup, DB inaccessible groupID=$groupID" }
+                        return@launch
+                    }
                     createNewGroupIfNotExist(groupID)
                 }
             }

@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatItemForwardHistoryBinding
@@ -23,7 +24,8 @@ internal fun getForwardText(context: Context, forward: Forward): String {
     } else if (forward.attachments?.isNotEmpty() == true) {
         context.getString(R.string.chat_message_attachment)
     } else {
-        forward.text ?: ""
+        // Normalize so historically stored raw forwards also render with line breaks here.
+        forward.text?.normalizeNewlines() ?: ""
     }
 }
 

@@ -51,4 +51,9 @@
     <string name="ps_select_audio_max_second">选择音频大于%1$d秒</string>
     <string name="ps_select_audio_min_second">选择音频小于%1$d秒</string>
     <string name="ps_select_no_support">不支持的选择类型</string>
+    <string name="ps_partial_access_tips">你仅允许访问部分照片</string>
+    <string name="ps_partial_access_manage">管理</string>
+    <string name="ps_partial_access_select_more">选择更多照片</string>
+    <string name="ps_partial_access_settings">打开设置</string>
+    <string name="ps_partial_access_empty">未找到照片或视频，仅可访问你所选的内容</string>
 </resources>

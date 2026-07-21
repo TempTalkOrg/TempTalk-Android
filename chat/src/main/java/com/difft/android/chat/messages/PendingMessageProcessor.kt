@@ -3,6 +3,7 @@ package com.difft.android.chat.messages
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.sampleAfterFirst
+import com.difft.android.base.utils.time.ServerTimeProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -139,7 +140,7 @@ class PendingMessageProcessor @Inject constructor(
 
             // 删除超过指定天数的待处理消息（脏数据清理）- 每个启动周期只执行一次
             if (!hasCleanedUp) {
-                val cleanupThreshold = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(CLEANUP_DAYS_THRESHOLD)
+                val cleanupThreshold = ServerTimeProvider.nowMillis() - TimeUnit.DAYS.toMillis(CLEANUP_DAYS_THRESHOLD)
                 val oldMessages = pendingMessages.filter { it.originalMessageTimeStamp < cleanupThreshold }
 
                 if (oldMessages.isNotEmpty()) {

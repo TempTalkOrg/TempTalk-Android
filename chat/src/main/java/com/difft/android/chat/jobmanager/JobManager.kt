@@ -5,12 +5,14 @@ import android.content.Intent
 import android.os.Build
 import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
 import com.difft.android.chat.jobmanager.impl.JsonDataSerializer
 import com.difft.android.chat.jobmanager.persistence.JobSpec
 import com.difft.android.chat.jobmanager.persistence.JobStorage
 import com.difft.android.chat.util.Debouncer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,8 +29,8 @@ class JobManager(
     private val configuration: Configuration
 ) : ConstraintObserver.Notifier {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val jobRunnerScope = CoroutineScope(SupervisorJob(scope.coroutineContext[kotlinx.coroutines.Job]) + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineName("JobManager") + dbKeyFailSoftExceptionHandler)
+    private val jobRunnerScope = CoroutineScope(SupervisorJob(scope.coroutineContext[kotlinx.coroutines.Job]) + Dispatchers.IO + CoroutineName("JobRunnerScope") + dbKeyFailSoftExceptionHandler)
     private val managementDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
     private val jobController: JobController
     private val jobTracker: JobTracker = configuration.jobTracker

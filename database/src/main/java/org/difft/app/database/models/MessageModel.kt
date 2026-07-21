@@ -174,5 +174,12 @@ class MessageModel {
         const val TYPE_NOTIFY = 2
         const val TYPE_CONFIDENTIAL_PLACEHOLDER = 3 // Confidential message read by recipient, awaiting sender confirmation to delete
         const val TYPE_UNSUPPORTED = 100
+
+        /**
+         * Fixed [systemShowTimestamp] for the archive tombstone so it always sorts before real
+         * messages (positive epoch-ms). Must not be 0 — systemShowTimestamp == 0 means "unset"
+         * and gets rewritten to timeStamp (e.g. EnvelopToMessageProcessor).
+         */
+        const val ARCHIVE_TOMBSTONE_SORT_SENTINEL = 1L
     }
 }

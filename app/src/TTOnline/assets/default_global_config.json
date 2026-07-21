@@ -158,7 +158,7 @@
       "meetingWithoutRingThreshold": 50,
       "chatWithoutReceiptThreshold": 50,
       "membersMaxSize": 200,
-      "encryptionEnabled": false,
+      "encryptionEnabled": true,
       "encryptionKeyResetEnabled": false,
       "messageArchivingTimeOptionValues": [
         3600,

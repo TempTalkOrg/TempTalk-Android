@@ -6,7 +6,6 @@ data class NewOutgoingPushMessage(
     val destinationDeviceId: Int,
     val destinationRegistrationId: Int,
     val content: String,
-    val legacyContent: String?,
     val readReceipt: Boolean,
     val notification: Notification?,
     val conversation: Conversation?,
@@ -76,7 +75,6 @@ data class NewOutgoingPushMessage(
         var destinationDeviceId: Int = 0,
         var destinationRegistrationId: Int = 0,
         var content: String = "",
-        var legacyContent: String? = null,
         var readReceipt: Boolean = false,
         var notification: Notification? = null,
         var conversation: Conversation? = null,
@@ -98,7 +96,6 @@ data class NewOutgoingPushMessage(
             apply { this.destinationRegistrationId = destinationRegistrationId }
 
         fun content(content: String) = apply { this.content = content }
-        fun legacyContent(legacyContent: String?) = apply { this.legacyContent = legacyContent }
         fun readReceipt(readReceipt: Boolean) = apply { this.readReceipt = readReceipt }
         fun notification(notification: Notification?) = apply { this.notification = notification }
         fun conversation(conversation: Conversation) = apply { this.conversation = conversation }
@@ -123,7 +120,6 @@ data class NewOutgoingPushMessage(
             destinationDeviceId,
             destinationRegistrationId,
             content,
-            legacyContent,
             readReceipt,
             notification,
             conversation,

@@ -11,8 +11,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.difft.app.database.WCDB
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
+import org.difft.app.database.models.PublicAccountType
 import com.difft.android.websocket.api.messages.Member
 import com.difft.android.websocket.api.messages.TTNotifyMessage
 import javax.inject.Inject
@@ -45,6 +47,16 @@ class ContactsUpdater @Inject constructor(
     private suspend fun processNotifyMessages() {
         while (true) {
             delay(3000) // Wait for 3 seconds before processing the next batch
+
+            // Fail-soft: the cipher key is unavailable (one-way flag that never clears in-process),
+            // so no batch can ever be processed again this process. Log once and BREAK to stop the
+            // 3s poll entirely (rather than re-logging every 3s forever). Incoming notifies are
+            // dropped by the producer guard in updateBySignalNotifyMessage so nothing strands in the
+            // channel; contacts are re-fetched from the server directory on the next cold start.
+            if (wcdb.isDbInaccessible) {
+                L.w { "[ContactsUpdater] DB inaccessible, stopping notify poll for this process" }
+                break
+            }
 
             val batch = mutableListOf<PendingContactMessage>()
             // Drain the channel and collect messages into the batch
@@ -96,11 +108,20 @@ class ContactsUpdater @Inject constructor(
             val action = member.action
             when (action) {
                 0 -> {
+                    // action=0 is add AND restore. Only read the prior row when the notify omits the
+                    // type, so it can be carried forward instead of demoting a known OFFICIAL.
+                    val notifyType = member.publicConfigs?.publicAccountType
+                    val prior = if (notifyType == null) {
+                        wcdb.contactor.getFirstObject(DBContactorModel.id.eq(member.number.toString()))
+                    } else null
                     val newContact = member.toContactor()
+                    newContact.publicAccountType = PublicAccountType.resolve(notifyType, prior?.publicAccountType)
                     L.i { "[ContactsUpdater] action=0(Add) id:$memberId, hasName:${member.name != null}, hasAvatar:${member.avatar != null}" }
                     try {
                         wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
                         wcdb.contactor.insertObject(newContact)
+                        // Only after a successful insert, so a failed write never mutates membership.
+                        OfficialAccountCache.put(member.number.toString(), newContact.publicAccountType == PublicAccountType.OFFICIAL)
                     } catch (e: Exception) {
                         L.e(e) { "[ContactsUpdater] action=0(Add) failed id:$memberId, next full sync will recover" }
                     }
@@ -121,6 +142,8 @@ class ContactsUpdater @Inject constructor(
                         try {
                             wcdb.contactor.deleteObjects(DBContactorModel.id.eq(contact.id))
                             wcdb.contactor.insertObject(contact)
+                            // Only after a successful insert, so a failed write never mutates membership.
+                            OfficialAccountCache.put(contact.id, contact.publicAccountType == PublicAccountType.OFFICIAL)
                         } catch (e: Exception) {
                             L.e(e) { "[ContactsUpdater] action=1(Update) failed id:$memberId, next full sync will recover" }
                         }
@@ -135,6 +158,7 @@ class ContactsUpdater @Inject constructor(
                 2, 3 -> {
                     L.i { "[ContactsUpdater] action=$action(Delete) id:$memberId — hard delete (weak state handled independently by notifyType=25)" }
                     wcdb.contactor.deleteObjects(DBContactorModel.id.eq(member.number.toString()))
+                    OfficialAccountCache.put(member.number.toString(), false)
                     dbMessageStore.removeRoomAndMessages(member.number.toString())
                     ContactorUtil.updateContactRequestStatus(member.number.toString(), isDelete = true)
                     ContactorUtil.emitContactsUpdate(listOf(member.number.toString()))
@@ -148,6 +172,12 @@ class ContactsUpdater @Inject constructor(
     }
 
     suspend fun updateBySignalNotifyMessage(message: TTNotifyMessage) {
+        // Fail-soft: the consumer loop breaks once DB is inaccessible, so drop the enqueue to avoid
+        // filling the buffered channel with messages nothing will ever drain (back-pressure guard).
+        if (wcdb.isDbInaccessible) {
+            L.w { "[ContactsUpdater] skip enqueue, DB inaccessible" }
+            return
+        }
         val directoryVersion = message.data?.directoryVersion ?: 0
         val memberIds = message.data?.members?.map { it.number } ?: emptyList()
         val actions = message.data?.members?.map { it.action } ?: emptyList()
@@ -189,6 +219,7 @@ class ContactsUpdater @Inject constructor(
         member.publicConfigs?.let {
             meetingVersion = it.meetingVersion
             publicName = it.publicName
+            publicAccountType = it.publicAccountType ?: publicAccountType   // skip-if-null: don't clobber
         }
         member.customUid?.let { customUid = it }
     }

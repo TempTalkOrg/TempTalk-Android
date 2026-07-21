@@ -85,13 +85,6 @@ object ValidatorUtil {
         return gid.matches("^[a-zA-Z0-9]{32}$".toRegex())
     }
 
-    fun isInviteCode(code: String): Boolean {
-        if (code.length != 8 && code.length != 32) {
-            return false
-        }
-        return code.matches(Regex("^[a-zA-Z0-9]{8}$|^[a-zA-Z0-9]{32}$"))
-    }
-
     fun isPi(code: String): Boolean {
         if (code.length != 8 && code.length != 32) {
             return false

@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.call.CallRole
+import com.difft.android.base.call.CallType
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.connect.CallConnectionCoordinator
@@ -42,8 +43,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -496,5 +499,29 @@ class LCallViewModelTwoPhaseInitTest {
         // and sessionStarter.start() (connect-on-released-room) must NOT run either.
         verify(exactly = 0) { anyConstructed<CriticalAlertDispatcher>().refreshGroupStatus(any()) }
         verify(exactly = 0) { anyConstructed<CallSessionStarter>().start() }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // T17 — isControlButtonClickEnabled (1v1) delegates to the non-throwing roomStateOrNull()
+    //        instead of the fail-loud `room` getter. Regression guard for the
+    //        "room accessed after release" crash on a control-button tap during teardown:
+    //        a released room reads null → button disabled, NOT a crash.
+    // ---------------------------------------------------------------------------------
+    @Test
+    fun `T17 - isControlButtonClickEnabled in 1v1 uses roomStateOrNull and is false after release`() {
+        mockkConstructor(CallRoomController::class)
+        every { anyConstructed<CallRoomController>().callType } returns MutableStateFlow(CallType.ONE_ON_ONE.type)
+        // First tap: room CONNECTED → clickable. Second tap: room released → roomStateOrNull()==null.
+        every { anyConstructed<CallRoomController>().roomStateOrNull() } returnsMany
+            listOf(Room.State.CONNECTED, null)
+        // Proof of delegation: if the method (incorrectly) fell back to the fail-loud getter,
+        // this stub would make the test throw instead of returning false.
+        every { anyConstructed<CallRoomController>().room } throws
+            IllegalStateException("[Call] room accessed after release")
+
+        val vm = buildViewModel()
+
+        assertTrue("connected 1v1 → control button enabled", vm.isControlButtonClickEnabled())
+        assertFalse("released 1v1 → control button disabled, not a crash", vm.isControlButtonClickEnabled())
     }
 }

@@ -3,11 +3,9 @@ package com.difft.android.network
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.network.CertValidationFailureDetector
 import com.difft.android.base.network.NetworkRiskNotifier
-import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.network.config.WsTokenManager
-import com.google.gson.Gson
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
@@ -29,7 +27,6 @@ import java.io.IOException
  * 1. Token management - Refresh and update auth tokens automatically
  * 2. Host failover - Switch to backup hosts when request fails (response code not in [100, 499])
  * 3. Response handling - Handle 204 No Content, transform non-success responses
- * 4. Error reporting - Record network errors to Firebase Crashlytics
  *
  * @param pinnedConnection True when this client pins trust to the embedded chative CA
  * (useCustomCa). Only failures on such channels are treated as a possible MITM attack;
@@ -87,18 +84,12 @@ class HttpClientInterceptor(
 
             response = chain.proceed(request)
 
-            // Save original response code for error logging (processResponse may close response)
-            val originalCode = response.code
-
             when (val result = processResponse(response, request)) {
                 is ResponseResult.Success -> {
-                    // Special cases (204, non-2xx with reason) are tracked inside processResponse
-                    // using SpecialResponseTrackingException, no need to record here
                     response = result.response
                 }
 
                 is ResponseResult.NeedsTokenRefresh -> {
-                    recordNetworkError(originalCode, request)
                     // Force refresh token and retry with original host
                     val newRequest = runBlocking { forceUpdateToken(request) }
                     if (newRequest == null) {
@@ -125,14 +116,12 @@ class HttpClientInterceptor(
                 }
 
                 is ResponseResult.NeedsHostRetry -> {
-                    recordNetworkError(originalCode, request)
                     // Switch to backup host and retry
                     response = changeHostAndReSendRequest(request, chain)
                     if (response != null) return response
                 }
 
                 is ResponseResult.Failed -> {
-                    recordNetworkError(originalCode, request)
                     throw result.exception
                 }
             }
@@ -196,24 +185,6 @@ class HttpClientInterceptor(
         if (pinnedConnection && CertValidationFailureDetector.isCertValidationFailure(e)) {
             NetworkRiskNotifier.onCertValidationFailed("http:${request?.url?.host ?: "unknown"}")
         }
-        if (needHandleException(e)) {
-            recordNetworkException(e, request)
-        }
-    }
-
-    /**
-     * Determine if exception should be recorded to Firebase.
-     * Excludes:
-     * - NetworkException: Already recorded via recordNetworkError before throwing
-     * - Canceled/Socket closed: User-initiated or expected disconnection
-     */
-    private fun needHandleException(e: Exception): Boolean {
-        // NetworkException is already recorded via recordNetworkError, skip to avoid duplicate
-        if (e is NetworkException) return false
-        // Skip user-initiated cancellation and expected socket closure
-        if ("Canceled".equals(e.message, true)) return false
-        if ("Socket closed".equals(e.message, true)) return false
-        return true
     }
 
     // Same OkHttp sync-API rationale as `intercept`: backup-host retry path
@@ -282,64 +253,6 @@ class HttpClientInterceptor(
         return null
     }
 
-    // ==================== Firebase Recording Methods ====================
-
-    /**
-     * Unified method to record exception to Firebase Crashlytics.
-     * All recording methods should go through this for consistency.
-     */
-    private fun recordToFirebase(e: Throwable) {
-        L.w { "[Network] $e" }
-    }
-
-    /**
-     * Record network error with HTTP status code.
-     * Used for real errors: 401, 403, 500, etc.
-     */
-    private fun recordNetworkError(code: Int, request: Request) {
-        val msg = buildString {
-            appendLine("code=$code")
-            appendLine(networkStatus())
-            appendLine(requestUrl(request))
-            appendLine(requestMethod(request))
-        }
-        recordToFirebase(NetworkException(errorCode = code, message = msg))
-    }
-
-    /**
-     * Record network exception (IOException, SocketException, etc).
-     * Used for connection failures, timeouts, etc.
-     */
-    private fun recordNetworkException(e: Exception, request: Request?) {
-        val msg = buildString {
-            appendLine(networkStatus())
-            appendLine(requestUrl(request))
-            appendLine(requestMethod(request))
-            append(e.message)
-        }
-        recordToFirebase(NetworkException(message = msg))
-    }
-
-    /**
-     * Record special response for backend improvement tracking.
-     * These are NOT errors, but tracking data for backend to fix non-standard APIs.
-     * Firebase will group these separately from NetworkException.
-     */
-    private fun recordSpecialResponse(type: String, request: Request, extraInfo: String? = null) {
-        val msg = buildString {
-            appendLine(requestUrl(request))
-            appendLine(requestMethod(request))
-            extraInfo?.let { appendLine(it) }
-        }
-        recordToFirebase(SpecialResponseTrackingException(type, msg))
-    }
-
-    private fun networkStatus(): String = "network=${NetworkUtils.getNetworkSummary()}"
-
-    private fun requestUrl(request: Request?): String = "url=${request?.url?.toString() ?: ""}"
-
-    private fun requestMethod(request: Request?): String = "method=${request?.method ?: ""}"
-
     /**
      * Unified response processing, including:
      * - 204 No Content: Convert to standard BaseResponse
@@ -350,18 +263,13 @@ class HttpClientInterceptor(
      * - Other non-2xx without reason: Return failure
      *
      * @param response Original response
-     * @param request Original request (used for creating new Response and logging)
+     * @param request Original request (used for creating new Response)
      * @return ResponseResult Processing result
      */
     private fun processResponse(response: Response, request: Request): ResponseResult {
         return when {
             // 204 No Content - Convert to standard BaseResponse
             response.code == 204 -> {
-//                // Track for backend improvement: should return standard BaseResponse
-//                recordSpecialResponse(
-//                    SpecialResponseTrackingException.RESPONSE_204_NO_CONTENT,
-//                    request
-//                )
                 val protocol = response.protocol  // Save protocol before close
                 response.close()
                 ResponseResult.Success(createNoContentResponse(request, protocol))
@@ -430,12 +338,6 @@ class HttpClientInterceptor(
 
         val reason = jsonResponse?.optString("reason", "") ?: ""
         return if (reason.isNotEmpty()) {
-//            // Track for backend improvement: should return 200 directly
-//            recordSpecialResponse(
-//                SpecialResponseTrackingException.RESPONSE_NON_2XX_WITH_REASON,
-//                request,
-//                "originalCode=$responseCode"
-//            )
             // Has reason field, convert to 200 response
             val newResponseBody = bodyString.toResponseBody(contentType)
             val newResponse = Response.Builder()

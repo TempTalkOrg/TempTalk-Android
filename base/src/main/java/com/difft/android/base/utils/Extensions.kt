@@ -15,6 +15,7 @@ import com.difft.android.base.application.ScopeApplication
 import com.difft.android.base.log.lumberjack.L
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.internal.managers.ViewComponentManager.FragmentContextWrapper
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -120,7 +121,9 @@ fun View.getLifecycleOwner(): LifecycleOwner? {
 
 // IO: most appScope.launch{} callers are IO-bound (DB / SP / file / network post-processing).
 // CPU-bound paths (libsignal decrypt) already use explicit withContext(Default).
-val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+// dbKeyFailSoftExceptionHandler (same package): a WCDBKeyUnavailableException on a launch here is
+// swallowed as fail-soft instead of crashing; CoroutineName tags the Crashlytics breadcrumb.
+val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("appScope") + dbKeyFailSoftExceptionHandler)
 
 fun checkThread() {
     if (BuildConfig.DEBUG) {

@@ -1,9 +1,7 @@
 package com.difft.android.chat.contacts
 
-import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.weakcontact.WeakContactClock
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.network.HttpService
 import com.difft.android.network.responses.DeletedRecordDto
@@ -16,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.PendingRemovalContactModel
@@ -72,8 +71,8 @@ class WeakContactReconciler @Inject constructor(
     }.onFailure { L.w { "[WeakContact] removeNow uid=$uid failed (offline?): ${it.stackTraceToString()}" } }
 
     /**
-     * Reconcile (cold start / after full refresh): fetch deletedRecords → gate → write clock anchor →
-     * apply diff side-effects → full overwrite.
+     * Reconcile (cold start / after full refresh): fetch deletedRecords → gate → apply diff
+     * side-effects → full overwrite.
      *
      * @return true if the weak table was refreshed from a complete server response; false if the fetch
      * failed or was incomplete (data==null) and the weak table was left untouched. Callers that run a
@@ -92,7 +91,8 @@ class WeakContactReconciler @Inject constructor(
             return@withLock false
         }
         val serverNow = resp.serverTimestamp ?: 0L
-        WeakContactClock.update(serverNow, SystemClock.elapsedRealtime()) // write the clock anchor
+        // Trusted-time anchor is NOT fed here: the same response's BaseResponse.serverTimestamp is
+        // already captured by the network converter hook (ServerTimeCaptureConverterFactory).
         // Drop records with null/blank uid — gson fills nullable uid with null on key mismatch,
         // which NPEs at cold start. Filtering here guarantees all downstream uids are non-null.
         val validRecords = records.filter { !it.uid.isNullOrBlank() }
@@ -159,6 +159,7 @@ class WeakContactReconciler @Inject constructor(
             ?.let { snapshot.remark = it }
         pendingRepo.upsert(uid, expireAt, reason, deleteTime, snapshot)  // write placeholder (atomic insertOrReplace)
         wcdb.contactor.deleteObjects(DBContactorModel.id.eq(uid))        // demote: drop the friend row
+        OfficialAccountCache.put(uid, false)                            // demote also drops official membership
         dbMessageStore.removeRoomAndMessages(uid)                        // clear friend-era chat (backstop for a dropped action)
         invalidateAndEmit(uid)
     }

@@ -23,7 +23,7 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatActivitySettingBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.search.SearchMessageActivity
@@ -42,12 +42,16 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
@@ -101,7 +105,7 @@ class SingleChatSettingActivity : BaseActivity() {
 
         if (TextUtils.isEmpty(contactId)) return
 
-        if (contactId.isBotId()) {
+        if (contactId.isOfficialAccount()) {
             mBinding.relInfo.visibility = View.GONE
         } else {
             mBinding.relMember.visibility = View.VISIBLE
@@ -159,12 +163,24 @@ class SingleChatSettingActivity : BaseActivity() {
             .onEach { loadAndRenderContact() }
             .launchIn(lifecycleScope)
 
+        // Cold-start race: the official-account cache may populate after onCreate ran the one-shot
+        // gating that hides the write actions (remove-friend / block). This is the only screen where
+        // the window enables a WRITE against the official account, so re-apply the gating by
+        // recreating on a membership flip. Fires at most once per entry (NORMAL->OFFICIAL only, in
+        // the sub-second preload window); drop(1) skips the current value so a warm cache no-ops.
+        OfficialAccountCache.state
+            .map { contactId in it }
+            .distinctUntilChanged()
+            .drop(1)
+            .onEach { recreate() }
+            .launchIn(lifecycleScope)
+
         // Subscribe to conversationSet for all config-related UI updates
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach { conversationSet ->
                 // Update block status (hidden for bots)
-                if (contactId.isBotId()) {
+                if (contactId.isOfficialAccount()) {
                     mBinding.clBlock.visibility = View.GONE
                 } else if (conversationSet.blockStatus == 1) {
                     mBinding.clBlock.visibility = View.VISIBLE
@@ -195,7 +211,7 @@ class SingleChatSettingActivity : BaseActivity() {
             mBinding.clMute.visibility = View.GONE
             mBinding.relRemove.visibility = View.GONE
             mBinding.disappearingTimeContainer.visibility = View.GONE
-        } else if (contactId.isBotId()) {
+        } else if (contactId.isOfficialAccount()) {
             mBinding.clMute.visibility = View.VISIBLE
             mBinding.relRemove.visibility = View.GONE
             mBinding.clBlock.visibility = View.GONE
@@ -268,7 +284,7 @@ class SingleChatSettingActivity : BaseActivity() {
     // Numeric-only display (common-group count); no English text to translate.
     @SuppressLint("SetTextI18n")
     private fun handleCommonGroupsDisplay() {
-        if (contactId == globalServices.myId || contactId.isBotId()) {
+        if (contactId == globalServices.myId || contactId.isOfficialAccount()) {
             mBinding.relGroupInCommon.visibility = View.GONE
         } else {
             mBinding.relGroupInCommon.visibility = View.VISIBLE

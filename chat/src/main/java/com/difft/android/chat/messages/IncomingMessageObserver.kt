@@ -1,6 +1,8 @@
 package com.difft.android.chat.messages
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +28,7 @@ class IncomingMessageObserver @Inject constructor(
     private val appWebSocketHelper: AppWebSocketHelper
 ) {
     private var started = false
-    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("IncomingMessageObserver") + dbKeyFailSoftExceptionHandler)
     private var messageReceivingJob: Job? = null
 
     fun start() {

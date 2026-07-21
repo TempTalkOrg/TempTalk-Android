@@ -167,6 +167,7 @@ data class PublicConfigs(
     val meetingVersion: Int = 0,
     val publicName: String = "",
     val msgEncVersion: Int = 0,
+    val publicAccountType: Int? = null,   // nullable on purpose (notify server-scope unconfirmed)
 )
 
 data class PrivateConfigs(

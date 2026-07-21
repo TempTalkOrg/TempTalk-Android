@@ -137,14 +137,19 @@ private fun FavoriteCell(
     onLongClick: (Offset) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Optimistic placeholder rows (sourceUrl set, no real attachment yet) display from the preview URL
-    // directly — the uploaded ciphertext resolveGif needs isn't available until the background upload
-    // completes. Confirmed rows resolve the decrypting content:// uri by fileHash as before.
-    val isOptimistic = item.sourceUrl != null && item.attachmentId == null
+    // Branch on the typed pending source (see PendingSource): Remote pending -> preview URL directly;
+    // Message pending -> LOCAL .encrypt/plaintext decrypting uri (no network), else gray; confirmed
+    // (None) -> resolve the decrypting content:// uri by fileHash (cache hit or ciphertext download).
+    val src = item.pendingSource
     var resolvedUri by remember(item.fileHash) { mutableStateOf<android.net.Uri?>(null) }
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     LaunchedEffect(item.fileHash) {
-        resolvedUri = if (isOptimistic) null else resolveGif(item.fileHash)
+        resolvedUri = when (src) {
+            is com.difft.android.chat.gif.favorite.PendingSource.Remote -> null // loaded via preview URL below
+            is com.difft.android.chat.gif.favorite.PendingSource.Message ->
+                com.difft.android.chat.gif.favorite.resolveMessageUri(src) // local only, no network (shared)
+            com.difft.android.chat.gif.favorite.PendingSource.None -> resolveGif(item.fileHash)
+        }
     }
 
     AndroidView(
@@ -154,13 +159,12 @@ private fun FavoriteCell(
         update = { iv ->
             Glide.with(iv).clear(iv)
             // Load once resolved; until then the gray background placeholder shows. Disk cache is
-            // DISABLED (NONE): the encrypted RESOURCE cache is opt-in per request (ENCRYPT_ANIMATED_CACHE)
-            // and this animated load does not set it, so RESOURCE would persist decrypted plaintext
-            // frames. The source stays encrypted at rest (.encrypt via the provider); the in-memory
-            // cache still serves rebinds within the session.
-            if (isOptimistic) {
+            // DISABLED (NONE) for encrypted-at-rest sources: the encrypted RESOURCE cache is opt-in per
+            // request and this animated load does not set it, so RESOURCE would persist decrypted
+            // plaintext frames. The in-memory cache still serves rebinds within the session.
+            if (src is com.difft.android.chat.gif.favorite.PendingSource.Remote) {
                 // Preview URL is a plaintext remote gif (not encrypted at rest) — default disk cache OK.
-                Glide.with(iv).load(item.sourceUrl).into(iv)
+                Glide.with(iv).load(src.previewUrl).into(iv)
             } else {
                 resolvedUri?.let {
                     Glide.with(iv).load(it)

@@ -51,7 +51,9 @@
     <string name="contact_add_contacts">Add Contact</string>
     <string name="contact_add_contacts_contact_name_not_correct">The contact ID is not correct, please try again.</string>
     <string name="contact_add_contacts_code_not_correct">The code is not correct, please try again.</string>
+    <string name="weak_contact_pending_group_title">Removing Soon</string>
     <string name="weak_contact_remove_in_days">Removes in %1$d days</string>
+    <string name="weak_contact_remove_today">Removes today</string>
     <string name="weak_contact_remove_now">Remove Now</string>
     <string name="weak_contact_remove_now_failed">Failed to remove, please try again.</string>
     <string name="weak_contact_account_unavailable_title">Account unavailable</string>
@@ -96,7 +98,7 @@
     <string name="chat_message_action_select_all">Select All</string>
     <string name="chat_message_attachment">[Attachment]</string>
     <string name="chat_message_image">[Image]</string>
-    <string name="chat_message_gif">[Gif]</string>
+    <string name="chat_message_gif">[GIF]</string>
     <string name="chat_message_video">[Video]</string>
     <!-- Generic fallback placeholder used in multi-select copy output for any
          message type not explicitly handled in MessageCopyTextFormatter. -->
@@ -171,7 +173,7 @@
     <string name="chat_voice_release_to_send">Release to send</string>
     <string name="chat_voice_release_to_cancel">Release to Cancel</string>
     <string name="chat_voice_cancel">Cancel</string>
-    <string name="chat_voice_add_effect">Add effect</string>
+    <string name="chat_voice_add_effect">Voice Effect</string>
     <string name="chat_voice_recording_too_short">Recording too short</string>
     <plurals name="chat_voice_recording_will_stop">
         <item quantity="one">Recording will stop in %d second</item>
@@ -225,7 +227,6 @@
     <string name="group_changed_group_name">%1$s changed the group name.</string>
     <string name="group_changed_group_avatar">%1$s changed the group avatar.</string>
     <string name="group_share_group_link">Share Group Link</string>
-    <string name="group_share_content">%1$s invited you to \"%2$s\", click to join the group.\nchative://group/join?inviteCode=%3$s</string>
     <string name="group_enter_group">Enter Group</string>
     <string name="group_permission_denied">No permission, please contact the group moderators.</string>
     <string name="group_unknown_group">Unknown group</string>
@@ -238,7 +239,6 @@
     <string name="group_only_moderators_can_add">Only moderators can add members</string>
     <string name="group_only_moderators_can_speak1">Only moderators can speak</string>
     <string name="group_critical_alert">Critical Alert</string>
-    <string name="group_enable_group_link">Enable group invite link</string>
     <string name="group_add_moderators">Add Moderators</string>
     <string name="group_remove_moderators">Remove Moderators</string>
     <string name="group_become_new_moderator">%1$s become the new moderator</string>
@@ -302,7 +302,7 @@
 
     <!-- Voice changer (call) settings -->
     <string name="me_call_voice_changer">Voice Changer</string>
-    <string name="me_call_voice_changer_desc">Default in calls, optional for voice messages.</string>
+    <string name="me_call_voice_changer_desc">Set voice effects for calls.</string>
 
     <!-- Contact profile setting-->
     <string name="contact_profile_info">Profile</string>
@@ -360,17 +360,10 @@
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
     <string name="invite_regenerate_dialog_cancel">Cancel</string>
     <string name="invite_regenerate_dialog_ok">Regenerate</string>
-    <string name="invite_group_tips">%1$s invited you to \"%2$s\", click to join the group: %3$s</string>
-    <string name="invite_invalid_invite_Code">Invalid group invite link.</string>
-    <string name="invite_link_invitation_is_disabled">Failed to join the group. This group disabled invite link.</string>
-    <string name="invite_only_moderators">Failed to join the group. This group only allows moderators to invite.</string>
-    <string name="invite_group_has_been_disbanded">Failed to join the group. This group has already been disbanded.</string>
-    <string name="invite_group_is_invalid">Failed to join the group. This group is invalid.</string>
     <string name="invite_ok">OK</string>
     <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
     <string name="invite_only_moderators_can_add">This group only allows moderators to invite.</string>
     <string name="invite_code">%s Invite Code</string>
-    <string name="invite_group_code">%s Group Invite Code</string>
     <string name="invite_joined_at">%s joined</string>
     <string name="invite_code_error_tips">Invites full. Please try later!</string>
 
@@ -569,8 +562,6 @@
 
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_tips">Messages will expire after being read, they will GONE and then can NOT be viewed in any way.</string>
-    <string name="official_bot_name" translatable="false">Support Team</string>
-    <string name="official_bot_id" translatable="false">+10000</string>
     <string name="disappearing_messages_not_archive">Do not expire</string>
     <string name="group_disband_tips">This group will be permanently deleted and all members will be removed.</string>
     <string name="group_remove_member_action">Remove member</string>
@@ -695,6 +686,7 @@
     <!-- GIF panel (M1: browse + search + send) -->
     <string name="gif_search_hint">Search GIFs</string>
     <string name="gif_no_result">No GIFs found</string>
+    <string name="gif_load_failed">Couldn\'t load GIFs. Try again later.</string>
     <string name="gif_search_clear">Clear</string>
     <string name="gif_tab_trending">Trending</string>
 

@@ -1,6 +1,6 @@
 package com.difft.android.base.utils.weakcontact
 
-import android.os.SystemClock
+import com.difft.android.base.utils.time.ServerTimeProvider
 import kotlin.math.ceil
 
 /**
@@ -31,21 +31,9 @@ object WeakContactCountdown {
         return daysFromRemaining(expireAt - effectiveNow)
     }
 
-    /**
-     * UI-bind entry: reads the current anchor from [WeakContactClock] and the current elapsedRealtime.
-     *
-     * Null anchor (e.g. just after process restart) falls back to `System.currentTimeMillis()`.
-     * Never treat raw `elapsedRealtime` as Unix time — it is uptime-relative and not comparable to
-     * [expireAt]'s UTC timestamp; with a null anchor only the wall clock is usable (±1 day error).
-     */
-    fun daysLeftFromClock(expireAt: Long): Int {
-        val anchor = WeakContactClock.snapshot()
-        return if (anchor == null) {
-            daysFromRemaining(expireAt - System.currentTimeMillis())
-        } else {
-            daysLeft(anchor.serverNow, anchor.anchorElapsed, SystemClock.elapsedRealtime(), expireAt)
-        }
-    }
+    /** UI-bind entry: "now" from the trusted [ServerTimeProvider] (its nowMillis handles all tiers). */
+    fun daysLeftFromClock(expireAt: Long): Int =
+        daysFromRemaining(expireAt - ServerTimeProvider.nowMillis())
 
     /** Remaining ms → days (ceil, floor 1). Shows 1 right up to expiry; removal is server-driven. */
     private fun daysFromRemaining(remaining: Long): Int {

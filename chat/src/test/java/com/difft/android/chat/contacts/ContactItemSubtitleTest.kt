@@ -2,7 +2,7 @@ package com.difft.android.chat.contacts
 
 import android.view.View
 import android.widget.FrameLayout
-import com.difft.android.base.utils.weakcontact.WeakContactClock
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsall.ContactItemViewHolder
 import org.junit.After
@@ -50,9 +50,10 @@ class ContactItemSubtitleTest {
         controller = Robolectric.buildActivity(Activity::class.java).create()
         val activity = controller.get()
         parent = FrameLayout(activity)
-        // Deterministic countdown: anchor server clock = now, so daysLeftFromClock is pure arithmetic
-        // off expireAt regardless of wall time.
-        WeakContactClock.update(serverNow = NOW, elapsedRealtime = android.os.SystemClock.elapsedRealtime())
+        // Deterministic countdown: anchor server clock = NOW on a fixed monotonic clock, so
+        // daysLeftFromClock resolves to NOW exactly regardless of wall time.
+        ServerTimeProvider.resetForTest(wallClock = { NOW }, elapsedClock = { 0L })
+        ServerTimeProvider.update(serverNow = NOW, source = "test")
     }
 
     @After
@@ -62,9 +63,7 @@ class ContactItemSubtitleTest {
     }
 
     private fun clearClockAnchor() {
-        val field = WeakContactClock::class.java.getDeclaredField("anchor")
-        field.isAccessible = true
-        field.set(WeakContactClock, null)
+        ServerTimeProvider.resetForTest(wallClock = { 0L }, elapsedClock = { 0L })
     }
 
     /** Build a real ViewHolder by inflating the real list-item layout under Robolectric. */
@@ -91,6 +90,28 @@ class ContactItemSubtitleTest {
         assertEquals(subtitle, vh.content)
         // Sanity: the rendered text reflects the day count.
         assertEquals(true, subtitle.contains("3"))
+    }
+
+    // ---- final-day weak-pending row shows "Removes today" subtitle ----------------------
+
+    @Test
+    fun `T10 weak pending contact within one day shows Removes today subtitle`() {
+        val activity = controller.get()
+        // expireAt = half a day from the anchored server-now → daysLeftFromClock = 1 (ceil, floor 1).
+        val expireAt = NOW + (dayMs / 2)
+        val days = WeakContactCountdown.daysLeftFromClock(expireAt) // REAL countdown
+        assertEquals(1, days)
+
+        // Adapter picks the "today" copy when days == 1.
+        val subtitle = activity.getString(R.string.weak_contact_remove_today)
+        val vh = holder()
+        vh.content = subtitle // REAL ViewHolder content setter (visibility + text)
+
+        val tv = vh.itemView.findViewById<View>(
+            com.difft.android.chat.R.id.textViewContent
+        )
+        assertEquals(View.VISIBLE, tv.visibility, "subtitle must be visible for weak-pending row")
+        assertEquals(subtitle, vh.content)
     }
 
     // ---- non-weak (friend) row has no subtitle → content GONE ---------------------------

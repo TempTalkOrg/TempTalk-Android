@@ -42,7 +42,7 @@ import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
+import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.common.ScreenshotDetector
 import com.difft.android.base.log.lumberjack.L
@@ -52,6 +52,7 @@ import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
@@ -65,9 +66,8 @@ import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.CombineForwardBar
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.presend.FilePreSendActivity
-import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.group.GroupUtil
@@ -77,13 +77,16 @@ import com.difft.android.chat.jobs.ReactionSendCoordinator
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
+import com.difft.android.chat.mention.MentionCandidate
+import com.difft.android.chat.mention.MentionCandidateSorter
+import com.difft.android.chat.mention.MentionStatsRepository
+import com.difft.android.chat.mention.MentionStatsSnapshot
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.source
 import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.messageserialization.db.store.formatBase58Id
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.config.GlobalConfigsManager
@@ -134,6 +137,8 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.difft.android.base.widget.InsetAwareConstraintLayout
 import org.difft.app.database.convertToContactorModels
@@ -165,6 +170,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -254,6 +260,19 @@ class ChatMessageInputFragment : Fragment() {
 
     @Inject
     lateinit var localMessageCreator: LocalMessageCreator
+
+    @Inject
+    internal lateinit var mentionStatsRepository: MentionStatsRepository
+
+    // Per-@-session cache of mention sort stats. Invalidated when a new "@" panel opens;
+    // keyword filtering within one session reuses it. Mutex + double-check → one DB load per session.
+    // @Volatile: read outside the mutex in ensureMentionStats' double-checked fast path.
+    @Volatile
+    private var mentionStatsSnapshot: MentionStatsSnapshot? = null
+    private val mentionStatsMutex = Mutex()
+
+    // Bumped on each new "@" session so a stale in-flight loadSnapshot can't overwrite the cache.
+    private val mentionStatsGeneration = AtomicLong(0)
 
     private var keyboardStateListener: InsetAwareConstraintLayout.KeyboardStateListener? = null
 
@@ -364,7 +383,8 @@ class ChatMessageInputFragment : Fragment() {
                         ?.getDisplayNameWithoutRemarkForUI()
                         ?: it.authorId.formatBase58Id()
                 }
-                binding.quoteText.text = text
+                // Display-only: normalize newlines in the quote preview.
+                binding.quoteText.text = text.normalizeNewlines()
                 binding.edittextInput.requestFocus()
                 ServiceUtil.getInputMethodManager(activity)
                     .showSoftInput(binding.edittextInput, InputMethodManager.SHOW_IMPLICIT)
@@ -751,7 +771,8 @@ class ChatMessageInputFragment : Fragment() {
 
         binding.edittextInput.doOnTextChanged { text, start, before, count ->
             currentDraft = currentDraft.copy(
-                content = text?.toString(),
+                // Store canonical newlines; mention offsets are re-derived at send.
+                content = text?.toString()?.normalizeNewlines(),
                 quote = quote,
                 mentions = mentions.toList(),
             )
@@ -761,6 +782,9 @@ class ChatMessageInputFragment : Fragment() {
                 if (isGroup) { //处理@相关的逻辑
                     if (count == 1 && text!!.substring(start, start + 1) == "@") {
                         mentionsSearchKeyStartPos = start
+                        mentionsSearchKey = null // new @ session starts with no keyword
+                        mentionStatsGeneration.incrementAndGet() // invalidate any in-flight load first
+                        mentionStatsSnapshot = null // new @ session → reload stats once
                         updateAtView(null)
                     } else {
                         var key: String? = null
@@ -833,11 +857,11 @@ class ChatMessageInputFragment : Fragment() {
         // standalone button_media in the input row.
         binding.buttonPhoto.setOnClickListener {
             if (!checkCanSpeak()) return@setOnClickListener
-            // check permission
-            // callback to select picture in onPicturePermissionForMessageResult
-            onPicturePermissionForMessage.launchMultiplePermission(PermissionUtil.picturePermissions)
+            // Collapse the keyboard first so both open/request branches behave the same.
             ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
             binding.edittextInput.clearFocus()
+            // Open directly when media is already usable (full/partial); else request.
+            onPicturePermissionForMessage.launchMediaSelectionOrOpen { createPictureSelector() }
         }
 
         binding.buttonAttachment.setOnClickListener {
@@ -880,7 +904,8 @@ class ChatMessageInputFragment : Fragment() {
 
         binding.buttonSubmit.setOnClickListener {
             if (!checkCanSpeak()) return@setOnClickListener
-            val message: String = binding.edittextInput.text.toString().trim()
+            // Normalize newlines before trim so the sent, stored, and wire copies match.
+            val message: String = binding.edittextInput.text.toString().normalizeNewlines().trim()
             if (!TextUtils.isEmpty(message)) {
                 sendValidatedText(message) {
                     binding.edittextInput.setText("")
@@ -1079,57 +1104,6 @@ class ChatMessageInputFragment : Fragment() {
             requestAddFriend(action = "accept", showLoading = true)
         }
 
-//        if (globalServices.myId !== chatViewModel.forWhat.id && !chatViewModel.forWhat.id.isBotId()) {
-//            binding.buttonNewCall.visibility = View.VISIBLE
-//            binding.buttonNewCall.setOnClickListener {
-//                if (chatViewModel.forWhat is For.Group) {
-//                    val group = chatUIData?.group ?: return@setOnClickListener
-//                    if (!groupUtil.canSpeak(group, globalServices.myId)) {
-//                        ToastUtil.show(getString(R.string.group_only_moderators_can_speak_tip))
-//                        return@setOnClickListener
-//                    }
-//                    if (LCallActivity.isInCalling()) {
-//                        if (LCallActivity.getConversationId() == chatViewModel.forWhat.id) {
-//                            LCallManager.bringInCallScreenBack(requireActivity())
-//                        } else {
-//                            ToastUtil.show(R.string.call_is_calling_tip)
-//                        }
-//                    } else {
-//                        val callData = LCallManager.getCallDataByConversationId(chatViewModel.forWhat.id)
-//                        //判断当前是否有livekit会议，有则join会议
-//                        if (callData != null) {
-//                            LCallManager.joinCall(requireActivity(), callData.roomId)
-//                            return@setOnClickListener
-//                        }
-//                        // 发起群call
-//                        chatViewModel.startCall(requireActivity(), group.name)
-//                    }
-//                } else {
-//                    if (LCallActivity.isInCalling()) {
-//                        if (LCallActivity.getConversationId() == chatViewModel.forWhat.id) {
-//                            LCallManager.bringInCallScreenBack(requireActivity())
-//                        } else {
-//                            ToastUtil.show(R.string.call_is_calling_tip)
-//                        }
-//                    } else {
-//                        //判断当前是否有livekit会议，有则join会议
-//                        val callData = LCallManager.getCallDataByConversationId(chatViewModel.forWhat.id)
-//                        if (callData != null) {
-//                            LCallManager.joinCall(requireActivity(), callData.roomId)
-//                            return@setOnClickListener
-//                        }
-//                        // 发起1v1call
-//                        val chatRoomName = chatUIData?.let {
-//                            it.contact?.displayName
-//                        } ?: LCallManager.getDisplayName(chatViewModel.forWhat.id) ?: ""
-//                        chatViewModel.startCall(requireActivity(), chatRoomName)
-//                    }
-//                }
-//            }
-//        } else {
-//            binding.buttonNewCall.visibility = View.GONE
-//        }
-
         updateViewByFriendCheck()
 
         if (isGroup) {
@@ -1197,8 +1171,8 @@ class ChatMessageInputFragment : Fragment() {
                             ?: quote.author.formatBase58Id()
                     }
 
-                    // Show the quoted text
-                    binding.quoteText.text = quote.text
+                    // Display-only: normalize newlines in the quote preview.
+                    binding.quoteText.text = quote.text.normalizeNewlines()
                     bindQuoteThumbnailPreview(quote)
                 } else {
                     binding.quoteZone.visibility = View.GONE
@@ -1613,26 +1587,20 @@ class ChatMessageInputFragment : Fragment() {
             }
         }
 
-        val set = mentionsSelectedContacts.map { "@" + it.getDisplayNameWithoutRemarkForUI() }.toHashSet()
+        val set = mentionsSelectedContacts.map(::mentionKeyFor).toHashSet()
         val text = binding.edittextInput.text.toString().trim()
 
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching {
                 withContext(Dispatchers.Default) {
-                    val map = findContainedSubstringsWithPositions(text, set)
-                    val mentionsMap = hashMapOf<Int, Mention>()
-
-                    map.map { posMap ->
-                        val id = mentionsSelectedContacts.find { contact -> "@" + contact.getDisplayNameWithoutRemarkForUI() == posMap.key }?.id
-                        posMap.value.forEach { pos ->
-                            mentionsMap[pos.first] = Mention(pos.first, posMap.key.length, id, 0)
-                        }
-                    }
+                    // Route through the single offset owner so live highlight and send-time
+                    // recompute share one source of truth (no behavior change).
+                    val computedMentions = mentionOffsets(text, set, ::uidForMentionKey)
 
                     withContext(Dispatchers.Main) {
                         if (!isAdded || view == null) return@withContext
                         mentions.clear()
-                        mentions.addAll(mentionsMap.values.toList())
+                        mentions.addAll(computedMentions)
 
                         val spannable = content as Spannable
                         spannable.getSpans<ForegroundColorSpan>().forEach {
@@ -1660,6 +1628,23 @@ class ChatMessageInputFragment : Fragment() {
         draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
     }
 
+    /**
+     * Returns the mention stats snapshot for [roomId], loading it once per @ session.
+     * Mutex + double-check so rapid keystrokes share a single DB load. The snapshot is validated
+     * by roomId to avoid cross-chat reuse.
+     */
+    private suspend fun ensureMentionStats(roomId: String): MentionStatsSnapshot {
+        mentionStatsSnapshot?.let { if (it.roomId == roomId) return it }
+        return mentionStatsMutex.withLock {
+            mentionStatsSnapshot?.let { if (it.roomId == roomId) return@withLock it }
+            // Capture generation before loading; a concurrent "@" reset bumps it, so a stale
+            // in-flight result is still returned to this caller (F1 guard drops its UI) but not cached.
+            val gen = mentionStatsGeneration.get()
+            mentionStatsRepository.loadSnapshot(roomId, globalServices.myId, System.currentTimeMillis())
+                .also { if (mentionStatsGeneration.get() == gen) mentionStatsSnapshot = it }
+        }
+    }
+
     private fun updateAtView(key: String? = null) {
         val content = binding.edittextInput.text.toString().trim()
         var preLetter: Char? = null
@@ -1672,27 +1657,56 @@ class ChatMessageInputFragment : Fragment() {
                 || (preLetter.isLetterOrDigit().not() && preLetter.isWhitespace().not())
 
         if (canShow && mentionsSearchKeyStartPos != -1) {
+            // Session guard (mirrors loadComposeQuoteThumbnailAsync): capture the @ session identity so a
+            // slow DB load can't revive a panel the user already closed / advanced past on completion.
+            val sessionStart = mentionsSearchKeyStartPos
+            val sessionGen = mentionStatsGeneration.get()
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-
                 val contacts = mutableListOf<ContactsAtAdapter.Item>()
 
-                val contactsOfGroup = chatUIData?.group?.members?.convertToContactorModels()?.mapNotNull { member ->
-                    if (key == null || member.getDisplayNameForUI().contains(key, true)) member else null
-                }?.sortedByPinyin() ?: emptyList()
-
-                if (contactsOfGroup.isNotEmpty()) {
-                    contacts.add(ContactsAtAdapter.Item.Title(getString(R.string.chat_at_group_members), getString(R.string.chat_at_tips)))
-                    contacts.add(ContactsAtAdapter.Item.Contact(ContactorModel().apply { id = MENTIONS_ALL_ID; name = getString(R.string.chat_at_all) }))
-                    contacts.addAll(contactsOfGroup.map { ContactsAtAdapter.Item.Contact(it) })
+                runCatching {
+                    val roomId = chatViewModel.forWhat.id
+                    val members = chatUIData?.group?.members?.convertToContactorModels() ?: emptyList()
+                    if (members.isNotEmpty()) {
+                        // Stats are an enhancement only: on DB failure degrade to empty stats,
+                        // which lands every member in the pinyin-fallback bucket (legacy order).
+                        val snapshot = runCatching { ensureMentionStats(roomId) }
+                            .onFailure { e ->
+                                if (e is CancellationException) throw e
+                                L.e { "[Mention] stats load failed, pinyin fallback: ${e.stackTraceToString()}" }
+                            }
+                            .getOrElse { MentionStatsSnapshot(roomId, System.currentTimeMillis(), emptyMap(), emptyMap()) }
+                        val byUid = members.associateBy { it.id }
+                        val candidates = members.map { MentionCandidate.from(it) }
+                        val ordered = MentionCandidateSorter.sort(
+                            candidates = candidates,
+                            key = key, // null = "@" only; non-empty = filter + sort
+                            now = snapshot.now, // snapshot instant → counts/tier stay consistent
+                            mentionStats = snapshot.mentionStats,
+                            lastSpeakTime = snapshot.lastSpeakTime,
+                        )
+                        if (ordered.isNotEmpty()) {
+                            contacts.add(ContactsAtAdapter.Item.Title(getString(R.string.chat_at_group_members), getString(R.string.chat_at_tips)))
+                            // @all is always pinned first; not keyword-matched.
+                            contacts.add(ContactsAtAdapter.Item.Contact(ContactorModel().apply { id = MENTIONS_ALL_ID; name = getString(R.string.chat_at_all) }))
+                            ordered.forEach { c -> byUid[c.uid]?.let { contacts.add(ContactsAtAdapter.Item.Contact(it)) } }
+                        }
+                    }
+                }.onFailure { e ->
+                    if (e is CancellationException) throw e
+                    L.e { "[Mention] updateAtView failed: ${e.stackTraceToString()}" }
+                    contacts.clear()
                 }
-
-//            if (contactsOther.isNotEmpty()) {
-//                contacts.add(ContactsAtAdapter.Item.Title(getString(R.string.chat_at_other), getString(R.string.chat_at_other_tips)))
-//                contacts.addAll(contactsOther.sortedWith(pinyinComparator).map { ContactsAtAdapter.Item.Contact(it) })
-//            }
 
                 withContext(Dispatchers.Main) {
                     if (!isAdded || view == null) return@withContext
+                    // Discard stale results: generation guards against cross-session ABA (same offset
+                    // reopened @); startPos guards against a closed panel (close path sets -1 but does
+                    // not bump generation); key guards against out-of-order keystrokes in one session.
+                    if (mentionStatsGeneration.get() != sessionGen ||
+                        mentionsSearchKeyStartPos != sessionStart ||
+                        mentionsSearchKey != key
+                    ) return@withContext
                     if (contacts.isEmpty()) {
                         binding.llAt.visibility = View.GONE
                         contactsAtAdapter.submitList(emptyList())
@@ -1721,6 +1735,31 @@ class ChatMessageInputFragment : Fragment() {
         return containedSubstrings
     }
 
+    /**
+     * Single owner of "map @display-name key -> mention offsets against [body]".
+     * Wraps [findContainedSubstringsWithPositions] so both the live [updateMentions]
+     * path and the send-time [mentionsForNormalizedBody] recompute go through one
+     * offset source. Offsets are indices into [body] exactly as given, so callers
+     * pass the FINAL body (normalized + trimmed at send) to keep start/length aligned
+     * after CRLF (2->1) shifts; the other six family members are length-preserving.
+     * [uidForKey] resolves the mention uid for a matched key; it defaults to null so
+     * unit tests can drive pure offset math without a contact map.
+     */
+    internal fun mentionOffsets(
+        body: String,
+        mentionKeys: Set<String>,
+        uidForKey: (String) -> String? = { null }
+    ): List<Mention> {
+        if (mentionKeys.isEmpty()) return emptyList()
+        val map = findContainedSubstringsWithPositions(body, HashSet(mentionKeys))
+        val rebuilt = hashMapOf<Int, Mention>()
+        map.forEach { (key, positions) ->
+            val uid = uidForKey(key)
+            positions.forEach { pos -> rebuilt[pos.first] = Mention(pos.first, key.length, uid, 0) }
+        }
+        return rebuilt.values.toList()
+    }
+
     private fun insertTextToEdittext(content: String) {
         val editable: Editable? = binding.edittextInput.text
         val cursorPosition = binding.edittextInput.selectionStart
@@ -1742,7 +1781,7 @@ class ChatMessageInputFragment : Fragment() {
     private fun updateBottomView() {
         if (!isGroup) {
 
-            if (isFriend || chatViewModel.forWhat.id.isBotId()) {
+            if (isFriend || chatViewModel.forWhat.id.isOfficialAccount()) {
                 binding.clSendMessage.visibility = View.VISIBLE
                 binding.clFriends.visibility = View.GONE
 
@@ -1833,7 +1872,7 @@ class ChatMessageInputFragment : Fragment() {
                     updateConfidentialUI(hideConfidential)
                 }
             }
-        } else if (chatViewModel.forWhat.id.isBotId() || !isFriend) {
+        } else if (chatViewModel.forWhat.id.isOfficialAccount() || !isFriend) {
             updateConfidentialUI(true)
         } else {
             updateConfidentialUI(false)
@@ -2091,6 +2130,11 @@ class ChatMessageInputFragment : Fragment() {
 
     /** Sends text with size validation: >10MB blocked, ≥4KB → text-file attachment, <4KB → normal. */
     private fun sendValidatedText(message: String, onSent: (() -> Unit)? = null): Boolean {
+        // Single choke point: normalize the newline family to `\n` for EVERY caller
+        // (send button, media caption, file caption). Idempotent, so re-normalizing an
+        // already-normalized send-button body is harmless. No `.trim()` here: caption
+        // callers must keep their raw whitespace behavior.
+        val message = message.normalizeNewlines()
         val messageBytes = message.toByteArray(Charsets.UTF_8)
         if (messageBytes.size > MAX_TEXT_FILE_SIZE) {
             ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
@@ -2141,6 +2185,26 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     /**
+     * Re-derives mention offsets against the FINAL body sent to [sendTextPush] (already
+     * normalized at Edit A, possibly truncated in the oversized branch). Running the
+     * single offset owner [mentionOffsets] against that exact body makes CRLF (2->1)
+     * shifts correct by construction and drops any mention whose substring fell outside
+     * a truncated body, so an out-of-bounds offset can never be produced.
+     */
+    private fun mentionsForNormalizedBody(body: String): MutableList<Mention> {
+        if (mentions.isEmpty()) return mutableListOf()
+        val keys = mentionsSelectedContacts.map(::mentionKeyFor).toHashSet()
+        return mentionOffsets(body, keys, ::uidForMentionKey).toMutableList()
+    }
+
+    /** The `@display-name` key used to locate a selected contact's mention in body text. */
+    private fun mentionKeyFor(contact: ContactorModel): String = "@" + contact.getDisplayNameWithoutRemarkForUI()
+
+    /** Resolves a mention key (as built by [mentionKeyFor]) back to its contact uid. */
+    private fun uidForMentionKey(key: String): String? =
+        mentionsSelectedContacts.find { mentionKeyFor(it) == key }?.id
+
+    /**
      * Unified method to send text messages with optional attachment
      * @param content Text content (can be null for attachment-only messages)
      * @param timeStamp Message timestamp
@@ -2158,6 +2222,11 @@ class ChatMessageInputFragment : Fragment() {
 
         // Mentions live in `content`; attachment-only sends must skip them to avoid phantom @-notifications.
         val hasContent = !content.isNullOrEmpty()
+
+        // Offset-carrying mentions must match the final (normalized, possibly truncated) body,
+        // so rebuild them from `content` via the single offset owner. `atPersonsString` below
+        // reads only mention.uid (offset-independent) and therefore keeps the original `mentions`.
+        val normalizedMentions = if (hasContent) mentionsForNormalizedBody(content ?: "") else mutableListOf()
 
         var atPersonsString: String? = null
         if (hasContent && mentions.isNotEmpty()) {
@@ -2216,7 +2285,7 @@ class ChatMessageInputFragment : Fragment() {
                 quote,
                 forwardContext,
                 recall,
-                if (hasContent) mentions.toMutableList() else mutableListOf(),
+                normalizedMentions,
                 atPersonsString,
                 reactions.toMutableList(),
                 screenShot,
@@ -2347,8 +2416,12 @@ class ChatMessageInputFragment : Fragment() {
                     when (effect) {
                         is com.difft.android.chat.gif.GifPanelContract.Effect.SendGif ->
                             onGifPicked(effect.uri)
-                        is com.difft.android.chat.gif.GifPanelContract.Effect.ShowError ->
+                        is com.difft.android.chat.gif.GifPanelContract.Effect.ShowError -> {
+                            // Surface a transient toast (e.g. a load-more/append failure) so it isn't
+                            // silent; the in-panel "couldn't load" label covers the first-page case.
                             L.w { "[ChatMessageInputFragment] gif inline effect error" }
+                            ToastUtil.show(R.string.gif_load_failed)
+                        }
                         is com.difft.android.chat.gif.GifPanelContract.Effect.FavoriteRemote ->
                             // Long-press add-to-favorites (Issue 5): forward the raw item to
                             // FavoriteViewModel as FromRemote — the placeholder + toast are instant
@@ -2413,24 +2486,38 @@ class ChatMessageInputFragment : Fragment() {
     private fun onFavoritePicked(item: com.difft.android.chat.gif.favorite.FavoriteGifUiItem) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                // Optimistic placeholder (upload not done yet): send from the preview URL, same as a
-                // search send (works before the ciphertext exists). Confirmed rows decrypt the
-                // encrypted-at-rest attachment via its content:// uri.
-                val sourceUrl = item.sourceUrl
-                val input = if (sourceUrl != null && item.attachmentId == null) {
-                    com.difft.android.chat.gif.GifSendInput.FromUrl(sourceUrl, item.width, item.height)
-                } else {
-                    val contentUri = favoriteViewModel.resolveGif(item.fileHash)
-                    if (contentUri == null) {
-                        L.w { "[ChatMessageInputFragment] favorite pick: resolve failed hash=${item.fileHash}" }
-                        return@launch
+                // Branch on the TYPED pending source (not the dead sourceUrl column): Remote pending ->
+                // send from the preview URL (works before the ciphertext exists); Message pending -> send
+                // from LOCAL message bytes only (no network), same source the grid cell renders; confirmed
+                // (None) -> resolve the decrypting content:// uri by fileHash. Every unresolvable path shows
+                // a failure toast — never a silent no-op send.
+                val input = when (val src = item.pendingSource) {
+                    is com.difft.android.chat.gif.favorite.PendingSource.Remote ->
+                        com.difft.android.chat.gif.GifSendInput.FromUrl(src.previewUrl, item.width, item.height)
+                    is com.difft.android.chat.gif.favorite.PendingSource.Message -> {
+                        val uri = com.difft.android.chat.gif.favorite.resolveMessageUri(src)
+                        if (uri == null) {
+                            L.w { "[ChatMessageInputFragment] favorite pick: message bytes gone msgId=${src.messageId}" }
+                            ToastUtil.show(R.string.gif_favorites_failed)
+                            return@launch
+                        }
+                        com.difft.android.chat.gif.GifSendInput.FromFavorite(uri.toString(), item.width, item.height)
                     }
-                    com.difft.android.chat.gif.GifSendInput.FromFavorite(contentUri.toString(), item.width, item.height)
+                    com.difft.android.chat.gif.favorite.PendingSource.None -> {
+                        val contentUri = favoriteViewModel.resolveGif(item.fileHash)
+                        if (contentUri == null) {
+                            L.w { "[ChatMessageInputFragment] favorite pick: resolve failed hash=${item.fileHash}" }
+                            ToastUtil.show(R.string.gif_favorites_failed)
+                            return@launch
+                        }
+                        com.difft.android.chat.gif.GifSendInput.FromFavorite(contentUri.toString(), item.width, item.height)
+                    }
                 }
                 val uri = gifSendUseCase.resolveSendable(input)
                 onGifPicked(uri)
             } catch (e: Exception) {
                 L.w { "[ChatMessageInputFragment] favorite pick send failed: ${e.stackTraceToString()}" }
+                ToastUtil.show(R.string.gif_favorites_failed)
             }
         }
     }
@@ -2450,6 +2537,19 @@ class ChatMessageInputFragment : Fragment() {
         // Deferred initial trending load: fire only when the panel is shown, not on VM
         // creation (conversation open). Idempotent across re-opens.
         gifPanelViewModel.onPanelShown()
+
+        // Flush-trigger gap: OpenFavorites (-> ensureKeyAndReconcile -> flushPendingFavorites) is only
+        // dispatched on a tab-CHANGE to favorites (LaunchedEffect in GifInlinePanel). Re-opening the
+        // panel while ALREADY on favorites retains the composition, so it never re-dispatches and a
+        // pending row from an earlier offline favorite/unfavorite never retries until an app restart.
+        // Re-dispatch here on every panel-show while on favorites (idempotent, offline-safe).
+        if (gifPanelViewModel.state.value.currentTab ==
+            com.difft.android.chat.gif.GifPanelContract.GifTab.FAVORITES
+        ) {
+            favoriteViewModel.dispatch(
+                com.difft.android.chat.gif.favorite.FavoriteContract.Intent.OpenFavorites
+            )
+        }
 
         if (binding.llChatActions.isVisible) {
             // Panel already on-screen (switching MORE -> GIF): ONLY swap content in place; do not

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -60,11 +61,22 @@ class GlideCacheKeyManagerTest {
         tempFile.delete()
     }
 
-    /** Reset the object's in-memory cache so each test observes a cold load. */
+    /** Reset the object's in-memory cache + readiness state so each test observes a cold load. */
     private fun resetCachedKey() {
         GlideCacheKeyManager::class.java.getDeclaredField("cached").apply {
             isAccessible = true
             set(GlideCacheKeyManager, null)
+        }
+        GlideCacheKeyManager::class.java.getDeclaredField("warmState").apply {
+            isAccessible = true
+            setInt(GlideCacheKeyManager, 0) // STATE_UNKNOWN
+        }
+        // Clear the in-flight guard so an async warmUp() launched by a prior test cannot leave
+        // `warming` latched and starve warmUp() in the next test.
+        GlideCacheKeyManager::class.java.getDeclaredField("warming").apply {
+            isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            (get(GlideCacheKeyManager) as java.util.concurrent.atomic.AtomicBoolean).set(false)
         }
     }
 
@@ -127,6 +139,29 @@ class GlideCacheKeyManagerTest {
         GlideCacheKeyManager.isAvailable(context)
     }
 
+    @Test
+    fun `isCacheKeyReady returns false on a clean slate without blocking`() {
+        // warmState == UNKNOWN → must return false immediately (offloading the keystore work to an
+        // async warmUp), never touching the keystore synchronously on the (main-thread) caller.
+        assertFalse(GlideCacheKeyManager.isCacheKeyReady(context))
+    }
+
+    @Test
+    fun `isCacheKeyReady agrees with getKeyOrNull once resolved`() {
+        // Resolve state via the blocking path first. On the host JVM the Keystore is unavailable, so
+        // getKeyOrNull degrades to null → warmState becomes UNAVAILABLE → isCacheKeyReady must be false
+        // and consistent with getKeyOrNull(), never throwing.
+        val key = GlideCacheKeyManager.getKeyOrNull(context)
+        assertEquals(key != null, GlideCacheKeyManager.isCacheKeyReady(context))
+    }
+
+    @Test
+    fun `isCacheKeyReady never throws regardless of key file state`() {
+        keyFile.writeBytes(ByteArray(3))
+        // Must not throw; the non-blocking UI contract is the only thing pinned on the host JVM.
+        GlideCacheKeyManager.isCacheKeyReady(context)
+    }
+
     // --------------------------------------------------------------------- @Ignore'd
     // Keystore-dependent contracts. AndroidKeystore is not emulated by Robolectric, so these
     // document the behavior verified on a real device/emulator (mirrors WCDBKeyManagerTest).
@@ -143,6 +178,15 @@ class GlideCacheKeyManagerTest {
         val reloaded = GlideCacheKeyManager.getKeyOrNull(context)
         assertTrue("key must round-trip from disk", key.contentEquals(reloaded!!))
         assertTrue("no temp file should survive", !tempFile.exists())
+    }
+
+    @Test
+    @Ignore("Requires AndroidKeystore — not available in Robolectric (host JVM)")
+    fun `isCacheKeyReady becomes true after the key resolves`() {
+        // On a real device getKeyOrNull() succeeds → warmState = STATE_READY, so the non-blocking UI
+        // check flips to true and stays consistent with getKeyOrNull().
+        assertEquals(32, GlideCacheKeyManager.getKeyOrNull(context)!!.size)
+        assertTrue("isCacheKeyReady must be true once the key resolves", GlideCacheKeyManager.isCacheKeyReady(context))
     }
 
     @Test

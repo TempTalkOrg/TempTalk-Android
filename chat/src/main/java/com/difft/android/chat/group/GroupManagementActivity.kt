@@ -126,12 +126,10 @@ class GroupManagementActivity : BaseActivity() {
     private fun initView(group: GroupModel) {
         mBinding.switchCanAdd.setOnCheckedChangeListener(null)
         mBinding.switchCanSpeak.setOnCheckedChangeListener(null)
-        mBinding.switchEnableLink.setOnCheckedChangeListener(null)
         mBinding.switchCanCriticalAlert.setOnCheckedChangeListener(null)
 
         mBinding.switchCanAdd.isChecked = group.invitationRule == 1
         mBinding.switchCanSpeak.isChecked = group.publishRule == 1
-        mBinding.switchEnableLink.isChecked = group.linkInviteSwitch == true
         mBinding.switchCanCriticalAlert.isChecked = group.criticalAlert == true
 
         setCheckChangeListener()
@@ -187,10 +185,6 @@ class GroupManagementActivity : BaseActivity() {
             changeGroupSetting(mBinding.switchCanSpeak, publishRule = publishRule)
         }
 
-        mBinding.switchEnableLink.setOnCheckedChangeListener { _, isChecked ->
-            changeGroupSetting(mBinding.switchEnableLink, linkInviteSwitch = isChecked)
-        }
-
         mBinding.switchCanCriticalAlert.setOnCheckedChangeListener { _, isChecked ->
             changeGroupSetting(mBinding.switchCanCriticalAlert, criticalAlertSwitch = isChecked)
         }
@@ -200,7 +194,6 @@ class GroupManagementActivity : BaseActivity() {
         switch: SwitchCompat,
         invitationRule: Int? = null,
         publishRule: Int? = null,
-        linkInviteSwitch: Boolean? = null,
         criticalAlertSwitch: Boolean? = null,
     ) {
         ComposeDialogManager.showWait(this@GroupManagementActivity, "")
@@ -211,7 +204,6 @@ class GroupManagementActivity : BaseActivity() {
                         groupId, ChangeGroupSettingsReq(
                             invitationRule = invitationRule,
                             publishRule = publishRule,
-                            linkInviteSwitch = linkInviteSwitch,
                             criticalAlert = criticalAlertSwitch,
                         )
                     )

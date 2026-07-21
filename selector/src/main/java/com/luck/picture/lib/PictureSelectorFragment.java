@@ -1,9 +1,12 @@
 package com.luck.picture.lib;
 
+import com.difft.android.base.android.permission.MediaAccessState;
 import com.difft.android.base.log.lumberjack.L;
 
 import android.annotation.SuppressLint;
 import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.Vibrator;
@@ -11,6 +14,7 @@ import android.text.TextUtils;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+import android.widget.PopupMenu;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
@@ -55,6 +59,7 @@ import com.luck.picture.lib.manager.SelectedManager;
 import com.luck.picture.lib.permissions.PermissionChecker;
 import com.luck.picture.lib.permissions.PermissionConfig;
 import com.luck.picture.lib.permissions.PermissionResultCallback;
+import com.luck.picture.lib.permissions.PermissionUtil;
 import com.luck.picture.lib.style.PictureSelectorStyle;
 import com.luck.picture.lib.style.SelectMainStyle;
 import com.luck.picture.lib.utils.ActivityCompatHelper;
@@ -97,6 +102,15 @@ public class PictureSelectorFragment extends PictureCommonFragment
     private BottomNavBar bottomNarBar;
     private CompleteSelectView completeSelectView;
     private TextView tvCurrentDataTime;
+    /**
+     * Android 14+ "Select photos" partial-access hint bar (shown only when
+     * media access is PARTIAL). Its own settings request code is kept distinct
+     * from PermissionChecker.REQUEST_CODE (10086) so returning from Settings
+     * routes through onActivityResult, not the graceful-close settings path.
+     */
+    private View partialAccessBar;
+    private TextView partialAccessManage;
+    private static final int REQUEST_PARTIAL_SETTINGS = 20086;
     private long intervalClickTime = 0;
     private int allFolderSize;
     private int currentPosition = -1;
@@ -244,6 +258,14 @@ public class PictureSelectorFragment extends PictureCommonFragment
         titleBar = view.findViewById(R.id.title_bar);
         bottomNarBar = view.findViewById(R.id.bottom_nar_bar);
         tvCurrentDataTime = view.findViewById(R.id.tv_current_data_time);
+        partialAccessBar = view.findViewById(R.id.ps_partial_access_bar);
+        partialAccessManage = view.findViewById(R.id.ps_partial_access_manage);
+        // Guard against custom onLayoutResourceListener layouts that omit this view (mirrors the
+        // partialAccessBar null-guard in updatePartialAccessBar).
+        if (partialAccessManage != null) {
+            partialAccessManage.setOnClickListener(this::showPartialAccessMenu);
+        }
+        updatePartialAccessBar();
         onCreateLoader();
         initAlbumListPopWindow();
         initTitleBar();
@@ -509,6 +531,115 @@ public class PictureSelectorFragment extends PictureCommonFragment
             }
         }
         PermissionConfig.CURRENT_REQUEST_PERMISSION = new String[]{};
+    }
+
+    /**
+     * Toggle the Android 14+ partial-access hint bar. Single source of truth is
+     * :base getMediaAccessState()==PARTIAL (Signal canOnlyReadSelected) — NOT the
+     * selector isPartialVisualAccessGranted, which also returns true under FULL and
+     * would wrongly show the bar with full access.
+     */
+    private void updatePartialAccessBar() {
+        if (partialAccessBar == null) {
+            return;
+        }
+        boolean partial = currentMediaAccessState(getContext()) == MediaAccessState.PARTIAL;
+        partialAccessBar.setVisibility(partial ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * Shorthand for the :base three-state predicate. Kept fully-qualified here
+     * (not imported) because its simple name collides with the selector's own
+     * {@link PermissionUtil}, already imported for {@link PermissionUtil#goIntentSetting}.
+     * Uses {@link #getAppContext()} instead of the passed-in context — callers may
+     * invoke this after fragment teardown (e.g. returning from system Settings),
+     * where {@link #getContext()} can be null and crash the non-null Kotlin param.
+     */
+    private MediaAccessState currentMediaAccessState(Context context) {
+        return com.difft.android.base.android.permission.PermissionUtil.getMediaAccessState(getAppContext());
+    }
+
+    /**
+     * "Manage" menu (aligns with Signal ManageContextMenu two entries). Uses the
+     * host Activity context so the popup inherits the app DayNight theme.
+     */
+    private void showPartialAccessMenu(View anchor) {
+        PopupMenu popupMenu = new PopupMenu(requireActivity(), anchor);
+        popupMenu.getMenu().add(0, 1, 0, getString(R.string.ps_partial_access_select_more));
+        popupMenu.getMenu().add(0, 2, 1, getString(R.string.ps_partial_access_settings));
+        popupMenu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == 1) {
+                requestSelectMore();
+                return true;
+            } else if (item.getItemId() == 2) {
+                openPartialAccessSettings();
+                return true;
+            }
+            return false;
+        });
+        popupMenu.show();
+    }
+
+    /**
+     * "Select more photos": reuse the selector's own re-selection mechanism with a
+     * custom callback. Both branches reload — after re-selecting, the user may still
+     * be in "Selected photos" (onDenied) but the selection set changed, so a reload
+     * is required either way. Never route onDenied to handlePermissionDenied (which
+     * toasts and closes the gallery).
+     */
+    private void requestSelectMore() {
+        L.i(() -> "[MediaAccess] user tapped select-more (partial)");
+        String[] readPermissionArray = PermissionConfig.getReadPermissionArray(getAppContext(), selectorConfig.chooseMode);
+        PermissionChecker.getInstance().requestPermissions(this, readPermissionArray, new PermissionResultCallback() {
+            @Override
+            public void onGranted() {
+                reloadAfterAccessChange();
+            }
+
+            @Override
+            public void onDenied() {
+                reloadAfterAccessChange();
+            }
+        });
+    }
+
+    /**
+     * "Go to Settings": use a dedicated request code so onActivityResult below only
+     * reloads (never closes) — the base REQUEST_GO_SETTING path would close the
+     * gallery when access is still partial (a legal usable state).
+     */
+    private void openPartialAccessSettings() {
+        L.i(() -> "[MediaAccess] user tapped go-to-settings (partial)");
+        PermissionUtil.goIntentSetting(this, REQUEST_PARTIAL_SETTINGS);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_PARTIAL_SETTINGS) {
+            reloadAfterAccessChange();
+        }
+    }
+
+    /**
+     * Unified reload after the user changed access via re-selection or Settings.
+     * Three branches: NONE (revoked in Settings) → mirror handlePermissionSettingResult
+     * graceful degradation (toast + close) instead of leaving a stale unreadable
+     * gallery; FULL/PARTIAL → fresh reload and refresh the bar (hidden when FULL).
+     */
+    private void reloadAfterAccessChange() {
+        MediaAccessState state = currentMediaAccessState(getContext());
+        if (state == MediaAccessState.NONE) {
+            // Fragment may be detached when returning from Settings; use the
+            // null-safe app context for both string lookup and the toast.
+            Context appContext = getAppContext();
+            ToastUtils.showToast(appContext, appContext.getString(R.string.ps_jurisdiction));
+            onKeyBackFragmentFinish();
+            updatePartialAccessBar();
+            return;
+        }
+        beginLoadData();
+        updatePartialAccessBar();
     }
 
     /**
@@ -1275,7 +1406,15 @@ public class PictureSelectorFragment extends PictureCommonFragment
                 tvDataEmpty.setVisibility(View.VISIBLE);
             }
             tvDataEmpty.setCompoundDrawablesRelativeWithIntrinsicBounds(0, R.drawable.ps_ic_no_data, 0, 0);
-            String tips = selectorConfig.chooseMode == SelectMimeType.ofAudio() ? getString(R.string.ps_audio_empty) : getString(R.string.ps_empty);
+            String tips;
+            if (selectorConfig.chooseMode == SelectMimeType.ofAudio()) {
+                tips = getString(R.string.ps_audio_empty);
+            } else if (currentMediaAccessState(getContext()) == MediaAccessState.PARTIAL) {
+                // Partial access with 0 selected: guide the user to select more (Manage bar stays visible).
+                tips = getString(R.string.ps_partial_access_empty);
+            } else {
+                tips = getString(R.string.ps_empty);
+            }
             tvDataEmpty.setText(tips);
         }
     }

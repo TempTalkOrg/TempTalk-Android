@@ -28,7 +28,7 @@ import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
-import com.difft.android.chat.contacts.data.isOfficialBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
 import com.difft.android.chat.group.getAvatarData
 import com.difft.android.chat.search.setHighLightText
@@ -231,7 +231,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                             binding.root.context.getString(com.difft.android.base.R.string.chat_favorites)
                     }
                 } else {
-                    binding.imageviewBotBadge.isVisible = data.roomId.isOfficialBotId()
+                    binding.imageviewBotBadge.isVisible = data.roomId.isOfficialAccount()
                     val contactAvatar = (data.remarkAvatarJson?.takeIf { it.isNotEmpty() } ?: data.roomAvatarJson)
                         ?.getContactAvatarData()
                     binding.imageviewAvatar.setAvatar(

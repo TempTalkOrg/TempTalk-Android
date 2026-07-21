@@ -3,13 +3,13 @@ package com.difft.android.network.config
 import com.auth0.android.jwt.JWT
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -100,8 +100,9 @@ class WsTokenManager @Inject constructor(
         val result = kotlin.runCatching {
             val jwt = JWT(currentToken)
             val expireDate = jwt.expiresAt
-            val currDate = Date()
-            currDate.after(expireDate)
+            // Refresh-early bias: if either clock says expired, refresh (guards the cold-start window
+            // where a stale offset could make nowMillis under-read). Null exp -> original NPE path (caught below).
+            maxOf(ServerTimeProvider.nowMillis(), System.currentTimeMillis()) > expireDate!!.time
         }.onFailure {
             L.w(it) { "[WsTokenManager] error:" }
         }.getOrDefault(false)

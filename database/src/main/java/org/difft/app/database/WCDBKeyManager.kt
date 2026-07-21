@@ -10,6 +10,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.difft.android.base.log.WCDBKeyUnavailableException
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
 import java.io.File
@@ -30,6 +31,21 @@ internal data class SealedData(
     val iv: ByteArray,
     val data: ByteArray
 )
+
+/**
+ * Outcome of a Keystore-entry lookup, disambiguating the three states the old `SecretKey?`
+ * return type fused into `null`: [Found] a usable entry exists; [Absent] the daemon answered
+ * cleanly with no such alias; [Failed] the operation threw, with [cause] carrying the real
+ * throwable for classification instead of swallowing it to `null`.
+ *
+ * `internal` so the same-module contract test ([KeystoreEntryClassificationTest]) can assert on
+ * these variants; [getKeystoreEntry] is the only public-to-module entry point.
+ */
+internal sealed interface KeystoreEntryResult {
+    data class Found(val key: SecretKey) : KeystoreEntryResult
+    data object Absent : KeystoreEntryResult
+    data class Failed(val cause: Throwable) : KeystoreEntryResult
+}
 
 /**
  * Synchronous WCDB cipher-key store.
@@ -153,8 +169,16 @@ object WCDBKeyManager {
         val iv = blob.copyOfRange(0, GCM_IV_SIZE)
         val ciphertextAndTag = blob.copyOfRange(GCM_IV_SIZE, WIRE_FORMAT_SIZE)
 
-        val secretKey = getKeystoreEntry(KEY_ALIAS)
-            ?: throw WCDBKeyUnavailableException("Keystore alias '$KEY_ALIAS' missing while key file exists")
+        // Split clean-absent (cause=null is CORRECT) from threw (preserve the real cause).
+        val secretKey = when (val entry = getKeystoreEntry(KEY_ALIAS)) {
+            is KeystoreEntryResult.Found -> entry.key
+            KeystoreEntryResult.Absent -> throw WCDBKeyUnavailableException(
+                "Keystore alias '$KEY_ALIAS' missing (clean-absent) while key file exists"
+            )
+            is KeystoreEntryResult.Failed -> throw WCDBKeyUnavailableException(
+                "Keystore read failed for alias '$KEY_ALIAS' while key file exists", entry.cause
+            )
+        }
 
         val plaintext = try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -210,8 +234,15 @@ object WCDBKeyManager {
     }
 
     private fun encrypt(plaintext: ByteArray): ByteArray {
-        val secretKey = getOrCreateKeystoreEntry(KEY_ALIAS)
-            ?: throw WCDBKeyUnavailableException("Could not get or create Keystore alias '$KEY_ALIAS'")
+        val secretKey = when (val entry = getOrCreateKeystoreEntry(KEY_ALIAS)) {
+            is KeystoreEntryResult.Found -> entry.key
+            is KeystoreEntryResult.Failed -> throw WCDBKeyUnavailableException(
+                "Could not get or create Keystore alias '$KEY_ALIAS'", entry.cause
+            )
+            KeystoreEntryResult.Absent -> throw WCDBKeyUnavailableException(
+                "Keystore alias '$KEY_ALIAS' still absent after create attempt"
+            )
+        }
         val cipher = try {
             Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, secretKey)
@@ -330,7 +361,8 @@ object WCDBKeyManager {
     /** Mirrors the legacy `WCDBSecretKeyHelper.unseal()` using the OLD alias `"WCDBSecret"`. */
     private fun unsealLegacy(sealed: SealedData?): ByteArray? {
         if (sealed == null) return null
-        val secretKey = getKeystoreEntry(LEGACY_KEY_ALIAS) ?: return null
+        // Behavior-preserving: only a usable entry proceeds; Absent/Failed → null (same as before).
+        val secretKey = (getKeystoreEntry(LEGACY_KEY_ALIAS) as? KeystoreEntryResult.Found)?.key ?: return null
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_BITS, sealed.iv))
@@ -372,9 +404,11 @@ object WCDBKeyManager {
     private fun keyStore(): KeyStore =
         KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
 
-    private fun getOrCreateKeystoreEntry(alias: String): SecretKey? {
+    // getKeystoreEntry stays `internal` for the same-module contract test; getOrCreateKeystoreEntry
+    // is only used here, so it's private. Keystore access stays owned here.
+    private fun getOrCreateKeystoreEntry(alias: String): KeystoreEntryResult {
         val existing = getKeystoreEntry(alias)
-        if (existing != null) return existing
+        if (existing is KeystoreEntryResult.Found) return existing
         return try {
             val keyGenerator = KeyGenerator.getInstance(
                 KeyProperties.KEY_ALGORITHM_AES,
@@ -388,22 +422,23 @@ object WCDBKeyManager {
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .build()
             keyGenerator.init(spec)
-            keyGenerator.generateKey()
+            KeystoreEntryResult.Found(keyGenerator.generateKey())
         } catch (e: Throwable) {
             L.e { "[WCDBKeyManager] failed to create Keystore alias '$alias': ${e.stackTraceToString()}" }
-            null
+            // If the read leg also threw, chain its cause so classification keeps both signals.
+            (existing as? KeystoreEntryResult.Failed)?.cause?.let { e.addSuppressed(it) }
+            KeystoreEntryResult.Failed(e)
         }
     }
 
-    private fun getKeystoreEntry(alias: String): SecretKey? {
-        return try {
-            val ks = keyStore()
-            if (!ks.containsAlias(alias)) return null
-            val entry = ks.getEntry(alias, null) as? KeyStore.SecretKeyEntry ?: return null
-            entry.secretKey
-        } catch (e: Throwable) {
-            L.w { "[WCDBKeyManager] failed to load Keystore alias '$alias': ${e.javaClass.simpleName}" }
-            null
-        }
+    internal fun getKeystoreEntry(alias: String): KeystoreEntryResult = try {
+        val ks = keyStore()
+        if (!ks.containsAlias(alias)) return KeystoreEntryResult.Absent
+        val entry = ks.getEntry(alias, null) as? KeyStore.SecretKeyEntry
+            ?: return KeystoreEntryResult.Absent
+        KeystoreEntryResult.Found(entry.secretKey)
+    } catch (e: Throwable) {
+        L.w { "[WCDBKeyManager] failed to load Keystore alias '$alias': ${e.javaClass.simpleName}" }
+        KeystoreEntryResult.Failed(e)
     }
 }

@@ -160,7 +160,7 @@ class GroupAvatarView @JvmOverloads constructor(
             .load(uri)
             .signature(ObjectKey(cacheFile.lastModified()))
             .diskCacheStrategy(
-                if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                if (GlideCacheKeyManager.isCacheKeyReady(context)) DiskCacheStrategy.RESOURCE
                 else DiskCacheStrategy.NONE
             )
             .listener(object : RequestListener<Drawable> {
@@ -202,7 +202,7 @@ class GroupAvatarView @JvmOverloads constructor(
                     .load(uri)
                     .signature(ObjectKey(downloadedFile.lastModified()))
                     .diskCacheStrategy(
-                        if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                        if (GlideCacheKeyManager.isCacheKeyReady(context)) DiskCacheStrategy.RESOURCE
                         else DiskCacheStrategy.NONE
                     )
                     .into(binding.ivAvatar)

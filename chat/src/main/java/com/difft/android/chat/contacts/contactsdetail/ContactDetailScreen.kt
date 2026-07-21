@@ -57,8 +57,7 @@ data class ContactDetailUiState(
     /** Weak-pending (delayed-removal) contact: isFriend=false + this true → show "Remove Now". */
     val isWeakPending: Boolean = false,
     val isSelf: Boolean = false,
-    val isBot: Boolean = false,
-    val isOfficialBot: Boolean = false,
+    val isOfficialAccount: Boolean = false,
     val displayName: String = "",
     val originalName: String? = null,
     val hasRemark: Boolean = false,
@@ -160,7 +159,7 @@ fun ContactDetailScreen(
             hasRemark = uiState.hasRemark,
             hasRemarkAvatar = uiState.hasRemarkAvatar,
             originalAvatarJson = uiState.originalAvatarJson,
-            isOfficialBot = uiState.isOfficialBot,
+            isOfficialAccount = uiState.isOfficialAccount,
             onAvatarClick = onAvatarClick,
             onOriginalAvatarClick = onOriginalAvatarClick,
             modifier = Modifier.padding(horizontal = DifftTheme.spacing.insetLarge)
@@ -173,7 +172,7 @@ fun ContactDetailScreen(
             isSelf = uiState.isSelf,
             isFriend = uiState.isFriend,
             isWeakPending = uiState.isWeakPending,
-            isBot = uiState.isBot,
+            isOfficialAccount = uiState.isOfficialAccount,
             onMessageClick = onMessageClick,
             onCallClick = onCallClick,
             onShareClick = onShareClick,
@@ -191,8 +190,7 @@ fun ContactDetailScreen(
             sourceDescribe = uiState.sourceDescribe,
             commonGroupsCount = uiState.commonGroupsCount,
             isSelf = uiState.isSelf,
-            isBot = uiState.isBot,
-            isOfficialBot = uiState.isOfficialBot,
+            isOfficialAccount = uiState.isOfficialAccount,
             website = uiState.website,
             onCommonGroupsClick = onCommonGroupsClick,
             onCopyUserId = onCopyUserId,
@@ -289,7 +287,7 @@ private fun AvatarNameSection(
     hasRemark: Boolean,
     hasRemarkAvatar: Boolean,
     originalAvatarJson: String?,
-    isOfficialBot: Boolean,
+    isOfficialAccount: Boolean,
     onAvatarClick: () -> Unit,
     onOriginalAvatarClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -341,7 +339,7 @@ private fun AvatarNameSection(
                     modifier = Modifier.weight(1f, fill = false)
                 )
 
-                if (isOfficialBot) {
+                if (isOfficialAccount) {
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(
                         painter = painterResource(id = R.drawable.chat_ic_official_bot_badge),
@@ -352,13 +350,13 @@ private fun AvatarNameSection(
                 }
             }
 
-            val showSubtitle = isOfficialBot ||
+            val showSubtitle = isOfficialAccount ||
                 (hasRemark && !originalName.isNullOrEmpty()) ||
                 hasRemarkAvatar
             if (showSubtitle) {
                 Spacer(modifier = Modifier.height(4.dp))
                 SubtitleRow(
-                    isOfficialBot = isOfficialBot,
+                    isOfficialAccount = isOfficialAccount,
                     hasRemark = hasRemark,
                     hasRemarkAvatar = hasRemarkAvatar,
                     originalName = originalName,
@@ -378,7 +376,7 @@ private val subtitleStyle = TextStyle(
 
 @Composable
 private fun SubtitleRow(
-    isOfficialBot: Boolean,
+    isOfficialAccount: Boolean,
     hasRemark: Boolean,
     hasRemarkAvatar: Boolean,
     originalName: String?,
@@ -391,7 +389,7 @@ private fun SubtitleRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        if (isOfficialBot) {
+        if (isOfficialAccount) {
             Text(
                 text = stringResource(R.string.contact_official_account_label),
                 style = subtitleStyle,
@@ -478,7 +476,7 @@ private fun ActionButtonsSection(
     isSelf: Boolean,
     isFriend: Boolean,
     isWeakPending: Boolean,
-    isBot: Boolean,
+    isOfficialAccount: Boolean,
     onMessageClick: () -> Unit,
     onCallClick: () -> Unit,
     onShareClick: () -> Unit,
@@ -515,7 +513,7 @@ private fun ActionButtonsSection(
                     onClick = onMessageClick,
                     modifier = Modifier.weight(1f)
                 )
-                if (!isBot) {
+                if (!isOfficialAccount) {
                     ActionButton(
                         iconRes = R.drawable.chat_contact_detail_ic_call,
                         label = stringResource(R.string.contact_action_call),
@@ -595,8 +593,7 @@ private fun ContactInfoSection(
     sourceDescribe: String?,
     commonGroupsCount: Int,
     isSelf: Boolean,
-    isBot: Boolean,
-    isOfficialBot: Boolean,
+    isOfficialAccount: Boolean,
     website: String?,
     onCommonGroupsClick: () -> Unit,
     onCopyUserId: () -> Unit,
@@ -646,7 +643,7 @@ private fun ContactInfoSection(
         }
 
         // Common groups (hidden for bots)
-        if (!isSelf && !isBot) {
+        if (!isSelf && !isOfficialAccount) {
             Spacer(modifier = Modifier.height(16.dp))
             ContactInfoRow(
                 label = stringResource(R.string.chat_group_in_common),
@@ -656,8 +653,8 @@ private fun ContactInfoSection(
             )
         }
 
-        // Website (only for official bot)
-        if (isOfficialBot && !website.isNullOrEmpty()) {
+        // Website (only for official account)
+        if (isOfficialAccount && !website.isNullOrEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
             ContactInfoRow(
                 label = stringResource(R.string.contact_info_website),
@@ -739,7 +736,7 @@ private fun ContactDetailScreenPreview() {
                 commonGroupsCount = 3,
                 isFriend = true,
                 isSelf = false,
-                isBot = false
+                isOfficialAccount = false
             ),
             isPopupMode = false,
             onCloseClick = {},
@@ -768,7 +765,7 @@ private fun ContactDetailScreenSelfPreview() {
                 joinedAt = "2023-06-01",
                 isFriend = true,
                 isSelf = true,
-                isBot = false
+                isOfficialAccount = false
             ),
             isPopupMode = false,
             onCloseClick = {},
@@ -798,7 +795,7 @@ private fun ContactDetailScreenNonFriendPreview() {
                 commonGroupsCount = 1,
                 isFriend = false,
                 isSelf = false,
-                isBot = false
+                isOfficialAccount = false
             ),
             isPopupMode = false,
             onCloseClick = {},
@@ -829,7 +826,7 @@ private fun ContactDetailScreenWeakPendingPreview() {
                 isFriend = false,
                 isWeakPending = true,
                 isSelf = false,
-                isBot = false
+                isOfficialAccount = false
             ),
             isPopupMode = false,
             onCloseClick = {},
@@ -859,7 +856,7 @@ private fun ContactDetailScreenPopupPreview() {
                 commonGroupsCount = 5,
                 isFriend = true,
                 isSelf = false,
-                isBot = false
+                isOfficialAccount = false
             ),
             isPopupMode = true,
             onCloseClick = {},

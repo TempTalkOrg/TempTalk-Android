@@ -2,6 +2,7 @@ package com.difft.android.chat.jobmanager
 
 import android.app.Application
 import android.os.PowerManager
+import com.difft.android.base.log.WCDBKeyUnavailableException
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.util.WakeLockUtil
 import kotlinx.coroutines.CancellationException
@@ -33,28 +34,36 @@ internal class JobRunner(
     fun launchIn(scope: CoroutineScope): kotlinx.coroutines.Job {
         return scope.launch(Dispatchers.IO) {
             while (isActive) {
-                val job = jobController.pullNextEligibleJobForExecution(jobPredicate, managementDispatcher)
-                val result = try {
-                    runJob(job)
-                } finally {
-                    withContext(managementDispatcher + NonCancellable) { jobController.onJobFinished(job) }
-                }
+                // Fail-soft: no wcdb handle here, so type-catch rather than flag-guard the DB
+                // chokepoint. A cipher-key failure is process-lifetime dead — stop this runner,
+                // jobs stay persisted. CancellationException isn't a subtype, so it still propagates.
+                try {
+                    val job = jobController.pullNextEligibleJobForExecution(jobPredicate, managementDispatcher)
+                    val result = try {
+                        runJob(job)
+                    } finally {
+                        withContext(managementDispatcher + NonCancellable) { jobController.onJobFinished(job) }
+                    }
 
-                when {
-                    result.isSuccess() -> {
-                        withContext(managementDispatcher) { jobController.onSuccess(job) }
-                    }
-                    result.isRetry() -> {
-                        withContext(managementDispatcher) {
-                            jobController.onRetry(job, result.getBackoffInterval())
+                    when {
+                        result.isSuccess() -> {
+                            withContext(managementDispatcher) { jobController.onSuccess(job) }
                         }
-                        job.onRetry()
+                        result.isRetry() -> {
+                            withContext(managementDispatcher) {
+                                jobController.onRetry(job, result.getBackoffInterval())
+                            }
+                            job.onRetry()
+                        }
+                        result.isFailure() -> {
+                            withContext(managementDispatcher) { jobController.onFailure(job) }
+                            job.onFailure()
+                        }
+                        else -> error("Invalid job result!")
                     }
-                    result.isFailure() -> {
-                        withContext(managementDispatcher) { jobController.onFailure(job) }
-                        job.onFailure()
-                    }
-                    else -> error("Invalid job result!")
+                } catch (e: WCDBKeyUnavailableException) {
+                    L.w { "[JobRunner] cipher key unavailable, stopping runner id=$id: ${e.message}" }
+                    break
                 }
             }
         }

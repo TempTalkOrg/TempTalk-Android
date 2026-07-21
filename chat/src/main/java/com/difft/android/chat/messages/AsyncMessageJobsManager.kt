@@ -62,6 +62,10 @@ class AsyncMessageJobsManager @Inject constructor(
         }
 
         appScope.launch(Dispatchers.IO) {
+            if (wcdb.isDbInaccessible) {
+                L.w { "[AsyncMessageJobsManager] skip, DB inaccessible" }
+                return@launch
+            }
             processContactors(contactorsToProcess)
             processGroups(groupsToProcess)
         }

@@ -21,6 +21,7 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
+import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.windowWidthPx
@@ -477,7 +478,8 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                         ?.getDisplayNameForUI()
                         ?: message.quote!!.author.formatBase58Id()
                 }
-                quoteText.text = message.quote?.text
+                // Quote.text bypasses the normal display path, so normalize it here.
+                quoteText.text = message.quote?.text?.normalizeNewlines()
                 quoteZone.setOnClickListener { message.quote?.let { onQuoteClicked(it) } }
 
                 // Cap the wrap_content text column so a long caption ellipsizes instead of pushing

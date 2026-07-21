@@ -99,11 +99,13 @@ object AvatarUtil {
 
     suspend fun fetchAvatar(context: Context, url: String, key: String): ByteArray {
         try {
-            val responseBody = EntryPointAccessors.fromApplication<EntryPoint>(context)
-                .httpClient1()
-                .httpService
-                .getResponseBody(url, emptyMap(), emptyMap())
-            val bytes = responseBody.bytes()
+            val bytes = withContext(Dispatchers.IO) {
+                EntryPointAccessors.fromApplication<EntryPoint>(context)
+                    .httpClient1()
+                    .httpService
+                    .getResponseBodyStreaming(url, emptyMap(), emptyMap())
+                    .readBoundedBytes()
+            }
             val secretKey = SecretKeySpec(Base64.decode(key, Base64.DEFAULT), "AESGCM256")
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             val params = GCMParameterSpec(128, bytes, 0, 12)

@@ -1,6 +1,7 @@
 package com.difft.android.chat.jobmanager
 
 import android.app.Application
+import com.difft.android.base.log.WCDBKeyUnavailableException
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -19,6 +20,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -260,6 +263,23 @@ class JobRunnerTest {
         done.await()
 
         verify { com.difft.android.chat.util.WakeLockUtil.release(wakeLock, "wakelock-success") }
+    }
+
+    // -- fail-soft key-unavailable loop exit --
+
+    @Test
+    fun `G1 launchIn breaks loop and completes normally when pull throws WCDBKeyUnavailableException`() = runTest {
+        // Runner must stop cleanly (break), not crash or spin; not a CancellationException subtype.
+        coEvery { jobController.pullNextEligibleJobForExecution(any(), any()) } throws
+            WCDBKeyUnavailableException("cipher key unavailable")
+
+        val coroutineJob = jobRunner.launchIn(runnerScope)
+        coroutineJob.join()
+
+        assertTrue("runner should complete (loop broke)", coroutineJob.isCompleted)
+        assertFalse("break is a clean exit, not a cancellation/crash", coroutineJob.isCancelled)
+        coVerify(exactly = 0) { jobController.onSuccess(any()) }
+        coVerify(exactly = 0) { jobController.onFailure(any()) }
     }
 
     // -- launchIn loops and processes multiple jobs --

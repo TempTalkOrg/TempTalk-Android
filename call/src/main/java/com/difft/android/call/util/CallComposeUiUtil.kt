@@ -1,6 +1,12 @@
 package com.difft.android.call.util
 
 import android.app.Activity
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import java.lang.ref.WeakReference
 
 
@@ -17,6 +23,13 @@ object CallComposeUiUtil {
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
             addView(composeView)
+            // The host may never have called setContentView (e.g. a routing-only
+            // startup Activity), so ComponentActivity never installed the ViewTree
+            // owners on the decor. Compose resolves the recomposer lifecycle by
+            // walking up from this content child, so install the owners here.
+            (activity as? LifecycleOwner)?.let { setViewTreeLifecycleOwner(it) }
+            (activity as? ViewModelStoreOwner)?.let { setViewTreeViewModelStoreOwner(it) }
+            (activity as? SavedStateRegistryOwner)?.let { setViewTreeSavedStateRegistryOwner(it) }
         }
         rootView.addView(frameLayout)
 
