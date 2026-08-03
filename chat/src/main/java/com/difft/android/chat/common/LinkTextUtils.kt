@@ -15,8 +15,9 @@ import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.security.SafeLinkOpener
 import com.difft.android.base.utils.AppScheme
-import com.difft.android.base.utils.openExternalBrowser
+import com.difft.android.base.utils.normalizeNewlinesForDisplay
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDialogFragment
 import com.difft.android.chat.ui.ChatMessageContainerView
@@ -28,6 +29,9 @@ import java.util.regex.Pattern
 object LinkTextUtils {
 
     fun setMarkdownToTextview(context: Context, text: String, textView: TextView?, mentions: List<Mention>? = null) {
+        // Length-preserving display normalize so soft separators render as breaks; CRLF is left
+        // intact (already breaks) so the sender's mention offsets stay valid.
+        val text = text.normalizeNewlinesForDisplay()
         val spannableString = SpannableString(text)
 
         // 定义需要匹配的前缀数组
@@ -262,9 +266,9 @@ object LinkTextUtils {
                 intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
             }
-            // External http/https links
+            // External http/https links - route through homograph/phishing check
             scheme == "http" || scheme == "https" -> {
-                context.openExternalBrowser(url)
+                SafeLinkOpener.open(context, url)
             }
         }
     }

@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -22,12 +23,15 @@ interface DeviceApiService {
     )
 
     /**
-     * GET /v1/devices/
-     * Returns raw Response to allow Repository-level error handling.
-     * The @SignalApi client preserves raw HTTP status codes (no HttpClientInterceptor).
+     * GET /v1/devices/ — returns {"devices":[...]}. Raw Response so the Repository maps status
+     * codes itself; the @SignalApi client preserves raw HTTP status.
      */
     @GET("v1/devices/")
-    suspend fun checkDeviceAuth(): Response<ResponseBody>
+    suspend fun getDevices(): Response<ResponseBody>
+
+    /** DELETE /v1/devices/{deviceId}. Server contract unverified. */
+    @DELETE("v1/devices/{deviceId}")
+    suspend fun removeDevice(@Path("deviceId") deviceId: Int): Response<ResponseBody>
 }
 
 data class DeviceVerificationCodeResponse(

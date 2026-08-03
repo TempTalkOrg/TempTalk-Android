@@ -1,5 +1,8 @@
 package com.difft.android.chat.gif.favorite
 
+import android.util.Base64
+import com.difft.android.base.utils.globalServices
+
 /**
  * Client-only favorites domain models (live inside the encrypted blob, never sent
  * as plaintext to the server). See android-impl-design.md §B1 and
@@ -45,3 +48,110 @@ data class FavoriteRecord(
 
 /** The decrypted favorites list (only confirmed records — optimistic pending items are not in the blob). */
 data class FavoriteListPlain(val records: List<FavoriteRecord>)
+
+/**
+ * Where a pending (not-yet-confirmed) favorite's asset comes from. Persisted as a single JSON column
+ * (FavoriteGifModel.pendingSourceJson) — see [toJson]/[pendingSourceFromJson] — and rebuilt here so
+ * render (FavoriteGrid) and retry (resolveAndConfirm / flushPendingFavorites) branch on the type.
+ * Confirmed rows have NONE (asset lives in the encrypted cache keyed by attachmentId).
+ */
+sealed interface PendingSource {
+    /** No pending asset source — a confirmed row (attachmentId + encKey resolve the cache). */
+    data object None : PendingSource
+
+    /** Giphy panel/search: display + send from the preview URL until the background upload lands. */
+    data class Remote(val previewUrl: String) : PendingSource
+
+    /**
+     * Message gif attachment reference (favorite-without-download). Carries everything needed to
+     * (a) derive the account fileHash for the isExist fast-pass, (b) render from local/cached bytes
+     * if present, and (c) download+decrypt the message ciphertext on an isExist miss.
+     *
+     *  - key/digest/authorizeId/attachmentId: the MESSAGE attachment pointer (message-scoped).
+     *    NOTE these are the message's authorizeId/attachmentId, used ONLY to download the source
+     *    bytes on an isExist miss; the CONFIRMED favorite gets a NEW account-level authorizeId from
+     *    isExist/uploadInfo (re-authorized under [myId] so the favorite outlives the message).
+     *  - messageId + fileName: locate the on-disk `.encrypt` ciphertext for local render / decrypt.
+     *  - accountFileHash: Base64(SHA-256(key)) precomputed — the isExist fast-pass key.
+     */
+    data class Message(
+        val messageId: String,
+        val fileName: String,
+        val attachmentId: String,
+        val authorizeId: Long,
+        val key: ByteArray,
+        val digest: ByteArray,
+        val accountFileHash: String
+    ) : PendingSource {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other == null || javaClass != other.javaClass) return false
+            other as Message
+            return accountFileHash == other.accountFileHash
+        }
+
+        override fun hashCode(): Int = accountFileHash.hashCode()
+    }
+}
+
+/**
+ * Persisted form of a [PendingSource] — serialized to the single `FavoriteGifModel.pendingSourceJson`
+ * column (mirrors how avatars store a structured blob as one JSON string column, e.g.
+ * ContactorModel/GroupModel.avatar). ByteArrays are Base64 NO_WRAP so the JSON stays compact/text-safe.
+ * A [type] discriminator disambiguates Remote vs Message; unknown types decode to null (forward-safe).
+ */
+private data class PendingSourceDto(
+    val type: Int,
+    val previewUrl: String? = null,       // Remote
+    val messageId: String? = null,        // Message ↓
+    val fileName: String? = null,
+    val attachmentId: String? = null,
+    val authorizeId: Long = 0L,
+    val encKeyB64: String? = null,
+    val digestB64: String? = null,
+    val accountFileHash: String? = null
+) {
+    companion object {
+        const val TYPE_REMOTE = 1
+        const val TYPE_MESSAGE = 2
+    }
+}
+
+/** Serialize a pending source for the `pendingSourceJson` column. [PendingSource.None] -> null. */
+fun PendingSource.toJson(): String? = when (this) {
+    PendingSource.None -> null
+    is PendingSource.Remote -> globalServices.gson.toJson(
+        PendingSourceDto(type = PendingSourceDto.TYPE_REMOTE, previewUrl = previewUrl)
+    )
+    is PendingSource.Message -> globalServices.gson.toJson(
+        PendingSourceDto(
+            type = PendingSourceDto.TYPE_MESSAGE,
+            messageId = messageId,
+            fileName = fileName,
+            attachmentId = attachmentId,
+            authorizeId = authorizeId,
+            encKeyB64 = Base64.encodeToString(key, Base64.NO_WRAP),
+            digestB64 = Base64.encodeToString(digest, Base64.NO_WRAP),
+            accountFileHash = accountFileHash
+        )
+    )
+}
+
+/** Rebuild a pending source from the `pendingSourceJson` column. null/blank/unparseable -> null. */
+fun pendingSourceFromJson(json: String?): PendingSource? {
+    if (json.isNullOrBlank()) return null
+    val dto = runCatching { globalServices.gson.fromJson(json, PendingSourceDto::class.java) }.getOrNull() ?: return null
+    return when (dto.type) {
+        PendingSourceDto.TYPE_REMOTE -> dto.previewUrl?.let { PendingSource.Remote(it) }
+        PendingSourceDto.TYPE_MESSAGE -> PendingSource.Message(
+            messageId = dto.messageId.orEmpty(),
+            fileName = dto.fileName.orEmpty(),
+            attachmentId = dto.attachmentId.orEmpty(),
+            authorizeId = dto.authorizeId,
+            key = dto.encKeyB64?.let { Base64.decode(it, Base64.NO_WRAP) } ?: ByteArray(0),
+            digest = dto.digestB64?.let { Base64.decode(it, Base64.NO_WRAP) } ?: ByteArray(0),
+            accountFileHash = dto.accountFileHash.orEmpty()
+        )
+        else -> null
+    }
+}

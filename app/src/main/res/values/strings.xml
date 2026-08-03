@@ -89,6 +89,11 @@
     <string name="status_upgrade_button_cancle">Cancel</string>
     <string name="status_upgrade_verify_failed">Update package security verification failed</string>
     <string name="status_upgrade_param_exception">Update package parameter exception</string>
+    <string name="upgrade_notification_channel_name">App updates</string>
+    <string name="upgrade_notification_downloading">Downloading new version…</string>
+    <string name="upgrade_notification_verifying">Verifying…</string>
+    <string name="upgrade_notification_complete">Download complete, tap to install</string>
+    <string name="upgrade_notification_failed">Download failed, tap to retry</string>
     <string name="me_text_size">Text Size</string>
     <string name="me_text_size_default">Default</string>
     <string name="me_text_size_lage">Large</string>
@@ -98,6 +103,9 @@
     <string name="db_recovery_please_wait">Please wait, this may take a moment…</string>
     <string name="db_recovery_resync_message">Database reset. Re-syncing your account; local chat history could not be recovered.</string>
     <string name="db_recovery_unrecoverable_message">Unable to recover the database. Please sign in again.</string>
+    <string name="db_key_unavailable_title">Secure storage unavailable</string>
+    <string name="db_key_unavailable_message">Your device\'s secure keystore is temporarily unavailable, so the encrypted database can\'t be opened. Your local data has not been deleted. Please try again.</string>
+    <string name="db_key_unavailable_retry">Retry</string>
 
     <string name="dual_pane_divider_drag_hint">Drag to resize panes</string>
 
@@ -144,4 +152,18 @@
     <string name="proxy_protect_call">Protect IP address in calls</string>
     <string name="proxy_protect_call_desc">When on, calls are also routed through the proxy to hide your real IP from Quicall. This may reduce call quality.</string>
     <string name="proxy_protect_call_enable_proxy_first">Turn on Use proxy first.</string>
+
+    <!-- Linked Devices -->
+    <string name="linked_devices_title">Linked Devices</string>
+    <string name="linked_devices_link_new_title">Link New Device</string>
+    <string name="linked_devices_link_new_subtitle">Scan QR Code</string>
+    <string name="linked_devices_linked_at">Linked: %1$s</string>
+    <string name="linked_devices_last_active">Last active: %1$s</string>
+    <string name="linked_devices_unnamed">Unnamed Device</string>
+    <string name="linked_devices_unlink_action">Unlink</string>
+    <string name="linked_devices_unlink_cancel">Cancel</string>
+    <string name="linked_devices_unlink_confirm_title">Unlink \"%1$s\"?</string>
+    <string name="linked_devices_unlink_confirm_body">By unlinking this device, it will no longer be able to send or receive messages.</string>
+    <string name="linked_devices_unlink_failed">Quicall was unable to unlink your device.</string>
+    <string name="linked_devices_list_update_failed">Failed to update device list.</string>
 </resources>

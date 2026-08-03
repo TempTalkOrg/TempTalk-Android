@@ -53,4 +53,9 @@
     <string name="ps_select_audio_max_second">Selected audio is longer than %1$d seconds</string>
     <string name="ps_select_audio_min_second">Selected audio is shorter than %1$d seconds</string>
     <string name="ps_select_no_support">Unsupported selection type</string>
+    <string name="ps_partial_access_tips">You\'ve allowed access to only selected photos</string>
+    <string name="ps_partial_access_manage">Manage</string>
+    <string name="ps_partial_access_select_more">Select more photos</string>
+    <string name="ps_partial_access_settings">Go to Settings</string>
+    <string name="ps_partial_access_empty">No photos or videos found. Only the photos and videos you selected are available.</string>
 </resources>

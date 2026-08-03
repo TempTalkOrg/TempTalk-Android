@@ -306,7 +306,6 @@ class GroupUtil @Inject constructor(
                 anyoneRemove = group.anyoneRemove,
                 rejoin = group.rejoin,
                 publishRule = group.publishRule,
-                linkInviteSwitch = group.linkInviteSwitch ?: false,
                 privateChat = group.privateChat ?: false,
                 members = group.members
             )

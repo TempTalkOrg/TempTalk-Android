@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.Build;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
@@ -122,6 +123,13 @@ public class PermissionChecker {
      */
     public static boolean isCheckReadStorage(int chooseMode, Context context) {
         if (SdkVersionUtils.isTIRAMISU()) {
+            // Android 14+ "Select photos" partial access: system holds READ_MEDIA_VISUAL_USER_SELECTED
+            // while IMAGES/VIDEO stay denied. Treat it as readable so this upfront gate does not
+            // re-launch the system re-selection dialog on every gallery open. Audio has no partial
+            // visual access, so it is excluded. Mirrors PermissionUtil.isAllGranted's skip logic.
+            if (chooseMode != SelectMimeType.ofAudio() && isPartialVisualAccessGranted(context)) {
+                return true;
+            }
             if (chooseMode == SelectMimeType.ofImage()) {
                 return PermissionChecker.isCheckReadImages(context);
             } else if (chooseMode == SelectMimeType.ofVideo()) {
@@ -134,6 +142,18 @@ public class PermissionChecker {
         } else {
             return PermissionChecker.isCheckReadExternalStorage(context);
         }
+    }
+
+    /**
+     * Android 14+ partial visual access ("Select photos"): READ_MEDIA_VISUAL_USER_SELECTED granted.
+     * Guarded by targetSdk to mirror PermissionUtil.isAllGranted (PermissionUtil.java:87-92).
+     */
+    private static boolean isPartialVisualAccessGranted(Context context) {
+        if (context.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return false;
+        }
+        return ContextCompat.checkSelfPermission(context,
+                PermissionConfig.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED;
     }
 
 

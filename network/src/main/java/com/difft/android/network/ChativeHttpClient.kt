@@ -105,7 +105,9 @@ class ChativeHttpClient(
 
     private val retrofit: Retrofit = Retrofit.Builder()
         .addConverterFactory(ScalarsConverterFactory.create())
-        .addConverterFactory(GsonConverterFactory.create(gson))
+        // Wraps the Gson factory to capture BaseResponse.serverTimestamp for ServerTimeProvider.
+        // One hook covers all ChativeHttpClient instances; scalar conversion above is unaffected.
+        .addConverterFactory(ServerTimeCaptureConverterFactory(GsonConverterFactory.create(gson)))
         .baseUrl(baseUrl)
         .client(okHttpClient)
         .build()

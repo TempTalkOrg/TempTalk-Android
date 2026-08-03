@@ -13,6 +13,22 @@
         app:layout_constraintBottom_toTopOf="@+id/bottom_nar_bar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/ps_partial_access_bar" />
+
+    <!--
+      Partial-access hint bar (Android 14+ "Select photos"). GONE by default;
+      shown only when media access is PARTIAL. When GONE, ConstraintLayout
+      collapses it to a zero-height point at title_bar bottom, so the recycler
+      (top_toBottomOf=ps_partial_access_bar) lays out identically to before.
+    -->
+    <include
+        android:id="@+id/ps_partial_access_bar"
+        layout="@layout/ps_partial_access_bar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title_bar" />
 
     <com.luck.picture.lib.widget.MediumBoldTextView

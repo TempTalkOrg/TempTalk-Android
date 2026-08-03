@@ -196,7 +196,7 @@ class AvatarView @JvmOverloads constructor(
             .load(uri)
             .signature(ObjectKey(file.lastModified()))
             .diskCacheStrategy(
-                if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                if (GlideCacheKeyManager.isCacheKeyReady(context)) DiskCacheStrategy.RESOURCE
                 else DiskCacheStrategy.NONE
             )
             .listener(object : RequestListener<Drawable> {
@@ -256,7 +256,7 @@ class AvatarView @JvmOverloads constructor(
                     .load(uri)
                     .signature(ObjectKey(downloadedFile.lastModified()))
                     .diskCacheStrategy(
-                        if (GlideCacheKeyManager.isAvailable(context)) DiskCacheStrategy.RESOURCE
+                        if (GlideCacheKeyManager.isCacheKeyReady(context)) DiskCacheStrategy.RESOURCE
                         else DiskCacheStrategy.NONE
                     )
                     .into(binding.ivAvatar)

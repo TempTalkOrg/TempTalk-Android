@@ -13,18 +13,25 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Screenshot baselines for [ContactDetailScreen] in the weak-pending (delayed-removal) state.
+ * Screenshot baselines for [ContactDetailScreen]: weak-pending, official-account (P1-04), and
+ * normal-friend states.
  *
  * A weak-pending contact renders as a non-friend card (isFriend=false → "Add Contact" entry)
  * plus an extra "Remove Now" action tinted with the destructive [DifftTheme] error colour.
  *
- * Design source: NONE — no Figma supplied for this feature. The "Remove Now" button reuses the
- * existing [ContactDetailScreen] ActionButton style (72dp tile, bgElevated, iconMedium icon,
- * labelMedium label) with `DifftTheme.colors.error` for icon+label tint; layout/spacing inherited
- * verbatim from the friend/non-friend variants. The exact styling is still pending UI review —
- * these baselines lock the current implementation, not a Figma ground truth.
+ * The official-account variant (`isOfficialAccount = true`) shows the official badge next to the
+ * name, the "Official Account" subtitle label, and a website info row; the call action is hidden.
+ * The normal-friend variant (`isOfficialAccount = false`, isFriend=true) shows message + call +
+ * share actions and no badge — this is the P1-04 param-consolidation counterpart of the official
+ * state (both derive from the single `isOfficialAccount` flag after §8).
  *
- * Light + dark parity: the weak-pending variant is captured in both themes.
+ * Design source: NONE — no Figma supplied for this feature. Baselines lock the current shipped
+ * [ContactDetailScreen] rendering (unchanged visually by the §8 param rename), not a Figma ground
+ * truth. The "Remove Now" button reuses the existing ActionButton style (72dp tile, bgElevated,
+ * iconMedium icon, labelMedium label) with `DifftTheme.colors.error` tint.
+ *
+ * Light + dark parity: every content variant (weak-pending, official, normal-friend) is captured
+ * in both themes.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -49,7 +56,28 @@ class ContactDetailScreenScreenshotTest {
         isFriend = false,
         isWeakPending = true,
         isSelf = false,
-        isBot = false,
+        isOfficialAccount = false,
+    )
+
+    private val officialAccountState = ContactDetailUiState(
+        displayName = "Support Team",
+        userId = "+10000",
+        joinedAt = "2024-01-15",
+        commonGroupsCount = 0,
+        isFriend = true,
+        isSelf = false,
+        isOfficialAccount = true,
+        website = "https://example.com/support",
+    )
+
+    private val normalFriendState = ContactDetailUiState(
+        displayName = "Jane Smith",
+        userId = "jane_smith",
+        joinedAt = "2024-02-10",
+        commonGroupsCount = 3,
+        isFriend = true,
+        isSelf = false,
+        isOfficialAccount = false,
     )
 
     @Test
@@ -102,5 +130,50 @@ class ContactDetailScreenScreenshotTest {
         }
         composeTestRule.onRoot()
             .captureRoboImage("screenshots/chat/ContactDetailScreen_weakPending_dark.png")
+    }
+
+    /** Renders [ContactDetailScreen] with all callbacks no-op'd and captures it to [fileName]. */
+    private fun captureContactDetailScreen(uiState: ContactDetailUiState, darkTheme: Boolean, fileName: String) {
+        composeTestRule.setContent {
+            DifftTheme(darkTheme = darkTheme) {
+                ContactDetailScreen(
+                    uiState = uiState,
+                    isPopupMode = false,
+                    onCloseClick = {},
+                    onMoreClick = {},
+                    onAvatarClick = {},
+                    onOriginalAvatarClick = {},
+                    onEditClick = {},
+                    onMessageClick = {},
+                    onCallClick = {},
+                    onShareClick = {},
+                    onAddFriendClick = {},
+                    onCommonGroupsClick = {},
+                    onCopyUserId = {},
+                    onRemoveNowClick = {},
+                )
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(fileName)
+    }
+
+    @Test
+    fun `contact detail official account light`() {
+        captureContactDetailScreen(officialAccountState, darkTheme = false, "screenshots/chat/ContactDetailScreen_official_light.png")
+    }
+
+    @Test
+    fun `contact detail official account dark`() {
+        captureContactDetailScreen(officialAccountState, darkTheme = true, "screenshots/chat/ContactDetailScreen_official_dark.png")
+    }
+
+    @Test
+    fun `contact detail normal friend light`() {
+        captureContactDetailScreen(normalFriendState, darkTheme = false, "screenshots/chat/ContactDetailScreen_normalFriend_light.png")
+    }
+
+    @Test
+    fun `contact detail normal friend dark`() {
+        captureContactDetailScreen(normalFriendState, darkTheme = true, "screenshots/chat/ContactDetailScreen_normalFriend_dark.png")
     }
 }

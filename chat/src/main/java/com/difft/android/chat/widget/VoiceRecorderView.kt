@@ -20,8 +20,6 @@ import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.appScope
-import com.difft.android.base.utils.globalServices
-import com.difft.android.call.data.VoicePreset
 import com.difft.android.chat.R
 import com.difft.android.chat.providers.MyBlobProvider
 import com.difft.android.chat.voice.DualCandidateVoiceRecorder
@@ -157,11 +155,6 @@ class VoiceRecorderView @JvmOverloads constructor(
         }
     }
 
-    private fun resolveVoicePreset(): VoicePreset {
-        val key = globalServices.userManager.getUserData()?.callVoiceChangerPreset
-        return VoicePreset.fromSdkKey(key ?: VoicePreset.ORIGINAL.sdkKey)
-    }
-
     private fun startRecordingIfPermissionGranted() {
         isRecording = true
         VoiceRecordingTracker.setRecording(true, "start")
@@ -170,11 +163,7 @@ class VoiceRecorderView @JvmOverloads constructor(
         recordingStartTime = System.currentTimeMillis()
         outputDir = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY))
 
-        val preset = resolveVoicePreset()
-        val emoji = if (preset == VoicePreset.ORIGINAL) "🐿️" else preset.emoji
-        tvEffectLabel.text = context.getString(R.string.chat_voice_add_effect).let { label ->
-            if (emoji.isEmpty()) label else "$emoji  $label"
-        }
+        tvEffectLabel.text = "✨ ${context.getString(R.string.chat_voice_add_effect)}"
 
         llActionButtons.visibility = View.VISIBLE
         btnCancel.setBackgroundResource(R.drawable.chat_voice_pill_bg_gray)
@@ -238,8 +227,7 @@ class VoiceRecorderView @JvmOverloads constructor(
                 L.w { "[VoiceRecorder] outputDir null at start, aborting" }
                 return false
             }
-            val preset = resolveVoicePreset()
-            val recipes = VoiceMessageRecipes.buildRecipes(preset.sdkKey)
+            val recipes = VoiceMessageRecipes.buildRandomRecipes()
             val recorder = DualCandidateVoiceRecorder(
                 context = context.applicationContext,
                 outputDir = dir,

@@ -34,69 +34,13 @@ class NewMessageDecryptionUtil @Inject constructor(
     private val gson: Gson,
 ) {
     fun decrypt(envelope: Envelope): SignalServiceDataClass? {
-        val content = if (envelope.getType().number == Envelope.Type.ENCRYPTEDTEXT_VALUE) { //is encrypted envelop
-            L.i { "[Message] decrypt encrypted message===${envelope.timestamp}" }
-            val version = envelope.content.first().toUInt().shr(4).toInt()
+        val typeNumber = envelope.getType().number
 
-            if (version !in MESSAGE_MINIMUM_SUPPORTED_VERSION..MESSAGE_MAX_SUPPORTED_VERSION) {
-                // Drop instead of throwing: version mismatch is permanent, and
-                // throwing would land the envelope in the failed_message retry queue.
-                L.w { "[Message] decrypt: unsupported version=$version, drop ts=${envelope.timestamp}" }
-                return null
-            }
-
-            val identityKeyBytes = decodeBase64OrThrow("identityKey", envelope.identityKey)
-            val peerContextBytes = decodeBase64OrThrow("peerContext", envelope.peerContext)
-
-            val encryptedContent = envelope.content.drop(1).toByteArray()
-            val encryptedMessage = EncryptedMessageProtos.EncryptContent.parseFrom(encryptedContent)
-            val decryptResult = try {
-                val dtProto = DtProto(version)
-                dtProto.use {
-                    it.decryptMessage(
-                        encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
-                        encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
-                        identityKeyBytes.map { it.toUByte() }.drop(1),
-                        null, // cachedTheirIdKey: no local cache yet
-                        encryptedMessage.eKey.toByteArray().map { it.toUByte() },
-                        encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() },
-                        peerContextBytes.map { it.toUByte() },
-                        encryptedMessage.cipherText.toByteArray().map { it.toUByte() },
-                    )
-                }
-            } catch (e: Exception) {
-                // Decryption with the original identity key fails, trying to decrypt with the old identity key.
-                if (e is DtProtoException.DecryptMessageDataException && encryptionDataManager.hasOldAciIdentityKey() && !encryptionDataManager.checkOldAciIdentityExpired()) {
-                    try {
-                        val dtProto = DtProto(version)
-                        dtProto.use {
-                            it.decryptMessage(
-                                encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
-                                encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
-                                identityKeyBytes.map { it.toUByte() }.drop(1),
-                                null, // cachedTheirIdKey: no local cache yet
-                                encryptedMessage.eKey.toByteArray().map { it.toUByte() },
-                                encryptionDataManager.getAciIdentityOldKey().privateKey.serialize().map { it.toUByte() },
-                                peerContextBytes.map { it.toUByte() },
-                                encryptedMessage.cipherText.toByteArray().map { it.toUByte() },
-                            )
-                        }
-                    } catch (e: Exception) {
-                        L.e { "[Message] decrypt error with old identity key:${e.message}" }
-                        throw e
-                    }
-                } else {
-                    throw e
-                }
-            }
-            val rawDecrypted = decryptResult.plainText.map { it.toByte() }.toByteArray()
-            val afterPadding = rawDecrypted.removePadding()
-            afterPadding
-        } else {
-            envelope.content.toByteArray()
-        }
-        if (envelope.getType().number == Envelope.Type.NOTIFY_VALUE) {
-            val contentString = String(content)
+        // NOTIFY: server-driven plaintext control signal (group / contact updates).
+        // It is not an E2E chat message and is never rendered as one — it is parsed
+        // as JSON and dispatched to the notify handlers. Kept as its own path.
+        if (typeNumber == Envelope.Type.NOTIFY_VALUE) {
+            val contentString = String(envelope.content.toByteArray())
             val notifyMessage = gson.fromJson(
                 contentString,
                 TTNotifyMessage::class.java
@@ -118,10 +62,80 @@ class NewMessageDecryptionUtil @Inject constructor(
             // (group/member names, critical alert content). Do NOT promote to L.i.
             // L.d { "[Message] received notify raw json=$contentString" }
             return SignalServiceDataClass(envelope, null, notifyMessage)
-        } else {
-            val contentObj = org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content.parseFrom(content)
-            return SignalServiceDataClass(envelope, contentObj, null)
         }
+
+        // Security whitelist: ENCRYPTEDTEXT is the ONLY type that carries a real
+        // E2E-encrypted, signed, source-authenticated message. Envelope.type is a
+        // server-controlled field, so any other value (PLAINTEXT/CIPHERTEXT/
+        // KEY_EXCHANGE/PREKEY_BUNDLE/RECEIPT/UNKNOWN/...) would otherwise let a
+        // malicious or compromised server hand us unauthenticated content and have
+        // us render it as a genuine message — i.e. forge messages from any sender.
+        // Senders only ever emit ENCRYPTEDTEXT, so dropping everything else costs
+        // no legitimate functionality.
+        if (typeNumber != Envelope.Type.ENCRYPTEDTEXT_VALUE) {
+            L.w { "[Message] drop non-encrypted envelope type=$typeNumber ts=${envelope.timestamp}" }
+            return null
+        }
+
+        L.i { "[Message] decrypt encrypted message===${envelope.timestamp}" }
+        val version = envelope.content.first().toUInt().shr(4).toInt()
+
+        if (version !in MESSAGE_MINIMUM_SUPPORTED_VERSION..MESSAGE_MAX_SUPPORTED_VERSION) {
+            // Drop instead of throwing: version mismatch is permanent, and
+            // throwing would land the envelope in the failed_message retry queue.
+            L.w { "[Message] decrypt: unsupported version=$version, drop ts=${envelope.timestamp}" }
+            return null
+        }
+
+        val identityKeyBytes = decodeBase64OrThrow("identityKey", envelope.identityKey)
+        val peerContextBytes = decodeBase64OrThrow("peerContext", envelope.peerContext)
+
+        val encryptedContent = envelope.content.drop(1).toByteArray()
+        val encryptedMessage = EncryptedMessageProtos.EncryptContent.parseFrom(encryptedContent)
+        val decryptResult = try {
+            val dtProto = DtProto(version)
+            dtProto.use {
+                it.decryptMessage(
+                    encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
+                    encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
+                    identityKeyBytes.map { it.toUByte() }.drop(1),
+                    null, // cachedTheirIdKey: no local cache yet
+                    encryptedMessage.eKey.toByteArray().map { it.toUByte() },
+                    encryptionDataManager.getAciIdentityKey().privateKey.serialize().map { it.toUByte() },
+                    peerContextBytes.map { it.toUByte() },
+                    encryptedMessage.cipherText.toByteArray().map { it.toUByte() },
+                )
+            }
+        } catch (e: Exception) {
+            // Decryption with the original identity key fails, trying to decrypt with the old identity key.
+            if (e is DtProtoException.DecryptMessageDataException && encryptionDataManager.hasOldAciIdentityKey() && !encryptionDataManager.checkOldAciIdentityExpired()) {
+                try {
+                    val dtProto = DtProto(version)
+                    dtProto.use {
+                        it.decryptMessage(
+                            encryptedMessage.signedEKey.toByteArray().map { it.toUByte() },
+                            encryptedMessage.identityKey.toByteArray().map { it.toUByte() },
+                            identityKeyBytes.map { it.toUByte() }.drop(1),
+                            null, // cachedTheirIdKey: no local cache yet
+                            encryptedMessage.eKey.toByteArray().map { it.toUByte() },
+                            encryptionDataManager.getAciIdentityOldKey().privateKey.serialize().map { it.toUByte() },
+                            peerContextBytes.map { it.toUByte() },
+                            encryptedMessage.cipherText.toByteArray().map { it.toUByte() },
+                        )
+                    }
+                } catch (e: Exception) {
+                    L.e { "[Message] decrypt error with old identity key:${e.message}" }
+                    throw e
+                }
+            } else {
+                throw e
+            }
+        }
+        val rawDecrypted = decryptResult.plainText.map { it.toByte() }.toByteArray()
+        val afterPadding = rawDecrypted.removePadding()
+
+        val contentObj = org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content.parseFrom(afterPadding)
+        return SignalServiceDataClass(envelope, contentObj, null)
     }
 
     /**

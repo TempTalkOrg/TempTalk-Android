@@ -6,13 +6,12 @@ import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.sideBar.CharacterParser
-import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsremark.ContactRemarkUtil
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.network.BaseResponse
@@ -25,13 +24,13 @@ import com.difft.android.network.requests.ContactsRequestBody
 import com.difft.android.network.responses.AddContactorResponse
 import com.difft.android.network.responses.AvatarResponse
 import com.difft.android.network.responses.ContactResponse
-import com.difft.android.network.responses.ContactsDataResponse
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.TextMessage
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -46,10 +45,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.cache.ContactRemarkInfo
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.convertToContactorModel
 import org.difft.app.database.covertToGroupMemberContactorModel
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
+import org.difft.app.database.models.PublicAccountType
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
 import com.difft.android.chat.dependencies.ApplicationDependencies
@@ -106,7 +107,7 @@ object ContactorUtil {
     val friendStatusUpdate: SharedFlow<Pair<String, Boolean>> = mFriendStatusSubject
 
     // 协程实现
-    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("ContactorUtil") + dbKeyFailSoftExceptionHandler)
     private val fetchAndSaveFlow = MutableSharedFlow<Boolean>(replay = 1) // replay=1 缓存最后一个事件，Boolean表示是否强制刷新
     private var isCoroutineInitialized = false
 
@@ -139,6 +140,7 @@ object ContactorUtil {
                 this.avatar = contactResponse.avatar
                 this.meetingVersion = contactResponse.publicConfigs?.meetingVersion ?: 1
                 this.publicName = contactResponse.publicConfigs?.publicName
+                this.publicAccountType = contactResponse.publicConfigs?.publicAccountType ?: PublicAccountType.NORMAL
                 this.timeZone = contactResponse.timeZone
                 this.remark = remark
                 this.remarkAvatar = remarkAvatarPlain
@@ -164,12 +166,6 @@ object ContactorUtil {
         return text?.split(separator)?.last() ?: ""
     }
 
-
-    private fun BaseResponse<ContactsDataResponse>.covertToContactors(): List<ContactorModel> =
-        this.data
-            ?.contacts
-            ?.mapNotNull { from(it) }
-            ?: emptyList()
 
     /**
      * get data from db first,then through the network
@@ -199,12 +195,13 @@ object ContactorUtil {
 
     private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> = withContext(Dispatchers.IO) {
         try {
-            val contacts = context
+            val rawContacts = context
                 .getEntryPoint()
                 .getHttpClient()
                 .httpService
                 .fetchContactors(baseAuth = basicAuth, body = ContactsRequestBody(ids.filter { !TextUtils.isEmpty(it) && it != "server" }))
-                .covertToContactors()
+                .data?.contacts ?: emptyList()
+            val contacts = rawContacts.mapNotNull { from(it) }
 
             if (contacts.isNotEmpty()) {
                 val noAvatarFromServer = contacts.filter { it.avatar == null }.map { it.id }
@@ -225,8 +222,18 @@ object ContactorUtil {
                     L.i { "[ContactorUtil] fetchContactors avatar changes: $avatarChanges" }
                 }
 
+                // A by-ids response may omit publicAccountType; from() defaulted it to NORMAL, which
+                // would demote a known OFFICIAL on delete+reinsert. Carry forward the prior DB value
+                // when the server field is absent (full sync stays authoritative and is untouched).
+                existInContacts.forEach { contact ->
+                    val serverValue = rawContacts.find { it.number == contact.id }?.publicConfigs?.publicAccountType
+                    val priorValue = list.find { it.id == contact.id }?.publicAccountType
+                    contact.publicAccountType = PublicAccountType.resolve(serverValue, priorValue)
+                }
+
                 wcdb.contactor.deleteObjects(DBContactorModel.id.`in`(existInContacts.map { it.id }))
                 wcdb.contactor.insertObjects(existInContacts.toList())
+                existInContacts.forEach { OfficialAccountCache.put(it.id, it.publicAccountType == PublicAccountType.OFFICIAL) }
 
                 val notExistInContacts = contacts.filter { contact -> list.none { it.id == contact.id } }
                 if (notExistInContacts.isNotEmpty()) {
@@ -291,7 +298,7 @@ object ContactorUtil {
                 fetchAndSaveFlow.emit(true)
             }
         } else {
-            if (globalServices.userManager.getUserData()?.syncedContactsV4 == false) {
+            if (globalServices.userManager.getUserData()?.syncedContactsV5 == false) {
                 coroutineScope.launch {
                     fetchAndSaveFlow.emit(false)
                 }
@@ -308,6 +315,7 @@ object ContactorUtil {
         L.d { "[ContactorUtil] Initializing with coroutines..." }
         setupFetchAndSaveContactorsWithCoroutines()
         coroutineScope.launch { ContactRemarkCache.preload() }
+        coroutineScope.launch { OfficialAccountCache.preload() }
         isCoroutineInitialized = true
     }
 
@@ -328,13 +336,13 @@ object ContactorUtil {
                         val contacts = contactsResponse.data?.contacts?.toMutableList() ?: mutableListOf()
                         val directoryVersion = contactsResponse.data?.directoryVersion ?: 0
 
-                        // Gate for mechanism-3 sweep: null data = server error (200 with no body). Captured
-                        // before the official-bot is appended so the bot doesn't mask an absent list.
+                        // Gate for mechanism-3 sweep: null data = server error (200 with no body) →
+                        // distinct from an empty-but-present list, so we never sweep on an error response.
                         val serverReturnedFriendList = contactsResponse.data?.contacts != null
 
                         // 检查是否需要跳过处理
                         val currentVersion = globalServices.userManager.getUserData()?.directoryVersionForContactors ?: 0
-                        val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContactsV4 ?: false
+                        val isSyncedContacts = globalServices.userManager.getUserData()?.syncedContactsV5 ?: false
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors total count:" + contacts.size + " - directoryVersion:$directoryVersion, currentVersion:$currentVersion, isSyncedContacts:$isSyncedContacts, forceRefresh:$forceRefresh" }
 
@@ -349,33 +357,15 @@ object ContactorUtil {
 
                         L.i { "[ContactorUtil] Starting to process version: $directoryVersion" }
 
-                        val officialBotId = ResUtils.getString(R.string.official_bot_id)
-                        val officialBotName = ResUtils.getString(R.string.official_bot_name)
-
-                        if (contacts.none { it.number == officialBotId }) {
-                            try {
-                                val response = httpService.fetchContactors(
-                                    baseAuth = (globalServices.userManager.getUserData()?.baseAuth ?: ""),
-                                    body = ContactsRequestBody(listOf(officialBotId))
-                                )
-
-                                response.data?.contacts?.firstOrNull()?.let {
-                                    contacts.add(it)
-                                } ?: run {
-                                    contacts.add(ContactResponse(number = officialBotId, name = officialBotName))
-                                }
-                            } catch (e: Exception) {
-                                L.e(e) { "[ContactorUtil] fetch official bot info error:" }
-                                contacts.add(ContactResponse(number = officialBotId, name = officialBotName))
-                            }
-                        }
-
-
                         val noAvatarIds = contacts.filter { it.avatar == null }.map { it.number ?: "null" }
                         L.i { "[ContactorUtil] fetchAndSaveContactors total:${contacts.size}, withoutAvatar:${noAvatarIds.size}, ids:$noAvatarIds" }
 
                         // Snapshot prior friend ids before the table is wiped (both ≤1000 and streaming paths).
                         val oldContactorIds = wcdb.contactor.allObjects.map { it.id }.toSet()
+                        // Snapshot official ids known before this sync (cache is overwritten by replaceAll
+                        // below). Used to shield the official conversation from the mechanism-3 sweep if the
+                        // server ever omits it from the directory.
+                        val preSyncOfficialIds = OfficialAccountCache.state.value
 
                         wcdb.contactor.deleteObjects()
 
@@ -386,6 +376,9 @@ object ContactorUtil {
                             val allContactEntities = contacts.mapNotNull { from(it) }
                             wcdb.contactor.insertObjects(allContactEntities)
                             ContactRemarkCache.putAll(allContactEntities.associate { it.id to ContactRemarkInfo(remark = it.remark, remarkAvatar = it.remarkAvatar) })
+                            OfficialAccountCache.replaceAll(
+                                allContactEntities.filter { it.publicAccountType == PublicAccountType.OFFICIAL }.map { it.id }.toSet()
+                            )
                             L.i { "[ContactorUtil] SaveContactors success:${allContactEntities.size}" }
                             emitContactsUpdate(allContactEntities.map { it.id })
                         }
@@ -396,7 +389,7 @@ object ContactorUtil {
 
                         // 更新状态
                         globalServices.userManager.update {
-                            this.syncedContactsV4 = true
+                            this.syncedContactsV5 = true
                         }
 
                         L.i { "[ContactorUtil] fetchAndSaveContactors complete" + contacts.size }
@@ -425,7 +418,12 @@ object ContactorUtil {
                                 // One batch read of the weak uid set (uid+expireAt columns only, no snapshot
                                 // deserialization) instead of N serial isPending() getFirstObject queries.
                                 val pendingUids = pendingRepo.getAllExpireAt().keys
-                                val swept = (vanishedFriends - pendingUids).toList()
+                                // Never sweep an official conversation off an incomplete directory list.
+                                val officialVanished = vanishedFriends intersect preSyncOfficialIds
+                                if (officialVanished.isNotEmpty()) {
+                                    L.w { "[ContactorUtil] fullSync: kept official conversation(s) out of room sweep count=${officialVanished.size}" }
+                                }
+                                val swept = (vanishedFriends - pendingUids - officialVanished).toList()
                                 swept.forEach { uid -> dbMessageStore.removeRoomAndMessages(uid) }
                                 if (swept.isNotEmpty()) {
                                     L.i { "[ContactorUtil] fullSync swept rooms for vanished non-weak friends: count=${swept.size}" }
@@ -577,6 +575,7 @@ object ContactorUtil {
         val batchSize = 500
         val allContactIds = mutableListOf<String>()
         val remarkUpdates = HashMap<String, ContactRemarkInfo?>()
+        val officialIds = mutableSetOf<String>()
         var totalWithoutAvatar = 0
         val noAvatarIds = mutableListOf<String>()
 
@@ -589,11 +588,13 @@ object ContactorUtil {
             wcdb.contactor.insertObjects(contactEntities)
             allContactIds.addAll(contactEntities.map { it.id })
             contactEntities.forEach { remarkUpdates[it.id] = ContactRemarkInfo(remark = it.remark, remarkAvatar = it.remarkAvatar) }
+            officialIds += contactEntities.filter { it.publicAccountType == PublicAccountType.OFFICIAL }.map { it.id }
 
             yield()
         }
 
         ContactRemarkCache.putAll(remarkUpdates)
+        OfficialAccountCache.replaceAll(officialIds)
         L.i { "[ContactorUtil] Streaming complete: total:${allContactIds.size}, withoutAvatar:$totalWithoutAvatar, ids:$noAvatarIds" }
         emitContactsUpdate(allContactIds)
     }
@@ -671,14 +672,4 @@ fun String.getFirstLetter(): String {
 
 fun String.getSortLetter(): String {
     return ContactorUtil.getSortLetter(this)
-}
-
-const val LENGTH_OF_BOT_ID = 6
-
-fun String.isBotId(): Boolean {
-    return this.length <= LENGTH_OF_BOT_ID
-}
-
-fun String.isOfficialBotId(): Boolean {
-    return this == ResUtils.getString(R.string.official_bot_id)
 }

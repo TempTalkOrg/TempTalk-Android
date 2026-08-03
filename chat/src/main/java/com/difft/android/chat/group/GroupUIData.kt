@@ -14,7 +14,6 @@ data class GroupUIData(
     var anyoneRemove: Boolean? = null,
     var rejoin: Boolean? = null,
     var publishRule: Int? = null,
-    var linkInviteSwitch: Boolean? = false,
     var privateChat: Boolean = false,
     val members: List<GroupMemberContactorModel>
 )

@@ -100,8 +100,8 @@ internal object UserDataFieldRouter {
             if (prev.mostUseEmojis != new.mostUseEmojis) {
                 add(AppStateChange.StringChange(AppStateKeys.MOST_USE_EMOJIS, new.mostUseEmojis.orEmpty()))
             }
-            if (prev.syncedContactsV4 != new.syncedContactsV4) {
-                add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_CONTACTS_V4, new.syncedContactsV4))
+            if (prev.syncedContactsV5 != new.syncedContactsV5) {
+                add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_CONTACTS_V5, new.syncedContactsV5))
             }
             if (prev.syncedGroupAndMembers != new.syncedGroupAndMembers) {
                 add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_GROUP_AND_MEMBERS, new.syncedGroupAndMembers))
@@ -233,7 +233,7 @@ internal object UserDataFieldRouter {
             AppStateKeys.SEARCH_BY_CUSTOM_UID -> base.copy(searchByCustomUid = value as Int)
             AppStateKeys.DIRECTORY_VERSION_FOR_CONTACTORS -> base.copy(directoryVersionForContactors = value as Int)
             AppStateKeys.MOST_USE_EMOJIS -> base.copy(mostUseEmojis = (value as String).takeIf { it.isNotEmpty() })
-            AppStateKeys.SYNCED_CONTACTS_V4 -> base.copy(syncedContactsV4 = value as Boolean)
+            AppStateKeys.SYNCED_CONTACTS_V5 -> base.copy(syncedContactsV5 = value as Boolean)
             AppStateKeys.SYNCED_GROUP_AND_MEMBERS -> base.copy(syncedGroupAndMembers = value as Boolean)
             AppStateKeys.PASSCODE_TIMEOUT -> base.copy(passcodeTimeout = value as Int)
             AppStateKeys.PASSCODE_ATTEMPTS -> base.copy(passcodeAttempts = value as Int)
@@ -293,7 +293,7 @@ internal object UserDataFieldRouter {
             searchByCustomUid = appState[AppStateKeys.SEARCH_BY_CUSTOM_UID] ?: base.searchByCustomUid,
             directoryVersionForContactors = appState[AppStateKeys.DIRECTORY_VERSION_FOR_CONTACTORS] ?: base.directoryVersionForContactors,
             mostUseEmojis = appState[AppStateKeys.MOST_USE_EMOJIS]?.takeIf { it.isNotEmpty() } ?: base.mostUseEmojis,
-            syncedContactsV4 = appState[AppStateKeys.SYNCED_CONTACTS_V4] ?: base.syncedContactsV4,
+            syncedContactsV5 = appState[AppStateKeys.SYNCED_CONTACTS_V5] ?: base.syncedContactsV5,
             syncedGroupAndMembers = appState[AppStateKeys.SYNCED_GROUP_AND_MEMBERS] ?: base.syncedGroupAndMembers,
             passcodeTimeout = appState[AppStateKeys.PASSCODE_TIMEOUT] ?: base.passcodeTimeout,
             passcodeAttempts = appState[AppStateKeys.PASSCODE_ATTEMPTS] ?: base.passcodeAttempts,

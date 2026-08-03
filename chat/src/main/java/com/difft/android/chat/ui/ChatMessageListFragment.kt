@@ -46,6 +46,7 @@ import com.difft.android.base.ui.noSmoothScrollToBottom
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.TextSizeUtil
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
@@ -60,7 +61,7 @@ import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDialogFragment
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.data.ChatMessageListUIState
@@ -105,7 +106,6 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
-import com.difft.android.chat.gif.favorite.resolveMessageGifPlaintext
 import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.keepEncryptedAtRest
@@ -122,6 +122,7 @@ import kotlinx.coroutines.withContext
 import com.difft.android.base.widget.InsetAwareConstraintLayout
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
+import org.difft.app.database.models.MessageModel
 import org.difft.app.database.wcdb
 import com.difft.android.chat.components.reaction.ReactionEmojisAdapter
 import com.difft.android.chat.dependencies.ApplicationDependencies
@@ -726,7 +727,7 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun initPrivacyBanner() {
-        if (chatViewModel.forWhat is For.Account && !chatViewModel.forWhat.id.isBotId()) {
+        if (chatViewModel.forWhat is For.Account && !chatViewModel.forWhat.id.isOfficialAccount()) {
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                 isFriend = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(chatViewModel.forWhat.id)) != null
                 withContext(Dispatchers.Main) {
@@ -893,8 +894,11 @@ class ChatMessageListFragment : Fragment() {
         if (!isAdded || view == null || !this::binding.isInitialized) return
         getLastVisibleMessage()?.let { message ->
             viewLifecycleOwner.lifecycleScope.launch {
-                chatViewModel.sendReadRecipient(message.systemShowTimestamp)
-                chatViewModel.updateMessageReadPosition(message.systemShowTimestamp)
+                // #1020 Phase 2: sample the read moment once so the wire ReadPosition.readAt and the
+                // local readTime record the same instant for this read.
+                val readAt = ServerTimeProvider.nowMillis()
+                chatViewModel.sendReadRecipient(message.systemShowTimestamp, readAt)
+                chatViewModel.updateMessageReadPosition(message.systemShowTimestamp, readAt)
                 updateBottomFloatingButton()
             }
         }
@@ -1027,6 +1031,10 @@ class ChatMessageListFragment : Fragment() {
     override fun onDestroyView() {
         // Batch delete seen confidential placeholders on page close (appScope, independent of UI lifecycle)
         appScope.launch {
+            if (wcdb.isDbInaccessible) {
+                L.w { "[ChatMessageListFragment] skip pending confidential placeholders, DB inaccessible" }
+                return@launch
+            }
             chatViewModel.processPendingConfidentialPlaceholders()
         }
         keyboardStateListener?.let {
@@ -1493,42 +1501,26 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onFavoriteGif(message: TextChatMessage) {
-            // Gif is encrypted at rest: gate on isReadable, then decrypt to a temp the write path
-            // consumes and deletes (deleteAfterUse). Shares resolveActionAttachment with save-to-album
-            // so the file path can't drift (§5.3).
+            // Favorite-without-download: build a message attachment ref (no decrypt, no IO). The write
+            // path derives the account fileHash from the key, isExist-fast-passes, and only downloads the
+            // message ciphertext on a miss. Shares resolveActionAttachment with save-to-album so the file
+            // path can't drift (§5.3).
             val (attachment, messageId) = resolveActionAttachment(message) ?: return
-            // Reject oversized gifs up front using the known attachment size — avoids decrypting a large
-            // file just to reject it (the write path also enforces MAX_FAVORITE_ASSET_BYTES as a backstop).
+            // Reject oversized gifs up front using the known attachment size (the write path also enforces
+            // MAX_FAVORITE_ASSET_BYTES as a backstop).
             if (attachment.size > MAX_FAVORITE_ASSET_BYTES) {
                 L.w { "[ChatMessageListFragment] favorite gif: too large size=${attachment.size} messageId=$messageId" }
                 ToastUtil.show(getString(R.string.gif_favorites_add_size_limit))
                 return
             }
-            val fileName = attachment.fileName ?: return
-            val basePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-            if (!EncryptedAttachmentAccess.isReadable(basePath)) {
-                L.w { "[ChatMessageListFragment] favorite gif: not readable messageId=$messageId" }
+            val ref = com.difft.android.chat.gif.favorite.buildMessageRef(attachment, messageId)
+            if (ref == null) {
+                // A gif with no attachment key/fileName can't be account-fileHashed or downloaded.
+                L.w { "[ChatMessageListFragment] favorite gif: missing key/fileName messageId=$messageId" }
                 ToastUtil.show(getString(R.string.gif_favorites_failed))
                 return
             }
-            viewLifecycleOwner.lifecycleScope.launch {
-                val resolved = withContext(Dispatchers.IO) {
-                    resolveMessageGifPlaintext(requireContext(), basePath, attachment.key)
-                }
-                if (resolved == null) {
-                    L.w { "[ChatMessageListFragment] favorite gif: decrypt failed messageId=${message.id}" }
-                    ToastUtil.show(getString(R.string.gif_favorites_failed))
-                    return@launch
-                }
-                val (file, isTemp) = resolved
-                favoriteViewModel.dispatch(
-                    com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(
-                        com.difft.android.chat.gif.favorite.FavoriteSource.FromMessageFile(
-                            file, attachment.width, attachment.height, deleteAfterUse = isTemp
-                        )
-                    )
-                )
-            }
+            favoriteViewModel.dispatch(com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(ref))
         }
 
         override fun onDismiss() {
@@ -1995,6 +1987,11 @@ class ChatMessageListFragment : Fragment() {
         }
 
         val data = chatMessageAdapter.currentList.getOrNull(firstVisibleItemPosition) ?: return
+        // Archive tombstone carries a sentinel sort timestamp, not a real date
+        if (data.systemShowTimestamp == MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL) {
+            binding.cvDayTime.visibility = View.GONE
+            return
+        }
         binding.cvDayTime.alpha = 1f
         binding.cvDayTime.visibility = View.VISIBLE
         binding.tvDayTime.text = TimeFormatter.getConversationDateHeaderString(

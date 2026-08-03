@@ -74,6 +74,34 @@ internal class CallConnectionCoordinator(
         private set
 
     /**
+     * True from the moment a user-initiated node / connection-mode switch tears the session down
+     * until the FIRST `RoomEvent.Connected` of the resulting reconnect consumes it (via
+     * [consumeManualSwitchReconnecting]). It tells `onConnected` that the local mic/camera
+     * publications were destroyed by the switch and must be re-applied from the user's still-live
+     * intent (see [RoomEventDispatcher.restoreMediaAfterServerSwitch]) instead of running the
+     * first-connect bring-up.
+     *
+     * Consume-on-use (rather than sticky) is deliberate: it scopes the flag to exactly the one
+     * reconnect it was set for, so a later re-emitted `Connected` (ICE-restart / soft-resume, which
+     * preserves tracks) takes the normal path — avoiding a force-unmute of a self-muted user and a
+     * spurious cancel of a genuine "participant left" timeout.
+     */
+    @Volatile
+    var isManualSwitchReconnecting: Boolean = false
+        private set
+
+    /**
+     * Atomically reads and clears [isManualSwitchReconnecting]. Called once by the room event
+     * collector on the first `onConnected` after a manual switch. Single-threaded on the collector,
+     * but @Volatile write keeps it visible to the IO connect coroutine.
+     */
+    fun consumeManualSwitchReconnecting(): Boolean {
+        val was = isManualSwitchReconnecting
+        isManualSwitchReconnecting = false
+        return was
+    }
+
+    /**
      * Embedded `serviceUrls` (bundled `default_global_config.json`) as a
      * last-ditch connection fallback — but ONLY while the proxy is OFF.
      *
@@ -113,6 +141,7 @@ internal class CallConnectionCoordinator(
         callParams: ByteArray?,
         useQuic: Boolean,
     ): Boolean {
+        isManualSwitchReconnecting = false
         val certPem = callTlsProvider.trustedCert
         if (callParams == null) {
             failWith(StartCallException(getString(R.string.call_params_startcall_exception_tip)))
@@ -191,7 +220,7 @@ internal class CallConnectionCoordinator(
                         is SocketTimeoutException, is RoomException.ConnectTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
                             reportCertRiskIfNeeded(t, att.serverHost)
                             LCallEngine.reportConnectionFailure(att.connectUrl)
-                            roomCtl.room.disconnect()
+                            roomCtl.disconnectQuietly()
                             transientErrorMsg = "${t.javaClass.simpleName}: ${t.message.orEmpty()}"
                         }
                         is RoomException.NoAuthException, is RoomException.StartCallException, is StartCallException -> {
@@ -303,12 +332,17 @@ internal class CallConnectionCoordinator(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
+            // The reconnect failed, so no manual-switch Connected will arrive to consume this flag.
+            // Some failure branches below don't tear the old session down, which could still emit
+            // an unrelated (ICE-restart) Connected later — reset here so it isn't misclassified as
+            // the manual-switch reconnect and made to run restore / cancel a legitimate 1v1 timeout.
+            isManualSwitchReconnecting = false
             when (e) {
                 is SocketTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
                     L.e { "[Call] manualSwitch transient url=$connectUrl err=${e.message}" }
                     reportCertRiskIfNeeded(e, serverHost)
                     LCallEngine.reportConnectionFailure(connectUrl)
-                    roomCtl.room.disconnect()
+                    roomCtl.disconnectQuietly()
                     failWith(ServerConnectionException(getString(R.string.call_connect_timeout_tip)))
                 }
                 is RoomException.NoAuthException, is RoomException.StartCallException, is StartCallException -> {
@@ -398,7 +432,12 @@ internal class CallConnectionCoordinator(
                 // end the call and the subsequent reconnect will be rejected with status
                 // 22001 ("Invalid Call, maybe expired"). Reject up-front and roll back
                 // engine state so the UI reflects the still-active connection.
-                if (roomCtl.room.remoteParticipants.isEmpty()) {
+                // Non-throwing snapshot: this collector runs on the (Main) viewModelScope and can
+                // race with call teardown (releaseLocked sets released=true before callStatus flips
+                // out of CONNECTED/RECONNECTED). Reading the fail-loud room getter here would crash
+                // with "room accessed after release"; a released room reads as "no remotes" → the
+                // switch is conservatively rejected instead.
+                if (!roomCtl.hasRemoteParticipants()) {
                     L.w {
                         "[call] manualSwitchReconnect rejected: only self in room, node=${selectedNode?.name} useQuic=$useQuicSignal"
                     }
@@ -436,16 +475,43 @@ internal class CallConnectionCoordinator(
                 // directly would do network I/O on the main thread
                 // (NetworkOnMainThreadException). Run it on IO, right before the
                 // reconnect, so ordering is preserved.
+                // Marks the upcoming disconnect+reconnect as a manual switch so onConnected
+                // re-applies the user's mic/camera intent instead of the first-connect bring-up.
+                // Set BEFORE the teardown; consumed by the first Connected of the reconnect (or
+                // reset if that reconnect fails). See field docs.
+                isManualSwitchReconnecting = true
                 scope.launch(Dispatchers.IO) {
-                    // Guard with runCatching so an unexpected disconnect() failure
-                    // can't abort the coroutine and leave the call stuck in
-                    // SWITCHING_SERVER (or cancel the parent scope) — reconnect must
-                    // always be attempted. Mirrors CallRoomController.disconnectAndRelease().
-                    runCatching { roomCtl.room.disconnect() }
-                        .onFailure { L.w { "[call] manualSwitchReconnect disconnect failed, proceeding to reconnect: ${it.message}" } }
+                    // disconnectQuietly() never throws (released/not-created room → no-op) and
+                    // swallows disconnect() failures, so it can't abort the coroutine or leave the
+                    // call stuck in SWITCHING_SERVER (or cancel the parent scope) — reconnect must
+                    // always be attempted. Also fixes the fail-loud getter crash if release raced in.
+                    roomCtl.disconnectQuietly()
+                    awaitDisconnectedSettle()
                     connectToRoomManualSwitch(effective, joinCallParams, useQuicSignal)
                 }
             }
+    }
+
+    /**
+     * Narrows the disconnect→connect race behind a manual server switch.
+     *
+     * `disconnectQuietly()` tears the old session down and sends a CLIENT_INITIATED leave. The
+     * server's leave response later drives an ASYNC `onEngineDisconnected(CLIENT_INITIATED)` into
+     * the SDK's Room. If that stale callback lands AFTER the new `connect()` has flipped the room
+     * to CONNECTING, the SDK's state-only re-entrancy guard misfires and tears the freshly-started
+     * connection down — leaving the call stuck in SWITCHING_SERVER ("connecting" forever).
+     *
+     * Waiting until the room is fully DISCONNECTED and then adding a small settle delay gives that
+     * late callback time to drain while the room is still DISCONNECTED (where the guard correctly
+     * absorbs it), before we start the new connect. Mitigation only; the root fix belongs in the
+     * SDK (session-tagged disconnect events + cancel-safe transport handshake).
+     */
+    private suspend fun awaitDisconnectedSettle() {
+        val deadline = System.currentTimeMillis() + MANUAL_SWITCH_DISCONNECT_WAIT_MS
+        while (!roomCtl.isRoomDisconnected() && System.currentTimeMillis() < deadline) {
+            delay(MANUAL_SWITCH_DISCONNECT_POLL_MS)
+        }
+        delay(MANUAL_SWITCH_SETTLE_DELAY_MS)
     }
 
     /**
@@ -570,5 +636,24 @@ internal class CallConnectionCoordinator(
             successAtt.connectUrl, successAtt.serverHost, successAtt.useQuic, successAtt.nodeType,
             hadQuicFailure, hadPrimaryFailure, lastFailedErrorMsg,
         )
+    }
+
+    private companion object {
+        /** Poll interval while waiting for the room to reach DISCONNECTED after disconnect(). */
+        const val MANUAL_SWITCH_DISCONNECT_POLL_MS = 20L
+
+        /**
+         * Upper bound on the DISCONNECTED wait. `disconnect()` runs handleDisconnect synchronously,
+         * so the room is normally DISCONNECTED already; this only bounds pathological cases so a
+         * manual switch can never hang here.
+         */
+        const val MANUAL_SWITCH_DISCONNECT_WAIT_MS = 500L
+
+        /**
+         * Settle delay after DISCONNECTED so the async onEngineDisconnected(CLIENT_INITIATED) from
+         * the torn-down session drains before connect() flips the room to CONNECTING. Observed lag
+         * between leave and that callback was ~300ms; kept modest to bound switch latency.
+         */
+        const val MANUAL_SWITCH_SETTLE_DELAY_MS = 300L
     }
 }

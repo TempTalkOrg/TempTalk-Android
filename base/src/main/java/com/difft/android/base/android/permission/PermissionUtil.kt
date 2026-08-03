@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
 import androidx.core.content.ContextCompat
@@ -17,9 +18,19 @@ import androidx.fragment.app.Fragment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.application
 
+/** Three-state media read access, mirroring Signal StorageUtil.canReadAny/canOnlyReadSelected. */
+enum class MediaAccessState { FULL, PARTIAL, NONE }
+
 object PermissionUtil {
 
     val picturePermissions = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> {
+            arrayOf(
+                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+            )
+        }
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
             arrayOf(
                 Manifest.permission.READ_MEDIA_IMAGES,
@@ -52,14 +63,50 @@ object PermissionUtil {
         object PermanentlyDenied : PermissionState()
     }
 
-    private fun getPermissionState(
+    @VisibleForTesting
+    internal fun getPermissionState(
         activity: Activity?,
         result: Map<String, @JvmSuppressWildcards Boolean>
     ): PermissionState {
-        val deniedList: List<String> = result.filter {
+        var deniedList: List<String> = result.filter {
             it.value.not()
         }.map {
             it.key
+        }
+
+        // Android 14+ partial access ("Select photos"): the system grants
+        // READ_MEDIA_VISUAL_USER_SELECTED while keeping full IMAGES/VIDEO denied.
+        // Media selection is fully usable in this state, so those two denials
+        // must not count — otherwise partial grants escalate to PermanentlyDenied
+        // after two picker sessions.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            deniedList.isNotEmpty() &&
+            ContextCompat.checkSelfPermission(
+                application,
+                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            deniedList = deniedList - setOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+            )
+        }
+
+        // Symmetric guard: any granted real media read permission means media is
+        // usable, so a VISUAL_USER_SELECTED denial must not count. Defends against
+        // an OEM that reports IMAGES/VIDEO granted but VISUAL denied.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            deniedList.contains(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) &&
+            (ContextCompat.checkSelfPermission(
+                application,
+                Manifest.permission.READ_MEDIA_IMAGES
+            ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    application,
+                    Manifest.permission.READ_MEDIA_VIDEO
+                ) == PackageManager.PERMISSION_GRANTED)
+        ) {
+            deniedList = deniedList - Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
         }
 
         var state = when (deniedList.isEmpty()) {
@@ -121,6 +168,64 @@ object PermissionUtil {
     fun arePermissionsGranted(context: Context, permissions: Array<String>): Boolean {
         return permissions.all { permission ->
             ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
+     * Synchronous pre-check of current media read access (does NOT request).
+     * FULL    = full library readable (IMAGES/VIDEO granted, or READ_EXTERNAL_STORAGE < 33).
+     * PARTIAL = 34+ "Select photos": only VISUAL_USER_SELECTED granted, IMAGES/VIDEO denied.
+     * NONE    = nothing readable → caller must request.
+     */
+    @JvmStatic
+    fun getMediaAccessState(context: Context = application): MediaAccessState = when {
+        isFullMediaGranted(context) -> MediaAccessState.FULL
+        isPartialMediaGranted(context) -> MediaAccessState.PARTIAL
+        else -> MediaAccessState.NONE
+    }
+
+    // PARTIAL: 34+ && VISUAL granted && neither IMAGES nor VIDEO granted (Signal canOnlyReadSelected)
+    private fun isPartialMediaGranted(context: Context): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            isGranted(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) &&
+            !hasAnyPermission(
+                context,
+                arrayOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                )
+            )
+
+    // FULL: any "real" read grant for the current SDK tier
+    private fun isFullMediaGranted(context: Context): Boolean = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+            hasAnyPermission(
+                context,
+                arrayOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                )
+            )
+        else -> isGranted(context, Manifest.permission.READ_EXTERNAL_STORAGE) // 26–32
+    }
+
+    private fun hasAnyPermission(context: Context, permissions: Array<String>): Boolean =
+        permissions.any { isGranted(context, it) }
+
+    private fun isGranted(context: Context, permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Media entry gate: if media is already usable (full or partial), open directly without prompting;
+     * otherwise fire the permission request. Removes the "re-prompt on every click under partial
+     * access" bug by pre-checking access before launching the system request.
+     */
+    fun Permission.launchMediaSelectionOrOpen(context: Context = application, onUsable: () -> Unit) {
+        if (getMediaAccessState(context) != MediaAccessState.NONE) {
+            onUsable()
+        } else {
+            L.i { "[MediaAccess] request media permission (state=NONE) sdk=${Build.VERSION.SDK_INT}" }
+            launchMultiplePermission(picturePermissions)
         }
     }
 }

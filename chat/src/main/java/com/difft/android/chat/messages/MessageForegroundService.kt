@@ -12,12 +12,14 @@ import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
 import com.difft.android.chat.R
 import com.difft.android.chat.websocket.WebSocketManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,7 +48,7 @@ class MessageForegroundService : Service() {
         fun webSocketManager(): WebSocketManager
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("MessageForegroundService") + dbKeyFailSoftExceptionHandler)
 
     override fun onBind(intent: Intent?): IBinder? {
         return null

@@ -33,6 +33,7 @@ import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.storage.AppStateDefaults
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.utils.globalServices
@@ -59,9 +60,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
+import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -295,7 +298,7 @@ class MessageNotificationUtil @Inject constructor(
     }
 
     fun isCriticalAlertTimestampValid(timestamp: Long): Boolean {
-        val now = System.currentTimeMillis()
+        val now = ServerTimeProvider.nowMillis()
         return kotlin.math.abs(now - timestamp) <= CRITICAL_ALERT_VALID_WINDOW_MS
     }
 
@@ -676,6 +679,40 @@ class MessageNotificationUtil @Inject constructor(
         L.e { "showNotificationOfPush failed: ${it.stackTraceToString()}" }
     }
 
+    /**
+     * Fail-soft caller/group display lookups for the incoming-call notification.
+     *
+     * Only the caller-name / group-name lookups touch the encrypted DB. Each read is wrapped in
+     * its own try/catch — a key failure that hasn't yet flipped wcdb.isDbInaccessible still throws
+     * (WCDBKeyUnavailableException) inside the lookup, which would otherwise abort the whole
+     * notification coroutine → missed call. On ANY lookup failure we fall back to the keystore-free
+     * display (caller id / conversation id) so the notification itself (full-screen intent, ringing,
+     * accept/reject actions) is ALWAYS built and posted. A flag check alone can't cover the
+     * pre-flip race, hence try/catch.
+     */
+    private suspend fun loadCallDisplayInfo(
+        roomId: String,
+        callerId: String,
+        conversationId: String?,
+        isGroup: Boolean,
+    ): Pair<Optional<ContactorModel>, GroupModel?> {
+        val callerInfo = try {
+            ContactorUtil.getContactWithID(context, callerId)
+        } catch (e: Exception) {
+            L.w { "[Call] caller lookup failed, using fallback display roomId=$roomId: ${e.message}" }
+            Optional.empty()
+        }
+        val groupInfo = if (isGroup && conversationId != null) {
+            try {
+                groupUtil.get().getSingleGroupInfo(conversationId)
+            } catch (e: Exception) {
+                L.w { "[Call] group lookup failed, using fallback display roomId=$roomId: ${e.message}" }
+                null
+            }
+        } else null
+        return callerInfo to groupInfo
+    }
+
     fun showCallNotificationNew(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, needAppLock: Boolean) {
         val notificationID = roomId.hashCode()  //roomId为空
         if (callType.isGroup() && conversationId == null) return
@@ -683,10 +720,7 @@ class MessageNotificationUtil @Inject constructor(
         // LAZY + start() after register: ensures the coroutine doesn't begin executing
         // until cancelNotificationsById can see it via pendingCallNotifyJobs.
         val job = appScope.launch(start = CoroutineStart.LAZY) {
-            val callerInfo = ContactorUtil.getContactWithID(context, callerId)
-            val groupInfo = if (callType.isGroup() && conversationId != null) {
-                groupUtil.get().getSingleGroupInfo(conversationId)
-            } else null
+            val (callerInfo, groupInfo) = loadCallDisplayInfo(roomId, callerId, conversationId, callType.isGroup())
 
             var title = ""
             var content = ""

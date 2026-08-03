@@ -31,6 +31,18 @@ class CallVibrationManager @Inject constructor(
     }
 
     /**
+     * 震动归属方。系统 Vibrator 是全 App 共享的单一资源，[stopVibration] 底层 vibrator.cancel()
+     * 会取消所有震动，无法按来源选择性取消（cancel(usageFilter) 仅 API 34+）。
+     * 用归属方标记实现优先级隔离：某一方的停止请求不会取消属于其他方的震动。
+     */
+    enum class VibrationSource { NONE, CALL, CRITICAL_ALERT }
+
+    private val vibrationLock = Any()
+
+    @Volatile
+    private var currentSource: VibrationSource = VibrationSource.NONE
+
+    /**
      * 获取 Vibrator 服务实例
      * 用于需要自定义震动模式的场景
      * 
@@ -43,37 +55,100 @@ class CallVibrationManager @Inject constructor(
     /**
      * 开始来电震动提醒
      * 使用标准模式：0ms 延迟，1000ms 震动，1000ms 间隔（循环）
+     *
+     * 紧急联络优先：若当前震动归属紧急联络（[VibrationSource.CRITICAL_ALERT]），则跳过来电震动，
+     * 不抢占其正在进行的告警震动，避免来电结束时误停/丢失紧急联络震动。
      */
     @SuppressLint("MissingPermission")
     fun startVibration() {
-        try {
-            val pattern: LongArray = longArrayOf(0, 1000, 1000)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                vibrator.vibrate(
-                    VibrationEffect.createWaveform(pattern, 1),
-                    VibrationAttributes.createForUsage(VibrationAttributes.USAGE_RINGTONE)
-                )
-            } else {
-                val audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .build()
-
-                vibrator.vibrate(pattern, 1, audioAttributes)
+        synchronized(vibrationLock) {
+            if (currentSource == VibrationSource.CRITICAL_ALERT) {
+                L.i { "[Call] CallVibrationManager skip call vibration, critical alert is vibrating" }
+                return
             }
-        } catch (e: Exception) {
-            L.e { "[Call] CallVibrationManager start Vibration fail: ${e.stackTraceToString()}" }
+            try {
+                val pattern: LongArray = longArrayOf(0, 1000, 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    vibrator.vibrate(
+                        VibrationEffect.createWaveform(pattern, 1),
+                        VibrationAttributes.createForUsage(VibrationAttributes.USAGE_RINGTONE)
+                    )
+                } else {
+                    val audioAttributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build()
+
+                    vibrator.vibrate(pattern, 1, audioAttributes)
+                }
+                currentSource = VibrationSource.CALL
+            } catch (e: Exception) {
+                L.e { "[Call] CallVibrationManager start Vibration fail: ${e.stackTraceToString()}" }
+            }
         }
     }
 
     /**
-     * 停止震动
-     * 取消所有正在进行的震动
+     * 开始 Critical Alert 循环震动。
+     *
+     * 与紧急联络铃声一样使用 USAGE_ALARM，使其在静音/勿扰下也能随铃声一起震动，
+     * 从而与铃声播放保持同步。
+     *
+     * @param pattern 震动波形，格式：[延迟, 震动时长, 间隔, ...]，默认 震1s / 停1s
+     * @param repeat 循环起点索引，0 表示从头循环，-1 表示不循环
      */
-    fun stopVibration() {
-        try {
-            vibrator.cancel()
-        } catch (e: Exception) {
-            L.e { "[Call] CallVibrationManager stop Vibration fail: ${e.message}" }
+    @SuppressLint("MissingPermission")
+    fun startAlarmVibration(
+        pattern: LongArray = longArrayOf(0, 1000, 1000),
+        repeat: Int = 0
+    ) {
+        synchronized(vibrationLock) {
+            try {
+                if (!vibrator.hasVibrator()) {
+                    L.i { "[Call] CallVibrationManager device has no vibrator, skip alarm vibration" }
+                    return
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    vibrator.vibrate(
+                        VibrationEffect.createWaveform(pattern, repeat),
+                        VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM)
+                    )
+                } else {
+                    val audioAttributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(pattern, repeat, audioAttributes)
+                }
+                currentSource = VibrationSource.CRITICAL_ALERT
+            } catch (e: Exception) {
+                L.e { "[Call] CallVibrationManager start alarm vibration fail: ${e.stackTraceToString()}" }
+            }
+        }
+    }
+
+    /**
+     * 停止震动。
+     *
+     * 由于系统 Vibrator 全 App 共享，取消操作无法按来源选择，因此按归属方隔离：
+     * 仅当当前震动无归属方（[VibrationSource.NONE]）或正属于 [source] 时才真正取消，
+     * 避免一方（如来电结束）误停另一方（如仍在进行的紧急联络）的震动。
+     *
+     * @param source 发起停止请求的归属方，默认 [VibrationSource.CALL]（兼容既有来电调用点）
+     */
+    fun stopVibration(source: VibrationSource = VibrationSource.CALL) {
+        synchronized(vibrationLock) {
+            if (currentSource != VibrationSource.NONE && currentSource != source) {
+                L.i { "[Call] CallVibrationManager skip stop by $source, current owner is $currentSource" }
+                return
+            }
+            try {
+                vibrator.cancel()
+            } catch (e: Exception) {
+                L.e { "[Call] CallVibrationManager stop Vibration fail: ${e.message}" }
+            } finally {
+                currentSource = VibrationSource.NONE
+            }
         }
     }
 

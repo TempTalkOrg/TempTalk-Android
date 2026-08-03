@@ -50,9 +50,16 @@ import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.databinding.MeFragmentBinding
+import com.difft.android.linkeddevices.LinkedDevicesActivity
+import com.difft.android.linkeddevices.LinkedDevicesCountStore
+import com.difft.android.linkeddevices.LinkedDevicesFragment
 import com.difft.android.login.ContactProfileSettingActivity
 import com.difft.android.login.ContactProfileSettingFragment
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import org.difft.app.database.cache.OfficialAccountCache
+import org.difft.app.database.models.DBContactorModel
+import org.difft.app.database.models.PublicAccountType
+import org.difft.app.database.wcdb
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.setting.AboutActivity
 import com.difft.android.setting.AboutFragment
@@ -99,6 +106,9 @@ class MeFragment : Fragment() {
     @Inject
     lateinit var environmentHelper: EnvironmentHelper
 
+    @Inject
+    lateinit var linkedDevicesCountStore: LinkedDevicesCountStore
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val binding = MeFragmentBinding.inflate(inflater, container, false)
         this.binding = binding
@@ -108,6 +118,10 @@ class MeFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         initThemeView()
+        // Store swallows non-cancellation errors; lifecycleScope cancels the launch on teardown.
+        viewLifecycleOwner.lifecycleScope.launch {
+            linkedDevicesCountStore.refresh()
+        }
     }
 
     private fun initThemeView() {
@@ -156,6 +170,14 @@ class MeFragment : Fragment() {
             }
         }
 
+        binding.clLinkedDevices.setOnClickListener {
+            navigateToDetailOrActivity(LinkedDevicesFragment.newInstance()) {
+                LinkedDevicesActivity.startActivity(requireActivity())
+            }
+        }
+
+        observeLinkedDevicesCount()
+
         binding.clPrivacy.setOnClickListener {
             navigateToDetailOrActivity(PrivacySettingFragment.newInstance()) {
                 PrivacySettingActivity.startActivity(requireActivity())
@@ -176,12 +198,24 @@ class MeFragment : Fragment() {
 
         binding.clHelp.visibility = View.VISIBLE
         binding.clHelp.setOnClickListener {
-            val botId = getString(com.difft.android.chat.R.string.official_bot_id)
-            val navigationCallback = activity as? ConversationNavigationCallback
-            if (navigationCallback?.isDualPaneMode == true) {
-                navigationCallback.onContactDetailSelected(botId)
-            } else {
-                ContactDetailActivity.startActivity(requireContext(), botId)
+            viewLifecycleOwner.lifecycleScope.launch {
+                // Cache first (sync); fall back to a DB read for the pre-preload cold-start window.
+                // Only when both are empty does the official account remain unknown (server contract
+                // guarantees exactly one, so minOrNull is deterministic).
+                val botId = OfficialAccountCache.state.value.minOrNull()
+                    ?: withContext(Dispatchers.IO) {
+                        wcdb.contactor.getFirstObject(DBContactorModel.publicAccountType.eq(PublicAccountType.OFFICIAL))?.id
+                    }
+                if (botId == null) {
+                    L.w { "[MeFragment] help click ignored: no official account known yet" }
+                    return@launch
+                }
+                val navigationCallback = activity as? ConversationNavigationCallback
+                if (navigationCallback?.isDualPaneMode == true) {
+                    navigationCallback.onContactDetailSelected(botId)
+                } else {
+                    ContactDetailActivity.startActivity(requireContext(), botId)
+                }
             }
         }
 
@@ -253,6 +287,17 @@ class MeFragment : Fragment() {
                 if (updatedIds.contains(globalServices.myId)) {
                     initData()
                 }
+            }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
+    }
+
+    private fun observeLinkedDevicesCount() {
+        linkedDevicesCountStore.count
+            .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
+            .onEach { count ->
+                val (visible, text) = linkedDevicesBadgeState(count)
+                binding.tvLinkedDevicesCount.visibility = if (visible) View.VISIBLE else View.GONE
+                binding.tvLinkedDevicesCount.text = text
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
@@ -346,6 +391,12 @@ class MeFragment : Fragment() {
                 .startActivityPreview(0, false, list)
         }
     }
+}
+
+/** Pure badge-state rule: hidden at null/0, else the raw count with no cap. Returns (visible, text). */
+fun linkedDevicesBadgeState(count: Int?): Pair<Boolean, String> {
+    val visible = (count ?: 0) > 0
+    return visible to (if (visible) count.toString() else "")
 }
 
 /**

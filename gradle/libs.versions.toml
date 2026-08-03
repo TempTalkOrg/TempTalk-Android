@@ -89,8 +89,8 @@ jna = "5.14.0"
 signalAndroid = "0.86.5"
 
 # Jackson
-jacksonDatabind = "2.21.4"
-jacksonModuleKotlin = "2.21.4"
+jacksonDatabind = "2.21.5"
+jacksonModuleKotlin = "2.21.5"
 
 # Other Libraries
 jwtdecode = "2.0.2"
@@ -122,8 +122,8 @@ desugarJdkLibs = "2.1.5"
 accompanistSystemuicontroller = "0.36.0"
 coil = "3.4.0"
 accompanistPermissions = "0.37.3"
-livekitAndroid = "2.24.1.12"
-denoiseFilter = "1.1.1"
+livekitAndroid = "2.24.1.17"
+denoiseFilter = "1.1.2"
 kotlinxSerializationCore = "1.11.0"
 kotlinxSerializationJson = "1.11.0"
 robolectric = "4.16.1"

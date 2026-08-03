@@ -36,7 +36,7 @@ object AppStateKeys {
     val SEARCH_BY_CUSTOM_UID = intPreferencesKey("search_by_custom_uid")
     val DIRECTORY_VERSION_FOR_CONTACTORS = intPreferencesKey("directory_version_for_contactors")
     val MOST_USE_EMOJIS = stringPreferencesKey("most_use_emojis")
-    val SYNCED_CONTACTS_V4 = booleanPreferencesKey("synced_contacts_v4")
+    val SYNCED_CONTACTS_V5 = booleanPreferencesKey("synced_contacts_v5")
     val SYNCED_GROUP_AND_MEMBERS = booleanPreferencesKey("synced_group_and_members")
     val PASSCODE_TIMEOUT = intPreferencesKey("passcode_timeout")
     val PASSCODE_ATTEMPTS = intPreferencesKey("passcode_attempts")
@@ -99,6 +99,20 @@ object AppStateKeys {
     // Newest ApplicationExitInfo timestamp already reported to Crashlytics. Used to dedup the
     // startup freeze probe so each real process exit is reported exactly once.
     val LAST_SEEN_EXIT_TS = longPreferencesKey("last_seen_exit_ts")
+
+    // ---------- Section F: Trusted-time (ServerTimeProvider) ----------
+    //
+    // Cold-start fallback for the process-level trusted clock. Non-sensitive, non-PII — plain
+    // app_state per issue #725 (SharedPreferences is Tink-keyset-only). Written throttled by
+    // ServerTimeProvider (|Δoffset| > 1s); read once async at startup into its @Volatile fields.
+    val SERVER_TIME_OFFSET = longPreferencesKey("server_time_offset")
+    val LAST_KNOWN_SERVER_TIME = longPreferencesKey("last_known_server_time")
+
+    // ---------- Section G: WCDB data-migration bookkeeping ----------
+    //
+    // One-time archive-tombstone sentinel re-anchor (WCDBUpdateService). Set only after the
+    // migration completes, so a failed run retries on the next start.
+    val ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED = booleanPreferencesKey("archive_tombstone_sentinel_migrated")
 }
 
 /**
@@ -114,7 +128,7 @@ object AppStateDefaults {
     const val DIRECTORY_VERSION_FOR_CONTACTORS = 0
     /** Nullable-string sentinel: callers use `getString(KEY).takeIf { it.isNotEmpty() }`. */
     const val MOST_USE_EMOJIS = ""
-    const val SYNCED_CONTACTS_V4 = false
+    const val SYNCED_CONTACTS_V5 = false
     const val SYNCED_GROUP_AND_MEMBERS = false
     const val PASSCODE_TIMEOUT = 300
     const val PASSCODE_ATTEMPTS = 0
@@ -156,4 +170,11 @@ object AppStateDefaults {
     // Section C defaults
     const val KEY_KEYBOARD_HEIGHT_PORTRAIT = 0
     const val KEY_KEYBOARD_HEIGHT_LANDSCAPE = 0
+
+    // Section F defaults — 0L means "no offset / never seen a server time" (collapses to L3 wall clock).
+    const val SERVER_TIME_OFFSET = 0L
+    const val LAST_KNOWN_SERVER_TIME = 0L
+
+    // Section G defaults
+    const val ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED = false
 }

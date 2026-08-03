@@ -8,7 +8,7 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.base.R
 import com.difft.android.base.utils.weakcontact.WeakContactCountdown
 import com.difft.android.chat.contacts.data.getSortLetter
-import com.difft.android.chat.contacts.data.isOfficialBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import org.difft.app.database.models.ContactorModel
 
 /**
@@ -58,13 +58,19 @@ abstract class ContactorsAdapter(private val myID: String) : ListAdapter<Contact
         } else {
             holder.setAvatarUrl(data)
             holder.name = data.getDisplayNameForUI()
-            holder.setBotBadgeVisible(data.id.isOfficialBotId())
+            holder.setBotBadgeVisible(data.id.isOfficialAccount())
         }
-        // Weak-pending contacts show a "Removes in N days" countdown subtitle. expireAt rides on the
-        // item (part of DiffUtil contents) so it appears/disappears as the weak state changes.
+        // Weak-pending contacts show a countdown subtitle. expireAt rides on the item (part of
+        // DiffUtil contents) so it appears/disappears as the weak state changes. daysLeftFromClock
+        // is floored at 1, so days == 1 covers the final day and any expired fallback ("today").
         holder.content = item.expireAt?.let { expireAt ->
             val days = WeakContactCountdown.daysLeftFromClock(expireAt)
-            holder.itemView.context.getString(com.difft.android.chat.R.string.weak_contact_remove_in_days, days)
+            val context = holder.itemView.context
+            if (days == 1) {
+                context.getString(com.difft.android.chat.R.string.weak_contact_remove_today)
+            } else {
+                context.getString(com.difft.android.chat.R.string.weak_contact_remove_in_days, days)
+            }
         }
         val bgColorRes = if (selectedId != null && data.id == selectedId) R.color.bg3 else R.color.bg1
         holder.itemView.setBackgroundColor(ContextCompat.getColor(holder.itemView.context, bgColorRes))
@@ -79,7 +85,10 @@ abstract class ContactorsAdapter(private val myID: String) : ListAdapter<Contact
 
     open fun getLetterPosition(letter: String?): Int {
         for (i in 0 until currentList.size) {
-            if (currentList[i].contactor.getDisplayNameForUI().getSortLetter() == letter) {
+            val item = currentList[i]
+            // The top pending group is not part of the A-Z index, so skip it.
+            if (item.expireAt != null) continue
+            if (item.contactor.getDisplayNameForUI().getSortLetter() == letter) {
                 return i
             }
         }

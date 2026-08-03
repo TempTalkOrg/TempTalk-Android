@@ -76,22 +76,19 @@ object VoiceMessageRecipes {
     )
 
     /**
-     * Build a 2-candidate recipe set based on the user's voice changer
-     * preference. Maps the call-module SDK key to the matching
-     * [VoiceMessageEffect]:
+     * Build a 2-candidate recipe set with a RANDOMLY picked voice effect.
      *
-     * - `"uncle"` → [VoiceMessageEffect.DEEPER]
-     * - anything else (including `"original"` and `"goddess"`) → [VoiceMessageEffect.HIGHER]
+     * The effect is chosen uniformly from all [VoiceMessageEffect] entries at
+     * recording start and stays fixed for the whole session. It intentionally
+     * does NOT follow the global call voice-changer preference — every voice
+     * message "add effect" is a surprise.
      *
-     * The first recipe is always plain denoised (no effect) — used when
-     * the user releases without sliding to "Add effect". The second
-     * recipe carries the effect — used when the user slides to "Add effect".
+     * The first recipe is always plain denoised (no effect) — used when the
+     * user releases without sliding to "Add effect". The second recipe carries
+     * the random effect — used when the user slides to "Add effect".
      */
-    fun buildRecipes(voicePresetSdkKey: String?): List<VoiceMessageRecipe> {
-        val effect = when (voicePresetSdkKey) {
-            "uncle" -> VoiceMessageEffect.DEEPER
-            else -> VoiceMessageEffect.HIGHER
-        }
+    fun buildRandomRecipes(): List<VoiceMessageRecipe> {
+        val effect = VoiceMessageEffect.entries.random()
         return listOf(
             VoiceMessageRecipe(id = "denoised", denoise = true),
             VoiceMessageRecipe(

@@ -3,7 +3,9 @@ package com.difft.android.chat.gif.favorite
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,5 +29,6 @@ object AppScopeModule {
     @Provides
     @Singleton
     @AppCoroutineScope
-    fun provideAppScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    fun provideAppScope(): CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("AppCoroutineScope") + dbKeyFailSoftExceptionHandler)
 }

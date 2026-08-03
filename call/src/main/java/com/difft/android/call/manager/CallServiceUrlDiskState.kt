@@ -2,6 +2,7 @@ package com.difft.android.call.manager
 
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.call.UrlInfo
+import com.difft.android.base.utils.time.ServerTimeProvider
 import kotlinx.serialization.Serializable
 
 /**
@@ -15,7 +16,7 @@ internal data class CallServiceUrlDiskState(
 ) {
     fun configVersion(): Int = serviceUrls?.config_version ?: -1
 
-    fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    fun isExpired(nowMillis: Long = ServerTimeProvider.nowMillis()): Boolean =
         serviceUrls == null || nowMillis >= expiresAtMillis
 }
 
@@ -67,7 +68,7 @@ internal fun computeExpiresAtMillis(serverTimestamp: Long?, ttlSeconds: Int): Lo
     val ttlMs = ttlSeconds.coerceAtLeast(0).toLong() * 1000L
     val st = serverTimestamp
     val baseMillis = when {
-        st == null -> System.currentTimeMillis()
+        st == null -> ServerTimeProvider.nowMillis() // share one axis with isExpired()'s default arg
         st > 1_000_000_000_000L -> st
         else -> st * 1000L
     }

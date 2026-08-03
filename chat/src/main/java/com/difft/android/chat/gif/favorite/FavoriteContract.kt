@@ -39,16 +39,23 @@ object FavoriteContract {
 sealed interface FavoriteSource {
     /** From the GIF panel: a resolved local gif file + its dimensions. */
     data class FromFile(val file: File, val width: Int, val height: Int) : FavoriteSource
+
     /**
-     * From a chat message's gif attachment. The host resolves a readable plaintext [file]: the
-     * plaintext file when present, else a temp decrypted from the encrypted-at-rest `.encrypt`
-     * ciphertext. [deleteAfterUse] is true for that temp so the write path deletes it once consumed.
+     * Message gif attachment reference (favorite-without-download). No plaintext file — the write
+     * path derives the account fileHash from [key], isExist-fast-passes, and only downloads the
+     * message ciphertext (via messageId+fileName+authorizeId) on a miss.
      */
-    data class FromMessageFile(
-        val file: File,
+    data class FromMessageRef(
+        val messageId: String,
+        val fileName: String,
+        val attachmentId: String,
+        val authorizeId: Long,
+        val key: ByteArray,
+        val digest: ByteArray,
         val width: Int,
         val height: Int,
-        val deleteAfterUse: Boolean = false
+        val size: Int,
+        val contentType: String
     ) : FavoriteSource
 
     /**

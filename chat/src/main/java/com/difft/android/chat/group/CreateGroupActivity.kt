@@ -10,7 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
+import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
@@ -32,7 +32,7 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getFirstLetter
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatActivityCreateGroupBinding
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.network.NetworkException
@@ -318,7 +318,8 @@ class CreateGroupActivity : BaseActivity() {
         resetButtonClear(null)
 
         binding.groupAvatar.setOnClickListener {
-            onPicturePermissionForAvatar.launchMultiplePermission(PermissionUtil.picturePermissions)
+            // Open directly when media is already usable (full/partial); else request.
+            onPicturePermissionForAvatar.launchMediaSelectionOrOpen { createPictureSelector() }
         }
     }
 
@@ -367,7 +368,7 @@ class CreateGroupActivity : BaseActivity() {
 
     @SuppressLint("NotifyDataSetChanged")
     private fun refreshContactsList(list: List<ContactorModel>) {
-        val sortedContacts = list.filterNot { it.id == globalServices.myId || (it.id.isBotId()) }
+        val sortedContacts = list.filterNot { it.id == globalServices.myId || (it.id.isOfficialAccount()) }
             .sortedByPinyin()
         memberModels.clear()
         sortedContacts.forEach {

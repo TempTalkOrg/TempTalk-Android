@@ -35,7 +35,9 @@ object GifPanelContract {
         val moodTabsEnabled: Boolean = true,
         // favorites data flow is wired in M3 -> tab enabled
         val favoritesEnabled: Boolean = true,
-        val emptyResult: Boolean = false
+        val emptyResult: Boolean = false,
+        // First-page fetch failed (network) with no items to show -> in-panel "couldn't load" label.
+        val loadError: Boolean = false
     )
 
     sealed interface Effect {
@@ -56,8 +58,9 @@ object GifPanelContract {
 }
 
 /**
- * UI projection of a [GifData] for the grid. Display AND send/favorite both use [webpUrl] (the
- * preview rendition) — the grid already loads/caches it, so send/favorite need no extra download.
+ * UI projection of a [GifData] for the grid. Display AND send/favorite all use [webpUrl] (the
+ * ORIGINAL rendition) — higher quality / smoother animation than the downsampled preview. The grid
+ * loads/caches it on display, so send/favorite are a Glide cache hit (no extra download at tap time).
  * [aspectRatio] = width / height, clamped to a sane range so a malformed item can't break the
  * staggered grid layout.
  */
@@ -75,17 +78,18 @@ data class GifUiItem(
         }
 
     companion object {
-        /** Map a network [GifData] to a UI item, or null if it lacks a usable preview URL. */
+        /** Map a network [GifData] to a UI item, or null if it lacks a usable original URL. */
         fun fromGifData(gif: GifData): GifUiItem? {
             val id = gif.id ?: return null
-            val preview = gif.preview ?: return null
-            // Prefer webp; fall back to the preview gif URL so an item without a webp is still usable.
-            val webp = preview.webp ?: preview.gif ?: return null
+            val original = gif.original ?: return null
+            // Use the ORIGINAL rendition everywhere (display + send + favorite). Prefer webp; fall back
+            // to the original gif URL so an item without a webp is still usable.
+            val webp = original.webp ?: original.gif ?: return null
             return GifUiItem(
                 id = id,
                 webpUrl = webp,
-                width = preview.width,
-                height = preview.height
+                width = original.width,
+                height = original.height
             )
         }
     }

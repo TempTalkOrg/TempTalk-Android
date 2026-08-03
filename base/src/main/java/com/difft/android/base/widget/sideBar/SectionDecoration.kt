@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.View
@@ -96,7 +97,10 @@ class SectionDecoration(context: Context, private val callback: DecorationCallba
             if (groupId < 0 || lastGroupId == groupId) {
                 continue
             }
-            val textLine = callback.getGroupFirstLine(position).uppercase(Locale.getDefault())
+            // Single-letter section headers are shown uppercase; multi-char group titles
+            // (e.g. a pending-removal group) keep their original casing.
+            val rawLine = callback.getGroupFirstLine(position)
+            val textLine = if (rawLine.length == 1) rawLine.uppercase(Locale.getDefault()) else rawLine
             if (TextUtils.isEmpty(textLine)) {
                 continue
             }
@@ -111,12 +115,29 @@ class SectionDecoration(context: Context, private val callback: DecorationCallba
                 }
             }
             c.drawRect(left, textY - topGap, right, textY, paint)
-            c.drawText(textLine, 16.dp.toFloat(), textY - 10.dp, textPaint)
+            val baseline = textY - 10.dp
+            val icon = callback.getGroupIcon(position)
+            if (icon != null) {
+                // 14dp square icon at left=16dp, vertically centered on the text's visual center.
+                val iconSize = 14.dp
+                val iconLeft = 16.dp
+                val textCenterY = baseline + (fontMetrics.ascent + fontMetrics.descent) / 2f
+                val iconTop = (textCenterY - iconSize / 2f).toInt()
+                icon.setBounds(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize)
+                icon.draw(c)
+                // Shift text right by icon width + 6dp gap.
+                c.drawText(textLine, (iconLeft + iconSize + 6.dp).toFloat(), baseline, textPaint)
+            } else {
+                c.drawText(textLine, 16.dp.toFloat(), baseline, textPaint)
+            }
         }
     }
 
     interface DecorationCallback {
         fun getGroupId(position: Int): Long
         fun getGroupFirstLine(position: Int): String
+
+        /** Optional leading icon drawn before the header text; null (default) draws text only. */
+        fun getGroupIcon(position: Int): Drawable? = null
     }
 }

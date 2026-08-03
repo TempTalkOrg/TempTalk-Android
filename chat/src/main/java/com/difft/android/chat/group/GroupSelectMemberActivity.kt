@@ -30,7 +30,7 @@ import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getFirstLetter
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatActivityGroupSelectMemberBinding
 import com.difft.android.chat.crypto.GroupCrypto
 import com.difft.android.chat.crypto.GroupCryptoRepo
@@ -399,7 +399,7 @@ class GroupSelectMemberActivity : BaseActivity() {
         }
 
         val filteredList = list.filter {
-            !it.id.isBotId()
+            !it.id.isOfficialAccount()
         }
 
         val searchResultList = filteredList.map { contact ->

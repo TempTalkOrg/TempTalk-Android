@@ -1,16 +1,19 @@
 package com.difft.android.chat.setting.archive
 
 
+import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.chat.R
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.NetworkException
+import com.difft.android.network.ServerTimeSyncer
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.group.ChangeGroupSettingsReq
@@ -28,6 +31,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.delete
 import org.difft.app.database.models.DBMessageModel
@@ -38,6 +43,7 @@ import org.difft.app.database.models.ResetIdentityKeyModel
 import org.difft.app.database.wcdb
 import util.AppForegroundObserver
 import util.TimeUtils
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -56,6 +62,7 @@ class MessageArchiveManager @Inject constructor(
     private val localMessageCreator: dagger.Lazy<LocalMessageCreator>,
     private val conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>,
     private val gson: Gson,
+    private val serverTimeSyncer: ServerTimeSyncer,
 ) {
     companion object {
         private const val FOREGROUND_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
@@ -68,10 +75,19 @@ class MessageArchiveManager @Inject constructor(
     @Volatile
     private var lastCheckTime: Long = 0L
 
+    // Single-run guard: Activity recreation re-enters startCheckTask and would stack loops on appScope
+    private val isStarted = AtomicBoolean(false)
+
+    // Defense in depth: no concurrent caller exists today, but the tombstone exists-then-insert
+    // below must never run concurrently, so any future second caller stays safe
+    private val archiveMutex = Mutex()
+
     // Channel to signal state changes and interrupt the delay
     private val stateChangeSignal = Channel<Unit>(Channel.CONFLATED)
 
     fun startCheckTask() {
+        if (!isStarted.compareAndSet(false, true)) return
+
         currentInterval = if (AppForegroundObserver.isForegrounded()) {
             FOREGROUND_INTERVAL_MS
         } else {
@@ -79,6 +95,13 @@ class MessageArchiveManager @Inject constructor(
         }
 
         appScope.launch(Dispatchers.IO) {
+            // Fail-soft: skip all DB work if the cipher key is unavailable (one-way process-lifetime
+            // flag). The archive task self-heals on the next cold start; the appScope CEH is the net.
+            if (wcdb.isDbInaccessible) {
+                L.w { "[MessageArchiveManager] skip check task, DB inaccessible" }
+                return@launch
+            }
+
             checkIdentityKeyReset()
 
             while (true) {
@@ -104,14 +127,16 @@ class MessageArchiveManager @Inject constructor(
         stateChangeSignal.trySend(Unit)
     }
 
-    private suspend fun doArchiveIfNeeded() {
-        val timeSinceLastCheck = System.currentTimeMillis() - lastCheckTime
+    private suspend fun doArchiveIfNeeded() = archiveMutex.withLock {
+        // Monotonic clock: a wall-clock rollback would make this negative and stall the archive gate.
+        // elapsedRealtime is never meaningfully 0 at runtime, so the lastCheckTime == 0L sentinel holds.
+        val timeSinceLastCheck = SystemClock.elapsedRealtime() - lastCheckTime
 
         // First call (lastCheckTime = 0) or exceeded interval
         if (lastCheckTime == 0L || timeSinceLastCheck >= currentInterval) {
             L.i { "[MessageArchiveManager] Archive check triggered (${timeSinceLastCheck / 1000}s since last)" }
             archiveMessages()
-            lastCheckTime = System.currentTimeMillis()
+            lastCheckTime = SystemClock.elapsedRealtime()
         } else {
             L.d { "[MessageArchiveManager] Skip archive check, ${(currentInterval - timeSinceLastCheck) / 1000}s remaining" }
         }
@@ -127,8 +152,12 @@ class MessageArchiveManager @Inject constructor(
      * when new normal messages are archived.
      */
     private suspend fun archiveMessages() {
+        // Best-effort trusted-time anchor before deciding expiry (offline still proceeds on L2/L3 fallback).
+        serverTimeSyncer.ensureAnchored()
+
         val pageSize = 100L
-        val currentTimeMillis = System.currentTimeMillis()
+        // Trusted "now": immune to local wall-clock tampering once anchored.
+        val currentTimeMillis = ServerTimeProvider.nowMillis()
 
         val roomsNeedCheckClear = wcdb.room.getAllObjects(
             DBRoomModel.roomId.notEq(globalServices.myId)
@@ -177,45 +206,50 @@ class MessageArchiveManager @Inject constructor(
                     delay(100)
                 }
 
-                // Replace the archive system message when normal messages were archived
+                // Ensure a single archive system message exists when normal messages were archived
                 if (totalProcessedCount > 0) {
                     L.i { "[MessageArchiveManager] processed $totalProcessedCount normal messages for room ${room.roomId}" }
 
-                    // Delete old archive system messages to avoid duplicates
-                    wcdb.message.getAllObjects(
+                    // Create once, keep forever: an existing tombstone is never re-created
+                    val existingTombstone = wcdb.message.getAllObjects(
                         DBMessageModel.roomId.eq(room.roomId).and(DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY))
-                    ).forEach { message ->
-                        if (isArchiveExpiredSystemMessage(message)) {
-                            message.delete()
+                    ).firstOrNull { isArchiveExpiredSystemMessage(it) }
+
+                    if (existingTombstone != null) {
+                        // Safety net: re-anchor a tombstone that still carries a legacy sort key
+                        if (existingTombstone.systemShowTimestamp != MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL) {
+                            wcdb.message.updateValue(
+                                MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL,
+                                DBMessageModel.systemShowTimestamp,
+                                DBMessageModel.id.eq(existingTombstone.id)
+                            )
                         }
-                    }
+                    } else {
+                        // Earliest remaining message only drives readTime/expiresInSeconds; the sort key is the fixed sentinel
+                        val earliestMessage = wcdb.message.getFirstObject(
+                            DBMessageModel.roomId.eq(room.roomId),
+                            DBMessageModel.systemShowTimestamp.order(Order.Asc)
+                        )
 
-                    // Anchor the new archive message to the earliest remaining message
-                    val earliestMessage = wcdb.message.getFirstObject(
-                        DBMessageModel.roomId.eq(room.roomId),
-                        DBMessageModel.systemShowTimestamp.order(Order.Asc)
-                    )
+                        val systemShowTimestamp = MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL
 
-                    // Place it 1ms before the earliest message so it appears first
-                    val systemShowTimestamp = earliestMessage?.systemShowTimestamp?.minus(1)
-                        ?: System.currentTimeMillis()
+                        // Use the earliest message's readTime for consistent expiry calculation.
+                        // Fallback to current time if readTime = 0 (unread) to ensure it can be archived later.
+                        val readTime = earliestMessage?.readTime?.takeIf { it > 0 } ?: ServerTimeProvider.nowMillis()
 
-                    // Use the earliest message's readTime for consistent expiry calculation.
-                    // Fallback to current time if readTime = 0 (unread) to ensure it can be archived later.
-                    val readTime = earliestMessage?.readTime?.takeIf { it > 0 } ?: System.currentTimeMillis()
+                        // Inherit expiresInSeconds from earliest message, or fall back to room-level messageExpiry
+                        val expiresInSeconds = earliestMessage?.expiresInSeconds ?: (room.messageExpiry ?: 0L).toInt()
 
-                    // Inherit expiresInSeconds from earliest message, or fall back to room-level messageExpiry
-                    val expiresInSeconds = earliestMessage?.expiresInSeconds ?: (room.messageExpiry ?: 0L).toInt()
-
-                    L.i { "[MessageArchiveManager] creating archive message for room ${room.roomId}, timestamp: $systemShowTimestamp, readTime: $readTime, expiresInSeconds: $expiresInSeconds" }
-                    localMessageCreator.get().createEarlierMessagesExpiredMessage(
-                        room.roomId,
-                        room.roomType,
-                        systemShowTimestamp,
-                        readTime,
-                        expiresInSeconds
-                    ).let { message ->
-                        wcdb.message.insertObject(message)
+                        L.i { "[MessageArchiveManager] creating archive message for room ${room.roomId}, timestamp: $systemShowTimestamp, readTime: $readTime, expiresInSeconds: $expiresInSeconds" }
+                        localMessageCreator.get().createEarlierMessagesExpiredMessage(
+                            room.roomId,
+                            room.roomType,
+                            systemShowTimestamp,
+                            readTime,
+                            expiresInSeconds
+                        ).let { message ->
+                            wcdb.message.insertObject(message)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -229,9 +263,14 @@ class MessageArchiveManager @Inject constructor(
     /**
      * Build the WHERE condition for expired message deletion.
      *
+     * Arrival floor: readTime is peer-supplied (iOS/Desktop send their local wall-clock readAt), so a
+     * bogus-early value could delete a message before it has actually aged. Each readTime predicate is
+     * therefore ANDed with the same predicate on systemShowTimestamp (arrival), flooring the effective
+     * read time at the message's own arrival. No-op for correct data (readTime >= systemShowTimestamp).
+     *
      * Normal messages (readTime > 0):
-     * - readTime <= messageClearAnchor, OR
-     * - readTime + messageExpiry < currentTime
+     * - (readTime <= messageClearAnchor AND systemShowTimestamp <= messageClearAnchor), OR
+     * - (readTime + messageExpiry < now AND systemShowTimestamp + messageExpiry < now)
      *
      * Legacy messages (readTime = 0, fallback):
      * - When messageExpiry > 0 and systemShowTimestamp <= readPosition,
@@ -258,8 +297,11 @@ class MessageArchiveManager @Inject constructor(
             // Both messageClearAnchor and messageExpiry: check either condition
             messageClearAnchor > 0 && messageExpiryMillis > 0 -> {
                 val hasReadTime = DBMessageModel.readTime.gt(0)
+                // Arrival floor: AND each readTime predicate with the same predicate on arrival (systemShowTimestamp).
                 val clearAnchorCondition = DBMessageModel.readTime.le(messageClearAnchor)
+                    .and(DBMessageModel.systemShowTimestamp.le(messageClearAnchor))
                 val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
+                    .and(DBMessageModel.systemShowTimestamp.add(messageExpiryMillis).lt(currentTimeMillis))
                 val normalCondition = hasReadTime.and(clearAnchorCondition.or(expiryCondition))
 
                 if (legacyFallback != null) {
@@ -270,12 +312,17 @@ class MessageArchiveManager @Inject constructor(
             }
             // Only messageClearAnchor: no legacy fallback needed (clearAnchor is an explicit cutoff)
             messageClearAnchor > 0 -> {
-                baseCondition.and(DBMessageModel.readTime.gt(0)).and(DBMessageModel.readTime.le(messageClearAnchor))
+                // Arrival floor: a message that arrived after the anchor must not be anchor-cleared.
+                baseCondition.and(DBMessageModel.readTime.gt(0))
+                    .and(DBMessageModel.readTime.le(messageClearAnchor))
+                    .and(DBMessageModel.systemShowTimestamp.le(messageClearAnchor))
             }
             // Only messageExpiry: check time-based expiry
             messageExpiryMillis > 0 -> {
                 val hasReadTime = DBMessageModel.readTime.gt(0)
+                // Arrival floor: don't expire before arrival(systemShowTimestamp) + expiry.
                 val expiryCondition = DBMessageModel.readTime.add(messageExpiryMillis).lt(currentTimeMillis)
+                    .and(DBMessageModel.systemShowTimestamp.add(messageExpiryMillis).lt(currentTimeMillis))
                 val normalCondition = hasReadTime.and(expiryCondition)
 
                 if (legacyFallback != null) {

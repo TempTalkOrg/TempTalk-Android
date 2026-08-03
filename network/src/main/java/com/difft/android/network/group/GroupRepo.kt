@@ -46,15 +46,6 @@ interface GroupService {
     @POST("v1/groups/{gid}/members/{uid}")
     suspend fun changeMemberRole(@Path("gid") gid: String, @Path("uid") uid: String, @Body req: ChangeRolepReq): BaseResponse<Any>
 
-    @GET("v1/groups/invitation/{gid}")
-    suspend fun getInviteCode(@Path("gid") gid: String): BaseResponse<InviteCodeResp>
-
-    @GET("v1/groups/invitation/groupInfo/{inviteCode}")
-    suspend fun getGroupInfoByInviteCode(@Path("inviteCode") inviteCode: String): BaseResponse<GroupInfoByInviteCodeResp>
-
-    @PUT("v1/groups/invitation/join/{inviteCode}")
-    suspend fun joinGroupByInviteCode(@Path("inviteCode") inviteCode: String): BaseResponse<JoinGroupByInviteCodeResp>
-
     @PUT("v1/groups/{gid}/upgrade-to-encrypted")
     suspend fun upgradeToEncrypted(@Path("gid") gid: String, @Body req: UpgradeGroupToEncryptedReq): BaseResponse<GetGroupInfoResp>
 
@@ -137,18 +128,6 @@ constructor(
         return groupService.changeGroupSettings(gid, changeGroupSettingsReq)
     }
 
-    suspend fun getInviteCode(gid: String): BaseResponse<InviteCodeResp> {
-        return groupService.getInviteCode(gid)
-    }
-
-    suspend fun getGroupInfoByInviteCode(inviteCode: String): BaseResponse<GroupInfoByInviteCodeResp> {
-        return groupService.getGroupInfoByInviteCode(inviteCode)
-    }
-
-    suspend fun joinGroupByInviteCodeResp(inviteCode: String): BaseResponse<JoinGroupByInviteCodeResp> {
-        return groupService.joinGroupByInviteCode(inviteCode)
-    }
-
     suspend fun upgradeToEncrypted(gid: String, req: UpgradeGroupToEncryptedReq): BaseResponse<GetGroupInfoResp> {
         return groupService.upgradeToEncrypted(gid, req)
     }
@@ -198,7 +177,6 @@ data class ChangeGroupSettingsReq(
     val rejoin: Boolean? = null,
     val remindCycle: String? = null,
     val privateChat: Boolean? = null,
-    val linkInviteSwitch: Boolean? = null,
     val criticalAlert: Boolean? = null,
     val encryptedName: String? = null,
     val encryptedAvatar: String? = null,
@@ -304,35 +282,6 @@ data class ChangeSelfSettingsInGroupReq(
     val notification: Int? = null,
     val remark: String? = null,
     val useGlobal: Boolean?= null
-)
-
-data class InviteCodeResp(
-    val inviteCode: String
-)
-
-data class GroupInfoByInviteCodeResp(
-    val avatar: String?,
-    val invitationRule: Int,
-    val members: Any?,
-    val membersCount: Int,
-    val messageExpiry: Int,
-    val name: String?,
-    val version: Int
-) : java.io.Serializable
-
-data class JoinGroupByInviteCodeResp(
-    val anyoneRemove: Boolean,
-    val avatar: String,
-    val ext: Boolean,
-    val gid: String,
-    val invitationRule: Int,
-    val members: List<Member>,
-    val messageExpiry: Int,
-    val name: String,
-    val publishRule: Int,
-    val rejoin: Boolean,
-    val remindCycle: String,
-    val version: Int
 )
 
 data class GroupMemberBinding(

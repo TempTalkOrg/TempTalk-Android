@@ -76,7 +76,7 @@ class CallMessageCreator @Inject constructor(
                         }
                         groupCallUserPublicKeyInfos
                     } else{
-                        conversationManager.getPublicKeyInfos(listOf(forWhat.id))
+                        conversationManager.getPublicKeyInfos(listOf(forWhat.id, myUid))
                     }
             }
             else if (callActionType?.isInvite() == true && members?.isNotEmpty() == true) {
@@ -89,9 +89,12 @@ class CallMessageCreator @Inject constructor(
                 }
             }
         } else if (callType.isInstant()) {
-            publicKeyInfos = if(!members.isNullOrEmpty() || callUidList.isNotEmpty()){
-                if(callActionType?.isHangUp() == true) conversationManager.getPublicKeyInfos(callUidList) else conversationManager.getPublicKeyInfos(members?.let { members + listOf(myUid) } )
-            }else {
+            publicKeyInfos = if (callActionType?.isHangUp() == true) {
+                // 挂断始终同步给自己另一端：即使远端参会者已全部离开(callUidList 为空)，也要发给 myUid
+                conversationManager.getPublicKeyInfos(callUidList + listOf(myUid))
+            } else if (!members.isNullOrEmpty() || callUidList.isNotEmpty()) {
+                conversationManager.getPublicKeyInfos(members?.let { members + listOf(myUid) })
+            } else {
                 forWhat?.let {
                     conversationManager.updatePublicKeyInfoData(forWhat)
                     conversationManager.getPublicKeyInfos(forWhat)
@@ -155,9 +158,7 @@ class CallMessageCreator @Inject constructor(
 
                     CallActionType.HANGUP -> {
                         roomId?.firstOrNull()?.let {
-                            if (myUid != publicKeyInfo.uid) {
-                                this.hangup = hangup { this.roomId = it }
-                            }
+                            this.hangup = hangup { this.roomId = it }
                         }
                     }
 

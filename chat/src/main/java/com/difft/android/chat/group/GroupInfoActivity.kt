@@ -11,7 +11,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
+import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.GlobalNotificationType
@@ -32,7 +32,6 @@ import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.getSortLetter
 import com.difft.android.chat.databinding.ChatActivityGroupInfoBinding
-import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
 import com.difft.android.chat.setting.SaveToPhotosSettingsActivity
@@ -158,9 +157,6 @@ class GroupInfoActivity : BaseActivity() {
 
     @Inject
     lateinit var groupUtil: GroupUtil
-
-    @Inject
-    lateinit var inviteUtils: InviteUtils
 
     @Inject
     lateinit var groupRepo: GroupRepo
@@ -447,15 +443,6 @@ class GroupInfoActivity : BaseActivity() {
         binding.relNotification.setOnClickListener {
             GroupNotificationSettingsActivity.start(this, groupId)
         }
-
-//        if (groupInfo?.linkInviteSwitch == true) {
-//            binding.groupLinkContainer.visibility = View.VISIBLE
-//            binding.groupLinkContainer.setOnClickListener {
-//                getInviteCode(selfGroupInfo?.displayName ?: "", groupInfo?.name ?: "", groupInfo?.avatar)
-//            }
-//        } else {
-//            binding.groupLinkContainer.visibility = View.GONE
-//        }
 
         if (role == GROUP_ROLE_OWNER) {
             binding.relGroupManagement.visibility = View.VISIBLE
@@ -791,9 +778,10 @@ class GroupInfoActivity : BaseActivity() {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.clickable {
-                        onPicturePermissionForAvatar.launchMultiplePermission(
-                            PermissionUtil.picturePermissions
-                        )
+                        // Omit context → uses application default, avoiding capture of the
+                        // Activity context inside this composable clickable.
+                        // Open directly when media is already usable (full/partial); else request.
+                        onPicturePermissionForAvatar.launchMediaSelectionOrOpen { createResetAvatarPictureSelector() }
                     }
                 ) {
                     AndroidView(

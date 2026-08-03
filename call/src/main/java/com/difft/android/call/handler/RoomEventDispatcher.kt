@@ -54,6 +54,7 @@ import kotlinx.serialization.json.Json
 data class RoomEventHost(
     val showBarrageFn: (Participant, String, Int?) -> Unit,
     val setMicEnabledFn: (Boolean, Boolean, Boolean) -> Unit,
+    val setCameraEnabledFn: (Boolean) -> Unit,
     val resetNoBodySpeakCheckFn: () -> Unit,
     val sendHangUpBroadcastFn: (String) -> Unit,
     val stopRingToneAndTimeoutCheckFn: () -> Unit,
@@ -68,6 +69,7 @@ data class RoomEventHost(
         showBarrageFn(participant, message, type)
     fun setMicEnabled(enabled: Boolean, publishMuted: Boolean = false, isShowBarrage: Boolean = true) =
         setMicEnabledFn(enabled, publishMuted, isShowBarrage)
+    fun setCameraEnabled(enabled: Boolean) = setCameraEnabledFn(enabled)
     fun resetNoBodySpeakCheck() = resetNoBodySpeakCheckFn()
     fun sendHangUpBroadcast(roomId: String) = sendHangUpBroadcastFn(roomId)
     fun stopRingToneAndTimeoutCheck() = stopRingToneAndTimeoutCheckFn()
@@ -115,6 +117,18 @@ internal class RoomEventDispatcher(
 
     private var lastLocalPoorErrorTime: Long = 0L
     private var speakingWatchdogJob: Job? = null
+
+    /**
+     * Remote identities we've already surfaced a "mic on" barrage for, until they mute
+     * or genuinely leave. Deduplicates the open-mic barrage across its two triggers
+     * (first subscribe of an already-unmuted track in [onMicTrackSubscribed], and the
+     * mute→unmute transition in [onTrackUnmuted]) and — crucially — across every
+     * reconnect variant: a full reconnect, a manual server switch, or a staggered late
+     * re-subscribe all re-deliver `TrackSubscribed` for existing unmuted tracks with no
+     * `TrackUnmuted`, which would otherwise re-fire the barrage for everyone. Mutated only
+     * from the single serial event-collector coroutine, so a plain set is thread-safe.
+     */
+    private val remoteMicOnAnnounced = mutableSetOf<String>()
 
     fun startCollectingRoomEvents() {
         scope.launch {
@@ -179,7 +193,7 @@ internal class RoomEventDispatcher(
                 roomCtl.collectError(event.error)
             }
             is RoomEvent.DataReceived -> handleDataReceived(event)
-            is RoomEvent.ParticipantDisconnected -> onParticipantDisconnected()
+            is RoomEvent.ParticipantDisconnected -> onParticipantDisconnected(event.participant)
             is RoomEvent.ParticipantConnected -> onParticipantConnected(event.participant)
             is RoomEvent.Reconnected -> {
                 L.i { "[Call] RoomEventDispatcher room event reconnected." }
@@ -199,6 +213,7 @@ internal class RoomEventDispatcher(
             is RoomEvent.TrackUnmuted -> onTrackUnmuted(event)
             is RoomEvent.TrackSubscribed -> {
                 checkRemoteUserScreenShare(event.participant)
+                onMicTrackSubscribed(event)
                 if (event.publication.source == Track.Source.CAMERA && !event.publication.muted) {
                     participantManager.resortParticipants()
                 }
@@ -269,7 +284,10 @@ internal class RoomEventDispatcher(
         // unmutes the published track, ignoring publishMuted) yet keep the UI showing muted, while
         // a server switch still re-publishes the track as needed.
         val hasMicPublication = room.localParticipant.getTrackPublication(Track.Source.MICROPHONE) != null
-        L.i { "[Call] RoomEventDispatcher room event connected. hasMicPublication=$hasMicPublication" }
+        // Consume-on-use: only the first Connected of a manual-switch reconnect takes the restore
+        // path; later ICE-restart re-emits (tracks preserved) fall through to the normal branch.
+        val isManualSwitch = connectionCoordinator.consumeManualSwitchReconnecting()
+        L.i { "[Call] RoomEventDispatcher room event connected. hasMicPublication=$hasMicPublication manualSwitch=$isManualSwitch" }
         host.onFeedbackIdentityResolved(
             userSid = room.localParticipant.sid.value,
             userIdentity = room.localParticipant.identity?.value,
@@ -277,18 +295,45 @@ internal class RoomEventDispatcher(
         )
         callDataManager.updateCallingState(rid, isInCalling = true)
         if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
-            if (!hasMicPublication) host.setMicEnabled(true)
-            when {
-                room.remoteParticipants.size > 1 -> {
-                    host.switchToInstantCall()
-                    host.handleConnectedState()
+            if (isManualSwitch) {
+                // The call is already established; a manual switch is NOT a fresh outbound call,
+                // so re-apply the user's media intent rather than the first-connect bring-up.
+                restoreMediaAfterServerSwitch()
+                // Cancel any timeout the teardown armed: the old session emits a transient
+                // ParticipantDisconnected for the still-present remote (see onParticipantDisconnected),
+                // and on reconnect the remote returns via initial state sync (not a
+                // ParticipantConnected event), so nothing else would cancel it — it would fire
+                // "对方未接听" ~60s later and end a live call. Clear it, then re-decide from who is
+                // actually present after reconnect.
+                timeoutMonitor.cancelIfActive()
+                when {
+                    room.remoteParticipants.size > 1 -> {
+                        host.switchToInstantCall()
+                        host.handleConnectedState()
+                    }
+                    room.remoteParticipants.size == 1 -> host.handleConnectedState()
+                    // Narrow race: the remote genuinely left during the disconnect/reconnect
+                    // window (only self remains). Don't mark the call CONNECTED with nobody in
+                    // it — arm the 1v1 timeout so the empty call is detected and ended, matching
+                    // the first-connect branch.
+                    else -> timeoutMonitor.start1V1Timeout(rid)
                 }
-                room.remoteParticipants.size == 1 -> host.handleConnectedState()
-                else -> timeoutMonitor.start1V1Timeout(rid)
+            } else {
+                if (!hasMicPublication) host.setMicEnabled(true)
+                when {
+                    room.remoteParticipants.size > 1 -> {
+                        host.switchToInstantCall()
+                        host.handleConnectedState()
+                    }
+                    room.remoteParticipants.size == 1 -> host.handleConnectedState()
+                    else -> timeoutMonitor.start1V1Timeout(rid)
+                }
             }
         } else {
             host.handleConnectedState()
-            if (!hasMicPublication) {
+            if (isManualSwitch) {
+                restoreMediaAfterServerSwitch()
+            } else if (!hasMicPublication) {
                 room::ttCallResp.get()?.let { response ->
                     val autoPublishSilenceAudio = response.callOptions.autoPublishSilenceAudio
                     L.i { "[call] RoomEventDispatcher room event connected, autoPublishSilenceAudio=$autoPublishSilenceAudio" }
@@ -297,6 +342,36 @@ internal class RoomEventDispatcher(
             }
         }
         refreshRoomMetadata()
+    }
+
+    /**
+     * A user-initiated server-node / connection-mode switch does a full disconnect+reconnect
+     * (see [CallConnectionCoordinator.connectToRoomManualSwitch]), which destroys the local
+     * mic/camera publications. The reconnect starts a fresh session with no tracks, so the
+     * control toggles — driven by `roomCtl.micEnabled/cameraEnabled`, which the switch path
+     * never resets — would keep showing "on" while nothing is actually published/captured.
+     *
+     * Re-apply the user's pre-switch intent (read live from `roomCtl`). Only enable when desired is
+     * `true`: a self-muted user is left muted (never force-unmuted), matching the guard the
+     * first-connect bring-up relies on. For a muted group participant, still publish silence when
+     * the server requests it, preserving first-connect presence semantics. Invoked only on the
+     * single manual-switch reconnect (flag is consumed in `onConnected`), so it never runs on an
+     * ICE-restart re-emit where tracks are preserved.
+     */
+    private fun restoreMediaAfterServerSwitch() {
+        val desiredMic = roomCtl.micEnabled.value
+        val desiredCamera = roomCtl.cameraEnabled.value
+        L.i { "[Call] RoomEventDispatcher restore media after server switch mic=$desiredMic camera=$desiredCamera" }
+        if (desiredMic) {
+            host.setMicEnabled(true, isShowBarrage = false)
+        } else if (host.getCurrentCallType() != CallType.ONE_ON_ONE.type) {
+            room::ttCallResp.get()?.let { response ->
+                if (response.callOptions.autoPublishSilenceAudio) {
+                    host.setMicEnabled(true, publishMuted = true, isShowBarrage = false)
+                }
+            }
+        }
+        if (desiredCamera) host.setCameraEnabled(true)
     }
 
     private fun onParticipantConnected(participant: Participant) {
@@ -310,7 +385,23 @@ internal class RoomEventDispatcher(
         participantManager.updateAwaitingJoinInvitees()
     }
 
-    private fun onParticipantDisconnected() {
+    private fun onParticipantDisconnected(participant: Participant) {
+        // A manual server switch / failover reconnect tears the old session down, which emits a
+        // transient ParticipantDisconnected for the still-present remote. Arming the "participant
+        // left" timeout here would fire "对方未接听" after reconnect, because the remote comes back
+        // via initial state sync (not a ParticipantConnected event) and the timer is never
+        // cancelled. Ignore disconnects only during the transient switch/reconnect window
+        // (SWITCHING_SERVER status / failover retry) — NOT via the sticky isManualSwitchReconnecting
+        // flag, which stays set after the switch and would swallow a genuine later remote leave.
+        if (roomCtl.callStatus.value == CallStatus.SWITCHING_SERVER ||
+            connectionCoordinator.isRetryUrlConnecting
+        ) {
+            L.i { "[Call] RoomEventDispatcher ignore ParticipantDisconnected during switch/reconnect" }
+            return
+        }
+        // Genuine leave (not a transient switch disconnect): drop any mic-on dedup entry so a
+        // later rejoin with the same identity announces its mic again.
+        participant.identity?.value?.let { remoteMicOnAnnounced.remove(it) }
         timeoutMonitor.onParticipantDisconnected(host.getCurrentCallType() == CallType.ONE_ON_ONE.type)
     }
 
@@ -320,6 +411,8 @@ internal class RoomEventDispatcher(
             event.publication.subscribed &&
             event.participant is RemoteParticipant
         ) {
+            // Mic-off ends this remote's on-episode: clear so the next mic-on barrages again.
+            event.participant.identity?.value?.let { remoteMicOnAnnounced.remove(it) }
             if (shouldShowBarrageForRemoteParticipant(event.participant)) {
                 host.showBarrage(event.participant, getString(R.string.call_barrage_message_close_mic))
             }
@@ -328,13 +421,44 @@ internal class RoomEventDispatcher(
 
     private fun onTrackUnmuted(event: RoomEvent.TrackUnmuted) {
         if (event.publication.source == Track.Source.MICROPHONE && event.participant is RemoteParticipant) {
-            if (shouldShowBarrageForRemoteParticipant(event.participant)) {
+            // Dedup with the first-subscribe barrage (see [remoteMicOnAnnounced]): a reconnect
+            // may re-deliver an unmute for an already-announced remote, which must not re-fire.
+            // Check shouldShow first (matching onMicTrackSubscribed) so a filtered-out identity
+            // is never marked "announced" as a side effect, which would suppress it forever.
+            val identity = event.participant.identity?.value
+            if (shouldShowBarrageForRemoteParticipant(event.participant) &&
+                (identity == null || remoteMicOnAnnounced.add(identity))
+            ) {
                 host.showBarrage(event.participant, getString(R.string.call_barrage_message_open_mic))
             }
         }
         if (event.participant is RemoteParticipant && event.publication.source == Track.Source.CAMERA) {
             participantManager.resortParticipants()
         }
+    }
+
+    /**
+     * A remote's first mic-ON has no mute→unmute transition: the track is subscribed
+     * already-unmuted, so [onTrackUnmuted] never fires for it and the open-mic barrage
+     * would be lost (mic-OFF and later ON still work via mute events). Emit it here for
+     * a genuine new subscription.
+     *
+     * Dedup via [remoteMicOnAnnounced] rather than a connection-status guard: the status
+     * is unreliable across reconnect variants (a manual server switch re-subscribes under
+     * SWITCHING_SERVER/RECONNECTED, and a staggered late re-subscribe lands after the
+     * pending-resubscription window closes), so a status check would still let those
+     * re-subscribes spam a false open-mic barrage. The dedup set stays populated across
+     * reconnects, so re-subscribing an already-announced remote is a no-op; remotes
+     * subscribed while muted get their barrage later via [onTrackUnmuted].
+     */
+    private fun onMicTrackSubscribed(event: RoomEvent.TrackSubscribed) {
+        if (event.publication.source != Track.Source.MICROPHONE) return
+        if (event.publication.muted) return
+        if (event.participant !is RemoteParticipant) return
+        if (!shouldShowBarrageForRemoteParticipant(event.participant)) return
+        val identity = event.participant.identity?.value ?: return
+        if (!remoteMicOnAnnounced.add(identity)) return
+        host.showBarrage(event.participant, getString(R.string.call_barrage_message_open_mic))
     }
 
     private fun shouldShowBarrageForRemoteParticipant(participant: Participant): Boolean {

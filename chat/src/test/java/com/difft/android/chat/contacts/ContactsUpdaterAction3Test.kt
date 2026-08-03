@@ -4,7 +4,15 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.websocket.api.messages.Data
 import com.difft.android.websocket.api.messages.Member
+import com.difft.android.websocket.api.messages.PublicConfigs
 import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.tencent.wcdb.winq.Expression
+import io.mockk.slot
+import org.difft.app.database.cache.OfficialAccountCache
+import org.difft.app.database.models.ContactorModel
+import org.difft.app.database.models.PublicAccountType
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import io.mockk.clearMocks
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -90,7 +98,7 @@ class ContactsUpdaterAction3Test {
         }
     }
 
-    private fun member(number: String, action: Int): Member = Member(
+    private fun member(number: String, action: Int, publicConfigs: PublicConfigs? = null): Member = Member(
         uid = number,
         customUid = null,
         displayName = "n-$number",
@@ -102,7 +110,7 @@ class ContactsUpdaterAction3Test {
         friend = false,
         name = "n-$number",
         number = number,
-        publicConfigs = null,
+        publicConfigs = publicConfigs,
         privateConfigs = null,
     )
 
@@ -152,5 +160,59 @@ class ContactsUpdaterAction3Test {
         // The conversation must be PRESERVED on restore — action=0 never deletes the room itself,
         // and clearWeakOnFriendRestored (vs removeWeak) is the room-preserving entry by contract.
         verify(exactly = 0) { dbMessageStore.removeRoomAndMessages("peer-z") }
+    }
+
+    // ---- P1-04 action=0 publicAccountType carry-forward (ARCH-CRIT-1) --------------------
+    // These invoke the real private processContactNotifyMessage, whose action=0 branch reads the
+    // prior row via DBContactorModel.id.eq(...) (CppObject native lib) → instrumentation only.
+
+    // T8b — action=0 RESTORE of an already-OFFICIAL id whose notify omits publicAccountType must
+    // carry the prior type forward (not demote to NORMAL). The handler reads the prior row via
+    // DBContactorModel.id.eq(...) (CppObject native lib) → @Ignore (instrumentation only). The slot
+    // capture pins the inserted publicAccountType so the assertion is meaningful under instrumentation.
+    // The pure carry-forward logic itself is fully pinned on the JVM by ResolvePublicAccountTypeTest.
+    @Test
+    @Ignore("action=0 branch reads prior row + builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
+    fun `T8b action 0 restore with null publicAccountType keeps prior OFFICIAL type`() = runTest {
+        val prior = ContactorModel().also { it.id = "peer-official"; it.publicAccountType = PublicAccountType.OFFICIAL }
+        every { wcdb.contactor.getFirstObject(any<Expression>()) } returns prior
+        val inserted = slot<ContactorModel>()
+        every { wcdb.contactor.insertObject(capture(inserted)) } returns Unit
+
+        invokeProcess(notify(listOf(member("peer-official", action = 0, publicConfigs = PublicConfigs(publicAccountType = null)))))
+
+        // Carry-forward: absent notify field keeps the prior OFFICIAL type (no demote).
+        assertEquals(PublicAccountType.OFFICIAL, inserted.captured.publicAccountType)
+    }
+
+    // T8c — action=0 add of a genuinely-new id (no prior row) with an absent field defaults to NORMAL.
+    @Test
+    @Ignore("action=0 branch reads prior row + builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
+    fun `T8c action 0 genuinely-new id with null field defaults to NORMAL`() = runTest {
+        every { wcdb.contactor.getFirstObject(any<Expression>()) } returns null
+        val inserted = slot<ContactorModel>()
+        every { wcdb.contactor.insertObject(capture(inserted)) } returns Unit
+
+        invokeProcess(notify(listOf(member("peer-new", action = 0, publicConfigs = PublicConfigs(publicAccountType = null)))))
+
+        assertEquals(PublicAccountType.NORMAL, inserted.captured.publicAccountType)
+    }
+
+    // T8d — action=0 insert THROWS → the official-account cache membership must stay unchanged
+    // (the put now runs inside the try, only after a successful insert). Handler builds
+    // DBContactorModel.id.eq (CppObject native lib) → @Ignore (instrumentation only).
+    @Test
+    @Ignore("action=0 branch builds DBContactorModel.id.eq (CppObject native lib); instrumentation only.")
+    fun `T8d action 0 insert failure leaves official cache unchanged`() = runTest {
+        OfficialAccountCache.clear()
+        OfficialAccountCache.put("peer-fail", true)   // pre-existing OFFICIAL membership
+        every { wcdb.contactor.getFirstObject(any<Expression>()) } returns null
+        every { wcdb.contactor.insertObject(any<ContactorModel>()) } throws RuntimeException("wcdb insert failed")
+
+        // notify would resolve NORMAL; a pre-fix put(...,false) would wrongly drop membership.
+        invokeProcess(notify(listOf(member("peer-fail", action = 0, publicConfigs = PublicConfigs(publicAccountType = null)))))
+
+        assertTrue(OfficialAccountCache.contains("peer-fail"))
+        OfficialAccountCache.clear()
     }
 }

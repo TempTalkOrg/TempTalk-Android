@@ -50,8 +50,24 @@ internal fun CallMessageHandler.handleCallingMessage(
 
     appScope.launch(Dispatchers.IO) {
         try {
-            val response = callService.checkCall((globalServices.userManager.getUserData()?.microToken ?: ""), roomId)
+            val callerId = content.calling?.caller ?: message.senderId
+            if (envelope.source != callerId) {
+                L.e { "[Call] handleCallMessage, source is not callerId" }
+                return@launch
+            }
 
+            val callInfo = resolveCallInfo(content.calling, callerId)
+
+            // Persist the chat-side call record BEFORE checkCall — independent of whether the call
+            // is still live. A call started while this device was offline may already have ended by
+            // the time the backlog is drained (checkCall then returns fail/userStopped); we still
+            // want the "X called you / started a call" trace + unread red dot. checkCall below only
+            // gates the LIVE-call handling (active-call list + incoming ring UI).
+            if (content.calling.createCallMsg) {
+                handleCallTextMessage(envelope, content, callInfo)
+            }
+
+            val response = callService.checkCall((globalServices.userManager.getUserData()?.microToken ?: ""), roomId)
             if (response.status != CallMessageHandler.RESPONSE_STATUS_SUCCESS ||
                 response.data?.userStopped == true
             ) {
@@ -61,7 +77,7 @@ internal fun CallMessageHandler.handleCallingMessage(
 
             L.i { "[Call] handleCallMessage, checkCall success" }
 
-            processCallingMessage(message, envelope, content, roomId, response.data)
+            handleCallData(roomId, callInfo, envelope, response.data, message.senderId, content)
         } catch (error: CancellationException) {
             // Preserve structured concurrency — never swallow coroutine cancellation.
             throw error
@@ -69,28 +85,6 @@ internal fun CallMessageHandler.handleCallingMessage(
             L.e { "[Call] handleCallMessage, checkCall fail:${error.stackTraceToString()}" }
         }
     }
-}
-
-internal suspend fun CallMessageHandler.processCallingMessage(
-    message: SignalServiceDataClass,
-    envelope: SignalServiceProtos.Envelope,
-    content: SignalServiceProtos.CallMessage,
-    roomId: String,
-    checkCallData: RoomState?,
-) {
-    val callerId = content.calling?.caller ?: message.senderId
-
-    if (envelope.source != callerId) {
-        L.e { "[Call] handleCallMessage, checkCall source is not callerId" }
-        return
-    }
-
-    val callInfo = resolveCallInfo(content.calling, callerId)
-    if (content.calling.createCallMsg) {
-        handleCallTextMessage(envelope, content, callInfo)
-    }
-
-    handleCallData(roomId, callInfo, envelope, checkCallData, message.senderId, content)
 }
 
 internal suspend fun CallMessageHandler.resolveCallInfo(

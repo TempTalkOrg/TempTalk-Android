@@ -110,15 +110,17 @@
                 android:background="@drawable/chat_voice_pill_bg_gray"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:paddingHorizontal="24dp">
+                android:paddingHorizontal="12dp">
 
                 <androidx.appcompat.widget.AppCompatTextView
                     android:id="@+id/tv_effect_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:textColor="@color/white"
                     android:textSize="14sp"
-                    tools:text="🐿️ Add effect" />
+                    tools:text="✨ Voice Effect" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

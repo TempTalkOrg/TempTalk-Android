@@ -2,10 +2,8 @@ package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.FilePathManager
 import com.difft.android.chat.media.FavoriteEncryptedAttachmentProvider
 import com.difft.android.chat.util.FileEncryptionUtil
-import com.difft.android.chat.cryptonew.EncryptionDataManager
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
 import com.difft.android.network.BaseResponse
@@ -15,16 +13,13 @@ import com.difft.android.network.responses.FavoriteItemMeta
 import com.difft.android.network.responses.FavoritesPutRequest
 import com.difft.android.network.responses.FavoritesResponse
 import com.difft.android.chat.gif.favorite.FavoriteSyncRepository.Companion.toModel
-import com.difft.android.chat.gif.GifSendInput
-import com.difft.android.chat.gif.GifSendUseCase
-import kotlinx.coroutines.CoroutineScope
+import com.difft.android.chat.gif.favorite.FavoriteSyncRepository.Companion.toPendingSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.FavoriteGifModel
 import java.io.File
-import java.util.concurrent.atomic.AtomicLong
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -65,25 +60,15 @@ class FavoriteWriteRepository @Inject constructor(
     private val syncRepo: FavoriteSyncRepository,
     private val keyRepo: FavoriteKeyRepo,
     private val assetUploader: FavoriteAssetUploader,
-    private val encryptionDataManager: EncryptionDataManager,
     private val userManager: UserManager,
-    private val gifSendUseCase: GifSendUseCase,
-    @param:AppCoroutineScope private val appScope: CoroutineScope
+    private val keyLifecycle: FavoriteKeyLifecycle,
+    // dagger.Lazy breaks the writeRepo <-> optimisticWriter cycle: optimisticWriter injects writeRepo
+    // for the CAS core (putWithCas / refavorite); writeRepo only reaches back for the flush delegate.
+    private val optimisticWriter: dagger.Lazy<FavoriteOptimisticWriter>
 ) {
     private val favoritesUrl: String get() = urlManager.gifs + "v1/gifs/favorites"
     // The `/gifs/` route requires token auth (JWT/microToken); the Basic baseAuth fallback gets 401.
     private fun token(): String = userManager.getUserData()?.microToken ?: ""
-
-    // Monotonic placeholder seq so optimistic items sort to the very front (highest first).
-    private val optimisticSeq = AtomicLong(0L)
-
-    // tempHashes with a resolveAndConfirm in flight. favoriteOptimistic launches one on appScope;
-    // flushPendingFavorites (on a fast favorites-tab open) sees the still-pending placeholder and
-    // would launch a SECOND for the same tempHash — duplicate download + trans-store + CAS PUT (and a
-    // possible CAS conflict/retry) for the same item. A concurrent set skips the redundant second run.
-    private val resolvingTempHashes = java.util.Collections.newSetFromMap(
-        java.util.concurrent.ConcurrentHashMap<String, Boolean>()
-    )
 
     /**
      * Favorite a gif. Optimistically caches the item (pending=true, shown immediately), trans-stores
@@ -91,13 +76,16 @@ class FavoriteWriteRepository @Inject constructor(
      * optimistic row is backfilled with the server listVersion and pending=false.
      */
     suspend fun favorite(file: File, width: Int, height: Int): FavResult {
-        // 0. Cap pre-check (confirm-first): if already at the limit, surface CapReached so the UI can
-        //    ask the user before evicting. Done BEFORE trans-store to avoid a wasted upload on cancel.
-        //    onEvictOldest only removes the oldest; the ViewModel re-runs the favorite afterwards.
-        if (syncRepo.confirmedRecords().size >= MAX_FAVORITES) {
+        // 0. Cap pre-check (confirm-first): surface CapReached BEFORE trans-store (no wasted upload on
+        //    cancel). Capture confirmedRecords ONCE for both the size check and the oldest eviction
+        //    target (§12.5#9); onEvictOldest only removes the oldest, the ViewModel re-runs the favorite.
+        val confirmed = syncRepo.confirmedRecords()
+        if (confirmed.size >= MAX_FAVORITES) {
+            val oldestFileHash = confirmed.minByOrNull { it.addedListVersion }?.attachment?.fileHash
             return FavResult.CapReached(onEvictOldest = {
-                syncRepo.confirmedRecords().minByOrNull { it.addedListVersion }
-                    ?.let { unfavorite(it.attachment.fileHash) }
+                // Evict via the optimistic tombstone unfavorite (offline-safe + instant). Lazy avoids the
+                // writeRepo <-> optimisticWriter Hilt cycle.
+                oldestFileHash?.let { optimisticWriter.get().unfavorite(it) }
             })
         }
 
@@ -108,13 +96,14 @@ class FavoriteWriteRepository @Inject constructor(
         //     a download round-trip (FavoriteGifLoader keys the cache by attachmentId).
         seedFavoritesCache(file, pointer.id, pointer.key)
 
-        // 2. Optimistic cache row (sorts to the top; pending until CAS confirms).
-        val placeholderVersion = Long.MAX_VALUE - optimisticSeq.getAndIncrement()
+        // 2. Optimistic cache row (sorts to the top; pending until CAS confirms). nextTopVersion() is a
+        //    monotonically INCREASING key on a high base, so the newest add sorts to the very top.
+        val placeholderVersion = syncRepo.nextTopVersion()
         syncRepo.upsert(pointer.toPendingModel(placeholderVersion))
 
         // 3. Ensure favKey (unwrap-first). If it cannot be established (e.g. identity not ready),
         //    keep the optimistic row pending and let a later favorites-tab open flush it.
-        val firstCreate = ensureFavKey()
+        val firstCreate = keyLifecycle.ensureFavKey()
         if (!keyRepo.hasKey()) {
             L.i { "[FavoriteWrite] favorite kept pending (no favKey) fileHash=${pointer.fileHash}" }
             return FavResult.SyncDeferred
@@ -133,7 +122,7 @@ class FavoriteWriteRepository @Inject constructor(
         //    it (first-create, or a prior first-create whose upload failed), so it self-heals.
         val record = FavoriteRecord(pointer, syncRepo.cachedListVersion)
         return try {
-            val newVersion = putWithCas(FavoriteAction.FAVORITE, record, wrappedFavKey = wrappedFavKeyForPut(firstCreate))
+            val newVersion = putWithCas(FavoriteAction.FAVORITE, record, wrappedFavKey = keyLifecycle.wrappedFavKeyForPut(firstCreate))
             // Backfill the optimistic row with the server-arbitrated listVersion + confirm.
             syncRepo.upsert(pointer.toConfirmedModel(newVersion))
             FavResult.Ok
@@ -151,159 +140,95 @@ class FavoriteWriteRepository @Inject constructor(
     }
 
     /**
-     * Optimistic panel/search favorite. Returns immediately after inserting a placeholder pending row
-     * (top of the list, shown instantly + toast). The real work — download the preview, trans-store,
-     * CAS PUT — runs on [appScope] so it survives the panel/fragment closing.
+     * Sync a pending RE-FAVORITE (a row [FavoriteSyncRepository.markPendingRefavorite] turned pending,
+     * keeping its attachment): CAS a FAVORITE to bump it to the top server-side, then confirm it back to
+     * a normal row. Offline / transient failure LEAVES it pending so flushPendingFavorites retries it
+     * (its None-source branch runs the same CAS) — this is what makes an offline re-favorite durable
+     * instead of being reverted by the next pull. Serialized on casMutex by the caller.
+     */
+    suspend fun reconfirm(fileHash: String) {
+        if (!keyRepo.hasKey()) return // stays pending; a later flush (with a key) retries
+        // Keyed single-row read: the pending re-favorite row carries the bare fileHash + its attachment.
+        val row = syncRepo.firstByFileHash(fileHash)?.takeIf { it.pending && !it.attachmentId.isNullOrEmpty() } ?: return
+        val record = with(FavoriteSyncRepository.Companion) { row.toRecord() }
+        // Pull the current list + version before the CAS (replaceConfirmedCache PRESERVES pending rows,
+        // so this row survives the pull); applyAction re-bumps it to the top of the blob.
+        syncRepo.pullAndDecrypt()
+        try {
+            val newVersion = putWithCas(FavoriteAction.FAVORITE, record, wrappedFavKey = keyLifecycle.wrappedFavKeyForPut())
+            syncRepo.upsert(record.attachment.toConfirmedModel(newVersion))
+        } catch (e: FavoritePermanentRejectException) {
+            // Never going to succeed: confirm it back to a normal row (drop the pending flag) at the
+            // server's current version so it doesn't linger as a stuck pending row. The top-bump is lost
+            // but the favorite itself remains.
+            L.w { "[FavoriteWrite] reconfirm permanently rejected fileHash=$fileHash: ${e.message}" }
+            syncRepo.upsert(record.attachment.toConfirmedModel(syncRepo.cachedListVersion))
+        } catch (e: CasExhaustedException) {
+            L.w { "[FavoriteWrite] reconfirm CAS exhausted, kept pending fileHash=$fileHash" }
+        } catch (e: IOException) {
+            // Offline / transient: KEEP it pending; flushPendingFavorites retries it once back online.
+            L.w { "[FavoriteWrite] reconfirm transient failure, kept pending fileHash=$fileHash: ${e.message}" }
+        }
+    }
+
+    /**
+     * Sync an already-tombstoned (optimistically-unfavorited) confirmed favorite to the server: CAS
+     * PUT (action=unfavorite) and, on success, hard-delete the local tombstone + its ciphertext. The
+     * OPTIMISTIC state is now the tombstone (set by [FavoriteOptimisticWriter.unfavorite] before this
+     * runs), so — unlike the old eager unfavorite — this does NO local remove up front. Offline /
+     * transient failure KEEPS the tombstone (hidden locally, excluded from cap + blob); the next
+     * favorites-tab open flush retries it. This is the fix for the original silent-fail bug: the local
+     * hide already happened, and the network step here can throw without losing the removal.
      *
-     * This OWNS the placeholder lifecycle (it does NOT call [favorite], which would insert a SECOND
-     * pending row keyed by the real fileHash → a duplicate). On success it atomically swaps the
-     * placeholder for the confirmed real-fileHash row; on permanent reject / error it silently rolls
-     * the placeholder back; on transient CAS exhaustion it leaves the placeholder pending so
-     * [flushPendingFavorites] retries it.
+     * MUST run under the caller's casMutex (all callers wrap it): the two tombstone re-checks below only
+     * hold against a concurrent re-favorite because that re-favorite's CAS is serialized on the same
+     * mutex. The re-checks re-derive intent from the CURRENT tombstone flag — a re-favorite that cleared
+     * the tombstone (before or during our network round-trip) means "keep the row", so we abort / skip
+     * the hard-delete rather than delete a row the user just re-added.
      */
-    suspend fun favoriteOptimistic(giphyId: String, previewUrl: String, width: Int, height: Int) {
-        val tempHash = "giphy:$giphyId"
-        // 1. Placeholder shown immediately (survives page close + refresh; never wiped by a pull).
-        syncRepo.upsertPlaceholder(tempHash, previewUrl, width, height)
-        // 2. Real work in the background (app-scoped, so closing the panel doesn't cancel it).
-        appScope.launch {
-            resolveAndConfirm(tempHash, previewUrl, width, height)
-        }
-    }
-
-    /**
-     * Background body of an optimistic favorite (also reused to flush a placeholder pending row):
-     * resolve the preview (cache hit or download) → trans-store → ensure favKey → reconcile →
-     * CAS PUT. On success swap the placeholder for the confirmed row; on permanent reject / error
-     * roll it back; on CAS exhaustion leave it pending for a later flush.
-     */
-    private suspend fun resolveAndConfirm(
-        tempHash: String,
-        previewUrl: String,
-        width: Int,
-        height: Int
-    ) {
-        // Coalesce concurrent runs for the same placeholder: favoriteOptimistic's appScope task and a
-        // flushPendingFavorites on a fast favorites-tab open would otherwise both resolve/upload/PUT
-        // the same tempHash. add() returns false if one is already in flight — skip the duplicate.
-        if (!resolvingTempHashes.add(tempHash)) {
-            L.i { "[FavoriteWrite] optimistic resolve already in flight, skipping duplicate tempHash=$tempHash" }
-            return
-        }
-        try {
-            val uri = gifSendUseCase.resolveSendable(GifSendInput.FromUrl(previewUrl, width, height))
-            val realFile = File(uri.path ?: throw IllegalStateException("resolved uri has no path"))
-            // Trans-store (account-level encrypted attachment) + seed its ciphertext cache so the
-            // confirmed cell renders without a re-download.
-            val pointer = assetUploader.transStore(realFile, width, height)
-            seedFavoritesCache(realFile, pointer.id, pointer.key)
-            // Ensure the favKey (unwrap-first / first-create). If it can't be established, leave the
-            // placeholder pending — a later favorites-tab open flushes it.
-            val firstCreate = ensureFavKey()
-            if (!keyRepo.hasKey()) {
-                L.i { "[FavoriteWrite] optimistic kept pending (no favKey) tempHash=$tempHash" }
-                return
-            }
-            // Pull the current server list + version right before the CAS (see favorite()).
-            if (!firstCreate) syncRepo.pullAndDecrypt()
-            val record = FavoriteRecord(pointer, syncRepo.cachedListVersion)
-            try {
-                val newVersion = putWithCas(FavoriteAction.FAVORITE, record, wrappedFavKey = wrappedFavKeyForPut(firstCreate))
-                // Swap: delete placeholder + upsert the confirmed real-fileHash row atomically. The
-                // server-arbitrated newVersion is the highest (re-favorite bumps to the top via
-                // applyAction), so the row stays on top and won't reorder on the next pull. dedup: if a
-                // row for this real fileHash already existed, insertOrReplace keeps a single copy.
-                val confirmed = FavoriteRecord(pointer, newVersion).toModel().apply { pending = false }
-                if (!syncRepo.confirmPlaceholder(tempHash, confirmed)) {
-                    // The user unfavorited the placeholder while this background write was in flight, so
-                    // the swap was skipped (no local resurrection). The server FAVORITE PUT above already
-                    // landed, though, so issue a compensating server-side unfavorite — otherwise the
-                    // removed gif reappears on the next pull / on other devices. Driven straight from the
-                    // pointer (there is no local cached row to look up: the placeholder is gone and the
-                    // confirmed row was intentionally not inserted).
-                    L.i { "[FavoriteWrite] optimistic confirm skipped (unfavorited mid-flight), compensating unfavorite tempHash=$tempHash fileHash=${pointer.fileHash}" }
-                    // The ciphertext seeded above (keyed by pointer.id) now has no cache row referencing
-                    // it (the confirmed row was intentionally not inserted), so it would leak on disk —
-                    // delete it. Best-effort.
-                    runCatching { FavoriteEncryptedAttachmentProvider.encryptedFile(pointer.id).delete() }
-                    compensateUnfavorite(pointer)
-                }
-            } catch (e: FavoritePermanentRejectException) {
-                L.w { "[FavoriteWrite] optimistic permanently rejected, rolled back tempHash=$tempHash: ${e.message}" }
-                syncRepo.removeByTempHash(tempHash)
-            } catch (e: CasExhaustedException) {
-                // Transient: leave the placeholder pending; flushPendingFavorites retries it.
-                L.w { "[FavoriteWrite] optimistic CAS exhausted, kept placeholder tempHash=$tempHash" }
-            }
-        } catch (e: Exception) {
-            // Transient failure (offline download / trans-store / pull, etc.): KEEP the placeholder
-            // pending — a later favorites-tab open flushes it, so an offline favorite still syncs once
-            // back online. A permanent SERVER reject is the inner catch above (rolled back there); this
-            // path only bounds transient failures, capped by the pendingSince TTL in flushPendingFavorites
-            // so it can't linger forever as a zombie that shows locally but never reaches the server.
-            L.w { "[FavoriteWrite] optimistic favorite deferred (kept pending) tempHash=$tempHash: ${e.stackTraceToString()}" }
-        } finally {
-            resolvingTempHashes.remove(tempHash)
-        }
-    }
-
-    /** Unfavorite by fileHash: optimistic remove, then CAS PUT (action=unfavorite). */
-    suspend fun unfavorite(fileHash: String) {
-        val existing = syncRepo.allCached().firstOrNull { it.fileHash == fileHash } ?: return
-        // Pending placeholder (optimistic panel/search favorite, not yet uploaded): it was never on the
-        // server, so there is nothing to CAS-unfavorite — a record built from its empty attachmentId/key
-        // and temp "giphy:<id>" fileHash would be a malformed no-op PUT. Just drop it locally. If its
-        // background resolveAndConfirm is still in flight, that task's confirmPlaceholder finds the
-        // placeholder gone and issues a compensating server unfavorite once its FAVORITE PUT lands.
-        if (existing.pending && existing.attachmentId.isNullOrEmpty()) {
-            syncRepo.removeByTempHash(fileHash)
-            L.i { "[FavoriteWrite] unfavorite pending placeholder (local-only) tempHash=$fileHash" }
-            return
-        }
+    suspend fun syncUnfavorite(record: FavoriteRecord) {
+        val fileHash = record.attachment.fileHash
+        // No key to CAS — tombstone waits (hidden locally); flushPendingFavorites syncs it once a key
+        // exists. Do NOT hard-delete here: the server still holds the item, so a later pull would need
+        // the tombstone to keep it hidden.
         if (!keyRepo.hasKey()) {
-            // No key to CAS — remove locally only; a later pull reconciles with the server.
-            syncRepo.removeByFileHash(fileHash)
-            L.i { "[FavoriteWrite] unfavorite local-only (no favKey) fileHash=$fileHash" }
+            L.i { "[FavoriteWrite] syncUnfavorite kept tombstone (no favKey) fileHash=$fileHash" }
             return
         }
-        // Pull the current list + version BEFORE the optimistic remove (see favorite()): a stale
-        // listVersion=0 CAS is rejected as "invalid param". pullAndDecrypt re-pulls the server list
-        // (which still holds this item), so remove AFTER it — else the item is re-added and, since
-        // unfavorite has no post-CAS re-remove, would never disappear locally.
-        syncRepo.pullAndDecrypt()
-        syncRepo.removeByFileHash(fileHash)
-        val record = with(FavoriteSyncRepository.Companion) { existing.toRecord() }
-        try {
-            putWithCas(FavoriteAction.UNFAVORITE, record, wrappedFavKey = null)
-        } catch (e: FavoritePermanentRejectException) {
-            // Local row already removed; the server still has it, so the next pull restores it.
-            L.w { "[FavoriteWrite] unfavorite permanently rejected fileHash=$fileHash: ${e.message}" }
-        } catch (e: CasExhaustedException) {
-            L.w { "[FavoriteWrite] unfavorite CAS exhausted fileHash=$fileHash" }
+        // Re-derive intent BEFORE the CAS: if a re-favorite cleared the tombstone while this task waited
+        // on casMutex, there is nothing to remove — abort (no CAS, no delete). The re-favorite's own CAS
+        // re-adds the item server-side.
+        if (!syncRepo.hasTombstone(fileHash)) {
+            L.i { "[FavoriteWrite] syncUnfavorite aborted, tombstone cleared (re-favorited) fileHash=$fileHash" }
+            return
         }
-    }
-
-    /**
-     * Server-side-only unfavorite of a just-confirmed pointer, used when the local placeholder was
-     * removed (user unfavorited it) while the optimistic FAVORITE PUT was in flight: the server now
-     * holds the item but the local list must not, so undo it server-side without touching the local
-     * cache (there is nothing local to remove). Driven straight from the pointer — [unfavorite] can't
-     * be reused because it early-returns on a missing local cache row (which is exactly the case here).
-     * Best-effort — a transient failure leaves the item on the server, and the next favorites-tab pull
-     * surfaces it (a manual remove then reconciles).
-     */
-    private suspend fun compensateUnfavorite(pointer: FavoriteAttachmentPointer) {
-        if (!keyRepo.hasKey()) return
-        // Re-pull the current server list + version so the CAS carries a fresh listVersion (a stale
-        // one is rejected "invalid param") and the replay removes THIS item from the latest list.
+        // Pull the current list + version BEFORE the CAS (see favorite()): a stale listVersion=0 CAS is
+        // rejected as "invalid param". The pull re-inserts the server copy, but replaceConfirmedCache's
+        // tombstone skip-set keeps this hash out of the cache, so it stays hidden.
         syncRepo.pullAndDecrypt()
-        val record = FavoriteRecord(pointer, syncRepo.cachedListVersion)
         try {
             putWithCas(FavoriteAction.UNFAVORITE, record, wrappedFavKey = null)
+            // Success server-side. Atomic check-and-delete: a re-favorite may have cleared the tombstone
+            // while the UNFAVORITE CAS was in flight — removeIfTombstone deletes ONLY if the row is STILL
+            // a tombstone (under syncMutex, so a re-favorite can't slip into a check/delete gap and get
+            // destroyed); a re-favorited row is kept for its own FAVORITE CAS to re-add it server-side.
+            if (syncRepo.removeIfTombstone(fileHash)) {
+                L.i { "[FavoriteWrite] syncUnfavorite confirmed, tombstone removed fileHash=$fileHash" }
+            } else {
+                L.i { "[FavoriteWrite] syncUnfavorite CAS ok but re-favorited mid-flight, kept row fileHash=$fileHash" }
+            }
         } catch (e: FavoritePermanentRejectException) {
-            L.w { "[FavoriteWrite] compensating unfavorite permanently rejected fileHash=${pointer.fileHash}: ${e.message}" }
+            // Permanent reject (never succeeds): drop the tombstone anyway (else a permanently-hidden
+            // zombie) — but only if it's STILL a tombstone (removeIfTombstone), so a mid-flight re-favorite
+            // isn't destroyed. A later pull re-adds it only if the server still holds it (rare on reject).
+            L.w { "[FavoriteWrite] syncUnfavorite permanently rejected, dropping tombstone fileHash=$fileHash: ${e.message}" }
+            syncRepo.removeIfTombstone(fileHash)
         } catch (e: CasExhaustedException) {
-            L.w { "[FavoriteWrite] compensating unfavorite CAS exhausted fileHash=${pointer.fileHash}" }
+            // Transient: KEEP the tombstone (hidden); flushPendingFavorites retries it.
+            L.w { "[FavoriteWrite] syncUnfavorite CAS exhausted, kept tombstone fileHash=$fileHash" }
+        } catch (e: IOException) {
+            // Offline / transient pull failure: KEEP the tombstone; flush retries it once back online.
+            L.w { "[FavoriteWrite] syncUnfavorite transient failure, kept tombstone fileHash=$fileHash: ${e.message}" }
         }
     }
 
@@ -315,7 +240,33 @@ class FavoriteWriteRepository @Inject constructor(
      */
     suspend fun flushPendingFavorites() {
         if (!keyRepo.hasKey()) return
-        val pending = syncRepo.allCached().filter { it.pending }
+        val cached = syncRepo.allCached()
+        // Optimistic-unfavorite tombstones (confirmed rows marked pendingRemoval): retry the UNFAVORITE
+        // CAS. NO TTL reap — reaping (hard-delete) would let the next pull resurrect the item; the ≤200
+        // cap already bounds how many tombstones can accumulate. syncUnfavorite hard-deletes on success.
+        val tombstones = cached.filter { it.pendingRemoval }
+        if (tombstones.isNotEmpty()) {
+            // Warm the cache + listVersion ONCE before the loop (design §12.5#6) so the skip-set and
+            // CAS state are fresh for the batch; runCatching keeps an offline pull from aborting the
+            // whole flush. syncUnfavorite still re-pulls per CAS for a correct per-op listVersion (the
+            // CAS's own conflict-retry needs it), so this only avoids a cold first-iteration pull.
+            runCatching { syncRepo.pullAndDecrypt() }
+                .onFailure { L.w { "[FavoriteWrite] flush: pre-loop pull failed (continuing): ${it.message}" } }
+        }
+        for (row in tombstones) {
+            val record = with(FavoriteSyncRepository.Companion) { row.toRecord() }
+            // Serialize each tombstone sync against the background confirm / re-favorite / unfavorite
+            // cycles (via the optimistic writer's casMutex): syncUnfavorite re-derives its intent from
+            // the current tombstone flag under lock, so a concurrent re-favorite can't be clobbered.
+            runCatching { optimisticWriter.get().runGuarded { syncUnfavorite(record) } }
+                .onFailure { L.w { "[FavoriteWrite] flush: unfavorite tombstone deferred fileHash=${row.fileHash}: ${it.message}" } }
+        }
+        // Confirm OLDEST-first (ascending addedListVersion): each CAS PUT gets the next (increasing)
+        // server listVersion, so confirming in add-order makes the server versions preserve that order —
+        // the newest stays on top after confirm, matching the pending display. (allCached() is DESCENDING;
+        // iterating it as-is would confirm newest-first → newest gets the lowest server version → the
+        // whole batch flips order on sync.)
+        val pending = cached.filter { it.pending }.sortedBy { it.addedListVersion }
         if (pending.isEmpty()) return
         L.i { "[FavoriteWrite] flushPendingFavorites count=${pending.size}" }
         val now = System.currentTimeMillis()
@@ -329,17 +280,25 @@ class FavoriteWriteRepository @Inject constructor(
                 syncRepo.removeByFileHash(row.fileHash)
                 continue
             }
-            // A placeholder row (panel/search optimistic) has no real attachment yet — its record has
-            // no id/key/digest, so re-run the background resolve+transStore+PUT keyed by its temp hash.
-            val sourceUrl = row.sourceUrl
-            if (sourceUrl != null) {
-                resolveAndConfirm(row.fileHash, sourceUrl, row.width, row.height)
-                continue
+            // A placeholder row (Remote panel/search or Message gif) has no real attachment yet — its
+            // record has no id/key/digest, so re-run the background resolve keyed by its temp hash.
+            when (row.toPendingSource()) {
+                is PendingSource.Remote, is PendingSource.Message -> {
+                    optimisticWriter.get().resolvePending(row.fileHash)
+                    continue
+                }
+                // Confirmed-shaped pending: a re-favorite (markPendingRefavorite) that kept its real
+                // attachment, or a legacy None row. It already has id/key/digest, so CAS its toRecord
+                // directly below (no resolve). This is what makes an offline re-favorite durable.
+                PendingSource.None -> { /* fall through to the toRecord path below */ }
             }
             val record = with(FavoriteSyncRepository.Companion) { row.toRecord() }
             try {
                 // Carry wrappedFavKey if the server still lacks it (recovers a failed first-create upload).
-                val newVersion = putWithCas(FavoriteAction.FAVORITE, record, wrappedFavKey = wrappedFavKeyForPut())
+                // Serialized on casMutex like the other background CAS cycles.
+                val newVersion = optimisticWriter.get().runGuarded {
+                    putWithCas(FavoriteAction.FAVORITE, record, wrappedFavKey = keyLifecycle.wrappedFavKeyForPut())
+                }
                 syncRepo.upsert(record.attachment.toConfirmedModel(newVersion))
             } catch (e: FavoritePermanentRejectException) {
                 L.w { "[FavoriteWrite] flush: permanent reject, rolled back fileHash=${row.fileHash}: ${e.message}" }
@@ -351,201 +310,31 @@ class FavoriteWriteRepository @Inject constructor(
     }
 
     /**
-     * Ensure a usable favKey is cached locally (unwrap-first, cross-platform §3.4):
-     *  1. local cache present -> done.
-     *  2. else GET wrappedFavKey and unwrap with the current KEK (HKDF of the aci identity) -> cache.
-     *  3. else no wrappedFavKey on the server (never created) -> first-create: generate favKey,
-     *     wrap it, cache; the wrapped key rides the first favorite PUT (returns true).
-     *
-     * A wrappedFavKey that the current KEK cannot unwrap means the account identity changed
-     * (rotation → needs rewrap; re-registration → needs reset). Those are driven by the identity
-     * layer (see [rewrapOnMasterKeyRotation] / [resetFavorites]), NOT auto-decided here, so this
-     * just leaves no local key and the caller keeps the add pending.
-     *
-     * @return true if this call FIRST-CREATED the favKey (caller must carry wrappedFavKey on PUT).
+     * Ensure a usable favKey is cached locally (unwrap-first). Delegates to [FavoriteKeyLifecycle];
+     * kept here as the public entry so callers (ViewModel, identity layer) don't need a second
+     * dependency. @return true if this call FIRST-CREATED the favKey.
      */
-    suspend fun ensureFavKey(): Boolean {
-        if (keyRepo.hasKey()) return false
-
-        val data = syncRepo.getFavorites()
-        if (data != null) syncRepo.applyServerMeta(data)
-        val wrapped = data?.wrappedFavKey
-
-        if (!wrapped.isNullOrEmpty()) {
-            // Server has a wrapped key: try to unwrap with the current account identity KEK.
-            val favKey = withContext(Dispatchers.IO) {
-                val kek = deriveCurrentKek() ?: return@withContext null
-                FavoriteCrypto.unwrapFavKey(kek, wrapped)
-            }
-            if (favKey != null) {
-                keyRepo.save(FavoriteCrypto.keyId(favKey), favKey)
-                L.i { "[FavoriteWrite] favKey unwrapped from server" }
-            } else {
-                // Current KEK can't unwrap — identity changed. rewrap/reset is identity-layer driven.
-                L.w { "[FavoriteWrite] wrappedFavKey present but current KEK cannot unwrap (identity changed)" }
-            }
-            return false
-        }
-
-        // No wrapped key on the server: first-create.
-        firstCreateKey()
-        return true
-    }
+    suspend fun ensureFavKey(): Boolean = keyLifecycle.ensureFavKey()
 
     /**
-     * Reset favorites (primary-device identity re-registration, old key unrecoverable): generate a
-     * NEW favKey + a NEW wrappedFavKey, then PUT action=reset. The server unpins all previously
-     * pinned attachments + GCs them, then pins these items (empty => cleared) and stores the new
-     * blob/keyId/wrappedFavKey. The old list is unrecoverable, so the new list starts from whatever
-     * is still locally cached (re-seedable — the attachment pointers are independent of favKey).
+     * Reset favorites (primary-device identity re-registration, old key unrecoverable). Delegates to
+     * [FavoriteKeyLifecycle]; kept here as the public entry for the identity layer.
      */
-    suspend fun resetFavorites() {
-        firstCreateKey() // new favKey + new wrappedFavKey cached locally
-        // Seed the new list from ALL locally-cached rows (confirmed + pending). Re-number
-        // addedListVersion 0..n-1 (oldest -> newest) so the reset list has a clean, monotonic
-        // sort key (old keys may be collapsed/placeholder).
-        val seed = syncRepo.allCached() // newest-first
-            .reversed()                 // oldest-first
-            .mapIndexed { index, row ->
-                val rec = with(FavoriteSyncRepository.Companion) { row.toRecord() }
-                FavoriteRecord(rec.attachment, index.toLong())
-            }
-        try {
-            putWholeList(seed, FavoriteAction.RESET, wrappedFavKey = currentWrappedFavKey())
-            seed.forEach { syncRepo.upsert(it.attachment.toConfirmedModel(it.addedListVersion)) }
-        } catch (e: CasExhaustedException) {
-            L.w { "[FavoriteWrite] resetFavorites CAS exhausted" }
-        } catch (e: FavoritePermanentRejectException) {
-            L.w { "[FavoriteWrite] resetFavorites permanently rejected: ${e.message}" }
-        }
-        L.i { "[FavoriteWrite] reset favorites seed=${seed.size}" }
-    }
+    suspend fun resetFavorites() = keyLifecycle.resetFavorites()
 
     /**
-     * Re-wrap the favKey under the NEW identity KEK and PUT action=rewrap (wrappedFavKey column only,
-     * no listVersion, no CAS). The list itself (blob) is preserved.
-     *
-     * The favKey is sourced in priority order:
-     *  1. the locally-cached favKey — the rotating primary almost always has it, and using it also
-     *     HEALS a server wrappedFavKey left stale under an even OLDER identity (the old private key
-     *     may no longer be on the device, e.g. after a previous rotation that failed to rewrap);
-     *  2. otherwise unwrap the server wrappedFavKey with [oldPriv]'s KEK.
-     * No-op if the server has no wrappedFavKey, or the favKey is unavailable both ways.
-     *
-     * Wired into the two aci identity-rotation points: explicit key reset (PrivacySettingFragment)
-     * and passive re-login where the favKey is still recoverable (via [onPrimaryLogin]).
+     * Re-wrap the favKey under the NEW identity KEK (wrappedFavKey column only). Delegates to
+     * [FavoriteKeyLifecycle]; kept here as the public entry (PrivacySettingFragment / onPrimaryLogin).
      */
-    suspend fun rewrapOnMasterKeyRotation(oldPriv: ByteArray?, newPriv: ByteArray) {
-        val data = syncRepo.getFavorites()
-        if (data != null) syncRepo.applyServerMeta(data)
-        val wrapped = data?.wrappedFavKey
-        if (wrapped.isNullOrEmpty()) {
-            L.i { "[FavoriteWrite] rewrap skipped: no wrappedFavKey on server" }
-            return
-        }
-        val rewrapped = withContext(Dispatchers.IO) {
-            val favKey = keyRepo.getFavKey()?.favKey
-                ?: oldPriv?.let { FavoriteCrypto.unwrapFavKey(FavoriteCrypto.deriveKek(it), wrapped) }
-            if (favKey == null) {
-                L.w { "[FavoriteWrite] rewrap: no cached favKey and old KEK cannot unwrap, abort" }
-                return@withContext null
-            }
-            // Cache the favKey locally so subsequent ops don't re-derive it.
-            keyRepo.save(FavoriteCrypto.keyId(favKey), favKey)
-            FavoriteCrypto.wrapFavKey(FavoriteCrypto.deriveKek(newPriv), favKey)
-        } ?: return
-        try {
-            putRewrap(rewrapped)
-            L.i { "[FavoriteWrite] rewrap done" }
-        } catch (e: FavoritePermanentRejectException) {
-            L.w { "[FavoriteWrite] rewrap permanently rejected: ${e.message}" }
-        } catch (e: CasExhaustedException) {
-            L.w { "[FavoriteWrite] rewrap CAS exhausted (unexpected — rewrap has no CAS)" }
-        }
-    }
+    suspend fun rewrapOnMasterKeyRotation(oldPriv: ByteArray?, newPriv: ByteArray) =
+        keyLifecycle.rewrapOnMasterKeyRotation(oldPriv, newPriv)
 
     /**
-     * Primary-device login decision (design §3.4). The login flow just generated a FRESH aci
-     * identity and overwrote the previous one, so decide what happens to the favKey:
-     *  - Server has no wrappedFavKey -> fresh account, nothing to do (first-create is lazy on panel open).
-     *  - The new identity KEK already unwraps it -> nothing to do (identity effectively unchanged).
-     *  - The favKey is still RECOVERABLE (locally cached, or the old identity survived login and can
-     *    unwrap the server key) -> rewrap under the new identity so the list is PRESERVED.
-     *  - Otherwise (favKey unrecoverable: no cache AND old key gone) -> reset: the old list is
-     *    unrecoverable, so start a fresh favKey (server unpins + GCs the old attachments).
-     *
-     * Best-effort; callers wrap this so a failure never blocks login.
-     *
-     * @param oldPriv previous aci identity private key captured BEFORE login overwrote it, or null
-     *                if none was available (fresh install / cleared storage). Must be captured by the
-     *                caller before the new identity is written — it is unrecoverable afterwards.
-     * @param newPriv the freshly generated aci identity private key (current identity).
+     * Primary-device login rewrap-vs-reset decision (design §3.4). Delegates to
+     * [FavoriteKeyLifecycle]; kept here as the public entry (LoginViewModel).
      */
-    suspend fun onPrimaryLogin(oldPriv: ByteArray?, newPriv: ByteArray) {
-        val data = syncRepo.getFavorites()
-        if (data != null) syncRepo.applyServerMeta(data)
-        val wrapped = data?.wrappedFavKey
-        if (wrapped.isNullOrEmpty()) {
-            L.i { "[FavoriteWrite] primary login: server has no favorites, nothing to do" }
-            return
-        }
-        val decision = withContext(Dispatchers.IO) {
-            // Already unwrappable under the new identity (rare — e.g. re-login kept the same key).
-            if (FavoriteCrypto.unwrapFavKey(FavoriteCrypto.deriveKek(newPriv), wrapped) != null) {
-                return@withContext Decision.NONE
-            }
-            // favKey still recoverable (locally cached, or the old identity survived and can unwrap)
-            // -> preserve the list by re-wrapping under the new identity.
-            val recoverable = keyRepo.hasKey() ||
-                (oldPriv != null && FavoriteCrypto.unwrapFavKey(FavoriteCrypto.deriveKek(oldPriv), wrapped) != null)
-            if (recoverable) Decision.REWRAP else Decision.RESET
-        }
-        when (decision) {
-            Decision.NONE -> L.i { "[FavoriteWrite] primary login: new KEK already unwraps, no action" }
-            Decision.REWRAP -> {
-                L.i { "[FavoriteWrite] primary login: favKey recoverable -> rewrap (list preserved)" }
-                rewrapOnMasterKeyRotation(oldPriv, newPriv)
-            }
-            Decision.RESET -> {
-                L.i { "[FavoriteWrite] primary login: favKey unrecoverable -> reset (list cleared)" }
-                resetFavorites()
-            }
-        }
-    }
-
-    private enum class Decision { NONE, REWRAP, RESET }
-
-    /** Generate a fresh favKey, wrap it under the current KEK, and cache it locally. */
-    private suspend fun firstCreateKey() = withContext(Dispatchers.IO) {
-        val favKey = FavoriteCrypto.generateFavKey()
-        keyRepo.save(FavoriteCrypto.keyId(favKey), favKey)
-    }
-
-    /** Derive the KEK from the current account identity private key, or null if unavailable. */
-    private fun deriveCurrentKek(): ByteArray? = try {
-        val priv = encryptionDataManager.getAciIdentityKey().privateKey.serialize()
-        FavoriteCrypto.deriveKek(priv)
-    } catch (e: Exception) {
-        L.w { "[FavoriteWrite] cannot derive KEK: ${e.message}" }
-        null
-    }
-
-    /** Wrap the currently-cached favKey under the current KEK, for a PUT that carries wrappedFavKey. */
-    private suspend fun currentWrappedFavKey(): String? = withContext(Dispatchers.IO) {
-        val key = keyRepo.getFavKey() ?: return@withContext null
-        val kek = deriveCurrentKek() ?: return@withContext null
-        FavoriteCrypto.wrapFavKey(kek, key.favKey)
-    }
-
-    /**
-     * The wrappedFavKey to attach to a favorite/flush PUT: carry it whenever the server has no key yet
-     * — a first-create, OR a prior first-create whose upload failed (local favKey exists but the server
-     * keyId is still empty). Without this the server keeps rejecting every favorite as "invalid param"
-     * (blob + keyId but no wrappedFavKey), so favoriting would be permanently stuck. Null once the
-     * server already holds the wrapped key. Callers must reconcile (serverKeyId is fresh) before this.
-     */
-    internal suspend fun wrappedFavKeyForPut(firstCreate: Boolean = false): String? =
-        if (firstCreate || syncRepo.serverKeyId.isNullOrEmpty()) currentWrappedFavKey() else null
+    suspend fun onPrimaryLogin(oldPriv: ByteArray?, newPriv: ByteArray) =
+        keyLifecycle.onPrimaryLogin(oldPriv, newPriv)
 
     /**
      * Bounded CAS retry: on conflict re-pull, REPLAY this add/remove onto the latest list,
@@ -559,7 +348,8 @@ class FavoriteWriteRepository @Inject constructor(
         repeat(MAX_CAS_RETRIES) { attempt ->
             val merged = applyAction(action, records, item)
             val capped = enforceCapInternal(merged)
-            val resp = putRequest(capped.records, listVersion, action, wrappedFavKey)
+            // items = the single affected record (the favorite/unfavorite DELTA), NOT capped.records.
+            val resp = putRequest(capped.records, listOf(item), listVersion, action, wrappedFavKey)
             when {
                 resp.isSuccess() -> {
                     val data = resp.data
@@ -588,13 +378,15 @@ class FavoriteWriteRepository @Inject constructor(
     }
 
     /**
-     * PUT the whole [records] list with bounded CAS retry (used by reset). On a version conflict,
-     * refresh the CAS listVersion and re-PUT — the whole-list payload is unchanged (reset replaces
-     * the list regardless of old contents) and we do NOT decrypt (we may not hold the old key).
+     * PUT the whole [records] list with bounded CAS retry (used by reset, driven from
+     * [FavoriteKeyLifecycle]). On a version conflict, refresh the CAS listVersion and re-PUT — the
+     * whole-list payload is unchanged (reset replaces the list regardless of old contents) and we do
+     * NOT decrypt (we may not hold the old key).
      */
-    private suspend fun putWholeList(records: List<FavoriteRecord>, action: String, wrappedFavKey: String?): Long {
+    internal suspend fun putWholeList(records: List<FavoriteRecord>, action: String, wrappedFavKey: String?): Long {
         repeat(MAX_CAS_RETRIES) { attempt ->
-            val resp = putRequest(records, syncRepo.cachedListVersion, action, wrappedFavKey)
+            // reset pins the whole seeded list, so items == records (empty => server clears all).
+            val resp = putRequest(records, records, syncRepo.cachedListVersion, action, wrappedFavKey)
             when {
                 resp.isSuccess() -> {
                     resp.data?.let { syncRepo.applyServerMeta(it) }
@@ -615,8 +407,9 @@ class FavoriteWriteRepository @Inject constructor(
         throw CasExhaustedException()
     }
 
-    /** PUT action=rewrap: updates only the wrappedFavKey column (no listVersion, no CAS). */
-    private suspend fun putRewrap(wrappedFavKey: String) = withContext(Dispatchers.IO) {
+    /** PUT action=rewrap: updates only the wrappedFavKey column (no listVersion, no CAS). Driven from
+     *  [FavoriteKeyLifecycle]. */
+    internal suspend fun putRewrap(wrappedFavKey: String) = withContext(Dispatchers.IO) {
         val resp = httpClient.httpService.putFavorites(
             token(),
             favoritesUrl,
@@ -631,13 +424,19 @@ class FavoriteWriteRepository @Inject constructor(
 
     private suspend fun putRequest(
         records: List<FavoriteRecord>,
+        itemRecords: List<FavoriteRecord>,
         listVersion: Long,
         action: String,
         wrappedFavKey: String?
     ): BaseResponse<FavoritesResponse> = withContext(Dispatchers.IO) {
         val key = keyRepo.getFavKey() ?: throw CasExhaustedException()
+        // [blob] is the encrypted RESULTING list (the client's source of truth). [items] is the plaintext
+        // DELTA the server pins/unpins for THIS action — favorite/unfavorite = just the affected record,
+        // reset = the whole seeded list — NOT the resulting list (matches iOS DTGifFavoritesRepository).
+        // Sending the resulting list as items breaks unfavorite of the LAST item: an empty items array is
+        // rejected "invalid param", and for a non-last unfavorite it would mis-pin the survivors server-side.
         val blob = FavoriteCrypto.encrypt(key.favKey, FavoriteListPlain(records))
-        val items = records.map {
+        val items = itemRecords.map {
             FavoriteItemMeta(it.attachment.id, it.attachment.authorizeId.toString(), it.attachment.fileHash)
         }
         // reset replaces the whole list (no CAS); favorite/unfavorite carry listVersion for CAS.
@@ -698,7 +497,7 @@ class FavoriteWriteRepository @Inject constructor(
      * [FavoriteGifLoader] gets a cache hit and skips the download — without ever caching plaintext.
      * Best-effort: a failure here only means the gif is fetched on demand later.
      */
-    private suspend fun seedFavoritesCache(file: File, attachmentId: String, key: ByteArray) = withContext(Dispatchers.IO) {
+    internal suspend fun seedFavoritesCache(file: File, attachmentId: String, key: ByteArray) = withContext(Dispatchers.IO) {
         if (attachmentId.isEmpty() || key.size < 64) return@withContext
         try {
             val encFile = FavoriteEncryptedAttachmentProvider.encryptedFile(attachmentId)

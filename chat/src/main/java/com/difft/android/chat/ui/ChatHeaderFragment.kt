@@ -16,8 +16,7 @@ import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isBotId
-import com.difft.android.chat.contacts.data.isOfficialBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatFragmentHeaderBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
@@ -28,11 +27,15 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.difft.app.database.cache.OfficialAccountCache
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.wcdb
 
@@ -89,6 +92,15 @@ class ChatHeaderFragment : CommonHeaderFragment() {
             initView(null)
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
+        // Self-heal the badge + official branch if the cache populates after this header was bound
+        // during the pre-preload window (initView resets all state at its top, so re-running is idempotent).
+        OfficialAccountCache.state
+            .map { chatViewModel.forWhat.id in it }
+            .distinctUntilChanged()
+            .drop(1)
+            .onEach { initView(null) }
+            .launchIn(viewLifecycleOwner.lifecycleScope)
+
         // 给整个 header 区域添加点击事件，跳转到单聊设置页面
         binding.root.setOnClickListener {
             SingleChatSettingActivity.startActivity(requireActivity(), chatViewModel.forWhat.id)
@@ -123,11 +135,11 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         binding.imageviewAddContact.visibility = View.GONE
         binding.imageviewCreateGroup.visibility = View.GONE
         binding.buttonCall.visibility = View.GONE
-        binding.imageviewBotBadge.isVisible = contact.id.isOfficialBotId()
+        binding.imageviewBotBadge.isVisible = contact.id.isOfficialAccount()
 
         if (contact.id == globalServices.myId) {
             binding.textviewNickname.text = getString(com.difft.android.base.R.string.chat_favorites)
-        } else if (contact.id.isBotId()) {
+        } else if (contact.id.isOfficialAccount()) {
             binding.textviewNickname.text = contact.getDisplayNameForUI()
         } else {
             binding.textviewNickname.text = contact.getDisplayNameForUI()

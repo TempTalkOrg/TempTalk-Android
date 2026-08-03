@@ -277,11 +277,13 @@ class WCDBPagedMessageAccessTest {
         assertTrue(stamps.isEmpty())
     }
 
-    // T12 — updateMessageReadTime writes readMaxTimestamp into all matching rows WITHOUT a load.
-    //      Mirrors DBMessageStore.updateMessageReadTime (#4) SQL: updateValue over the readTime=0
-    //      / null & systemShowTimestamp<=max condition.
+    // T12 — updateMessageReadTime writes the actual read moment (readAt) into all matching rows
+    //      WITHOUT a load. Mirrors DBMessageStore.updateMessageReadTime (#4 / #1020 Phase 2) SQL:
+    //      the WHERE bound is readMaxTimestamp (systemShowTimestamp<=readMaxTimestamp & readTime=0
+    //      / null); the SET value is readAt — a value DISTINCT from the WHERE bound. This test asserts
+    //      readTime == readAt (NOT readMaxTimestamp) to pin the de-conflated 3-arg semantics.
     @Test
-    fun `updateMessageReadTime sets readTime on all unread rows without load`() = runTest {
+    fun `updateMessageReadTime sets readTime to readAt on all unread rows without load`() = runTest {
         (0 until 100).forEach { i ->
             wcdbInstance.message.insertObject(MessageModel().apply {
                 id = "rrt-$i"; roomId = "rrt"; fromWho = "s"
@@ -289,24 +291,30 @@ class WCDBPagedMessageAccessTest {
                 readTime = 0L; type = MessageModel.TYPE_TEXT
             })
         }
-        val readMax = 5_000L
+        val readMaxTimestamp = 5_000L    // WHERE bound (server axis, systemShowTimestamp)
+        val readAt = 4_200L              // SET value (actual read moment) — distinct from the bound
         val cond = DBMessageModel.roomId.eq("rrt")
             .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
-            .and(DBMessageModel.systemShowTimestamp.le(readMax).or(DBMessageModel.systemShowTimestamp.eq(readMax)))
-        wcdbInstance.message.updateValue(readMax, DBMessageModel.readTime, cond)
+            .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
+        wcdbInstance.message.updateValue(readAt, DBMessageModel.readTime, cond)
 
-        // every row now has readTime == readMax; none left at 0.
+        // every row now has readTime == readAt (the read moment), NOT the readMaxTimestamp bound.
         assertEquals(0L, messageCount(DBMessageModel.roomId.eq("rrt").and(DBMessageModel.readTime.eq(0L))))
-        assertEquals(100L, messageCount(DBMessageModel.roomId.eq("rrt").and(DBMessageModel.readTime.eq(readMax))))
+        assertEquals(100L, messageCount(DBMessageModel.roomId.eq("rrt").and(DBMessageModel.readTime.eq(readAt))))
+        assertEquals(0L, messageCount(DBMessageModel.roomId.eq("rrt").and(DBMessageModel.readTime.eq(readMaxTimestamp))))
     }
 
     // T13 — updateMessageReadTime on an empty match set is a no-op (no exception, no rows changed).
     //      Pins that dropping the old isNotEmpty() guard is safe (updateValue no-ops on empty).
+    //      Uses the 3-arg shape: WHERE bounds by readMaxTimestamp, SET value is readAt.
     @Test
     fun `updateMessageReadTime empty match is a safe no-op`() = runTest {
+        val readMaxTimestamp = 5_000L
+        val readAt = 4_200L
         val cond = DBMessageModel.roomId.eq("rrt-empty")
-            .and(DBMessageModel.readTime.eq(0L))
-        wcdbInstance.message.updateValue(9_999L, DBMessageModel.readTime, cond)   // must not throw
+            .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
+            .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
+        wcdbInstance.message.updateValue(readAt, DBMessageModel.readTime, cond)   // must not throw
         assertEquals(0L, messageCount(DBMessageModel.roomId.eq("rrt-empty")))
     }
 

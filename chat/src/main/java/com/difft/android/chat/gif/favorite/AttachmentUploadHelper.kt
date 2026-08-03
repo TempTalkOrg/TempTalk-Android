@@ -192,6 +192,35 @@ class AttachmentUploadHelper @Inject constructor(
         }
     }
 
+    /**
+     * isExist fast-pass keyed by a KNOWN [fileHash] (no plaintext, no hashing). Returns the existing
+     * attachment pointer fields if the server holds the file for [recipients], else null (miss →
+     * caller must upload). Runs on IO (blocking Call.execute()).
+     *
+     * The returned [UploadedAttachment.key]/[UploadedAttachment.fileSize] are intentionally empty/0:
+     * isExist never returns the plaintext key or plaintext size, and the caller already carries both
+     * from the message ref — a half-populated field would be misleading.
+     *
+     * @throws IOException on network / non-success server response.
+     */
+    suspend fun existingByFileHash(fileHash: String, recipients: List<String>): UploadedAttachment? =
+        withContext(Dispatchers.IO) {
+            val microToken = globalServices.userManager.getUserData()?.microToken ?: ""
+            val resp = fileShareRepo.isExist(FileExistReq(microToken, fileHash, recipients)).execute()
+            if (!resp.isSuccessful) throw IOException("isExist fail: ${resp.message()}")
+            val res = resp.body()?.data ?: throw IOException("isExist response data is null")
+            if (!res.exists) return@withContext null
+            if (res.authorizeId == 0L) throw IOException("isExist returned invalid authorizeId for existing file")
+            UploadedAttachment(
+                attachmentId = res.attachmentId,
+                authorizeId = res.authorizeId,
+                key = ByteArray(0),          // caller supplies the real key (ref.key); not from isExist
+                digest = FileUtils.decodeDigestHex(res.cipherHash),
+                fileHash = fileHash,
+                fileSize = 0                 // unknown here; caller carries the message size
+            )
+        }
+
     private fun uploadToOss(encryptFile: File, urls: List<String>, onProgress: ((Int) -> Unit)?) {
         var lastError: Exception? = null
         for ((index, url) in urls.withIndex()) {

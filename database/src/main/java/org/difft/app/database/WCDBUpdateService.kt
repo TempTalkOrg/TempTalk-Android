@@ -1,11 +1,18 @@
 package org.difft.app.database
 
+import androidx.datastore.preferences.core.edit
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.AppStateDataStoreEntryPoint
+import com.difft.android.base.storage.AppStateDefaults
+import com.difft.android.base.storage.AppStateKeys
 import com.difft.android.base.user.ActiveConversation
 import com.difft.android.base.utils.RoomChange
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
+import com.difft.android.base.utils.application
+import com.difft.android.base.utils.dbKeyFailSoftExceptionHandler
 import com.difft.android.base.utils.globalServices
+import dagger.hilt.android.EntryPointAccessors
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.gson.JsonObject
@@ -20,6 +27,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -42,7 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Uses direct notification mechanism instead of SQL listener for better reliability.
  */
 object WCDBUpdateService :
-    CoroutineScope by CoroutineScope(CoroutineName("WCDBUpdateService") + Dispatchers.IO + SupervisorJob()) {
+    CoroutineScope by CoroutineScope(CoroutineName("WCDBUpdateService") + Dispatchers.IO + SupervisorJob() + dbKeyFailSoftExceptionHandler) {
 
     private val isUpdatingRoomsStarted = AtomicBoolean(false)
 
@@ -62,8 +70,15 @@ object WCDBUpdateService :
 
     fun start() {
         launch {
+            // Fail-soft: skip all DB work if the cipher key is unavailable (one-way process-lifetime
+            // flag). The CEH on this scope is the crash-safety net if the flag flips mid-run.
+            if (wcdb.isDbInaccessible) {
+                L.w { "[WCDBUpdateService] skip start, DB inaccessible" }
+                return@launch
+            }
             updatingRooms()
             updateSavedMessageExpire()
+            migrateArchiveTombstoneSortSentinel()
             clearInvalidGroupMembers()
         }
     }
@@ -183,6 +198,54 @@ object WCDBUpdateService :
             DBMessageModel.expiresInSeconds,
             DBMessageModel.roomId.eq(globalServices.myId)
         )
+    }
+
+    // In-process single-run guard: start() has no reentry guard, and two concurrent dedup passes
+    // could keep different rows (getAllObjects order is unspecified) and delete both tombstones
+    private val isTombstoneMigrationStarted = AtomicBoolean(false)
+
+    /**
+     * Re-anchor legacy archive tombstones (dynamic sort key) to the fixed sentinel, and collapse
+     * per-room duplicates left by the old delete-then-recreate flow (the exists-then-skip path
+     * never deletes, so this is where duplicates converge). Idempotent; a persisted app_state flag
+     * skips the scan after one success — set only on completion, so a failed run retries next start.
+     */
+    private suspend fun migrateArchiveTombstoneSortSentinel() {
+        if (!isTombstoneMigrationStarted.compareAndSet(false, true)) return
+        val dataStore = runCatching {
+            EntryPointAccessors.fromApplication(application, AppStateDataStoreEntryPoint::class.java)
+                .appStateDataStore()
+        }.getOrNull() ?: return
+        val migrated = dataStore.data.first()[AppStateKeys.ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED]
+            ?: AppStateDefaults.ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED
+        if (migrated) return
+        reAnchorLegacyArchiveTombstones()
+        dataStore.edit { it[AppStateKeys.ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED] = true }
+    }
+
+    // messageText LIKE pre-filter narrows the scan to tombstone candidates; the per-row JSON
+    // check confirms the match (actionType is not a DB column).
+    private fun reAnchorLegacyArchiveTombstones() {
+        val tombstones = wcdb.message.getAllObjects(
+            DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY)
+                .and(DBMessageModel.messageText.like("%\"actionType\":$NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED%"))
+        ).filter { isArchiveExpiredSystemMessage(it) }
+
+        val duplicates = tombstones.groupBy { it.roomId }.values.flatMap { it.drop(1) }
+        duplicates.forEach { it.delete() }
+
+        val toMigrate = (tombstones - duplicates.toSet())
+            .filter { it.systemShowTimestamp != MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL }
+        toMigrate.forEach { message ->
+            wcdb.message.updateValue(
+                MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL,
+                DBMessageModel.systemShowTimestamp,
+                DBMessageModel.id.eq(message.id)
+            )
+        }
+        if (toMigrate.isNotEmpty() || duplicates.isNotEmpty()) {
+            L.i { "[WCDBUpdateService] archive tombstone migration reAnchored=${toMigrate.size} duplicatesRemoved=${duplicates.size}" }
+        }
     }
 
     fun updatingRooms() {

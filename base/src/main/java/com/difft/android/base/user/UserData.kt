@@ -77,7 +77,7 @@ data class UserData(
     // — Contact sync state —
     var searchByCustomUid: Int = 0,
     var directoryVersionForContactors: Int = 0,
-    var syncedContactsV4: Boolean = false, //是否已经同步过联系人
+    var syncedContactsV5: Boolean = false, // V5: re-pull to seed publicAccountType
     var syncedGroupAndMembers: Boolean = false, //是否已经同步过群和成员信息
 
     // — Notification preferences + unread —

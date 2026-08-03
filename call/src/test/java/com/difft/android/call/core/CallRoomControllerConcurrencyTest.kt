@@ -6,6 +6,8 @@ import com.difft.android.call.CallIntent
 import io.livekit.android.LiveKit
 import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.RemoteParticipant
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -14,6 +16,7 @@ import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -203,5 +206,100 @@ class CallRoomControllerConcurrencyTest {
 
         val ex = assertThrows(IllegalStateException::class.java) { ctl.room }
         assertTrue("post-release access must fail loud", ex.message!!.contains("after release"))
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Safe, non-throwing accessors for teardown-racing UI/async callers. Unlike the
+    // fail-loud `room` getter above, these NEVER throw before create / after release — a
+    // gone room reads as "not connected" / "no remotes" / disconnect no-op. Regression
+    // guard for the "room accessed after release" crash family (isControlButtonClickEnabled,
+    // manualSwitchReconnect, connect-failure disconnect).
+    // ---------------------------------------------------------------------------------
+    @Test
+    fun `roomStateOrNull is null before create, live state after create, null after release`() {
+        val ctl = buildController()
+        assertNull("null before createRoom instead of throwing", ctl.roomStateOrNull())
+
+        every { mockRoom.state } returns Room.State.CONNECTED
+        ctl.createRoom()
+        assertEquals(Room.State.CONNECTED, ctl.roomStateOrNull())
+
+        ctl.disconnectAndRelease()
+        assertNull("null after release instead of throwing", ctl.roomStateOrNull())
+    }
+
+    @Test
+    fun `isRoomDisconnected is true before create, tracks state after create, true after release`() {
+        val ctl = buildController()
+        assertTrue("true before createRoom (nothing to tear down)", ctl.isRoomDisconnected())
+
+        every { mockRoom.state } returns Room.State.CONNECTED
+        ctl.createRoom()
+        assertFalse("false while the live room is CONNECTED", ctl.isRoomDisconnected())
+
+        every { mockRoom.state } returns Room.State.DISCONNECTED
+        assertTrue("true once the live room reports DISCONNECTED", ctl.isRoomDisconnected())
+
+        ctl.disconnectAndRelease()
+        assertTrue("true after release (gone room reads as disconnected)", ctl.isRoomDisconnected())
+    }
+
+    @Test
+    fun `hasRemoteParticipants is false before create and after release, true with remotes`() {
+        val ctl = buildController()
+        assertFalse("false before createRoom instead of throwing", ctl.hasRemoteParticipants())
+
+        every { mockRoom.remoteParticipants } returns
+            mapOf(Participant.Identity("remote-1") to mockk<RemoteParticipant>(relaxed = true))
+        ctl.createRoom()
+        assertTrue("true while a remote participant is present", ctl.hasRemoteParticipants())
+
+        ctl.disconnectAndRelease()
+        assertFalse("false after release instead of throwing", ctl.hasRemoteParticipants())
+    }
+
+    @Test
+    fun `hasRemoteParticipants is false when only self is in the room`() {
+        val ctl = buildController()
+        every { mockRoom.remoteParticipants } returns emptyMap()
+        ctl.createRoom()
+
+        assertFalse("empty remotes → false (preserves only-self switch rejection)", ctl.hasRemoteParticipants())
+    }
+
+    @Test
+    fun `disconnectQuietly is a no-op before create and never throws`() {
+        val ctl = buildController()
+
+        ctl.disconnectQuietly() // must not throw
+
+        assertFalse("no room created by a quiet disconnect", ctl.isRoomInitialized())
+        verify(exactly = 0) { mockRoom.disconnect() }
+    }
+
+    @Test
+    fun `disconnectQuietly disconnects the live room without marking it released`() {
+        val ctl = buildController()
+        ctl.createRoom()
+
+        ctl.disconnectQuietly()
+
+        verify(exactly = 1) { mockRoom.disconnect() }
+        // Quiet disconnect is NOT a release: the room stays usable/created and the fail-loud
+        // getter must still hand it out (only disconnectAndRelease() flips `released`).
+        assertFalse("disconnectQuietly must not release the room", ctl.isReleased())
+        assertSame(mockRoom, ctl.room)
+    }
+
+    @Test
+    fun `disconnectQuietly after release does not disconnect the dead room again`() {
+        val ctl = buildController()
+        ctl.createRoom()
+        ctl.disconnectAndRelease() // releaseLocked() already calls disconnect() once
+
+        ctl.disconnectQuietly() // released → early return, no second disconnect
+
+        verify(exactly = 1) { mockRoom.disconnect() }
+        assertTrue(ctl.isReleased())
     }
 }

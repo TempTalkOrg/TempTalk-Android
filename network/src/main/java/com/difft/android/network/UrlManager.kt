@@ -14,7 +14,6 @@ import javax.inject.Inject
 private interface UrlProtocol {
     val defaultHost: String
     val avatarStorage: String
-    val inviteGroupUrl: String
     val installationGuideUrl: String
     val appVersionConfigUrl: String
 }
@@ -22,7 +21,6 @@ private interface UrlProtocol {
 private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val defaultHost = "chat.chative.im"
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
-    override val inviteGroupUrl: String = "https://quicall.app/"
     override val installationGuideUrl: String = "https://quicall.app"
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/prod-buildversion/insider-version.json"
 }
@@ -30,7 +28,6 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
 private class ChativeDevelopmentUrlProtocol : UrlProtocol {
     override val defaultHost = "chat.test.chative.im"
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
-    override val inviteGroupUrl: String = "https://quicall.app/"
     override val installationGuideUrl: String = "https://quicall.app"
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/test-buildversion/insider-version.json"
 }
@@ -220,9 +217,6 @@ class UrlManager @Inject constructor(
     private val avatarStorage
         get() = configData()?.avatarFile ?: protocol.avatarStorage
 
-    val inviteGroupUrl
-        get() = protocol.inviteGroupUrl
-
     fun getAvatarStorageUrl(attachmentId: String): String {
         return if (avatarStorage.endsWith("/")) {
             "${avatarStorage}$attachmentId"
@@ -239,7 +233,6 @@ class UrlManager @Inject constructor(
 
     fun isTrustedHost(host: String): Boolean {
         val trustedHosts = setOf(
-            inviteGroupUrl,
             installationGuideUrl,
             default,
             "https://chative.com/",
@@ -261,12 +254,6 @@ class UrlManager @Inject constructor(
     // 新版 https://temptalk.app/u?pi=TqP1diDA
     fun isInviteLinkUrl(url: String): Boolean {
         val regex = Regex("^https://[^/]+/u[^?]*\\?([^#&]*&)*pi=[A-Za-z0-9]+.*$")
-        return regex.matches(url)
-    }
-
-    //群邀请链接 https://www.test.chative.im/u/g.html?i=SoLSt0G8
-    fun isGroupInviteLinkUrl(url: String): Boolean {
-        val regex = Regex("^https://[^/]+/u[^?]*\\?([^#&]*&)*i=[A-Za-z0-9]+.*$")
         return regex.matches(url)
     }
 }

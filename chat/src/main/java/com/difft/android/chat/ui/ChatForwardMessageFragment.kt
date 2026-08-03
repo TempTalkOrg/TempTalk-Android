@@ -16,9 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
@@ -279,41 +277,24 @@ class ChatForwardMessageFragment : Fragment() {
     }
 
     private fun favoriteGif(message: TextChatMessage) {
-        // Gif is encrypted at rest: gate on isReadable, then decrypt to a temp when only ciphertext
-        // exists. Shares resolveActionAttachment with saveAttachment so the file path can't drift.
+        // Favorite-without-download: build a message attachment ref (no decrypt, no IO). The write path
+        // derives the account fileHash from the key, isExist-fast-passes, and only downloads the message
+        // ciphertext on a miss. Shares resolveActionAttachment with saveAttachment so the path can't drift.
         val (attachment, messageId) = resolveActionAttachment(message) ?: return
-        // Reject oversized gifs up front using the known attachment size — avoids decrypting a large
-        // file just to reject it (the write path also enforces MAX_FAVORITE_ASSET_BYTES as a backstop).
+        // Reject oversized gifs up front using the known attachment size (the write path also enforces
+        // MAX_FAVORITE_ASSET_BYTES as a backstop).
         if (attachment.size > MAX_FAVORITE_ASSET_BYTES) {
             L.w { "[ChatForwardMessageFragment] favorite gif: too large size=${attachment.size} messageId=$messageId" }
             ToastUtil.show(getString(R.string.gif_favorites_add_size_limit))
             return
         }
-        val fileName = attachment.fileName ?: return
-        val basePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        if (!EncryptedAttachmentAccess.isReadable(basePath)) {
-            L.w { "[ChatForwardMessageFragment] favorite gif: not readable messageId=$messageId" }
+        val ref = com.difft.android.chat.gif.favorite.buildMessageRef(attachment, messageId)
+        if (ref == null) {
+            L.w { "[ChatForwardMessageFragment] favorite gif: missing key/fileName messageId=$messageId" }
             ToastUtil.show(getString(R.string.gif_favorites_failed))
             return
         }
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resolved = withContext(Dispatchers.IO) {
-                com.difft.android.chat.gif.favorite.resolveMessageGifPlaintext(requireContext(), basePath, attachment.key)
-            }
-            if (resolved == null) {
-                L.w { "[ChatForwardMessageFragment] favorite gif: decrypt failed messageId=${message.id}" }
-                ToastUtil.show(getString(R.string.gif_favorites_failed))
-                return@launch
-            }
-            val (file, isTemp) = resolved
-            favoriteViewModel.dispatch(
-                com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(
-                    com.difft.android.chat.gif.favorite.FavoriteSource.FromMessageFile(
-                        file, attachment.width, attachment.height, deleteAfterUse = isTemp
-                    )
-                )
-            )
-        }
+        favoriteViewModel.dispatch(com.difft.android.chat.gif.favorite.FavoriteContract.Intent.Favorite(ref))
     }
 
     private fun saveAttachment(data: TextChatMessage) {

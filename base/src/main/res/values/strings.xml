@@ -48,4 +48,10 @@
     <string name="net_risk_warning_message">Application may be running under Man-in-the-middle Attack!</string>
     <string name="net_risk_warning_ignore">Ignore</string>
     <string name="net_risk_warning_quit">Quit</string>
+
+    <!-- Suspicious link (homograph / phishing) open confirmation -->
+    <string name="link_safety_warning_title">Security Notice</string>
+    <string name="link_safety_confirm_message">We can\'t confirm this link is safe. Open it anyway?\n%1$s</string>
+    <string name="link_safety_open_anyway">Open</string>
+    <string name="link_safety_cancel">Cancel</string>
 </resources>

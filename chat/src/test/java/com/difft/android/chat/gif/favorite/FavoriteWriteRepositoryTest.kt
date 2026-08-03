@@ -2,7 +2,6 @@ package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.user.UserManager
 import com.difft.android.chat.cryptonew.EncryptionDataManager
-import com.difft.android.chat.gif.GifSendUseCase
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
@@ -13,8 +12,6 @@ import com.difft.android.network.responses.FavoritesResponse
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.difft.app.database.models.FavoriteGifModel
@@ -49,11 +46,11 @@ class FavoriteWriteRepositoryTest {
     private val assetUploader: FavoriteAssetUploader = mockk()
     private val encryptionDataManager: EncryptionDataManager = mockk()
     private val userManager: UserManager = mockk(relaxed = true)
-    private val gifSendUseCase: GifSendUseCase = mockk(relaxed = true)
-    // Optimistic-favorite background scope. Unconfined so any launched work runs inline in the test
-    // thread; these tests exercise the blocking favorite() path, not favoriteOptimistic.
-    private val appScope = CoroutineScope(Dispatchers.Unconfined)
+    // Optimistic writer is not exercised by these blocking-path tests (favorite()/putWithCas/key
+    // lifecycle); relaxed so the writeRepo Lazy back-edge resolves without behavior.
+    private val optimisticWriter: FavoriteOptimisticWriter = mockk(relaxed = true)
     private lateinit var repo: FavoriteWriteRepository
+    private lateinit var keyLifecycle: FavoriteKeyLifecycle
 
     private val favKeyEntry = FavKeyEntry("kid", ByteArray(FavoriteCrypto.FAV_KEY_SIZE))
 
@@ -61,9 +58,14 @@ class FavoriteWriteRepositoryTest {
     fun setUp() {
         every { httpClient.httpService } returns httpService
         every { urlManager.gifs } returns "https://host/gifs/"
+        // keyLifecycle owns ensureFavKey / reset / rewrap / onPrimaryLogin (delegated to by writeRepo).
+        // Its Lazy<writeRepo> back-edge resolves to `repo` at .get() time (assigned just below).
+        keyLifecycle = FavoriteKeyLifecycle(
+            syncRepo, keyRepo, encryptionDataManager, dagger.Lazy { repo }
+        )
         repo = FavoriteWriteRepository(
-            httpClient, urlManager, syncRepo, keyRepo, assetUploader, encryptionDataManager, userManager,
-            gifSendUseCase, appScope
+            httpClient, urlManager, syncRepo, keyRepo, assetUploader, userManager,
+            keyLifecycle, dagger.Lazy { optimisticWriter }
         )
     }
 

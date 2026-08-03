@@ -49,6 +49,7 @@ fun GifGrid(
     contentPadding: androidx.compose.foundation.layout.PaddingValues =
         androidx.compose.foundation.layout.PaddingValues(16.dp),
     isLoading: Boolean = false,
+    loadError: Boolean = false,
     onAddToFavorite: (GifUiItem) -> Unit = {}
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -86,6 +87,15 @@ fun GifGrid(
                 androidx.compose.material3.CircularProgressIndicator(
                     color = DifftTheme.colors.textTertiary,
                     modifier = Modifier.size(28.dp)
+                )
+
+            // First-page fetch failed (no items): centered "couldn't load" label (same style as the
+            // empty-result label), so a network failure isn't a blank panel.
+            loadError && items.isEmpty() ->
+                Text(
+                    text = stringResource(R.string.gif_load_failed),
+                    style = DifftTheme.typography.bodyMedium,
+                    color = DifftTheme.colors.textTertiary
                 )
 
             emptyResult ->

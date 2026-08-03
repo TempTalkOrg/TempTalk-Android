@@ -2,14 +2,10 @@ package com.difft.android.chat.invite
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
@@ -19,25 +15,17 @@ import androidx.core.graphics.createBitmap
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.widget.ChativeButton
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarView
-import com.difft.android.chat.common.GroupAvatarView
 import com.difft.android.chat.common.LinearProgressBar
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.group.GroupChatContentActivity
-import com.difft.android.chat.group.getAvatarData
 import com.difft.android.chat.qr.QrEncoder
 import com.difft.android.chat.qr.QrErrorCorrection
 import com.difft.android.chat.ui.ChatBackgroundDrawable
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.network.UrlManager
-import com.difft.android.network.group.GroupInfoByInviteCodeResp
-import com.difft.android.network.group.GroupRepo
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import com.difft.android.base.widget.ComposeDialogManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -53,13 +41,7 @@ import javax.inject.Inject
 class InviteUtils @Inject constructor() {
 
     @Inject
-    lateinit var urlManager: UrlManager
-
-    @Inject
     lateinit var inviteRepo: InviteRepo
-
-    @Inject
-    lateinit var groupRepo: GroupRepo
 
     fun showInviteDialog(context: FragmentActivity) {
         val fragment = InviteBottomSheetFragment()
@@ -265,17 +247,6 @@ class InviteUtils @Inject constructor() {
         }
     }
 
-    fun showGroupInviteDialog(
-        context: FragmentActivity,
-        myName: String = "",
-        groupName: String = "",
-        groupAvatar: String? = null,
-        inviteCode: String = "",
-    ) {
-        val fragment = GroupInviteBottomSheetFragment.newInstance(myName, groupName, groupAvatar, inviteCode)
-        fragment.show(context.supportFragmentManager, "GroupInviteDialog")
-    }
-
     /**
      * 邀请对话框关闭时的清理工作
      */
@@ -285,110 +256,6 @@ class InviteUtils @Inject constructor() {
         cancelCodeTextAnimation()
         currentAutoRefreshTimes = 0
     }
-
-    // context is a FragmentActivity (not plain Activity) so context.lifecycleScope resolves
-    // (lifecycleScope is an extension on LifecycleOwner). The sole caller passes requireActivity().
-    fun getGroupInviteCode(
-        context: FragmentActivity,
-        inviteCode: String,
-        myName: String,
-        groupName: String,
-        imageView: AppCompatImageView?,
-        clShare: ConstraintLayout?,
-        clCopy: ConstraintLayout?,
-        onCopyDismiss: (() -> Unit)? = null
-    ) {
-        val url = "${urlManager.inviteGroupUrl.trimEnd('/')}/u/g.html?i=$inviteCode"
-        val content = context.getString(R.string.invite_group_tips, myName, groupName, url)
-
-        context.lifecycleScope.launch {                  // ties the encode to the FragmentActivity
-            try {
-                val bmp = createQRBitmap(context, url)    // suspends; encode runs on Default inside
-                if (bmp != null) {
-                    imageView?.setImageBitmap(bmp)        // setImageBitmap on Main
-                } else {
-                    // Encode failed — keep the placeholder rather than clearing to a blank QR. No content.
-                    L.w { "[InviteUtils] group invite QR encode returned null" }
-                }
-            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-                throw e                                   // never swallow structured-concurrency cancellation
-            } catch (e: Exception) {
-                // A throw before QrEncoder's own catch (e.g. zero-dim logo bitmap, OOM) would otherwise
-                // surface as an uncaught coroutine exception and crash the app. No content logged.
-                L.e { "[InviteUtils] getGroupInviteCode QR build failed: ${e.stackTraceToString()}" }
-            }
-        }
-
-        clShare?.setOnClickListener {
-            context.shareText(content)
-        }
-
-        clCopy?.setOnClickListener {
-            Util.copyToClipboard(context, content)
-            onCopyDismiss?.invoke()
-        }
-    }
-
-
-    fun getGroupInfoByInviteCode(activity: FragmentActivity, inviteCode: String) {
-        activity.lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    groupRepo.getGroupInfoByInviteCode(inviteCode)
-                }
-                if (result.status == 0) {
-                    result.data?.let { data -> showJoinGroupDialog(activity, data, inviteCode) }
-                } else {
-                    result.reason?.let { message -> ToastUtil.show(message) }
-                }
-            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.e { "getGroupInfoByInviteCode error: ${e.stackTraceToString()}" }
-                ToastUtil.show(activity.getString(R.string.chat_net_error))
-            }
-        }
-    }
-
-    private fun showJoinGroupDialog(activity: FragmentActivity, data: GroupInfoByInviteCodeResp, inviteCode: String) {
-        val fragment = JoinGroupBottomSheetFragment.newInstance(data, inviteCode)
-        fragment.show(activity.supportFragmentManager, "JoinGroupDialog")
-    }
-
-    fun joinGroupByInviteCode(inviteCode: String, activity: FragmentActivity, needFinish: Boolean = false) {
-        activity.lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    groupRepo.joinGroupByInviteCodeResp(inviteCode)
-                }
-                if (result.status == 0) {
-                    result.data?.let { data ->
-                        GroupChatContentActivity.startActivity(activity, data.gid)
-                        if (needFinish) {
-                            activity.finish()
-                        }
-                    }
-                } else {
-                    val message = when (result.status) {
-                        10120 -> activity.getString(R.string.invite_invalid_invite_Code)
-                        10121 -> activity.getString(R.string.invite_link_invitation_is_disabled)
-                        10122 -> activity.getString(R.string.invite_only_moderators)
-                        10123 -> activity.getString(R.string.invite_group_has_been_disbanded)
-                        10124 -> activity.getString(R.string.invite_group_is_invalid)
-                        else -> result.reason
-                    }
-
-                    showErrorAndFinish(message ?: "", activity, needFinish)
-                }
-            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[InviteUtils] joinGroupByInviteCode error: ${e.stackTraceToString()}" }
-                showErrorAndFinish(e.message ?: "", activity, needFinish)
-            }
-        }
-    }
-
 
 //    private fun getRoundCornerBitmap(bitmap: Bitmap): Bitmap? {
 //        val roundPx = 8.dp.toFloat()
@@ -530,127 +397,3 @@ class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
     }
 }
 
-/**
- * 群组邀请底部弹窗Fragment
- */
-@AndroidEntryPoint
-class GroupInviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
-
-    @Inject
-    lateinit var inviteUtils: InviteUtils
-
-    private val myName: String by lazy { arguments?.getString(ARG_MY_NAME) ?: "" }
-    private val groupName: String by lazy { arguments?.getString(ARG_GROUP_NAME) ?: "" }
-    private val groupAvatar: String? by lazy { arguments?.getString(ARG_GROUP_AVATAR) }
-    private val inviteCode: String by lazy { arguments?.getString(ARG_INVITE_CODE) ?: "" }
-
-    companion object {
-        private const val ARG_MY_NAME = "arg_my_name"
-        private const val ARG_GROUP_NAME = "arg_group_name"
-        private const val ARG_GROUP_AVATAR = "arg_group_avatar"
-        private const val ARG_INVITE_CODE = "arg_invite_code"
-
-        fun newInstance(myName: String, groupName: String, groupAvatar: String?, inviteCode: String): GroupInviteBottomSheetFragment {
-            return GroupInviteBottomSheetFragment().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_MY_NAME, myName)
-                    putString(ARG_GROUP_NAME, groupName)
-                    putString(ARG_GROUP_AVATAR, groupAvatar)
-                    putString(ARG_INVITE_CODE, inviteCode)
-                }
-            }
-        }
-    }
-
-    // 使用默认容器（带圆角和拖拽条）
-    override fun getContentLayoutResId(): Int = R.layout.layout_group_invite
-
-    // 全屏显示
-    override fun isFullScreen(): Boolean = true
-
-    override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-
-        var ivQR: AppCompatImageView? = null
-        var clShare: ConstraintLayout? = null
-        var clCopy: ConstraintLayout? = null
-
-        ivQR = view.findViewById(R.id.iv_QR)
-        clShare = view.findViewById(R.id.cl_share)
-        clCopy = view.findViewById(R.id.cl_copy)
-        val clScan: ConstraintLayout = view.findViewById(R.id.cl_scan)
-
-        val avatarView: GroupAvatarView = view.findViewById(R.id.avatarView)
-        val tvName: AppCompatTextView = view.findViewById(R.id.tv_name)
-        val tvContent: AppCompatTextView = view.findViewById(R.id.tv_content)
-
-        avatarView.setAvatar(groupAvatar?.getAvatarData())
-        tvName.text = groupName
-
-        tvContent.text = requireContext().getString(R.string.invite_group_code, PackageUtil.getAppName())
-
-        clScan.setOnClickListener {
-            ScanActivity.startActivity(requireActivity())
-        }
-
-        view.findViewById<AppCompatImageView>(R.id.iv_close).setOnClickListener {
-            dismiss()
-        }
-
-        // 初始化群组邀请码，传入 dismiss 回调
-        inviteUtils.getGroupInviteCode(requireActivity(), inviteCode, myName, groupName, ivQR, clShare, clCopy) {
-            dismiss()
-        }
-    }
-}
-
-/**
- * 加入群组底部弹窗Fragment
- */
-@AndroidEntryPoint
-class JoinGroupBottomSheetFragment() : BaseBottomSheetDialogFragment() {
-
-    @Inject
-    lateinit var inviteUtils: InviteUtils
-
-    private val data: GroupInfoByInviteCodeResp? by lazy {
-        @Suppress("DEPRECATION")
-        arguments?.getSerializable(ARG_DATA) as? GroupInfoByInviteCodeResp
-    }
-    private val inviteCode: String by lazy { arguments?.getString(ARG_INVITE_CODE) ?: "" }
-
-    companion object {
-        private const val ARG_DATA = "arg_data"
-        private const val ARG_INVITE_CODE = "arg_invite_code"
-
-        fun newInstance(data: GroupInfoByInviteCodeResp, inviteCode: String): JoinGroupBottomSheetFragment {
-            return JoinGroupBottomSheetFragment().apply {
-                arguments = Bundle().apply {
-                    putSerializable(ARG_DATA, data)
-                    putString(ARG_INVITE_CODE, inviteCode)
-                }
-            }
-        }
-    }
-
-    // 使用默认容器（带圆角和拖拽条）
-    override fun getContentLayoutResId(): Int = R.layout.layout_join_group
-
-    // 全屏显示
-    override fun isFullScreen(): Boolean = true
-
-    @SuppressLint("SetTextI18n")
-    override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-
-        view.findViewById<AppCompatImageView>(R.id.iv_close).setOnClickListener {
-            dismiss()
-        }
-        view.findViewById<GroupAvatarView>(R.id.imageview_group).setAvatar(data?.avatar?.getAvatarData())
-
-        view.findViewById<AppCompatTextView>(R.id.textview_group_name).text = data?.name + "(" + data?.membersCount + ")"
-
-        view.findViewById<ChativeButton>(R.id.btn_join).setOnClickListener {
-            dismiss()
-            inviteUtils.joinGroupByInviteCode(inviteCode, requireActivity())
-        }
-    }
-}

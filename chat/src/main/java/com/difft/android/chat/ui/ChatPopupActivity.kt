@@ -34,7 +34,7 @@ import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE
 import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE_TYPE
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatActivityChatPopupBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
@@ -553,7 +553,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider {
     }
 
     private fun updateConfidential(conversationSet: ConversationSetResponseBody? = null) {
-        if (chatViewModel.forWhat.id.isBotId()) {
+        if (chatViewModel.forWhat.id.isOfficialAccount()) {
             shouldHideConfidential = true
             updateConfidentialUI(conversationSet)
             return

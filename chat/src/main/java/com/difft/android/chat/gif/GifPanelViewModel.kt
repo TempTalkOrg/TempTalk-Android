@@ -123,7 +123,7 @@ class GifPanelViewModel @Inject constructor(
     /** Reset cursors and load the first page for [query] (null = trending). */
     private fun reload(query: String?) {
         cursor.value = Cursor()
-        _state.update { it.copy(items = emptyList(), isLoading = true, emptyResult = false) }
+        _state.update { it.copy(items = emptyList(), isLoading = true, emptyResult = false, loadError = false) }
         viewModelScope.launch { fetchPage(query, replace = true) }
     }
 
@@ -154,15 +154,20 @@ class GifPanelViewModel @Inject constructor(
                     items = merged,
                     isLoading = false,
                     hasMore = page.hasMore,
-                    emptyResult = merged.isEmpty()
+                    emptyResult = merged.isEmpty(),
+                    loadError = false
                 )
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             L.w { "[GifPanel] fetch failed query=${query?.length ?: 0}chars: ${e.stackTraceToString()}" }
-            _state.update { it.copy(isLoading = false, hasMore = false) }
-            _effect.trySend(GifPanelContract.Effect.ShowError(e.message ?: ""))
+            // Two failure shapes: first-page (nothing to show) -> in-panel "couldn't load" label; an
+            // append/load-more failure (items already shown) keeps the grid but must NOT fail silently
+            // now that hasMore is cleared (pagination dead-ends) -> surface a transient toast instead.
+            val hadItems = _state.value.items.isNotEmpty()
+            _state.update { it.copy(isLoading = false, hasMore = false, loadError = it.items.isEmpty()) }
+            if (hadItems) _effect.trySend(GifPanelContract.Effect.ShowError(""))
         }
     }
 

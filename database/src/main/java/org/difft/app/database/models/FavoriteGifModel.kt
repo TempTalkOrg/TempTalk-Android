@@ -70,6 +70,27 @@ class FavoriteGifModel {
     @WCDBField
     var pendingSince: Long = 0L
 
+    /**
+     * Serialized pending source (client-side PendingSource: Remote Giphy previewUrl, or Message
+     * attachment ref for favorite-without-download). ONE JSON column — mirrors how avatars persist a
+     * structured blob (ContactorModel/GroupModel.avatar). Only set while pending=true; null for
+     * confirmed rows. Legacy #999 pending Remote rows have this null but [sourceUrl] set (read
+     * fallback). Migrates via WCDB's implicit ALTER TABLE ADD COLUMN on first table access.
+     */
+    @WCDBField
+    var pendingSourceJson: String? = null
+
+    /**
+     * Optimistic-unfavorite tombstone: a CONFIRMED row (has attachmentId/key) marked for removal that
+     * has NOT yet synced its UNFAVORITE CAS PUT. Hidden from the UI immediately and excluded from the
+     * cap count + re-encrypted blob, but kept in the cache so a server pull can't resurrect it (the
+     * item still lives on the server until the CAS lands). Cleared on re-favorite of the same hash;
+     * hard-deleted once the UNFAVORITE CAS succeeds. Non-null default false; implicit WCDB ALTER;
+     * #901-safe (Kotlin model, boxed NULL reads as the default).
+     */
+    @WCDBField
+    var pendingRemoval: Boolean = false
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other == null || javaClass != other.javaClass) return false

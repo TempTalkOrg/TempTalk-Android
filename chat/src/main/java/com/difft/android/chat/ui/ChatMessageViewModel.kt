@@ -13,6 +13,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.call.LChatToCallController
@@ -809,7 +810,7 @@ class ChatMessageViewModel @AssistedInject constructor(
         )
     }
 
-    suspend fun sendReadRecipient(currentReadPosition: Long) = withContext(Dispatchers.IO) {
+    suspend fun sendReadRecipient(currentReadPosition: Long, readAt: Long) = withContext(Dispatchers.IO) {
         try {
             // 判断是否为大群（群人数大于阈值）
             val isLargeGroup = if (forWhat is For.Group) {
@@ -826,6 +827,8 @@ class ChatMessageViewModel @AssistedInject constructor(
 
             val lastReadPosition = dbRoomStore.getMessageReadPosition(forWhat)
             if (currentReadPosition > lastReadPosition) {
+                // #1020 Phase 2: readAt (server-axis read moment) is sampled once by the caller and
+                // passed to both this and updateMessageReadPosition so wire and local readTime match.
                 // #909 #5: page the in-range messages instead of loading them all. Peak memory
                 // is one page + per-sender max-message refs + the timestamp longs, never the
                 // whole match set of full MessageModel objects.
@@ -857,7 +860,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                     val maxMessage = plan.maxMessage
                     val readPosition = ReadPosition(
                         forWhat.id.takeIf { forWhat is For.Group },
-                        maxMessage.timeStamp,
+                        readAt,
                         maxMessage.systemShowTimestamp,
                         maxMessage.notifySequenceId,
                         maxMessage.sequenceId
@@ -886,7 +889,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                 } else {
                     val syncReadPosition = ReadPosition(
                         forWhat.id.takeIf { forWhat is For.Group },
-                        syncMaxMessage.timeStamp,
+                        readAt,
                         syncMaxMessage.systemShowTimestamp,
                         syncMaxMessage.notifySequenceId,
                         syncMaxMessage.sequenceId
@@ -912,10 +915,11 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
-    suspend fun updateMessageReadPosition(readPosition: Long) = withContext(Dispatchers.IO) {
+    suspend fun updateMessageReadPosition(readPosition: Long, readAt: Long) = withContext(Dispatchers.IO) {
         try {
+            // #1020 Phase 2: readTime = actual read moment (readAt from caller); readPosition selects rows.
             dbRoomStore.updateMessageReadPosition(forWhat, readPosition)
-            dbMessageStore.updateMessageReadTime(forWhat.id, readPosition)
+            dbMessageStore.updateMessageReadTime(forWhat.id, readPosition, readAt)
         } catch (e: Exception) {
             L.e { "updateMessageReadPosition error: ${e.stackTraceToString()}" }
         }
@@ -998,8 +1002,8 @@ class ChatMessageViewModel @AssistedInject constructor(
         
         val myId = globalServices.myId
         val recallTimeoutInterval = (globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.recall?.timeoutInterval ?: (24 * 60 * 60)) * 1000L
-        val currentTime = System.currentTimeMillis()
-        
+        val currentTime = ServerTimeProvider.nowMillis()
+
         val messages = wcdb.message.getAllObjects(
             DBMessageModel.id.`in`(*selectedIds.toTypedArray())
         )

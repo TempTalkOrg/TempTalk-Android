@@ -49,7 +49,9 @@
     <string name="contact_add_contacts">添加联系人</string>
     <string name="contact_add_contacts_contact_name_not_correct">联系人 ID 不正确，请重试。</string>
     <string name="contact_add_contacts_code_not_correct">邀请码不正确，请重试。</string>
+    <string name="weak_contact_pending_group_title">即将移除</string>
     <string name="weak_contact_remove_in_days">%1$d天后移除</string>
+    <string name="weak_contact_remove_today">今天移除</string>
     <string name="weak_contact_remove_now">立即移除</string>
     <string name="weak_contact_remove_now_failed">移除失败，请重试。</string>
     <string name="weak_contact_account_unavailable_title">账号不可用</string>
@@ -94,7 +96,7 @@
     <string name="chat_message_action_select_all">全选</string>
     <string name="chat_message_attachment">[附件]</string>
     <string name="chat_message_image">[图片]</string>
-    <string name="chat_message_gif">[Gif]</string>
+    <string name="chat_message_gif">[GIF]</string>
     <string name="chat_message_video">[视频]</string>
     <string name="chat_message_short_for_generic">[消息]</string>
     <string name="chat_message_audio">[语音]</string>
@@ -219,7 +221,6 @@
     <string name="group_changed_group_name">%1$s更改了群组名称。</string>
     <string name="group_changed_group_avatar">%1$s更改了群头像。</string>
     <string name="group_share_group_link">分享群组链接</string>
-    <string name="group_share_content">%1$s邀请您加入“%2$s”，点击加入群组。\nchative://group/join?inviteCode=%3$s</string>
     <string name="group_enter_group">进入群组</string>
     <string name="group_permission_denied">没有权限，请联系群协调人</string>
     <string name="group_unknown_group">未知群组</string>
@@ -232,7 +233,6 @@
     <string name="group_only_moderators_can_add">仅协调人可添加成员</string>
     <string name="group_only_moderators_can_speak1">仅群主和协调人可发言</string>
     <string name="group_critical_alert">紧急联络</string>
-    <string name="group_enable_group_link">启用群邀请链接</string>
     <string name="group_add_moderators">添加协调人</string>
     <string name="group_remove_moderators">删除协调人</string>
     <string name="group_become_new_moderator">%1$s已成为协调人</string>
@@ -295,8 +295,8 @@
     <string name="voice_speed_2x">2×</string>
 
     <!-- Voice changer (call) settings -->
-    <string name="me_call_voice_changer">变音</string>
-    <string name="me_call_voice_changer_desc">通话默认生效，语音消息可选使用。</string>
+    <string name="me_call_voice_changer">变声</string>
+    <string name="me_call_voice_changer_desc">设置通话中的变声效果。</string>
 
     <!-- Contact profile setting-->
     <string name="contact_profile_info">资料</string>
@@ -354,17 +354,10 @@
     <string name="invite_regenerate_dialog_content">旧的邀请码将过期。您确定要继续吗？</string>
     <string name="invite_regenerate_dialog_cancel">取消</string>
     <string name="invite_regenerate_dialog_ok">重新生成</string>
-    <string name="invite_group_tips">%1$s 邀请你加入“%2$s”，点击加入群组：%3$s</string>
-    <string name="invite_invalid_invite_Code">无效的群组邀请链接。</string>
-    <string name="invite_link_invitation_is_disabled">加入群组失败。此群组已禁用邀请链接。</string>
-    <string name="invite_only_moderators">加入群组失败。此群组仅允许协调人邀请。</string>
-    <string name="invite_group_has_been_disbanded">加入群组失败。此群组已被解散。</string>
-    <string name="invite_group_is_invalid">加入群组失败。此群组无效。</string>
     <string name="invite_ok">好的</string>
     <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
     <string name="invite_only_moderators_can_add">此群组仅允许协调人邀请。</string>
     <string name="invite_code">%s邀请码</string>
-    <string name="invite_group_code">%s群邀请码</string>
     <string name="invite_joined_at">%s加入</string>
     <string name="invite_code_error_tips">邀请已满，请稍后重试！</string>
 
@@ -395,6 +388,7 @@
     <string name="switch_camera">切换相机</string>
 
     <string name="app_sign_error_title">安全提示</string>
+    <string name="app_sign_error_tips">您当前安装的应用为非官方正版签名应用，请确认。</string>
     <string name="emulator_risk_tips">您当前的设备是模拟器，可能会导致应用程序功能无法正常使用或产生安全风险，请确认。</string>
     <string name="root_risk_tips">您当前设备已root，存在应用数据被第三方应用窃取的风险，请确认。</string>
 
@@ -632,6 +626,7 @@
     <!-- GIF panel (M1: browse + search + send) -->
     <string name="gif_search_hint">搜索 GIF</string>
     <string name="gif_no_result">没有找到相关 GIF</string>
+    <string name="gif_load_failed">无法加载 GIF，请稍后重试</string>
     <string name="gif_search_clear">清除</string>
     <string name="gif_tab_trending">热门</string>
 

@@ -12,7 +12,7 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
-import com.difft.android.base.utils.openExternalBrowser
+import com.difft.android.base.security.SafeLinkOpener
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
@@ -149,16 +149,11 @@ class ScanActivity : BaseActivity() {
                 if (urlManager.isInviteLinkUrl(result)) {
                     val code = uri.getQueryParameter("pi") ?: ""
                     inviteUtils.queryByInviteCode(this, code, true)
-                } else if (urlManager.isGroupInviteLinkUrl(result)) {
-                    val code = uri.getQueryParameter("i") ?: ""
-                    inviteUtils.joinGroupByInviteCode(code, this, true)
                 } else {
-                    openExternalBrowser(result)
-                    finish()
+                    SafeLinkOpener.open(this, result, onOpen = { finish() })
                 }
             } else {
-                openExternalBrowser(result)
-                finish()
+                SafeLinkOpener.open(this, result, onOpen = { finish() })
             }
         } else if (uri.scheme.equals("tsdevice") || uri.scheme.equals("chative")) {
             val resultStr = result.replace("tsdevice:/", "tsdevice://").toUri()

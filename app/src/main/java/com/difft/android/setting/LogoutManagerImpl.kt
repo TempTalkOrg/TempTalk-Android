@@ -21,6 +21,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.cache.ContactRemarkCache
+import org.difft.app.database.cache.OfficialAccountCache
 import com.difft.android.chat.messages.MessageForegroundService
 import com.difft.android.chat.util.AppIconBadgeManager
 import com.difft.android.chat.util.ForegroundServiceUtil
@@ -72,6 +73,7 @@ class LogoutManagerImpl @Inject constructor(
                 // we explicitly clear the unread counter here.
                 userManager.update { unreadMsgNum = 0 }
                 ContactRemarkCache.clear()
+                OfficialAccountCache.clear()
                 // Mirror the full-clear path: invalidate the proxy provider's in-memory
                 // @Volatile cache eagerly so it doesn't keep serving the previous user's
                 // TURN secret until the next refreshFromUserDataIfChanged() read. The
@@ -123,6 +125,7 @@ class LogoutManagerImpl @Inject constructor(
         messageStore.deleteDatabase()
 
         ContactRemarkCache.clear()
+        OfficialAccountCache.clear()
 
         // Unconditional clear on logout: the share link embeds the coturn
         // `static-auth-secret` (when present) — that's a user-bound secret and

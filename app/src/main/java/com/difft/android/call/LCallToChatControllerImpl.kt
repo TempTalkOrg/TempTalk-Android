@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.PushTextSendJobFactory
+import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.StartCallRequestBody
+import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AutoLeave
 import com.difft.android.base.user.CallChat
@@ -28,6 +30,7 @@ import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.ScreenDeviceUtil
@@ -35,7 +38,7 @@ import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.LENGTH_OF_BOT_ID
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.cryptonew.EncryptionDataManager
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.group.GroupUtil
@@ -85,6 +88,7 @@ class LCallToChatControllerImpl @Inject constructor(
     private val localMessageCreator: LocalMessageCreator,
     private val dbRoomStore: DBRoomStore,
     private val inComingCallStateManager: InComingCallStateManager,
+    private val onGoingCallStateManager: OnGoingCallStateManager,
     private val criticalAlertStateManager: CriticalAlertStateManager,
     private val messageArchiveManager: MessageArchiveManager,
     private val callDataManagerLazy: Lazy<CallDataManager>,
@@ -211,7 +215,7 @@ class LCallToChatControllerImpl @Inject constructor(
     override suspend fun getSingleGroupInfo(conversationId: String): GroupModel? =
         groupUtil.getSingleGroupInfo(conversationId)
 
-    override fun isBotId(id: String): Boolean = id.length <= LENGTH_OF_BOT_ID
+    override fun isOfficialAccount(id: String): Boolean = id.isOfficialAccount()
 
     override fun contactorListSortedByPinyin(list: List<ContactorModel>): List<ContactorModel> = list.sortedByPinyin()
 
@@ -328,18 +332,104 @@ class LCallToChatControllerImpl @Inject constructor(
     // region Incoming call state
 
     override fun restoreIncomingCallScreenIfActive() {
-        L.i { "[Call] Status: inCalling=${inComingCallStateManager.isActivityShowing()}, isInForeground=${inComingCallStateManager.isInForeground()}" }
-        if (!inComingCallStateManager.isActivityShowing() || inComingCallStateManager.isInForeground()) return
-        appScope.launch(Dispatchers.IO) {
-            val isLocked = ScreenDeviceUtil.isScreenLocked(application)
-            if (!isLocked && inComingCallStateManager.isActivityShowing() && !inComingCallStateManager.isInForeground()) {
-                L.i { "[Call] Status: OK> restoreIncomingCallActivityIfIncoming" }
-                withContext(Dispatchers.Main) {
-                    val intent = Intent(application, LIncomingCallActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+        L.i { "[Call] Status: isActivityShowing=${inComingCallStateManager.isActivityShowing()}, isInForeground=${inComingCallStateManager.isInForeground()}" }
+
+        // Case 1: the incoming-call Activity was already launched but moved to background
+        // (e.g. user pressed Home while the ringing screen was visible) -> reorder it to front.
+        // Suppressed while a voice message is being recorded, mirroring Case 2 and
+        // [IncomingCallServiceManager.showIncomingCallUI] so pulling the full-screen ringing UI over
+        // the chat does not interrupt an in-progress recording.
+        // Also suppressed once a call is in progress (isInCalling), mirroring Case 2: when the user
+        // answers from a notification, joinCall launches LCallActivity (which sets isInCalling=true)
+        // over the still-showing ringing Activity; without this guard the foreground-restore would
+        // reorder the ringing screen back above the live call screen and strand the user there.
+        if (inComingCallStateManager.isActivityShowing()) {
+            if (inComingCallStateManager.isInForeground() || onGoingCallStateManager.isInCalling()) return
+            appScope.launch(Dispatchers.IO) {
+                val isLocked = ScreenDeviceUtil.isScreenLocked(application)
+                if (!isLocked
+                    && !VoiceRecordingTracker.isRecording
+                    && inComingCallStateManager.isActivityShowing()
+                    && !inComingCallStateManager.isInForeground()
+                    && !onGoingCallStateManager.isInCalling()
+                ) {
+                    L.i { "[Call] Status: OK> restoreIncomingCallActivityIfIncoming" }
+                    withContext(Dispatchers.Main) {
+                        val intent = Intent(application, LIncomingCallActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        application.startActivity(intent)
                     }
-                    application.startActivity(intent)
                 }
+            }
+            return
+        }
+
+        // Case 2: only a notification was shown while the app was in background (the Activity was
+        // never launched). If the incoming call is still ringing (not timed out) and we are not
+        // already in a call, bring up the incoming-call screen when returning to foreground.
+        restoreIncomingCallFromNotificationIfNeeded()
+    }
+
+    /**
+     * Restores the incoming-call screen from an active ringing notification.
+     * Picks the most recent still-notifying [CallData] and launches [LIncomingCallActivity].
+     *
+     * Skipped while a voice message is being recorded, mirroring the suppression in
+     * [IncomingCallServiceManager.showIncomingCallUI] so the recorder is not interrupted.
+     */
+    private fun restoreIncomingCallFromNotificationIfNeeded() {
+        if (onGoingCallStateManager.isInCalling() || VoiceRecordingTracker.isRecording) return
+        // Cheap early-out; the authoritative selection happens inside the coroutine below.
+        if (callDataManager.getCallListData().values.none { it.notifying }) return
+
+        appScope.launch(Dispatchers.IO) {
+            if (ScreenDeviceUtil.isScreenLocked(application)) return@launch
+            // Re-check on the launch boundary to avoid racing with timeout/cancel that may have
+            // cleared the ringing state, with the Activity already being shown, or with a voice
+            // recording that started in the meantime (VoiceRecordingTracker is a point-in-time read).
+            if (onGoingCallStateManager.isInCalling()
+                || inComingCallStateManager.isActivityShowing()
+                || VoiceRecordingTracker.isRecording
+            ) return@launch
+
+            // Select the latest active call here (not before launching) so a newer incoming call
+            // that arrived while this coroutine was deferred is honored instead of a stale pick.
+            val callData = callDataManager.getCallListData().values
+                .filter { it.notifying }
+                .maxByOrNull { it.createdAt ?: 0L } ?: return@launch
+
+            L.i { "[Call] Status: OK> restoreIncomingCallFromNotification roomId=${callData.roomId}" }
+            withContext(Dispatchers.Main) {
+                // Final guard on the same thread as startActivity (no suspension in between): the
+                // incoming timeout may have cleared this call between selection and launch, so
+                // don't surface a ringing screen for an already-expired call.
+                if (!callDataManager.getCallNotifyStatus(callData.roomId)
+                    || onGoingCallStateManager.isInCalling()
+                    || inComingCallStateManager.isActivityShowing()
+                ) return@withContext
+
+                val intent = CallIntent.Builder(
+                    application,
+                    globalServices.activityProvider.getActivityClass(ActivityType.L_INCOMING_CALL)
+                )
+                    .withAction(CallIntent.Action.INCOMING_CALL)
+                    .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .withRoomId(callData.roomId)
+                    .withRoomName(callData.callName ?: "")
+                    .withCallType(callData.type ?: CallType.ONE_ON_ONE.type)
+                    .withCallerId(callData.caller.uid ?: "")
+                    .withConversationId(callData.conversation)
+                    .withCallRole(CallRole.CALLEE.type)
+                    // This flow resumes a background-notification call, so it must keep the same
+                    // app-lock requirement as the notification path (which passes true) rather than
+                    // the foreground direct-launch value (false). Only takes effect when the user
+                    // has an app lock configured; otherwise the Activity forces it off anyway.
+                    .withNeedAppLock(true)
+                    .build()
+                application.startActivity(intent)
+                // The Activity takes over the ringing UI; drop the now-redundant notification.
+                cancelNotificationById(callData.roomId.hashCode())
             }
         }
     }

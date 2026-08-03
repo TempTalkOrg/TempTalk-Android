@@ -108,12 +108,13 @@ object GroupAvatarUtil {
             }
 
             // Download file content
-            val responseBody = EntryPointAccessors.fromApplication<EntryPoint>(context)
-                .fileClient()
-                .httpService
-                .getResponseBody(location, emptyMap(), emptyMap())
-
-            val bytes = responseBody.bytes()
+            val bytes = withContext(Dispatchers.IO) {
+                EntryPointAccessors.fromApplication<EntryPoint>(context)
+                    .fileClient()
+                    .httpService
+                    .getResponseBodyStreaming(location, emptyMap(), emptyMap())
+                    .readBoundedBytes()
+            }
 
             // Decrypt data
             val decryptPass: ByteArray = Base64.decode(groupAvatarData.encryptionKey, Base64.DEFAULT)
@@ -233,7 +234,7 @@ object GroupAvatarUtil {
             .load(uri)
             .signature(ObjectKey(cacheFile.lastModified()))
             .diskCacheStrategy(
-                if (GlideCacheKeyManager.isAvailable(application)) DiskCacheStrategy.RESOURCE
+                if (GlideCacheKeyManager.isCacheKeyReady(application)) DiskCacheStrategy.RESOURCE
                 else DiskCacheStrategy.NONE
             )
             .into(imageView)

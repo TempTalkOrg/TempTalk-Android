@@ -34,7 +34,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isBotId
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.databinding.ChatFragmentChatBinding
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
@@ -353,7 +353,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
     }
 
     private fun updateConfidential(conversationSet: ConversationSetResponseBody? = null) {
-        if (chatViewModel.forWhat.id.isBotId()) {
+        if (chatViewModel.forWhat.id.isOfficialAccount()) {
             binding.includeFullInput.ivFullInputConfidential.visibility = View.GONE
             return
         }

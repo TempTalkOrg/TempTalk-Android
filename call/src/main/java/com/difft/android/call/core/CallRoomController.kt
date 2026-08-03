@@ -25,7 +25,6 @@ import io.livekit.android.e2ee.E2EEOptions
 import io.livekit.android.e2ee.TTEncryptor
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.AudioTrackPublishDefaults
-import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.LocalAudioTrackOptions
@@ -138,6 +137,53 @@ class CallRoomController(
             check(!released) { "[Call] room accessed after release" }
             return roomInstance ?: error("[Call] room accessed before createRoom()")
         }
+
+    /**
+     * Lock-free, non-throwing counterpart to [room] for UI/touch handlers that can legitimately
+     * race with teardown. Returns null before [createRoom] and after release, so callers treat a
+     * gone room as "not connected" instead of crashing on the fail-loud [room] getter. Reads the
+     * same @Volatile fields (no roomLock) so it never blocks the main thread on an in-flight
+     * disconnect(); a benign released-flip between the two reads still yields a safe "not CONNECTED".
+     */
+    fun roomStateOrNull(): Room.State? {
+        if (released) return null
+        return roomInstance?.state
+    }
+
+    /**
+     * Lock-free, non-throwing "is the room fully torn down" snapshot for the manual server-switch
+     * path. A released or not-yet-created room reads as disconnected. Keeps the livekit [Room.State]
+     * type encapsulated here so the coordinator can gate its disconnect→connect sequencing without
+     * importing SDK types.
+     */
+    fun isRoomDisconnected(): Boolean {
+        if (released) return true
+        return (roomInstance?.state ?: Room.State.DISCONNECTED) == Room.State.DISCONNECTED
+    }
+
+    /**
+     * Lock-free, non-throwing remote-presence snapshot for teardown-racing callers (e.g. the
+     * manual server-switch collector on the main thread). Returns false before [createRoom] and
+     * after release, so a gone room is conservatively treated as "only self" instead of crashing
+     * on the fail-loud [room] getter.
+     */
+    fun hasRemoteParticipants(): Boolean {
+        if (released) return false
+        return roomInstance?.remoteParticipants?.isNotEmpty() == true
+    }
+
+    /**
+     * Best-effort disconnect that never throws on a not-yet-created or already-released room.
+     * For connect-failure / manual-switch paths that can race with teardown: unlike
+     * `room.disconnect()` via the fail-loud getter, a gone room is a no-op here instead of an
+     * IllegalStateException crash. Threading is the caller's responsibility — disconnect() may do
+     * network I/O (TLS close_notify under an active proxy), so call it off the main thread.
+     */
+    fun disconnectQuietly() {
+        if (released) return
+        val r = roomInstance ?: return
+        runCatching { r.disconnect() }
+    }
 
     /**
      * OkHttpClient handed to LiveKit so its **WSS signaling** rides the self-hosted
@@ -428,6 +474,4 @@ class CallRoomController(
     /** True once the room has actually been released (post-lock). */
     @VisibleForTesting
     fun isReleased(): Boolean = synchronized(roomLock) { released }
-
-    fun local(): LocalParticipant = room.localParticipant
 }

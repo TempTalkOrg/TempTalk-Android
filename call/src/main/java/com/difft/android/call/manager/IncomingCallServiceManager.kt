@@ -63,10 +63,14 @@ class IncomingCallServiceManager @Inject constructor(
         val callInfo = parseIncomingCallIntent(intent) ?: return
         if (shouldSkipIncomingCall(callInfo)) return
         
-        showIncomingCallUI(context, callInfo)
+        val shownAsActivity = showIncomingCallUI(context, callInfo)
         startIncomingCallNotifications(callInfo)
         enableIncomingCallTimeout(context, callInfo.roomId)
-        wakeUpDevice()
+        // Only temporarily bypass the app lock when a foreground incoming-call Activity is actually
+        // shown (the user is already past the lock). On the notification-only / background path there
+        // is no Activity to protect, and leaving the flag set would leak into the next app entry and
+        // let the home screen skip the app lock (e.g. cold start from a call notification).
+        wakeUpDevice(disableScreenLockTemporarily = shownAsActivity)
     }
 
     /**
@@ -81,9 +85,17 @@ class IncomingCallServiceManager @Inject constructor(
         L.i { "[call] IncomingCallServiceManager stopIncomingCallService stop Service, tag=$tag" }
         callTimeoutManager.cancelCallWithTimeout(roomId)
         callToChatController.cancelNotificationById(roomId.hashCode())
-        ringtoneManager.stopRingTone(tag)
-        vibrationManager.stopVibration()
+        // Clear this call's notifying flag first, then stop the shared ringtone/vibration ONLY when no
+        // other incoming call is still notifying. Ringtone/vibration are global singletons shared by all
+        // concurrent incoming calls (only the first one starts them; see startIncomingCallNotifications).
+        // Stopping them unconditionally here would silence still-active concurrent calls when the first
+        // one ends. Keeping them running lets the remaining call(s) stay audible; the last one to stop
+        // finally stops them.
         callDataManager.setCallNotifyStatus(roomId, false)
+        if (!callDataManager.hasCallDataNotifying()) {
+            ringtoneManager.stopRingTone(tag)
+            vibrationManager.stopVibration()
+        }
         val application = context.applicationContext
         application.sendBroadcast(
             Intent(LCallConstants.CALL_OPERATION_INVITED_DESTROY)
@@ -138,8 +150,9 @@ class IncomingCallServiceManager @Inject constructor(
      * 
      * @param context 上下文
      * @param callInfo 来电信息
+     * @return true 表示以前台来电 Activity 形式展示；false 表示以通知形式展示
      */
-    private fun showIncomingCallUI(context: Context, callInfo: IncomingCallInfo) {
+    private fun showIncomingCallUI(context: Context, callInfo: IncomingCallInfo): Boolean {
         val application = context.applicationContext
         
         if (!callToChatController.isIncomingCallActivityShowing()
@@ -159,6 +172,7 @@ class IncomingCallServiceManager @Inject constructor(
                 .withNeedAppLock(false)
                 .build()
             application.startActivity(intentActivity)
+            return true
         } else {
             // Show notification
             if (VoiceRecordingTracker.isRecording) {
@@ -173,20 +187,25 @@ class IncomingCallServiceManager @Inject constructor(
                 callInfo.callType,
                 true
             )
+            return false
         }
     }
 
     /**
      * 启动来电通知（铃声和震动）
-     * 如果当前没有正在进行的通话且没有其他来电通知，则启动铃声和震动
-     * 
+     *
+     * 铃声/震动只为"第一路"来电启动（已有来电在响铃时不再重复响铃），但每一路来电都会被标记为
+     * notifying（活跃来电）。这样即使存在多路并发来电，回前台恢复逻辑也能据此挑出最新一路仍活跃的
+     * 来电，而不会因为后到的来电从未置位 notifying 而选错或漏选。
+     *
      * @param callInfo 来电信息
      */
     private fun startIncomingCallNotifications(callInfo: IncomingCallInfo) {
-        if (!callDataManager.hasCallDataNotifying()) {
+        val shouldStartRinging = !callDataManager.hasCallDataNotifying()
+        callDataManager.setCallNotifyStatus(callInfo.roomId, true)
+        if (shouldStartRinging) {
             ringtoneManager.startRingTone(callInfo.intent)
             vibrationManager.startVibration()
-            callDataManager.setCallNotifyStatus(callInfo.roomId, true)
         }
     }
 
@@ -209,11 +228,17 @@ class IncomingCallServiceManager @Inject constructor(
 
     /**
      * 唤醒设备
-     * 唤醒屏幕并临时禁用锁屏
+     *
+     * 始终唤醒屏幕；仅当来电以前台 Activity 形式展示时才临时禁用应用锁。通知/后台路径不禁用，
+     * 避免该内存标志泄漏到下一次 APP 入口而绕过主页应用锁。
+     *
+     * @param disableScreenLockTemporarily 是否临时禁用应用锁（仅前台来电 Activity 场景为 true）
      */
-    private fun wakeUpDevice() {
+    private fun wakeUpDevice(disableScreenLockTemporarily: Boolean) {
         ScreenDeviceUtil.wakeUpDevice()
-        ScreenLockUtil.temporarilyDisabled = true
+        if (disableScreenLockTemporarily) {
+            ScreenLockUtil.temporarilyDisabled = true
+        }
     }
 }
 

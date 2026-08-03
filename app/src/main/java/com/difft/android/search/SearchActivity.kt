@@ -19,7 +19,6 @@ import com.difft.android.chat.R
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUIData
 import com.difft.android.chat.group.GroupUtil
-import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ListItem
 import com.difft.android.chat.recent.RecentChatAdapter
 import com.difft.android.chat.recent.RoomViewData
@@ -41,7 +40,6 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class SearchActivity : BaseActivity() {
@@ -55,9 +53,6 @@ class SearchActivity : BaseActivity() {
 
     private val mBinding: ActivitySearchBinding by viewbind()
     private var key: String = ""
-
-    @Inject
-    lateinit var inviteUtils: InviteUtils
 
     private var searchJob: Job? = null
 

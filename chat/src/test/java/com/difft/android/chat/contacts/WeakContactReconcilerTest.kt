@@ -2,7 +2,7 @@ package com.difft.android.chat.contacts
 
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.utils.weakcontact.WeakContactClock
+import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.messageserialization.db.store.DBMessageStore
@@ -44,8 +44,9 @@ import kotlin.test.assertTrue
  * All collaborators are MockK fakes; [WeakContactReconciler] is constructed via its real
  * constructor and the real entry methods are invoked — tests assert on the real orchestration,
  * never a re-implementation of it. `ContactorUtil` is an `object` → mocked via [mockkObject] so
- * the static `emitContactsUpdate` side-effect is verifiable and inert. [WeakContactClock] is the
- * real process singleton (reset in @Before).
+ * the static `emitContactsUpdate` side-effect is verifiable and inert. [ServerTimeProvider] is the
+ * real process singleton (reset with injected clocks in @Before to keep sibling tests deterministic;
+ * reconcile itself no longer feeds the anchor — the network converter hook owns that).
  *
  * **WCDB native-lib constraint (project precedent — see [com.difft.android.chat.common
  * .ConversationManagerImplTest] and `DBPublicKeyInfoStoreTest`)**: WINQ `Expression`
@@ -56,8 +57,8 @@ import kotlin.test.assertTrue
  * `@Ignore`-d as compilation guards + documented expected behavior; they run via instrumentation.
  * Tests whose path touches NO `Expression` (removeWeak, removeNow, reconcile-gate) run live.
  *
- * Robolectric is the runner because [WeakContactReconciler] reads `SystemClock.elapsedRealtime()`
- * when writing the clock anchor (reconcile path).
+ * Robolectric is the runner for Android framework availability; @Before injects deterministic clocks
+ * into [ServerTimeProvider] so no real device clock is read by any collaborator.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -102,12 +103,8 @@ class WeakContactReconcilerTest {
         clearClockAnchor()
     }
 
-    private fun clockAnchor() = WeakContactClock.snapshot()
-
     private fun clearClockAnchor() {
-        val field = WeakContactClock::class.java.getDeclaredField("anchor")
-        field.isAccessible = true
-        field.set(WeakContactClock, null)
+        ServerTimeProvider.resetForTest(wallClock = { 0L }, elapsedClock = { 0L })
     }
 
     private fun dto(
@@ -377,22 +374,6 @@ class WeakContactReconcilerTest {
         coVerify(exactly = 0) { dbMessageStore.removeRoomAndMessages("x") } // room always preserved here
         coVerify { pendingRepo.remove("x") }                               // placeholder dropped
         coVerify { pendingRepo.overwriteAll(any()) }
-    }
-
-    // ---- reconcile writes the clock anchor (reconcile diff touches Expression) ----------
-
-    @Test
-    @Ignore("Reconcile diff reads contactor via WINQ Expression (native lib); instrumentation only.")
-    fun `T16 reconcile writes WeakContactClock anchor with server timestamp`() = runTest {
-        coEvery { pendingRepo.snapshotBeforeOverwrite() } returns emptySet()
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(emptyList(), serverTimestamp = 7777L)
-        stubContactorPresence(present = emptySet())
-
-        reconciler.reconcile("test")
-
-        val anchor = clockAnchor()
-        assertTrue(anchor != null, "anchor must be written after successful reconcile")
-        assertEquals(7777L, anchor.serverNow)
     }
 
     // ---- reconcile "still" branch is a no-op (contactor + weak coexistence is normal) ---------
