@@ -34,7 +34,7 @@ class MessageActionConfigBuilder(
         val showReactionBar: Boolean,
         val quickActions: List<MessageAction>,
         val moreActions: List<MessageAction>,
-        val allActions: List<MessageAction>,  // All actions for "More" sheet (without MORE button)
+        val allActions: List<MessageAction>,  // Full action set (same list as quickActions post-expansion)
         val anchorBounds: Rect,
         val isOutgoing: Boolean
     )
@@ -56,30 +56,8 @@ class MessageActionConfigBuilder(
         anchorBounds: Rect
     ): Config {
         val allActions = buildAllActions(message, isForForward, isSaved)
-        
-        // Split into quick actions (first 4) and more actions (rest)
-        val quickActions: List<MessageAction>
-        val moreActions: List<MessageAction>
-        
-        if (isForForward) {
-            // In forward mode, show all actions as quick actions (max 3)
-            quickActions = allActions.take(3)
-            moreActions = emptyList()
-        } else {
-            // Normal mode: first 4 as quick, rest in More
-            quickActions = if (allActions.size > 4) {
-                allActions.take(4) + MessageAction.more()
-            } else {
-                allActions
-            }
-            moreActions = if (allActions.size > 4) {
-                allActions.drop(4)
-            } else {
-                emptyList()
-            }
-        }
-        
-        val showReactionBar = shouldShowReactionBar(message, mostUseEmojis)
+
+        val showReactionBar = shouldShowReactionBar(message, mostUseEmojis, isSaved)
         val reactions = if (showReactionBar) {
             mostUseEmojis?.take(5) ?: emptyList()
         } else {
@@ -99,9 +77,9 @@ class MessageActionConfigBuilder(
             reactions = reactions,
             selectedEmojis = selectedEmojis,
             showReactionBar = showReactionBar,
-            quickActions = quickActions,
-            moreActions = moreActions,
-            allActions = allActions,  // All actions for "More" sheet
+            quickActions = allActions,   // full expansion — grid renders this
+            moreActions = emptyList(),   // vestigial (cleanup candidate)
+            allActions = allActions,
             anchorBounds = anchorBounds,
             isOutgoing = message.isMine
         )
@@ -140,12 +118,6 @@ class MessageActionConfigBuilder(
             actions.add(MessageAction.copy())
         }
 
-        // Add to Fav - for gif/webp messages (same as normal mode, §5.3): forwarded/combined-forward
-        // detail views expose it too, mirroring Save.
-        if (isAnimatedImageMessage(message)) {
-            actions.add(MessageAction.favoriteGif())
-        }
-
         // Forward - for non-audio messages
         if (message.attachment?.isAudioMessage() != true) {
             actions.add(MessageAction.forward())
@@ -155,6 +127,12 @@ class MessageActionConfigBuilder(
         if (message.canDownloadFile()) {
             val isMediaFile = isMediaFile(message)
             actions.add(MessageAction.save(isMediaFile))
+        }
+
+        // Add to Fav - for gif/webp messages (same as normal mode, §5.3): forwarded/combined-forward
+        // detail views expose it too, mirroring Save.
+        if (isAnimatedImageMessage(message)) {
+            actions.add(MessageAction.favoriteGif())
         }
     }
     
@@ -169,26 +147,26 @@ class MessageActionConfigBuilder(
         val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
         
         if (!isConfidential) {
-            // Quote
+            // ① Primary — Quote
             actions.add(MessageAction.quote())
-            
-            // Copy
+
+            // ① Primary — Copy
             if (hasTextContent(message) || message.canDownloadFile() || message.isLongTextAttachment()) {
                 actions.add(MessageAction.copy())
             }
 
-            // Add to Fav - for gif/webp messages (M3, §5.3). Positioned right after quote+copy,
-            // before translate/forward (Issue 6c).
-            if (isAnimatedImageMessage(message)) {
-                actions.add(MessageAction.favoriteGif())
-            }
-
-            // Forward - for non-audio messages
+            // ① Primary — Forward (non-audio messages)
             if (message.attachment?.isAudioMessage() != true) {
                 actions.add(MessageAction.forward())
             }
-            
-            // Speech to Text - for audio messages
+
+            // ① Primary — Select. Voice messages cannot be forwarded, so exclude them.
+            // Voice files (flags=0) are forwardable, so they remain selectable.
+            if (message.attachment?.isAudioMessage() != true) {
+                actions.add(MessageAction.multiSelect())
+            }
+
+            // ② Transform — Speech to Text (audio)
             if (message.attachment?.isAudioMessage() == true) {
                 if (message.speechToTextData == null || message.speechToTextData?.convertStatus != SpeechToTextStatus.Show) {
                     actions.add(MessageAction.speechToText())
@@ -196,34 +174,35 @@ class MessageActionConfigBuilder(
                     actions.add(MessageAction.speechToTextOff())
                 }
             }
-            
-            // Save/Download - for downloadable files
+
+            // ③ Save — Save/Download (downloadable files)
             if (message.canDownloadFile()) {
                 val isMediaFile = isMediaFile(message)
                 actions.add(MessageAction.save(isMediaFile))
             }
-            
-            // Multi-select - voice messages cannot be forwarded, so exclude them.
-            // Voice files (flags=0) are forwardable, so they remain selectable.
-            if (message.attachment?.isAudioMessage() != true) {
-                actions.add(MessageAction.multiSelect())
+
+            // ③ Save — Add to Fav (gif/webp messages, M3)
+            if (isAnimatedImageMessage(message)) {
+                actions.add(MessageAction.favoriteGif())
             }
-            
-            // Save to Note
-            actions.add(MessageAction.saveToNote())
+
+            // ③ Save — Add to Saved (not already saved)
+            if (!isSaved) {
+                actions.add(MessageAction.saveToNote())
+            }
         }
-        
-        // Delete Saved - for saved messages
-        if (isSaved) {
-            actions.add(MessageAction.deleteSaved())
-        }
-        
-        // Recall - for own messages within timeout
+
+        // ④ Recall (red) — own messages within timeout
         if (message.isMine && isWithinRecallTimeout(message)) {
             actions.add(MessageAction.recall())
         }
-        
-        // More Info - always show
+
+        // ④ Delete (red) — saved messages
+        if (isSaved) {
+            actions.add(MessageAction.deleteSaved())
+        }
+
+        // ④ Info — always show
         actions.add(MessageAction.moreInfo())
     }
     
@@ -232,9 +211,11 @@ class MessageActionConfigBuilder(
      */
     private fun shouldShowReactionBar(
         message: TextChatMessage,
-        mostUseEmojis: List<String>?
+        mostUseEmojis: List<String>?,
+        isSaved: Boolean
     ): Boolean {
         return !mostUseEmojis.isNullOrEmpty()
+            && !isSaved
             && message.sharedContacts.isNullOrEmpty()
             && message.attachment?.isAudioMessage() != true
             && message.attachment?.isAudioFile() != true

@@ -5,14 +5,15 @@ import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.FileUtil.getFilePath
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.chat.mediasend.v2.videos.VideoTrimData
 import com.difft.android.chat.mms.MediaConstraints
 import com.difft.android.chat.mms.SentMediaQuality
-import org.thoughtcrime.securesms.video.StreamingTranscoder
-import org.thoughtcrime.securesms.video.TranscoderOptions
-import org.thoughtcrime.securesms.video.VideoRemuxer
-import org.thoughtcrime.securesms.video.VideoUtil
+import com.difft.android.video.StreamingTranscoder
+import com.difft.android.video.TranscoderOptions
+import com.difft.android.video.VideoRemuxer
+import com.difft.android.video.VideoSource
+import com.difft.android.video.VideoUtil
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -47,9 +48,9 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
 
     @WorkerThread
     override fun transform(context: Context, media: LocalMedia): LocalMedia {
-        val inputPath = media.realPath
-        val inputFile = File(inputPath)
-        val fileSize = inputFile.length()
+        // Size and duration come from the MediaStore row rather than from opening the file: the
+        // bare realPath is exactly what may be unreadable, and both values are already known.
+        val fileSize = MediaMetadataSource.sizeBytes(media)
         val constraints = MediaConstraints.getPushMediaConstraints(SentMediaQuality.fromCode(sentMediaQuality.code))
         val maxFileSize = constraints.getCompressedVideoMaxSize(context)
 
@@ -61,11 +62,14 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
             return performFullTranscode(context, media, constraints)
         }
 
-        // Check if compression is needed (bitrate/size check)
-        val (inputBitRate, targetBitRate) = getBitrateInfo(inputPath, constraints)
+        // Check if compression is needed (bitrate/size check). An unknown bitrate (-1) makes
+        // needsCompression take its conservative branch, which is the behaviour we want.
+        val preset = constraints.videoTranscodingSettings
+        val inputBitRate = VideoUtil.inputBitRate(fileSize, MediaMetadataSource.durationMs(media))
+        val targetBitRate = preset.videoBitRate + preset.audioBitRate
         val compressionNeeded = needsCompression(inputBitRate, targetBitRate, fileSize, maxFileSize)
 
-        L.i { "VideoTrimTransform: fileSize=${fileSize / 1024 / 1024}MB, inputBitRate=$inputBitRate, targetBitRate=$targetBitRate, compressionNeeded=$compressionNeeded" }
+        L.i { "VideoTrimTransform: sizeBytes=$fileSize, inputBitRate=$inputBitRate, targetBitRate=$targetBitRate, compressionNeeded=$compressionNeeded" }
 
         return if (compressionNeeded) {
             // Case 2: Compression needed -> full transcode
@@ -74,16 +78,8 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
         } else {
             // Case 3: No trimming, no compression needed -> fast remux (metadata removal only)
             L.i { "VideoTrimTransform: No compression needed, using fast remux (metadata removal only)" }
-            performFastRemux(media)
+            performFastRemux(context, media)
         }
-    }
-
-    /**
-     * Get input bitrate and target bitrate for compression decision.
-     */
-    private fun getBitrateInfo(inputPath: String, constraints: MediaConstraints): Pair<Int, Int> {
-        val preset = constraints.videoTranscodingSettings
-        return VideoUtil.getBitrateInfo(inputPath, preset.videoBitRate, preset.audioBitRate)
     }
 
     /**
@@ -95,16 +91,15 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
 
         try {
             val transformProperties = TransformProperties(false, data.isDurationEdited, data.startTimeUs, data.endTimeUs, sentMediaQuality.code, false)
-            val inputFile = File(media.realPath)
             val options = if (transformProperties.videoTrim) {
                 TranscoderOptions(transformProperties.videoTrimStartTimeUs, transformProperties.videoTrimEndTimeUs)
             } else {
                 null
             }
 
-            // Use File constructor for native file handling (Signal's approach)
-            // This avoids JNI overhead from MediaDataSource
-            val transcoder = StreamingTranscoder(inputFile, options, constraints.videoTranscodingSettings, constraints.getCompressedVideoMaxSize(context), true)
+            // VideoSource is the single dispatch owner: a sandbox source still reaches the native
+            // file path inside it, a gallery source is read through its provider's descriptor.
+            val transcoder = StreamingTranscoder(VideoSource.of(context, media.readableUri()), options, constraints.videoTranscodingSettings, constraints.getCompressedVideoMaxSize(context), true)
 
             if (transcoder.isTranscodeRequired) {
                 // Create output file directly without copying input first
@@ -136,12 +131,13 @@ class VideoTrimTransform(private val data: VideoTrimData, private val sentMediaQ
      * Perform fast remux to remove metadata without re-encoding.
      * This is very fast (milliseconds) as it only copies the encoded streams.
      */
-    private fun performFastRemux(media: LocalMedia): LocalMedia {
-        val inputPath = media.realPath
+    private fun performFastRemux(context: Context, media: LocalMedia): LocalMedia {
         val outputFile = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY), "${UUID.randomUUID()}.mp4")
         val outputPath = outputFile.absolutePath
 
-        val success = VideoRemuxer.remux(inputPath, outputPath)
+        // A source that cannot be opened at all throws out of here and is reported per item; a
+        // readable source that fails to remux still returns false and is sent as-is below.
+        val success = VideoRemuxer.remux(VideoSource.of(context, media.readableUri()), outputPath)
 
         if (success) {
             L.i { "Fast remux completed successfully" }

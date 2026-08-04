@@ -8,14 +8,15 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.BaseActivity
 import com.difft.android.chat.R
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import util.getParcelableArrayListExtraCompat
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.mediasend.MediaFailureClassifier
 import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.MediaSendFailureNotice
 import com.difft.android.chat.mediasend.v2.review.MediaReviewFragment
 import com.difft.android.chat.util.FullscreenHelper
 import com.difft.android.chat.util.WindowUtil
-import com.difft.android.base.widget.ToastUtil
 
 class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
 
@@ -83,10 +84,16 @@ class MediaSelectionActivity : BaseActivity(), MediaReviewFragment.Callback {
         finish()
     }
 
+    /**
+     * Stays on the review screen: finishing here discarded the typed caption and the whole selection
+     * to report a failure, and the throwable itself was dropped without a trace.
+     */
     override fun onSendError(error: Throwable) {
-        ToastUtil.showLong(R.string.operation_failed)
-        setResult(RESULT_CANCELED)
-        finish()
+        val failure = MediaFailureClassifier.classifyThrown(error)
+        MediaSendFailureNotice.showThrown(this, failure) {
+            (supportFragmentManager.findFragmentById(R.id.fragment_container) as? MediaReviewFragment)
+                ?.retrySend()
+        }
     }
 
     override fun onNoMediaSelected() {

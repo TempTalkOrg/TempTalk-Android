@@ -171,6 +171,12 @@ class LChatToCallControllerImpl @Inject constructor(
         )
         val notification = Notification(Args(collapseId), LCallConstants.CALL_NOTIFICATION_TYPE)
 
+        // Generated once per user-initiated start. Reported via TTStartCall and threaded to
+        // all outbound control messages so the server can locate the room by clientCallId when
+        // roomId is not yet assigned (window W). Stable across the initial connect failover
+        // because it is baked into startCallParams (reused for every failover URL).
+        val clientCallId = java.util.UUID.randomUUID().toString()
+
         val body = StartCallRequestBody(
             callType.type,
             LCallConstants.CALL_VERSION,
@@ -179,7 +185,8 @@ class LChatToCallControllerImpl @Inject constructor(
             cipherMessages = callEncryptResult.cipherMessages,
             encInfos = callEncryptResult.encInfos,
             notification = notification,
-            publicKey = callEncryptResult.publicKey
+            publicKey = callEncryptResult.publicKey,
+            clientCallId = clientCallId
         )
 
         val startCallParams = createStartCallParams(body)
@@ -194,6 +201,7 @@ class LChatToCallControllerImpl @Inject constructor(
             .withStartCallParams(startCallParams)
             .withNeedAppLock(false)
             .withCallWaitDialogShown(true)
+            .withClientCallId(clientCallId)
 
         activity.startActivity(callIntentBuilder.build())
         return true

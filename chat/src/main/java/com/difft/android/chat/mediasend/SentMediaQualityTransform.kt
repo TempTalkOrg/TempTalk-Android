@@ -2,7 +2,7 @@ package com.difft.android.chat.mediasend
 
 import android.content.Context
 import androidx.annotation.WorkerThread
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.chat.mediasend.LocalMediaExtensions.transformProperties
 import com.difft.android.chat.mms.SentMediaQuality
 import java.util.Optional

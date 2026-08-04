@@ -2,7 +2,8 @@ package com.difft.android.chat.media
 
 import android.content.Context
 import android.net.Uri
-import org.thoughtcrime.securesms.video.interfaces.MediaInput
+import com.difft.android.video.UriMediaInput
+import com.difft.android.video.interfaces.MediaInput
 import java.io.IOException
 
 /**

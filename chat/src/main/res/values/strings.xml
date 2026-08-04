@@ -6,8 +6,6 @@
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">Learn more</string>
     <string name="SpanUtil__read_more">Read more</string>
-    <!-- DraftDatabase -->
-    <string name="chat_draft">Draft</string>
 
     <string name="you">You</string>
 
@@ -79,20 +77,19 @@
     <string name="chat_message_action_copy">Copy</string>
     <string name="chat_message_action_copied">Copied</string>
     <string name="chat_message_action_forward">Forward</string>
-    <string name="chat_message_action_voice2text">Voice To text</string>
+    <string name="chat_message_action_voice2text">Voice to Text</string>
     <string name="chat_message_action_voice2text_off">Discard Convert</string>
     <string name="chat_message_action_voice2text_tip_title">Information</string>
     <string name="chat_message_action_voice2text_tip_info">Voice-to-Text converted by Quicall server</string>
     <string name="chat_message_action_voice2text_tip_ok">OK</string>
-    <string name="chat_message_action_select_multiple">Select Multiple</string>
+    <string name="chat_message_action_select_multiple">Select</string>
     <string name="chat_message_action_select_max_limit">Select up to 50 messages</string>
     <string name="chat_message_action_quote">Quote</string>
     <string name="chat_message_action_recall">Recall</string>
     <string name="chat_message_action_save_to_photos">Save to Photos</string>
     <string name="chat_message_action_download">Download</string>
     <string name="chat_message_action_save_to_note">Add to Saved</string>
-    <string name="chat_message_action_more">More</string>
-    <string name="chat_message_action_more_info">More Info</string>
+    <string name="chat_message_action_info">Info</string>
     <string name="chat_message_action_translate">Translate</string>
     <string name="chat_message_action_translate_off">Off</string>
     <string name="chat_message_action_select_all">Select All</string>
@@ -132,10 +129,13 @@
     <string name="chat_list_at_you">[@You]</string>
     <string name="chat_list_at_all">[@All]</string>
     <string name="chat_list_critical_alert">[🚨 Critical Alert]</string>
+    <string name="chat_list_send_failed">[Send failed]</string>
+    <string name="chat_list_draft">[Draft]</string>
     <string name="chat_message_critical_alert">🚨 Critical Alert.</string>
     <string name="chat_status_sending">Sending</string>
     <string name="chat_status_sent">Sent</string>
     <string name="chat_status_fail">Fail</string>
+    <string name="chat_message_send_failed_retry">Send failed · Tap to retry</string>
     <string name="chat_emoji_reaction">Emoji Reaction</string>
     <string name="chat_emoji_most_use">Most use</string>
     <string name="chat_emoji_other">Others</string>
@@ -162,6 +162,7 @@
     <string name="chat_privacy_banner">🔒 Privacy first. Fully anonymous and end-to-end encrypted. DO NOT trust unknown users.</string>
 
     <string name="chat_action_photo">Photos</string>
+    <string name="chat_action_gif">GIF</string>
     <string name="chat_action_contact">Contact</string>
     <string name="chat_action_file">File</string>
     <string name="chat_action_call">Call</string>
@@ -693,7 +694,7 @@
     <!-- GIF favorites (M3: favorites data flow) -->
     <string name="gif_favorites_empty">No favorites yet</string>
     <!-- Unified favorite menu labels (message long-press menu + GIF grid long-press floating menu). -->
-    <string name="gif_favorites_add_full">Add to Favorites</string>
+    <string name="gif_favorites_add_full">Add to Fav</string>
     <string name="gif_favorites_remove">Remove from Favorites</string>
     <string name="gif_favorites_added">Added to Favorites</string>
     <string name="gif_favorites_failed">Couldn\'t add. Try again later.</string>
@@ -703,4 +704,37 @@
     <string name="gif_favorites_cap_message">You can save up to 200 favorites. Replace the oldest one or remove some favorites first.</string>
     <string name="gif_favorites_cap_confirm">Replace Oldest</string>
     <string name="gif_favorites_cap_cancel">Cancel</string>
+    <!-- Media send failure surface: dialog titles, per-item lines, overflow line and buttons.
+         Deliberately does not reuse file_unavailable: that wording asserts the file was moved or
+         deleted, which is the wrong attribution for a read that the system refused. -->
+    <string name="media_send_failed_title_single">Couldn\'t send this file</string>
+    <string name="media_send_failed_title_all">None of the %1$d items could be sent</string>
+    <string name="media_send_failed_title_partial">%2$d of %1$d items couldn\'t be sent</string>
+    <string name="media_send_failed_item_named">Item %1$d (%2$s): %3$s</string>
+    <string name="media_send_failed_item_unnamed">Item %1$d: %2$s</string>
+    <string name="media_send_failed_more">%1$d more not listed</string>
+    <string name="media_send_failed_named">Couldn\'t send \"%1$s\": %2$s</string>
+    <string name="media_send_failed_unnamed">Couldn\'t send this file: %1$s</string>
+    <string name="media_send_failed_retry">Retry</string>
+    <string name="media_send_failed_back">Go back</string>
+    <string name="media_send_failed_send_rest">Send the other %1$d</string>
+    <!-- Short reason labels, one per failure reason. Kept to a fragment so they read inside an item line. -->
+    <string name="media_send_reason_unreadable">couldn\'t be read</string>
+    <string name="media_send_reason_unsupported">format not supported</string>
+    <string name="media_send_reason_no_space">not enough storage</string>
+    <string name="media_send_reason_transform">processing failed</string>
+    <string name="media_send_reason_unknown">unexpected error</string>
+    <!-- Next-step guidance, one line per reason. media_send_next_restart_or_file covers both the
+         "read was refused with no attribution available" and "access looks granted yet the read
+         failed" cases, so it states only the observable fact and must not name a permission state;
+         it must keep the restart advice, which is what helps under either mechanism. The "File"
+         literal in it and in media_send_next_reselect_photos must match chat_action_file. -->
+    <string name="media_send_next_restart_or_file">The system refused to read this file. Restart the app and try again — or send it through \"File\" instead.</string>
+    <string name="media_send_next_grant">The app doesn\'t have access to your photos right now. Allow it in system settings, then try again.</string>
+    <string name="media_send_next_reselect_photos">This file isn\'t in the set of photos you allowed access to. Choose it in the access list, or send it through \"File\" instead.</string>
+    <string name="media_send_next_reselect_item">This file is no longer available. Pick it again.</string>
+    <string name="media_send_next_unsupported">This file\'s format isn\'t supported, or the file is damaged. Try another file.</string>
+    <string name="media_send_next_free_space">Free up some storage, then try again.</string>
+    <string name="media_send_next_retry_or_plain">Try again, or undo the edits and send the original.</string>
+    <string name="media_send_next_unknown">Something went wrong (%1$s). Try again.</string>
 </resources>

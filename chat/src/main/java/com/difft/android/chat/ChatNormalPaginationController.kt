@@ -1,13 +1,17 @@
 package com.difft.android.chat
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.qualifier.User
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.sampleAfterFirst
 import com.tencent.wcdb.winq.Order
+import com.tencent.wcdb.winq.ResultColumnConvertible
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
+import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -18,6 +22,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
+import org.difft.app.database.earliestFailedOutgoingMessage
+import org.difft.app.database.firstUnreadFromOthersMessage
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.MessageModel
@@ -29,6 +35,11 @@ class ChatNormalPaginationController @AssistedInject constructor(
     @Assisted
     private val forWhat: For,
     private val wcdb: WCDB,
+    // Comparison base for "from others". Same source as `isMine` (`Record2MessageFactory` compares
+    // `globalServices.myId` with `record.fromWho`) so "from others" has ONE meaning. `UserInfoModule`
+    // falls back to "" when no user data is loaded; a blank id only degrades the anchor decision
+    // towards today's behavior, it cannot crash or mis-place the divider.
+    @param:User.Uid private val myId: String,
 ) : BaseChatPaginationController(forWhat) {
     companion object {
         const val PAGE_SIZE: Long = 20L
@@ -44,10 +55,50 @@ class ChatNormalPaginationController @AssistedInject constructor(
         }
     }
 
+    /**
+     * Entry point for opening a conversation without a jump target. Owns the anchoring decision:
+     * the gate lives here and NOT in [initLoadMessage], so the `jumpToMessage` entry keeps its
+     * behavior untouched.
+     */
     private suspend fun loadNormalChatDefaultMessages() {
-        val readPosition =
-            wcdb.room.getValue(DBRoomModel.readPosition, DBRoomModel.roomId.eq(forWhat.id))?.long ?: 0L
+        // One row, two columns — replaces a single-column readPosition read, so the gate below adds
+        // ZERO queries for the overwhelming majority of rooms (sendStatus == NONE).
+        val roomRow = wcdb.room.getOneRow(
+            arrayOf<ResultColumnConvertible>(DBRoomModel.readPosition, DBRoomModel.sendStatus),
+            DBRoomModel.roomId.eq(forWhat.id)
+        )
+        val readPosition = roomRow?.getOrNull(0)?.long ?: 0L
+        val roomSendStatus = roomRow?.getOrNull(1)?.int ?: ROOM_SEND_STATUS_NONE
 
+        // `== FAILED`, not `!= NONE`: enabling the future SENDING aggregate must not start moving
+        // the first screen.
+        if (roomSendStatus == ROOM_SEND_STATUS_FAILED) {
+            val failed = wcdb.earliestFailedOutgoingMessage(forWhat.id)
+            if (failed != null) {
+                // Must be this dedicated query, not expectedUnreadMessages — see
+                // decideFirstScreenAnchor's KDoc for why the latter disables the anchoring.
+                val firstUnreadOthersTs = wcdb.firstUnreadFromOthersMessage(
+                    forWhat.id, forWhat.typeValue, readPosition, myId
+                )?.systemShowTimestamp
+                val anchor = decideFirstScreenAnchor(
+                    firstFailedTs = failed.systemShowTimestamp,
+                    firstUnreadOthersTs = firstUnreadOthersTs,
+                )
+                L.i {
+                    "[${forWhat.id}] first screen anchor decision: failedTs=${failed.systemShowTimestamp} " +
+                        "firstUnreadOthersTs=$firstUnreadOthersTs -> $anchor"
+                }
+                if (anchor is FirstScreenAnchor.AtFailedMessage) {
+                    loadFirstScreenAnchoredAtFailure(failed, readPosition)
+                    return
+                }
+            }
+        }
+        loadFirstScreenFromReadPosition(readPosition)
+    }
+
+    /** Default first screen: window built around [readPosition], divider rule untouched. */
+    private suspend fun loadFirstScreenFromReadPosition(readPosition: Long) {
         // 多查询一条未读消息用作后锚点
         val expectedUnreadMessages =
             wcdb.message.getAllObjects(
@@ -72,32 +123,8 @@ class ChatNormalPaginationController @AssistedInject constructor(
         L.i { "[${forWhat.id}] Load normal chat default messages, sortedMessages.size = ${sortedMessages.size}" }
 
         // 拆分锚点消息和显示消息
-        val anchorMessageBefore: MessageModel?
-        val pageMessages: List<MessageModel>
-        val anchorMessageAfter: MessageModel?
-
-        val pageSizeInt = PAGE_SIZE.toInt()
-        if (sortedMessages.size <= pageSizeInt) {
-            // 消息不够，没有锚点
-            anchorMessageBefore = null
-            pageMessages = sortedMessages
-            anchorMessageAfter = null
-        } else if (expectedUnreadMessages.size >= pageSizeInt + 1) {
-            // 未读消息够一页还多，最后一条作为后锚点
-            anchorMessageBefore = null
-            pageMessages = sortedMessages.take(pageSizeInt)
-            anchorMessageAfter = sortedMessages.last()
-        } else {
-            // 已读+未读混合，第一条作为前锚点，最后一条作为后锚点（如果有的话）
-            val hasAfterAnchor = sortedMessages.size > pageSizeInt + 1
-            anchorMessageBefore = sortedMessages.first()
-            pageMessages = if (hasAfterAnchor) {
-                sortedMessages.subList(1, pageSizeInt + 1)
-            } else {
-                sortedMessages.subList(1, sortedMessages.size)
-            }
-            anchorMessageAfter = if (hasAfterAnchor) sortedMessages.last() else null
-        }
+        val window = splitMessageWindow(sortedMessages, expectedUnreadMessages.size, PAGE_SIZE.toInt())
+        val pageMessages = window.pageMessages
 
         // 计算初始滚动位置
         val scrollToPosition = if (expectedUnreadMessages.isNotEmpty()) {
@@ -119,9 +146,69 @@ class ChatNormalPaginationController @AssistedInject constructor(
             messageList = pageMessages,
             scrollAction = if (scrollToPosition >= 0) ScrollAction.ToPosition(scrollToPosition) else null,
             updateTimestamp = System.currentTimeMillis(),
-            anchorMessageBefore = anchorMessageBefore,
-            anchorMessageAfter = anchorMessageAfter,
+            anchorMessageBefore = window.anchorBefore,
+            anchorMessageAfter = window.anchorAfter,
             readPosition = readPosition
+        )
+        observerMessagesChanges()
+    }
+
+    /**
+     * First screen anchored at [failed] — the earliest thing the user has not dealt with.
+     *
+     * [readPosition] is passed through unchanged: the divider is a session-scoped anchor in
+     * `ChatMessageViewModel`, so it renders if and only if its boundary message is in the loaded
+     * window, and it survives later pages. No suppression is needed here — the window only ever
+     * moves EARLIER than the default one, so the real first unread is either inside it (correct
+     * divider) or past its end (no candidate, nothing drawn).
+     *
+     * Window shape mirrors [jumpToMessage] but is keyed on `systemShowTimestamp` — the display-order
+     * column the whole controller pages on. `timeStamp` (the local clock at compose time) is used
+     * ONLY as the `ScrollAction.ToMessage` key and MUST NOT be used to build the window: on a failed
+     * message the two can disagree, which would desync the window from its own ordering.
+     */
+    private suspend fun loadFirstScreenAnchoredAtFailure(
+        failed: MessageModel,
+        readPosition: Long,
+    ) {
+        val anchorTs = failed.systemShowTimestamp
+        // Query one extra message to use as the after-anchor.
+        val afterMessages = wcdb.message.getAllObjects(
+            commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.ge(anchorTs)),
+            DBMessageModel.systemShowTimestamp.order(Order.Asc), PAGE_SIZE + 1
+        )
+        val allMessages = if (afterMessages.size < PAGE_SIZE) {
+            // Less than a full page after the anchor: back-fill earlier messages, one extra for the before-anchor.
+            val earlierMessages = wcdb.message.getAllObjects(
+                commonMessageQueryCondition.and(DBMessageModel.systemShowTimestamp.lt(anchorTs)),
+                DBMessageModel.systemShowTimestamp.order(Order.Desc), PAGE_SIZE - afterMessages.size + 1
+            )
+            earlierMessages + afterMessages
+        } else {
+            afterMessages
+        }
+
+        val sortedMessages = allMessages.sortedBy { it.systemShowTimestamp }
+
+        // Split into anchor messages and the page to display.
+        val window = splitMessageWindow(sortedMessages, afterMessages.size, PAGE_SIZE.toInt())
+
+        L.i {
+            "[${forWhat.id}] first screen anchored at failed message: anchorTs=$anchorTs " +
+                "page=${window.pageMessages.size}"
+        }
+
+        _chatMessagesStateFlow.value = ChatMessageListBehavior(
+            messageList = window.pageMessages,
+            // ToMessage, not ToPosition: index-free (the Fragment resolves it against the
+            // transformed list, so it is immune to the mapNotNull/filterNot drift a raw page index
+            // suffers) and exempt from the call-header scroll compensation, which only skips
+            // ToMessage and would otherwise yank the anchored view back to the bottom.
+            scrollAction = ScrollAction.ToMessage(failed.timeStamp),
+            updateTimestamp = System.currentTimeMillis(),
+            anchorMessageBefore = window.anchorBefore,
+            anchorMessageAfter = window.anchorAfter,
+            readPosition = readPosition,
         )
         observerMessagesChanges()
     }
@@ -261,42 +348,17 @@ class ChatNormalPaginationController @AssistedInject constructor(
             val sortedMessages = allMessages.sortedBy { it.systemShowTimestamp }
 
             // 拆分锚点消息和显示消息
-            val anchorMessageBefore: MessageModel?
-            val pageMessages: List<MessageModel>
-            val anchorMessageAfter: MessageModel?
+            val window = splitMessageWindow(sortedMessages, afterMessages.size, PAGE_SIZE.toInt())
 
-            val pageSizeInt = PAGE_SIZE.toInt()
-            if (sortedMessages.size <= pageSizeInt) {
-                // 消息不够，没有锚点
-                anchorMessageBefore = null
-                pageMessages = sortedMessages
-                anchorMessageAfter = null
-            } else if (afterMessages.size >= pageSizeInt + 1) {
-                // 后续消息够一页还多，最后一条作为后锚点
-                anchorMessageBefore = null
-                pageMessages = sortedMessages.take(pageSizeInt)
-                anchorMessageAfter = sortedMessages.last()
-            } else {
-                // 前后混合，第一条作为前锚点，最后一条作为后锚点（如果有的话）
-                val hasAfterAnchor = sortedMessages.size > pageSizeInt + 1
-                anchorMessageBefore = sortedMessages.first()
-                pageMessages = if (hasAfterAnchor) {
-                    sortedMessages.subList(1, pageSizeInt + 1)
-                } else {
-                    sortedMessages.subList(1, sortedMessages.size)
-                }
-                anchorMessageAfter = if (hasAfterAnchor) sortedMessages.last() else null
-            }
-
-            L.i { "[${forWhat.id}] jumpToMessage, after make up hot data and convert from message Model, pageMessages: ${pageMessages.size}" }
+            L.i { "[${forWhat.id}] jumpToMessage, after make up hot data and convert from message Model, pageMessages: ${window.pageMessages.size}" }
 
             _chatMessagesStateFlow.value =
                 ChatMessageListBehavior(
-                    messageList = pageMessages,
+                    messageList = window.pageMessages,
                     scrollAction = ScrollAction.ToMessage(messageTimeStamp), // 滚动到目标消息
                     updateTimestamp = System.currentTimeMillis(),
-                    anchorMessageBefore = anchorMessageBefore,
-                    anchorMessageAfter = anchorMessageAfter
+                    anchorMessageBefore = window.anchorBefore,
+                    anchorMessageAfter = window.anchorAfter
                 )
             observerMessagesChanges()
         }

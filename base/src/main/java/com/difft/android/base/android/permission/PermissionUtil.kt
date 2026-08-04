@@ -2,11 +2,13 @@ package com.difft.android.base.android.permission
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +22,23 @@ import com.difft.android.base.utils.application
 
 /** Three-state media read access, mirroring Signal StorageUtil.canReadAny/canOnlyReadSelected. */
 enum class MediaAccessState { FULL, PARTIAL, NONE }
+
+/**
+ * Why a media read that ALREADY FAILED failed, as a permission-layer classification.
+ *
+ * Complements [MediaAccessState]: that enum answers "what is granted right now", this one answers
+ * "the open failed — what does the permission layer say about it". [PermissionUtil.PermissionState]
+ * answers a third, unrelated question (the outcome of one permission request), so the three must
+ * stay separate.
+ *
+ * [GRANTED_BUT_UNREADABLE] is the state the permission layer previously could not express: it has
+ * only ever modelled "nothing granted" (request flow) and "permanently denied" (Settings flow),
+ * while full access demonstrably coexists with failing reads.
+ */
+enum class MediaReadDenialKind { PERMISSION_MISSING, PARTIAL_SELECTION, GRANTED_BUT_UNREADABLE, NOT_MEDIA_SCOPED }
+
+/** A classified read denial together with the throwable that proved the read had already failed. */
+data class MediaReadDenial(val kind: MediaReadDenialKind, val cause: Throwable?)
 
 object PermissionUtil {
 
@@ -214,6 +233,43 @@ object PermissionUtil {
 
     private fun isGranted(context: Context, permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Classifies a read failure that HAS ALREADY BEEN OBSERVED. [cause] is the throwable thrown by
+     * the failed open; requiring it in the signature makes that precondition part of the contract.
+     *
+     * MUST NOT be used as a pre-check. Permission state is not a readability predicate — the whole
+     * point of this classification is that FULL access coexists with failing reads. Readability can
+     * only be established by actually opening the item.
+     *
+     * Side-effect free: reads permission state, performs no IO, writes no log. The caller that owns
+     * the failure log format is the single owner of the log line.
+     *
+     * [MediaReadDenialKind.NOT_MEDIA_SCOPED] is mandatory, not defensive: without it a sandbox path
+     * whose file is genuinely gone would be reported as a permission problem while access is FULL,
+     * which is exactly the mis-attribution this classification exists to prevent.
+     */
+    @JvmStatic
+    fun classifyReadDenial(
+        uri: Uri,
+        cause: Throwable?,
+        context: Context = application
+    ): MediaReadDenial {
+        if (!isMediaStoreUri(uri)) return MediaReadDenial(MediaReadDenialKind.NOT_MEDIA_SCOPED, cause)
+        val kind = when (getMediaAccessState(context)) {
+            MediaAccessState.NONE -> MediaReadDenialKind.PERMISSION_MISSING
+            MediaAccessState.PARTIAL -> MediaReadDenialKind.PARTIAL_SELECTION
+            MediaAccessState.FULL -> MediaReadDenialKind.GRANTED_BUT_UNREADABLE
+        }
+        return MediaReadDenial(kind, cause)
+    }
+
+    // MediaStore authority, including the cross-profile "<userId>@media" form.
+    private fun isMediaStoreUri(uri: Uri): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
+        val authority = uri.authority ?: return false
+        return authority == MediaStore.AUTHORITY || authority.endsWith("@${MediaStore.AUTHORITY}")
+    }
 
     /**
      * Media entry gate: if media is already usable (full or partial), open directly without prompting;

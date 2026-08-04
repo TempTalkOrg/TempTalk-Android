@@ -35,6 +35,7 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
+import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioMessage
@@ -45,7 +46,9 @@ import org.difft.app.database.members
 import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.MessageModel
 import org.difft.app.database.wcdb
+import org.difft.app.database.writeRoomSendStatus
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
@@ -269,7 +272,30 @@ class PushTextSendJob @AssistedInject constructor(
         // Try to insert the message if it doesn't exist
         messageStore.putWhenNonExist(textMessage)
 
-        // Update both timestamps and send status in one operation
+        // The room-level aggregate is only ever ESCALATED at the source. The recompute in
+        // WCDBUpdateService is clear-only (it skips rooms stored as NONE), so without the write
+        // below a failure would never surface as a conversation-list tag.
+        //
+        // ORDERING IS LOAD-BEARING: the message row must be committed BEFORE the room row, so the
+        // message write MUST stay ABOVE the room write. The clear side is a single conditional
+        // UPDATE that re-checks "no failed message" (clearRoomSendStatusIfNoFailure); with
+        // message-before-room, no interleaving of the two can lose this FAILED. Emitting the room
+        // write first opens a window where a concurrent clear sees no failed message, writes NONE,
+        // and the failure is silently lost with no self-heal.
+        //
+        // That ordering — not atomicity — is what carries the correctness, so the two writes are
+        // NOT wrapped in a transaction: a failure in between costs this room its tag only, and the
+        // room's next failure restores it. Sending/Sent need no room write at all (the gated clear
+        // handles them).
+        writeMessageStatusRow(status)
+        if (status == MessageModel.SEND_TYPE_FAILED) {
+            wcdb.writeRoomSendStatus(textMessage.forWhat.id, ROOM_SEND_STATUS_FAILED)
+        }
+        RoomChangeTracker.trackRoom(textMessage.forWhat.id, RoomChangeType.MESSAGE)
+    }
+
+    /** Update both timestamps and send status in one operation. */
+    private fun writeMessageStatusRow(status: Int) {
         wcdb.message.updateRow(
             arrayOf(
                 Value(textMessage.systemShowTimestamp),
@@ -287,7 +313,6 @@ class PushTextSendJob @AssistedInject constructor(
             ),
             DBMessageModel.id.eq(textMessage.id)
         )
-        RoomChangeTracker.trackRoom(textMessage.forWhat.id, RoomChangeType.MESSAGE)
     }
 
     /**

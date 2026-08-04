@@ -1,16 +1,15 @@
-<!-- Star outline for the "Add to Fav" message action (Issue 6a). Path is byte-identical to
-     chat_ic_gif_tab_favorites.xml (the GIF favorites-tab star, ported from tabler:star); the
-     message-action Icon composable tints it uniformly and renders it at 20dp.
-     chat_message_action_favorites is a bookmark/ribbon shape, NOT a star, so it is not reused. -->
+<!-- Star outline for the "Add to Fav" message action. Stroke-only, 20 viewport.
+     Menu tints it uniformly; the declared color only applies outside the tinted menu. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
     <path
-        android:pathData="M12 17.75L5.828 20.995L7.007 14.122L2.007 9.255L8.907 8.255L11.993 2.002L15.079 8.255L21.979 9.255L16.979 14.122L18.158 20.995L12 17.75Z"
+        android:pathData="M9.99996 14.7917L4.85663 17.4958L5.83913 11.7683L1.67246 7.71251L7.42246 6.87918L9.99413 1.66835L12.5658 6.87918L18.3158 7.71251L14.1491 11.7683L15.1316 17.4958L9.99996 14.7917Z"
+        android:fillColor="@color/transparent"
         android:strokeColor="@color/icon"
-        android:strokeWidth="2"
+        android:strokeWidth="1.66667"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>

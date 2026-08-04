@@ -18,6 +18,8 @@ import kotlin.test.assertEquals
  *    (returns 0).
  * 3. Returns pre-sweep count for telemetry.
  * 4. Failure path: logs via L.e, returns 0 (not -1, not throw).
+ * 5. Room-level `sendStatus` is written DIRECTLY, not via the change notification (T3-16).
+ * 6. The `before == 0` short circuit returns before any query for rooms or any write.
  */
 @Ignore("WCDB native library not loadable in JVM unit tests; run via instrumentation test instead")
 class WcdbJobStorageSweepTest {
@@ -42,7 +44,8 @@ class WcdbJobStorageSweepTest {
         // Expected behavior:
         //   pre-sweep COUNT(*) WHERE sendType=0 → 0
         //   return 0 immediately, L.i "nothing to do"
-        //   no update statement issued.
+        //   NEITHER the room-id query NOR any update statement issued — the common
+        //   cold start must not pay for two full scans of an unindexed column.
     }
 
     @Test
@@ -52,6 +55,9 @@ class WcdbJobStorageSweepTest {
         //          2 with SentFailed(2).
         //   storage.sweepStaleSendingMessages() → returns 5.
         //   Post-state: 0 Sending, 3 Sent, 7 SentFailed.
+        //   The flip predicate is `sendType == Sending` alone — unchanged from
+        //   before the room-tag feature. Narrowing it would change which message
+        //   rows an existing install settles on startup.
     }
 
     @Test
@@ -70,5 +76,51 @@ class WcdbJobStorageSweepTest {
         //   TempTalkApplication continues startup; missing sweep is recoverable
         //   because FastJobStorage will re-enqueue any affected PushTextSendJob
         //   via its normal retry policy.
+    }
+
+    // T3-16 — the sweep must NOT depend on RoomChangeTracker delivery.
+    @Test
+    fun sweep_writes_room_sendStatus_directly_with_no_subscriber() {
+        // Expected behavior:
+        //   Setup: a room row with sendStatus = NONE and one TYPE_TEXT message
+        //          with sendType = Sending(0). NO RoomChangeTracker collector
+        //          registered anywhere (the real startup situation — the sweep
+        //          runs from Application.onCreate, WCDBUpdateService registers
+        //          its collector later from IndexActivity).
+        //   storage.sweepStaleSendingMessages()
+        //   Post-state: room.sendStatus == ROOM_SEND_STATUS_FAILED IMMEDIATELY,
+        //          without any collector ever running. roomChanges is
+        //          replay = 0, so a notification-only design would drop the
+        //          event here — pinned executably by
+        //          RoomChangeTrackerReplayAssumptionTest.
+        //
+        //   Ordering: the roomIds are collected from the message table BEFORE
+        //          the UPDATE flips them (roomIdsWithStaleSendingOutgoing).
+        //          Collecting afterwards matches nothing and the room is never
+        //          flagged — the failure mode this case exists to catch.
+        //
+        //   The message flip and the room write are two separate statements, NOT
+        //          one transaction: message-before-room is what makes the
+        //          interleaving safe (the clear side re-reads the message table),
+        //          and a failure in between only costs the room its tag.
+    }
+
+    // T3-15 — the type narrowing applies to the ROOM-TAG side only (owned by :database, shared
+    // spelling with hasFailedOutgoingMessage). The message flip keeps its original predicate.
+    @Test
+    fun sweep_does_not_flag_rooms_whose_only_stale_row_is_a_notify() {
+        // Expected behavior:
+        //   Setup: 3 TYPE_TEXT rows with sendType = Sending(0) in room A, plus
+        //          one TYPE_NOTIFY archive tombstone in room B whose sendType is
+        //          also 0 (it defaults to 0 — it was never "sent").
+        //   storage.sweepStaleSendingMessages()
+        //   Post-state: only room A is flagged FAILED. Room B gets no tag —
+        //          a notify row is never resent, so its tag would only clear on
+        //          the room's next unrelated message change.
+        //   Message rows: BOTH the text rows and the tombstone read SentFailed(2).
+        //          The flip is legacy behavior and is deliberately NOT narrowed;
+        //          the tag query is the guard.
+        //   Executable form: RoomSendStatusQueriesTest
+        //          `roomIdsWithStaleSendingOutgoing narrows to real outgoing messages`.
     }
 }

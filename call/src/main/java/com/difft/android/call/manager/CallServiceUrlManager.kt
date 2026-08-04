@@ -340,6 +340,21 @@ class CallServiceUrlManager @Inject constructor(
         if (proxyConfigProviderLazy.get().isEnabledForCall) {
             return proxyServiceUrls()
         }
+        return getUpstreamCachedServiceUrls()
+    }
+
+    /**
+     * Raw persisted [ServiceUrls] straight from the disk/memory cache, WITHOUT the
+     * proxy-synthesis short-circuit in [getCachedServiceUrls]. This returns the real
+     * upstream servers (domain + IPs) returned by `serviceurl/v2`, regardless of the
+     * "Protect IP address in calls" proxy toggle.
+     *
+     * Diagnostics only (the Insider "Call service settings" screen surfaces these so
+     * the real servers are visible even while the proxy forces call connections onto
+     * the tunnel domains). NEVER use this for connection routing — under the proxy,
+     * calls must connect by tunnel domain, not by these IPs.
+     */
+    fun getUpstreamCachedServiceUrls(): ServiceUrls? {
         synchronized(lock) {
             loadFromDiskLocked()
             return memState?.serviceUrls?.toServiceUrls()

@@ -3,7 +3,7 @@ package com.difft.android.chat.mediasend
 import android.os.Parcelable
 import com.difft.android.base.log.lumberjack.L
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import com.difft.android.chat.mms.SentMediaQuality

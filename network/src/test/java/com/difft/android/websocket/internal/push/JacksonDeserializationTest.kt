@@ -181,8 +181,8 @@ class JacksonDeserializationTest {
         assertEquals(200, result.status)
         assertEquals("ok", result.reason)
         assertNotNull(result.data)
-        assertEquals(true, result.data.isNeedsSync)
-        assertEquals(42L, result.data.sequenceId)
+        assertEquals(true, result.data!!.isNeedsSync)
+        assertEquals(42L, result.data!!.sequenceId)
     }
 
     @Test

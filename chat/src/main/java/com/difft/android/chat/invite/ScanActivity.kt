@@ -20,7 +20,7 @@ import com.difft.android.chat.databinding.ActivityScanBinding
 import com.difft.android.chat.util.ServiceUtil
 import com.difft.android.network.UrlManager
 import com.hi.dhl.binding.viewbind
-import com.luck.picture.lib.utils.ToastUtils
+import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 

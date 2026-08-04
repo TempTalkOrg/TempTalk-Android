@@ -79,8 +79,9 @@
         app:layout_constraintStart_toEndOf="@id/divider_rail"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Distinct id — see layout/activity_index.xml. -->
         <androidx.viewpager2.widget.ViewPager2
-            android:id="@+id/viewpager"
+            android:id="@+id/index_viewpager"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:nestedScrollingEnabled="false"

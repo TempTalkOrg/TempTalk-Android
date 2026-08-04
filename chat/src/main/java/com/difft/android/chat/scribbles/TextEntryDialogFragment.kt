@@ -14,9 +14,9 @@ import androidx.fragment.app.FragmentManager
 import com.airbnb.lottie.SimpleColorFilter
 import com.difft.android.chat.R
 import util.getParcelableCompat
-import org.signal.imageeditor.core.HiddenEditText
-import org.signal.imageeditor.core.model.EditorElement
-import org.signal.imageeditor.core.renderers.MultiLineTextRenderer
+import com.difft.android.imageeditor.core.HiddenEditText
+import com.difft.android.imageeditor.core.model.EditorElement
+import com.difft.android.imageeditor.core.renderers.MultiLineTextRenderer
 import com.difft.android.chat.components.KeyboardEntryDialogFragment
 import com.difft.android.chat.scribbles.HSVColorSlider.getColor
 import com.difft.android.chat.scribbles.HSVColorSlider.setUpForColor

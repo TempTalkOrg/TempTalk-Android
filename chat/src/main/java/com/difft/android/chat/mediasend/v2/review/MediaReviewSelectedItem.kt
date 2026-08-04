@@ -4,7 +4,8 @@ import android.view.View
 import android.widget.ImageView
 import com.bumptech.glide.Glide
 import com.difft.android.chat.R
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.chat.mediasend.readableUri
+import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.adapter.mapping.LayoutFactory
 import com.difft.android.chat.util.adapter.mapping.MappingAdapter
@@ -37,7 +38,9 @@ object MediaReviewSelectedItem {
 
         override fun bind(model: Model) {
             Glide.with(imageView)
-                .load(model.media.realPath)
+                // The normalized URI, not the bare realPath: a gallery path is unreadable under
+                // scoped storage, and Glide's Uri loader reaches both a provider and a sandbox file.
+                .load(model.media.readableUri())
                 .centerCrop()
                 .into(imageView)
 

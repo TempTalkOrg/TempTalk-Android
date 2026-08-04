@@ -3,8 +3,8 @@ package com.difft.android.chat.fonts
 import android.content.Context
 import android.graphics.Typeface
 import android.os.Build
-import org.signal.imageeditor.core.Renderer
-import org.signal.imageeditor.core.RendererContext
+import com.difft.android.imageeditor.core.Renderer
+import com.difft.android.imageeditor.core.RendererContext
 
 /**
  * TypefaceProvider that provides system bold typeface for image editor text rendering.

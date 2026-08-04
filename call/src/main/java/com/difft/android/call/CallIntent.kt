@@ -49,6 +49,7 @@ class CallIntent(private val intent: Intent) {
         CALL_START_PARAMS("CALL_START_PARAMS"),
         CALL_NEED_APP_LOCK("CALL_NEED_APP_LOCK"),
         CALL_WAIT_DIALOG_SHOWN("CALL_WAIT_DIALOG_SHOWN"),
+        CALL_CLIENT_CALL_ID("CALL_CLIENT_CALL_ID"),
     }
 
     /**
@@ -121,6 +122,12 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
+        /** 仅主叫发起路径设置：本次发起生成的 clientCallId，贯穿到取消/挂断信令。 */
+        fun withClientCallId(clientCallId: String?): Builder {
+            intent.putExtra(getExtraString(Extra.CALL_CLIENT_CALL_ID), clientCallId)
+            return this
+        }
+
         fun build(): Intent {
             return intent
         }
@@ -143,6 +150,8 @@ class CallIntent(private val intent: Intent) {
     val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
 
     val callWaitDialogShown: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), false) }
+
+    val clientCallId: String? by lazy { intent.getStringExtra(getExtraString(Extra.CALL_CLIENT_CALL_ID)) }
 
     override fun toString(): String {
         return """

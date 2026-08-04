@@ -11,7 +11,7 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.ColorInt
 import androidx.core.animation.doOnEnd
-import org.signal.imageeditor.core.Bounds
+import com.difft.android.imageeditor.core.Bounds
 import com.difft.android.chat.mediasend.v2.MediaAnimations
 import com.difft.android.chat.util.ViewUtil
 import com.difft.android.chat.util.visible

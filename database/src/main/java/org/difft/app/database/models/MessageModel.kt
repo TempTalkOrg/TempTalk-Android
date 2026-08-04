@@ -176,6 +176,19 @@ class MessageModel {
         const val TYPE_UNSUPPORTED = 100
 
         /**
+         * `sendType` column domain. Mirrors `SendType` in :chat (`SendMessageUtils.kt`), which is
+         * NOT visible from :database (:database does not depend on :chat). The two spellings are
+         * pinned equal by a unit test in :chat where both are visible.
+         *
+         * NOTE 0 == SENDING here (message-level), while `ROOM_SEND_STATUS_NONE == 0` (room-level,
+         * [difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE]). The two domains are
+         * deliberately different — do not cross-assign.
+         */
+        const val SEND_TYPE_SENDING = 0
+        const val SEND_TYPE_SENT = 1
+        const val SEND_TYPE_FAILED = 2
+
+        /**
          * Fixed [systemShowTimestamp] for the archive tombstone so it always sorts before real
          * messages (positive epoch-ms). Must not be 0 — systemShowTimestamp == 0 means "unset"
          * and gets rewritten to timeStamp (e.g. EnvelopToMessageProcessor).

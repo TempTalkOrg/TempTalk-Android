@@ -110,10 +110,17 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <!--
+                lines/ellipsize are the last-resort guard: without them an over-long tag run wraps
+                and grows the row to two lines. Colour is owned here, so the tag text needs no spans.
+            -->
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/textview_at"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:ellipsize="end"
+                android:lines="1"
                 android:textColor="@color/t.error"
                 android:textSize="14sp"
                 tools:text="[@You]" />

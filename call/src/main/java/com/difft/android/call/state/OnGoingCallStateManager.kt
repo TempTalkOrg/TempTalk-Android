@@ -59,6 +59,32 @@ class OnGoingCallStateManager @Inject constructor() {
 
     fun getCurrentRoomId(): String? = _currentRoomId.value
 
+    // 客户端本次发起生成的 clientCallId。仅主叫发起路径写入，贯穿整个通话会话，
+    // 供 roomId 尚未就绪（窗口 W）时的取消/挂断作为服务端回落定位键。
+    private val _clientCallId = MutableStateFlow<String?>(null)
+    val clientCallId: StateFlow<String?> = _clientCallId.asStateFlow()
+
+    fun setClientCallId(clientCallId: String?) {
+        _clientCallId.value = clientCallId
+        // 新去电会话身份建立 = 起点清零门闩，作为 reset() 之外的第二道保险：即使某次结束时
+        // reset() 未跑到（@Singleton 状态可能残留），也不会用上一通的取消意图污染这一通去电。
+        _initiatorPreConnectCancelled.set(false)
+    }
+
+    fun getClientCallId(): String? = _clientCallId.value
+
+    // 主叫在信令未连上（窗口 W）就退出的取消意图门闩。CallExitHandler 在决定取消的第一刻
+    // 同步置位；CallSessionStarter 拿到建房响应后据此跳过响铃/始通话消息，并用已知 roomId
+    // 补发权威取消——保证无论"取消"与"建房完成"谁先跑，取消都能赢。
+    // 生命周期：起点由 setClientCallId 清零、终点由 reset() 清零，杜绝跨通污染。
+    private val _initiatorPreConnectCancelled = AtomicBoolean(false)
+
+    fun markInitiatorPreConnectCancelled() {
+        _initiatorPreConnectCancelled.set(true)
+    }
+
+    fun isInitiatorPreConnectCancelled(): Boolean = _initiatorPreConnectCancelled.get()
+
     // 当前会话ID
     private val _conversationId = MutableStateFlow<String?>(null)
     val conversationId: StateFlow<String?> = _conversationId.asStateFlow()
@@ -173,6 +199,8 @@ class OnGoingCallStateManager @Inject constructor() {
         _isInCalling.value = false
         _isInCallEnding.value = false
         _currentRoomId.value = null
+        _clientCallId.value = null
+        _initiatorPreConnectCancelled.set(false)
         _conversationId.value = null
         _isInPipMode.value = false
         _isInScreenSharing.value = false

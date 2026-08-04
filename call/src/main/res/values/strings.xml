@@ -145,6 +145,9 @@
     <string name="call_server_node_fallback" translatable="false">Fallback</string>
     <string name="call_server_node_ips_label" translatable="false">IPs</string>
     <string name="call_server_node_no_ips" translatable="false">No IPs</string>
+    <string name="call_server_node_upstream_title" translatable="false">Upstream Servers (serviceurl/v2)</string>
+    <string name="call_server_node_upstream_hint" translatable="false">Proxy is protecting call IPs — calls connect via the tunnel domains above. Below are the real servers returned by serviceurl/v2 (not used for connection while proxied).</string>
+    <string name="call_server_node_upstream_empty" translatable="false">No upstream data. Tap refresh above to load.</string>
     <string name="call_server_node_unknown" translatable="false">Unknown</string>
     <string name="call_server_node_switch_forbid_only_self" translatable="false">Unable to switch route: you are the only participant in this call.</string>
     <string name="call_server_node_quic_unavailable" translatable="false">QUIC is unavailable with the current proxy; WebSocket is used.</string>

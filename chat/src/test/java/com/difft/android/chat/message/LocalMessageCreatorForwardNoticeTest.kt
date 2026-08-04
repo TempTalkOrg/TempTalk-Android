@@ -12,6 +12,7 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.MessageStore
 import difft.android.messageserialization.model.ForwardNoticeData
 import difft.android.messageserialization.model.Message
+import difft.android.messageserialization.model.MessageActivityNoticeData
 import difft.android.messageserialization.model.NotifyMessage
 import io.mockk.MockKAnnotations
 import io.mockk.Runs
@@ -45,7 +46,8 @@ import org.robolectric.annotation.Config
 import java.util.Locale
 
 /**
- * Unit test for [LocalMessageCreator.createForwardNoticeMessage].
+ * Unit test for [LocalMessageCreator.createForwardNoticeMessage] (and its copy-notice
+ * mirror [LocalMessageCreator.createActivityNoticeMessage] in Case 6).
  *
  * This test does NOT require Hilt — we construct LocalMessageCreator directly with
  * mocked dependencies (MessageStore + MessageArchiveManager). Contact name resolution
@@ -74,6 +76,8 @@ import java.util.Locale
  *     guarantees it is idempotent on messageId).
  *  5. showContent rendered via ForwardNoticeRenderer with operator/authors correctly
  *     localized (self → "You", others → resolved name).
+ *  6. Preview-exclusion contract — serialized notice JSON contains the exact
+ *     comma-anchored substrings WCDBUpdateService's LIKE filter matches.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -302,6 +306,51 @@ class LocalMessageCreatorForwardNoticeTest {
         assertEquals(
             TTNotifyMessage.NOTIFY_ACTION_TYPE_FORWARD_NOTICE,
             ttNotify["notifyType"].asInt
+        )
+    }
+
+    // ------------------------------------------------------------
+    // Case 6: Preview-exclusion contract — WCDBUpdateService's room-preview
+    //   query excludes forward/copy notices via `messageText LIKE
+    //   '%"notifyType":10020,%'` / `'%...10021,%'` (comma-anchored).
+    //   Literal substrings on purpose: referencing the constants would be a
+    //   tautology and miss constant/Gson-format drift.
+    // ------------------------------------------------------------
+    @Test
+    fun `serialized notice JSON contains the substring the preview-exclusion LIKE filter matches`() = runTest {
+        val stored = mutableListOf<Message>()
+        every { messageStore.putWhenNonExist(capture(stored)) } just Runs
+
+        creator.createForwardNoticeMessage(
+            operatorId = MY_ID,
+            forWhat = For.Group("g"),
+            noticeData = ForwardNoticeData(ForwardNoticeData.Scene.SINGLE, listOf(authorAlice), 1),
+            systemShowTimestamp = 1L,
+            timestamp = 1L
+        )
+        creator.createActivityNoticeMessage(
+            operatorId = MY_ID,
+            forWhat = For.Group("g"),
+            noticeData = MessageActivityNoticeData(
+                type = MessageActivityNoticeData.Type.COPY,
+                sourceAuthorIds = listOf(authorAlice),
+                messageCount = 1
+            ),
+            systemShowTimestamp = 2L,
+            timestamp = 2L
+        )
+
+        val forwardJson = (stored[0] as NotifyMessage).notifyContent
+        val copyJson = (stored[1] as NotifyMessage).notifyContent
+        assertTrue(
+            "forward notice JSON must contain \"notifyType\":10020, — the exact substring " +
+                "WCDBUpdateService's preview-exclusion LIKE filter matches",
+            forwardJson.contains("\"notifyType\":10020,")
+        )
+        assertTrue(
+            "copy notice JSON must contain \"notifyType\":10021, — the exact substring " +
+                "WCDBUpdateService's preview-exclusion LIKE filter matches",
+            copyJson.contains("\"notifyType\":10021,")
         )
     }
 

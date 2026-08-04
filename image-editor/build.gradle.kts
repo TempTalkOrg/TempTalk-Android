@@ -2,10 +2,11 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
+    id("kotlin-parcelize")
 }
 
 android {
-    namespace = "org.signal.imageeditor"
+    namespace = "com.difft.android.imageeditor"
 
     compileSdk = libs.versions.compileSdk.get().toInt()
 

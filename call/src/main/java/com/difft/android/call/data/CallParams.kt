@@ -74,6 +74,10 @@ fun createStartCallParams(params: StartCallRequestBody): ByteArray {
             this.roomId = roomId
         }
 
+        params.clientCallId?.let { clientCallId ->
+            this.clientCallId = clientCallId
+        }
+
         params.notification?.let { notification ->
             this.notification =  LivekitTemptalk.TTNotification.newBuilder().apply {
                 type = notification.type

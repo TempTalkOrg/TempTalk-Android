@@ -128,6 +128,8 @@ internal fun LCallActivity.processIntent(callIntent: CallIntent) {
             onGoingCallStateManager.setCallType(callIntent.callType)
         }
         onGoingCallStateManager.setConversationId(callIntent.conversationId)
+        // Only the start-call path carries a clientCallId; join carries null and leaves it unset.
+        callIntent.clientCallId?.let { onGoingCallStateManager.setClientCallId(it) }
     }
 }
 

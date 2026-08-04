@@ -90,6 +90,12 @@ internal fun LCallActivity.handleInviteViewAction(action: InviteViewState) {
         InviteViewState.INVITE -> {
             viewModel.callUiController.setShowInviteViewEnable(false)
             lifecycleScope.launch(Dispatchers.IO) {
+                // Snapshot the type BEFORE the request: the server flips room.metadata.callType to
+                // instant as soon as it accepts the invite, and that RoomUpdate can land before this
+                // response does. Reading afterwards would see instant and skip the ringtone/connected
+                // handling below, leaving the outgoing ringtone playing and the 1v1 no-answer timeout
+                // armed to end the call ~60s later.
+                val wasOneOnOneCall = onGoingCallStateManager.callType() == CallType.ONE_ON_ONE.type
                 val (state, invitees) = inviteCallManager?.inviteMembers()
                     ?: (InviteRequestState.FAILED to emptyList())
                 L.i { "[Call] invite call state: $state invitees:$invitees" }
@@ -99,9 +105,16 @@ internal fun LCallActivity.handleInviteViewAction(action: InviteViewState) {
                     }
                     viewModel.addAwaitingJoinInvitees(invitees)
                 }
-                val isOneOneCall = onGoingCallStateManager.callType() == CallType.ONE_ON_ONE.type
-                if (state == InviteRequestState.SUCCESS && isOneOneCall) {
-                    viewModel.switchToInstantCall()
+                if (state == InviteRequestState.SUCCESS && wasOneOnOneCall) {
+                    // Land instant now instead of waiting for the server to report it on
+                    // room.metadata. Until the type flips, CallExitHandler routes a hangup down the
+                    // 1v1 END path, which would terminate the meeting for the person just invited
+                    // rather than leaving it. The server flips callType when it accepts the invite,
+                    // so this only closes the gap until that RoomUpdate lands, and instant is a
+                    // one-way latch — the two cannot end up disagreeing.
+                    viewModel.applyInviteUpgrade()
+                    // Then the 1v1-specific waiting state, since we are no longer waiting on a
+                    // single callee to answer.
                     viewModel.stopRingToneAndTimeoutCheck()
                     viewModel.handleConnectedState()
                 }

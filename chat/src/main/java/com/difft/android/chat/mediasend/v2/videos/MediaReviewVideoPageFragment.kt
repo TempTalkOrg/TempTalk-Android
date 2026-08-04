@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.difft.android.chat.R
 import util.getParcelableCompat
+import com.difft.android.chat.mediasend.MediaKey
 import com.difft.android.chat.mediasend.VideoEditorFragment
 import com.difft.android.chat.mediasend.v2.HudCommand
 import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
@@ -45,7 +46,7 @@ class MediaReviewVideoPageFragment : androidx.fragment.app.Fragment(R.layout.fra
     }
 
     private fun restoreVideoEditorState() {
-        val data = sharedViewModel.getEditorState(requireUri()) as? VideoTrimData
+        val data = sharedViewModel.getEditorState(MediaKey(requireUri())) as? VideoTrimData
 
         if (data != null) {
             videoEditorFragment.restoreState(data)

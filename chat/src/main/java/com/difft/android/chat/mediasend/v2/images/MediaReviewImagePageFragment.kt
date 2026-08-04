@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.chat.R
 import util.getParcelableCompat
+import com.difft.android.chat.mediasend.MediaKey
 import com.difft.android.chat.mediasend.v2.HudCommand
 import com.difft.android.chat.mediasend.v2.MediaSelectionViewModel
 import com.difft.android.chat.scribbles.ImageEditorFragment
@@ -70,7 +71,7 @@ class MediaReviewImagePageFragment : androidx.fragment.app.Fragment(R.layout.fra
         super.onSaveInstanceState(outState)
 
         imageEditorFragment?.let {
-            sharedViewModel.setEditorState(requireUri(), requireNotNull(it.saveState()))
+            sharedViewModel.setEditorState(requireKey(), requireNotNull(it.saveState()))
         }
     }
 
@@ -98,6 +99,12 @@ class MediaReviewImagePageFragment : androidx.fragment.app.Fragment(R.layout.fra
 
     private fun requireUri(): Uri = requireNotNull(requireArguments().getParcelableCompat(ARG_URI, Uri::class.java))
 
+    /**
+     * Editor-state key for this page. Derived from ARG_URI, which the pager adapter fills from
+     * `readableUri()`, so this matches the key the view model writes for the same item.
+     */
+    private fun requireKey(): MediaKey = MediaKey(requireUri())
+
     override fun onTouchEventsNeeded(needed: Boolean) {
         if (isResumed) {
             if (!needed) {
@@ -124,7 +131,7 @@ class MediaReviewImagePageFragment : androidx.fragment.app.Fragment(R.layout.fra
 
         if (isResumed) {
             imageEditorFragment?.let {
-                sharedViewModel.setEditorState(requireUri(), requireNotNull(it.saveState()))
+                sharedViewModel.setEditorState(requireKey(), requireNotNull(it.saveState()))
             }
         }
     }
@@ -142,7 +149,7 @@ class MediaReviewImagePageFragment : androidx.fragment.app.Fragment(R.layout.fra
     }
 
     override fun restoreState() {
-        val data = sharedViewModel.getEditorState(requireUri()) as? ImageEditorFragment.Data
+        val data = sharedViewModel.getEditorState(requireKey()) as? ImageEditorFragment.Data
 
         if (data != null) {
             imageEditorFragment?.restoreState(data)

@@ -39,5 +39,8 @@ data class ChatMessageListBehavior(
     val updateTimestamp: Long = System.currentTimeMillis(),
     val anchorMessageBefore: MessageModel? = null, // 用于计算第一条消息显示逻辑的锚点消息（不显示）
     val anchorMessageAfter: MessageModel? = null, // 用于计算最后一条消息显示逻辑的锚点消息（不显示）
-    val readPosition: Long? = null, // 用于显示新消息分割线的已读位置，仅在初始化加载时传递
+    // Divider anchor, carried ONLY by the first-screen loads. Later emissions leave it null on
+    // purpose: ChatMessageViewModel captures the first value for the whole page session, so a null
+    // here means "no new anchor", NOT "hide the divider".
+    val readPosition: Long? = null,
 )

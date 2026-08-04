@@ -126,11 +126,14 @@
     </LinearLayout>
 
     <!-- 录音按钮 -->
+    <!-- marginStart/End align this bar over the input field in chat_fragment_input: the field is
+         flush to cl_left_actions (44dp) on the left and cl_right_actions (44dp) on the right.
+         Keep in sync if the input row's left/right button columns change. -->
     <LinearLayout
         android:id="@+id/ll_record"
         android:layout_width="0dp"
         android:layout_height="46dp"
-        android:layout_marginStart="88dp"
+        android:layout_marginStart="44dp"
         android:layout_marginEnd="44dp"
         android:background="@drawable/chat_msg_input_bg"
         android:gravity="center_horizontal"

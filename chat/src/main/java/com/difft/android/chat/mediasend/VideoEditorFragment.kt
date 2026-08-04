@@ -8,7 +8,6 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.difft.android.base.log.lumberjack.L
@@ -146,18 +145,20 @@ class VideoEditorFragment : androidx.fragment.app.Fragment(), PositionDragListen
         }
 
         sharedViewModel.state.observe(viewLifecycleOwner) { incomingState ->
-            val focusedUri = incomingState.focusedMedia?.realPath?.toUri()
-            val currentlyFocused = focusedUri != null && focusedUri == uri
+            // MediaKey(uri) is rebuilt on every emission rather than cached: `uri` is a lateinit
+            // var that setUri() may replace, so a cached key would go stale silently.
+            val focusedKey = incomingState.focusedMedia?.mediaKey()
+            val currentlyFocused = focusedKey != null && focusedKey == MediaKey(uri)
             if (MediaConstraints.isVideoTranscodeAvailable()) {
                 if (currentlyFocused) {
                     if (isVideoGif) {
                         player.play()
                     } else {
                         if (!isFocused) {
-                            bindVideoTimeline(incomingState.getOrCreateVideoTrimData(uri))
+                            bindVideoTimeline(incomingState.getOrCreateVideoTrimData(MediaKey(uri)))
                         } else {
-                            val videoTrimData = if (focusedUri != null) {
-                                incomingState.getOrCreateVideoTrimData(focusedUri)
+                            val videoTrimData = if (focusedKey != null) {
+                                incomingState.getOrCreateVideoTrimData(focusedKey)
                             } else {
                                 VideoTrimData()
                             }

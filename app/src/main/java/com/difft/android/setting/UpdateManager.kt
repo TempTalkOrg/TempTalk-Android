@@ -3,6 +3,7 @@ package com.difft.android.setting
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.BuildConfig
@@ -97,22 +98,29 @@ class UpdateManager @Inject constructor(
             confirmText = context.getString(R.string.settings_dialog_update),
             cancelable = false,
             showCancel = false,
+            // A force-update prompt that closes on tap is not forcing anything: the user
+            // could return from the store without updating and keep using the app.
+            autoDismiss = false,
             onConfirm = { goFdroid(context) }
         )
     }
 
+    /**
+     * Navigate to the F-Droid client.
+     * Falls back to the browser if the F-Droid app is not installed.
+     */
     private fun goFdroid(context: Context) {
         val fdroidPackage = "org.fdroid.fdroid"
         try {
-            val uri = Uri.parse("market://details?id=" + context.packageName)
-            val intent = Intent(Intent.ACTION_VIEW, uri)
+            val currentPackageUri: Uri = ("market://details?id=" + context.packageName).toUri()
+            val intent = Intent(Intent.ACTION_VIEW, currentPackageUri)
             intent.setPackage(fdroidPackage)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } catch (e: Exception) {
             L.w { "[UpdateManager] goFdroid error: ${e.stackTraceToString()}" }
-            val uri = Uri.parse("https://f-droid.org/packages/" + context.packageName)
-            val intent = Intent(Intent.ACTION_VIEW, uri)
+            val currentPackageUri: Uri = ("https://f-droid.org/packages/" + context.packageName).toUri()
+            val intent = Intent(Intent.ACTION_VIEW, currentPackageUri)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         }

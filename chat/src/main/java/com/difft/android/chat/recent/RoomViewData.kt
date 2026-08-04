@@ -3,6 +3,7 @@ package com.difft.android.chat.recent
 import com.difft.android.base.call.CallData
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
+import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 
 data class RoomViewData(
     val roomId: String,
@@ -19,6 +20,15 @@ data class RoomViewData(
     val pinnedTime: Long? = 0L,
     val mentionType: Int = MENTIONS_TYPE_NONE,
     val criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE, // Critical Alert 类型
+    /**
+     * Room-level aggregate of outgoing send failures, mirrored from `RoomModel.sendStatus`.
+     *
+     * This class is a PARALLEL form of `RoomModel` with no compile-time link, so a construction
+     * site that forgets to pass it simply renders no tag — silently, with no build error. Every
+     * site fed by a `RoomModel` must map it explicitly; the default only covers synthesized rooms
+     * that have no DB row (and therefore cannot hold a local failure).
+     */
+    val sendStatus: Int = ROOM_SEND_STATUS_NONE,
     val messageExpiry: Long? = null, //消息过期时间
     var isInstantCall: Boolean = false,
     var isLiveStream: Boolean = false,

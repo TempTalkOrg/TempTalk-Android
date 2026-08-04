@@ -28,6 +28,7 @@ import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.ui.messageaction.ArrowConfig
 import com.difft.android.chat.ui.messageaction.MessageAction
 import com.difft.android.chat.ui.messageaction.MessageActionContent
+import com.difft.android.chat.ui.messageaction.computeMaxPanelWidth
 
 /**
  * Selection popup for TextPreviewActivity.
@@ -227,6 +228,11 @@ private fun TextPreviewSelectionOverlay(
     
     val edgePaddingPx = with(density) { 16.dp.toPx().toInt() }
     val gapPx = with(density) { 8.dp.toPx().toInt() }
+
+    // Panel width guard (decision #11) — screen-width based; same value for measure and display (INV-1)
+    val maxPanelWidth = remember(screenWidth, edgePaddingPx) {
+        computeMaxPanelWidth(screenWidth, edgePaddingPx, density)
+    }
     
     Box(modifier = Modifier.fillMaxSize()) {
         // Measure phase
@@ -243,17 +249,18 @@ private fun TextPreviewSelectionOverlay(
                     }
             ) {
                 MessageActionContent(
+                    actions = actions,
+                    showReactionBar = false,
                     reactions = emptyList(),
                     selectedEmojis = emptySet(),
-                    showReactionBar = false,
-                    quickActions = actions,
+                    maxPanelWidth = maxPanelWidth,
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
-                    onActionClick = onActionClick
+                    onActionClick = {} // INV-6: measure phase must not fire real actions
                 )
             }
         }
-        
+
         // Position phase
         if (isMeasured && popupWidth > 0 && popupHeight > 0) {
             // Calculate X position - centered horizontally
@@ -334,10 +341,11 @@ private fun TextPreviewSelectionOverlay(
                 modifier = Modifier.offset { IntOffset(x, y) }
             ) {
                 MessageActionContent(
+                    actions = actions,
+                    showReactionBar = false,
                     reactions = emptyList(),
                     selectedEmojis = emptySet(),
-                    showReactionBar = false,
-                    quickActions = actions,
+                    maxPanelWidth = maxPanelWidth,
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
                     onActionClick = onActionClick,

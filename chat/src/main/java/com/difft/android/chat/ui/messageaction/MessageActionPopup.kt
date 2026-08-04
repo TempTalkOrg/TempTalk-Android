@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.base.utils.dp as dpToPx
 
@@ -75,7 +74,6 @@ class MessageActionPopup(
     
     private var overlayContainer: FrameLayout? = null
     private var composeView: ComposeView? = null
-    private var moreActionsDialog: ComposeDialog? = null
     private var currentConfig: MessageActionConfigBuilder.Config? = null
     private var callbacks: Callbacks? = null
     private var selectionMenuCallbacks: SelectionMenuCallbacks? = null
@@ -170,13 +168,8 @@ class MessageActionPopup(
             notifyDismiss(callbacks)
         }
         val onActionCallback = { action: MessageAction ->
-            when (action.type) {
-                MessageAction.Type.MORE -> showMoreActionsSheet(config.allActions, callbacks)
-                else -> {
-                    callbacks.onActionSelected(action.type)
-                    notifyDismiss(callbacks)
-                }
-            }
+            callbacks.onActionSelected(action.type)
+            notifyDismiss(callbacks)
         }
         
         // Callback to update popup bounds when measured
@@ -401,9 +394,6 @@ class MessageActionPopup(
     }
     
     private fun dismissInternal(notifyCallback: Boolean) {
-        moreActionsDialog?.dismiss()
-        moreActionsDialog = null
-        
         val wasShowing = _isShowing
         _isShowing = false
         
@@ -464,32 +454,6 @@ class MessageActionPopup(
     val menuMode: MenuMode
         get() = menuModeState.value
     
-    private fun showMoreActionsSheet(moreActions: List<MessageAction>, callbacks: Callbacks) {
-        if (moreActions.isEmpty()) return
-        
-        // Hide popup without triggering onDismiss callback
-        _isShowing = false
-        removeOverlay()
-        
-        // Show bottom sheet
-        moreActionsDialog = MoreActionsSheet.show(
-            activity = activity,
-            actions = moreActions,
-            onActionClick = { action ->
-                moreActionsDialog?.dismiss()
-                moreActionsDialog = null
-                callbacks.onActionSelected(action.type)
-                callbacks.onDismiss()
-                cleanup()
-            },
-            onDismiss = {
-                moreActionsDialog = null
-                callbacks.onDismiss()
-                cleanup()
-            }
-        )
-    }
-    
     private fun cleanup() {
         currentConfig = null
         callbacks = null
@@ -525,7 +489,12 @@ private fun MessageActionPopupOverlay(
     // Constants (pixels)
     val edgePaddingPx = 8.dpToPx
     val arrowGapPx = 2.dpToPx
-    
+
+    // Panel width guard (decision #11) — same value passed to both measure and display phases (INV-1)
+    val maxPanelWidth = remember(contentBounds, edgePaddingPx) {
+        computeMaxPanelWidth(contentBounds.width(), edgePaddingPx, density)
+    }
+
     // Use actual content area bounds
     val minY = contentBounds.top + edgePaddingPx
     val maxY = contentBounds.bottom - edgePaddingPx
@@ -553,10 +522,11 @@ private fun MessageActionPopupOverlay(
                     }
             ) {
                 MessageActionContent(
+                    actions = quickActions,
+                    showReactionBar = showReactionBar,
                     reactions = reactions,
                     selectedEmojis = selectedEmojis,
-                    showReactionBar = showReactionBar,
-                    quickActions = quickActions,
+                    maxPanelWidth = maxPanelWidth,
                     arrowConfig = ArrowConfig(isBelow = true, arrowOffsetX = with(density) { 100.toDp() }),
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
@@ -586,10 +556,11 @@ private fun MessageActionPopupOverlay(
                 modifier = Modifier.offset { IntOffset(x, y) }
             ) {
                 MessageActionContent(
+                    actions = quickActions,
+                    showReactionBar = showReactionBar,
                     reactions = reactions,
                     selectedEmojis = selectedEmojis,
-                    showReactionBar = showReactionBar,
-                    quickActions = quickActions,
+                    maxPanelWidth = maxPanelWidth,
                     arrowConfig = ArrowConfig(isBelow = isBelow, arrowOffsetX = arrowOffsetX),
                     onReactionClick = onReactionClick,
                     onMoreEmojiClick = onMoreEmojiClick,

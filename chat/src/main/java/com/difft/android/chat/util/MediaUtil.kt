@@ -14,7 +14,7 @@ import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
 import com.difft.android.base.log.lumberjack.L
 import difft.android.messageserialization.model.Attachment
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.chat.mms.PartAuthority
 import java.io.IOException
 import java.util.Locale

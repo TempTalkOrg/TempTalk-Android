@@ -33,6 +33,7 @@ import com.difft.android.base.ui.TitleBar
 fun AboutPageView(
     onBackClick: () -> Unit,
     appVersion: String,
+    channelLabel: String,
     buildVersion: String,
     buildTime: String,
     onCheckForUpdateClick: () -> Unit,
@@ -60,6 +61,7 @@ fun AboutPageView(
         ) {
             SettingsScreen(
                 appVersion = appVersion,
+                channelLabel = channelLabel,
                 buildVersion = buildVersion,
                 buildTime = buildTime,
                 onCheckForUpdateClick = onCheckForUpdateClick,
@@ -129,6 +131,7 @@ fun ClickableSettingsItem(title: String, click: () -> Unit) {
 @Composable
 fun SettingsScreen(
     appVersion: String,
+    channelLabel: String,
     buildVersion: String,
     buildTime: String,
     onCheckForUpdateClick: () -> Unit,
@@ -151,7 +154,7 @@ fun SettingsScreen(
         ) {
             SettingItem(
                 title = stringResource(id = R.string.settings_version),
-                value = appVersion + (if (isInsider) " (Insider)" else "")
+                value = appVersion + (if (channelLabel.isNotEmpty()) " ($channelLabel)" else "")
             )
             HorizontalDivider(
                 color = colorResource(id = com.difft.android.base.R.color.bg),
@@ -219,6 +222,7 @@ private fun DefaultAboutPageView() {
     AboutPageView(
         onBackClick = {},
         appVersion = "1.0.0",
+        channelLabel = "Google",
         buildVersion = "1.0.0",
         buildTime = "12:00 PM",
         onCheckForUpdateClick = {},

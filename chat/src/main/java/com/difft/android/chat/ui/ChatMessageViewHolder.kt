@@ -738,11 +738,16 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         ) {
             val ivSendStatus = mineBinding!!.ivSendStatus
             val ivReadNumber = mineBinding.ivReadNumber
-            val ivSendFail = mineBinding.ivSendFail
 
             ivSendStatus.visibility = View.GONE
             ivReadNumber.visibility = View.GONE
-            ivSendFail.visibility = View.GONE
+
+            // Failed state renders OUTSIDE the bubble (status row below it); the in-bubble
+            // indicators only ever express sending / sent / read. Called unconditionally so every
+            // rebind resets the row.
+            bindSendFailStatusRow(mineBinding.llSendFailStatus, sendStatus) {
+                contentContainer.performClick()
+            }
 
             when (sendStatus) {
                 SendType.Sending.rawValue -> {
@@ -765,17 +770,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                     }
                 }
 
-                SendType.SentFailed.rawValue -> {
-                    ivSendFail.visibility = View.VISIBLE
-                    ivSendFail.setOnClickListener {
-                        contentContainer.performClick()
-                    }
-                }
+                // Rendered by the status row above.
+                SendType.SentFailed.rawValue -> Unit
 
                 else -> {
                     ivSendStatus.visibility = View.GONE
                     ivReadNumber.visibility = View.GONE
-                    ivSendFail.visibility = View.GONE
                 }
             }
         }

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "org.signal.video"
+    namespace = "com.difft.android.video"
 
     compileSdk = libs.versions.compileSdk.get().toInt()
 
@@ -16,6 +16,9 @@ android {
 
     buildFeatures {
         viewBinding = true
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -42,4 +45,5 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
 }

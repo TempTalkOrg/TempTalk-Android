@@ -151,6 +151,18 @@ class CallRoomController(
     }
 
     /**
+     * Lock-free, non-throwing room accessor for async collectors that can legitimately race with
+     * teardown (e.g. [com.difft.android.call.session.CallTypeCoordinator]'s `room.metadata`
+     * collector, which lives in `viewModelScope` and is not cancelled synchronously with release).
+     * Returns null before [createRoom] and after release, so a metadata emission that lands after
+     * `disconnectAndRelease()` is dropped instead of crashing on the fail-loud [room] getter.
+     */
+    fun roomOrNull(): Room? {
+        if (released) return null
+        return roomInstance
+    }
+
+    /**
      * Lock-free, non-throwing "is the room fully torn down" snapshot for the manual server-switch
      * path. A released or not-yet-created room reads as disconnected. Keeps the livekit [Room.State]
      * type encapsulated here so the coordinator can gate its disconnect→connect sequencing without

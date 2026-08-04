@@ -11,6 +11,8 @@ import com.difft.android.test.TestDispatcherRule
 import com.difft.android.test.rules.GlobalStaticMockRule
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.LocalParticipant
+import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
 import io.mockk.every
 import io.mockk.mockk
@@ -19,7 +21,6 @@ import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.serialization.json.Json
 import livekit.LivekitTemptalk
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -99,7 +100,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
             resetNoBodySpeakCheckFn = {},
             sendHangUpBroadcastFn = {},
             stopRingToneAndTimeoutCheckFn = {},
-            switchToInstantCallFn = {},
+            resolveCallTypeFn = {},
             handleConnectedStateFn = {},
             onFeedbackIdentityResolvedFn = { _, _, _ -> },
             onNetworkPoorStateChangedFn = {},
@@ -120,7 +121,6 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
             speakerState = mockk(relaxed = true),
             callDataManager = mockk(relaxed = true),
             statisticsLogManager = mockk(relaxed = true),
-            json = Json { ignoreUnknownKeys = true },
             mySelfId = "self",
             host = host,
         )
@@ -277,5 +277,72 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         dispatch(dispatcher, RoomEvent.ParticipantDisconnected(room, mockk<RemoteParticipant>(relaxed = true)))
 
         verify(exactly = 1) { timeoutMonitor.onParticipantDisconnected(true) }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Cancelling the teardown-armed timeout on a manual-switch Connected must not depend on
+    // the type the call resolves to afterwards.
+    //
+    // The timeout is armed only while the call is 1v1, but `onConnected` resolves the
+    // authoritative type before it branches, so the switch window itself can turn the call
+    // into instant — a third participant joins, or the server flips callType for an invite
+    // whose RoomUpdate the switch missed. If the cancel lived in the 1v1 branch, those cases
+    // would skip it and fire "对方未接听" ~60s later on a live call.
+    // ---------------------------------------------------------------------------------
+    @Test
+    fun `manual switch cancels the armed timeout even when the type upgraded to instant`() {
+        stubConnectedRoom(remoteCount = 2)
+        every { coordinator.consumeManualSwitchReconnecting() } returns true
+
+        dispatch(buildDispatcher(CallType.INSTANT.type), RoomEvent.Connected(room))
+
+        verify(exactly = 1) { timeoutMonitor.cancelIfActive() }
+    }
+
+    /** The pre-existing path, kept honest: a still-1v1 manual switch cancels as it always did. */
+    @Test
+    fun `manual switch cancels the armed timeout when the call is still one-on-one`() {
+        stubConnectedRoom(remoteCount = 1)
+        every { coordinator.consumeManualSwitchReconnecting() } returns true
+
+        dispatch(buildDispatcher(CallType.ONE_ON_ONE.type), RoomEvent.Connected(room))
+
+        verify(exactly = 1) { timeoutMonitor.cancelIfActive() }
+    }
+
+    // A first connect arms nothing, so there is nothing to cancel; cancelling anyway would be
+    // harmless today but would hide a genuinely leaked timeout from this test.
+    @Test
+    fun `a non-switch connect does not cancel any timeout`() {
+        stubConnectedRoom(remoteCount = 2)
+        every { coordinator.consumeManualSwitchReconnecting() } returns false
+
+        dispatch(buildDispatcher(CallType.INSTANT.type), RoomEvent.Connected(room))
+
+        verify(exactly = 0) { timeoutMonitor.cancelIfActive() }
+    }
+
+    /**
+     * Minimal `Room` surface that `onConnected` touches: the value-class sid/identity it reports for
+     * feedback, and a remote-participant map of the given size. A relaxed mock cannot supply the
+     * value classes, hence the explicit stubs.
+     *
+     * Media state is stubbed too because a manual-switch Connected always reaches
+     * `restoreMediaAfterServerSwitch`, which reads `roomCtl.micEnabled.value` — a relaxed StateFlow
+     * hands back an Object there and the cast fails. Muted with the camera off is the quiet choice:
+     * it drives no media calls, leaving the timeout assertions as the only thing under test.
+     */
+    private fun stubConnectedRoom(remoteCount: Int) {
+        stubMediaState(mic = false, camera = false)
+        val local = mockk<LocalParticipant>(relaxed = true)
+        every { local.sid } returns Participant.Sid("local-sid")
+        every { local.identity } returns Participant.Identity("local-identity")
+        every { local.getTrackPublication(any()) } returns null
+        every { room.localParticipant } returns local
+        every { room.sid } returns Room.Sid("room-sid")
+        val remotes = mockk<Map<Participant.Identity, RemoteParticipant>>(relaxed = true)
+        every { remotes.size } returns remoteCount
+        every { remotes.isEmpty() } returns (remoteCount == 0)
+        every { room.remoteParticipants } returns remotes
     }
 }

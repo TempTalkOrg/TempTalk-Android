@@ -11,9 +11,11 @@ import com.difft.android.network.proxy.ProxyLinkCodec
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.setting.proxy.ProxyE2eProbe
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -400,13 +402,38 @@ class ProxySettingsViewModel @Inject constructor(
 
     /**
      * Stage 2: whether TempTalk is reachable *through* the proxy. Runs after stage
-     * 1 == OK while the switch is ON. [runCatching] is defense-in-depth (the probe
-     * contract is "never throws"). The result is dropped if [snapshot] is stale.
+     * 1 == OK while the switch is ON. The result is dropped if [snapshot] is stale.
+     *
+     * A RETIRED probe must never settle the status area. [cancelProbes] retires one
+     * on every toggle / save / recheck, but [isProbeResultApplicable] cannot detect
+     * that: the saved address is usually unchanged, so a retired run's verdict still
+     * matches. Cancellation is the only signal, and it needs both guards below —
+     * turning the switch OFF while stage 2 is in flight otherwise repaints the red
+     * "无法通过代理连接到 Quicall" plus its recheck icon under an already-off switch,
+     * because the verdict hops back to Main only after [reloadWithoutProbe] has
+     * emptied the status area.
+     *
+     * The catch is defense-in-depth for a probe that breaks its "never throws"
+     * contract, but it must not swallow [CancellationException] — [ProxyE2eProbe]
+     * deliberately rethrows that instead of answering `false` (see
+     * `ProxyE2eProbeImpl.probeOnce`) precisely so a cancelled probe is not read as
+     * "unreachable". [ensureActive] then covers the mirror case, where the probe
+     * produced a real verdict before the cancellation reached it.
      */
     private fun runE2eProbe(snapshot: String) {
         e2eJob?.cancel()
         e2eJob = viewModelScope.launch {
-            val ok = runCatching { e2eProbe.probe() }.getOrDefault(false)
+            val ok = try {
+                e2eProbe.probe()
+            } catch (cancellation: CancellationException) {
+                // MUST stay ahead of the Exception clause: CancellationException IS-A
+                // Exception, so merging or reordering the two silently turns every
+                // cancelled probe back into a "服务不可达" verdict.
+                throw cancellation
+            } catch (_: Exception) {
+                false
+            }
+            ensureActive()
             if (!isProbeResultApplicable(snapshot)) return@launch
             _uiState.update {
                 it.copy(probe = if (ok) ProbeState.ServiceReachable else ProbeState.ServiceUnreachable)
@@ -418,6 +445,10 @@ class ProxySettingsViewModel @Inject constructor(
      * A probe result applies only when the saved address is still [snapshot] AND
      * the input has no unsaved edits — otherwise the user has moved on and the
      * stale result must not overwrite the cleared status (§6.0.1).
+     *
+     * This tracks EDITS only. It deliberately says nothing about whether the probe
+     * was retired — editing the address leaves the in-flight probe running, so the
+     * two conditions are independent; see [runE2eProbe] for the cancellation half.
      */
     private fun isProbeResultApplicable(snapshot: String): Boolean {
         val s = _uiState.value

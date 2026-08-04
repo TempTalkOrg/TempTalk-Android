@@ -17,6 +17,9 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Order
+import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
+import difft.android.messageserialization.model.needsSendStatusRecompute
+import difft.android.messageserialization.model.resolveRoomSendStatus
 import org.difft.app.database.models.MessageModel
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -156,8 +159,8 @@ object WCDBUpdateService :
             // into memory (same unbounded getAllObjects anti-pattern the issue removed elsewhere).
             roomIdsToDelete.forEach { roomId ->
                 // Diagnostic: warn if any business (non-Notify) message survives in an "empty" room.
-                // Archive-expired system messages are TYPE_NOTIFY (actionType 10012); a non-Notify
-                // message here is unexpected. Checked via COUNT (no object load) — this is a SQL
+                // Archive-expired system messages and forward/copy notices are TYPE_NOTIFY; a
+                // non-Notify message here is unexpected. Checked via COUNT (no object load) — this is a SQL
                 // approximation of the old per-row isArchiveExpiredSystemMessage filter (which parses
                 // messageText JSON and cannot be expressed in SQL); it narrows to "stray business
                 // messages", the case the warning actually exists to surface.
@@ -298,14 +301,56 @@ object WCDBUpdateService :
 
                                 // 以下是需要重新查询数据的逻辑
                                 if (roomChanges.any { it.type == RoomChangeType.MESSAGE }) {
-                                    // 获取最新消息
+                                    // Recompute for an ALREADY-FLAGGED room only (discovering a new failure
+                                    // is the set source's job), gated on the stored value so a NONE room
+                                    // costs zero extra queries — which is why no `sendType` index is needed.
+                                    // The gate is a COST filter, not a correctness gate: the clear re-checks
+                                    // the message table inside its own UPDATE, so a stale read either way is
+                                    // safe. Its own updateRow, FIRST in this branch, deliberately: the
+                                    // preview writes below sit behind `needsUpdate`-style guards that are
+                                    // false in the most common failure case (the failed message is already
+                                    // the preview), which would swallow a merged sendStatus write entirely.
+                                    if (needsSendStatusRecompute(roomObject.sendStatus)) {
+                                        resolveRoomSendStatus(roomObject.sendStatus, wcdb.hasFailedOutgoingMessage(roomId))
+                                            ?.let { targetStatus ->
+                                                // A clear goes through the conditional writer so a
+                                                // source-side FAILED committed since the probe is not lost —
+                                                // that loss would NOT self-heal, and a snapshot CAS would not
+                                                // prevent it. An escalation (SENDING -> FAILED) is written
+                                                // directly: resolve never returns FAILED for a NONE room, so
+                                                // this cannot discover a new failure, and over-flagging a
+                                                // room whose failure was retried away self-heals on that
+                                                // retry's own room change.
+                                                if (targetStatus == ROOM_SEND_STATUS_NONE) {
+                                                    wcdb.clearRoomSendStatusIfNoFailure(roomId)
+                                                } else {
+                                                    wcdb.writeRoomSendStatus(roomId, targetStatus)
+                                                }
+                                                L.i { "[WCDBUpdateService] room=$roomId sendStatus ${roomObject.sendStatus}->$targetStatus (clear is conditional; no-op if a failure raced in)" }
+                                            }
+                                    }
+
+                                    // Skip forward/copy notices so the preview falls back to the latest
+                                    // non-notice message. notifyType is inside messageText JSON (not a
+                                    // column) — matched via LIKE with a trailing-comma anchor (substring
+                                    // pinned by LocalMessageCreatorForwardNoticeTest); isNull keeps
+                                    // NULL-text notify rows included (NULL LIKE propagates NULL).
                                     val previewMessage = wcdb.message.getFirstObject(
-                                        DBMessageModel.roomId.eq(roomId),
+                                        DBMessageModel.roomId.eq(roomId)
+                                            .and(
+                                                DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY)
+                                                    .or(DBMessageModel.messageText.isNull())
+                                                    .or(
+                                                        DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_FORWARD_NOTICE,%")
+                                                            .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_COPY_NOTICE,%"))
+                                                    )
+                                            ),
                                         DBMessageModel.systemShowTimestamp.order(Order.Desc)
                                     )
 
                                     if (previewMessage == null) {
-                                        // No messages, set emptyRoomSince (if not set), keep lastActiveTime unchanged
+                                        // No previewable messages (none at all, or only forward/copy
+                                        // notices): set emptyRoomSince (if not set), keep lastActiveTime unchanged
                                         val emptyRoomSince = roomObject.emptyRoomSince ?: System.currentTimeMillis()
                                         if (roomObject.lastDisplayContent != "" || roomObject.emptyRoomSince == null) {
                                             wcdb.room.updateRow(
@@ -438,6 +483,10 @@ object WCDBUpdateService :
     // Earlier messages expired 系统消息的 actionType
     // 注意：与 TTNotifyMessage.NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED 保持一致
     private const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012
+
+    // Forward/copy notice notifyType (excluded from room preview) — keep in sync with TTNotifyMessage
+    private const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020
+    private const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021
 
     /**
      * 判断是否是归档系统消息（Earlier messages expired）

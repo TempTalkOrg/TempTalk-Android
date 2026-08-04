@@ -146,9 +146,12 @@ allprojects {
                     because("Force Kotlin version to 2.3.0 for Coroutines 1.9.0 compatibility")
                 }
             }
+            // Netty reaches this build only through AGP's Unified Test Platform
+            // configurations (io.grpc:grpc-netty), never the app runtime classpath
+            // — but the dep security scan treats test/build tooling as in-scope.
             if (requested.group == "io.netty") {
-                useVersion("4.1.135.Final")
-                because("Fix CVE: IpSubnetFilter bypass (CVE-2026-44249), SNIHandler/HTTP2 DoS (CVE-2026-45416/50560), FD leak (CVE-2026-45536), hostname verification bypass (CVE-2026-50010)")
+                useVersion("4.1.136.Final")
+                because("Fix CVE: Bzip2Decoder infinite loop (CVE-2026-59901), SPDY unbounded settings map / zlib expansion / RST_STREAM leak (CVE-2026-55831/55833/56745), HttpContentEncoder queue growth (CVE-2026-59899), CORS bypass (CVE-2026-56746), WebSocket V07/V08 handshake validation (CVE-2026-59898), multipart CRLF injection (CVE-2026-59921), HTTP/2 Host header dedup (CVE-2026-59900) — plus the 4.1.135 fixes for IpSubnetFilter bypass (CVE-2026-44249), SNIHandler/HTTP2 DoS (CVE-2026-45416/50560), FD leak (CVE-2026-45536), hostname verification bypass (CVE-2026-50010)")
             }
             if (requested.group == "org.bouncycastle" &&
                 (requested.name == "bcprov-jdk18on" ||

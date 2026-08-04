@@ -4,54 +4,29 @@ import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.ui.theme.DifftThemePreview
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.base.utils.dp as dpToPx
 
@@ -226,14 +201,10 @@ class FailedMessageActionPopup(
     }
 }
 
-// Item dimensions (Compose Dp)
-private val ITEM_WIDTH = 55.dp
-private val ITEM_SPACING = 6.dp
-private val ARROW_WIDTH = 12.dp
-private val ARROW_HEIGHT = 6.dp
-
 /**
- * Full-screen overlay that positions the popup content using Box + offset
+ * Full-screen overlay that positions the popup content using Box + offset.
+ * Renders the shared [MessageActionContent] with the failed-state action set (resend / delete),
+ * no reaction bar, and always right-aligned positioning (INV-5).
  */
 @Composable
 private fun FailedMessagePopupOverlay(
@@ -247,16 +218,29 @@ private fun FailedMessagePopupOverlay(
     var popupWidth by remember { mutableIntStateOf(0) }
     var popupHeight by remember { mutableIntStateOf(0) }
     val isMeasured = popupWidth > 0 && popupHeight > 0
-    
+
     // Constants (pixels)
     val edgePaddingPx = 8.dpToPx
     val arrowHeightPx = 6.dpToPx
     val arrowGapPx = 2.dpToPx
-    
+
+    // Panel width guard (decision #11) — same value for measure and display phases (INV-1)
+    val maxPanelWidth = remember(contentBounds, edgePaddingPx) {
+        computeMaxPanelWidth(contentBounds.width(), edgePaddingPx, density)
+    }
+
+    // Failed-state action set (Master Order B5): Resend -> Delete(red)
+    val failedActions = remember { buildFailedActions() }
+
+    // Unified type dispatcher for the shared content
+    val onActionClick: (MessageAction) -> Unit = { action ->
+        failedActionDispatch(action.type, onResendClick, onDeleteClick)
+    }
+
     // Use actual content area bounds
     val minY = contentBounds.top + edgePaddingPx
     val maxY = contentBounds.bottom - edgePaddingPx
-    
+
     // Full screen transparent overlay to catch outside clicks
     Box(
         modifier = Modifier
@@ -295,10 +279,16 @@ private fun FailedMessagePopupOverlay(
                         }
                     }
             ) {
-                FailedMessageActionContent(
+                MessageActionContent(
+                    actions = failedActions,
+                    showReactionBar = false,
+                    reactions = emptyList(),
+                    selectedEmojis = emptySet(),
+                    maxPanelWidth = maxPanelWidth,
                     arrowConfig = ArrowConfig(isBelow = true, arrowOffsetX = 60.dp),
-                    onResendClick = { },
-                    onDeleteClick = { }
+                    onReactionClick = { _, _ -> },
+                    onMoreEmojiClick = { },
+                    onActionClick = { }
                 )
             }
         }
@@ -320,10 +310,16 @@ private fun FailedMessagePopupOverlay(
             Box(
                 modifier = Modifier.offset { IntOffset(x, y) }
             ) {
-                FailedMessageActionContent(
+                MessageActionContent(
+                    actions = failedActions,
+                    showReactionBar = false,
+                    reactions = emptyList(),
+                    selectedEmojis = emptySet(),
+                    maxPanelWidth = maxPanelWidth,
                     arrowConfig = ArrowConfig(isBelow = isBelow, arrowOffsetX = arrowOffsetX),
-                    onResendClick = onResendClick,
-                    onDeleteClick = onDeleteClick
+                    onReactionClick = { _, _ -> },
+                    onMoreEmojiClick = { },
+                    onActionClick = onActionClick
                 )
             }
         }
@@ -364,167 +360,26 @@ private fun calculatePopupY(
     }
 }
 
+/** Failed-state action set (Master Order B5): Resend -> Delete(red). */
+internal fun buildFailedActions(): List<MessageAction> =
+    listOf(MessageAction.resend(), MessageAction.delete())
+
 /**
- * Content for failed message action popup
+ * Maps a failed-state action type to its callback; unknown types are ignored (else-safe).
+ *
+ * `MORE_INFO` is intentionally NOT dispatched here: a failed message has not reached anyone, so the
+ * delivery/read detail page carries no information for it. The regular (non-failed) message menu
+ * keeps its Info entry — only this failed-state set is narrowed.
  */
-@Composable
-fun FailedMessageActionContent(
-    arrowConfig: ArrowConfig?,
-    onResendClick: () -> Unit,
-    onDeleteClick: () -> Unit,
-    modifier: Modifier = Modifier
+internal fun failedActionDispatch(
+    type: MessageAction.Type,
+    onResend: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    val backgroundColor = DifftTheme.colors.backgroundActionPopup
-    
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.Start
-    ) {
-        // Arrow on top (when popup is below anchor)
-        if (arrowConfig != null && arrowConfig.isBelow) {
-            PopupArrow(
-                isPointingUp = true,
-                offsetX = arrowConfig.arrowOffsetX,
-                color = backgroundColor
-            )
-        }
-        
-        Card(
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = backgroundColor
-            ),
-            elevation = CardDefaults.elevatedCardElevation(
-                defaultElevation = 4.dp
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .width(IntrinsicSize.Min)
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(ITEM_SPACING),
-                verticalAlignment = Alignment.Top
-            ) {
-                // Resend action
-                ActionItem(
-                    action = MessageAction.resend(),
-                    onClick = onResendClick
-                )
-                
-                // Delete action
-                ActionItem(
-                    action = MessageAction.delete(),
-                    onClick = onDeleteClick
-                )
-            }
-        }
-        
-        // Arrow on bottom (when popup is above anchor)
-        if (arrowConfig != null && !arrowConfig.isBelow) {
-            PopupArrow(
-                isPointingUp = false,
-                offsetX = arrowConfig.arrowOffsetX,
-                color = backgroundColor
-            )
-        }
+    when (type) {
+        MessageAction.Type.RESEND -> onResend()
+        MessageAction.Type.DELETE -> onDelete()
+        else -> Unit
     }
 }
 
-@Composable
-private fun ActionItem(
-    action: MessageAction,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val iconTint = if (action.isDestructive) {
-        DifftTheme.colors.error
-    } else {
-        DifftTheme.colors.textPrimary
-    }
-    
-    val textColor = if (action.isDestructive) {
-        DifftTheme.colors.error
-    } else {
-        DifftTheme.colors.textPrimary
-    }
-    
-    Column(
-        modifier = modifier
-            .width(ITEM_WIDTH)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            painter = painterResource(action.iconRes),
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = iconTint
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = stringResource(action.labelRes),
-            fontSize = 11.sp,
-            color = textColor,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            lineHeight = 14.sp
-        )
-    }
-}
-
-@Composable
-private fun PopupArrow(
-    isPointingUp: Boolean,
-    offsetX: Dp,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(
-        modifier = modifier
-            .offset(x = offsetX - ARROW_WIDTH / 2)
-            .size(width = ARROW_WIDTH, height = ARROW_HEIGHT)
-    ) {
-        val path = Path().apply {
-            if (isPointingUp) {
-                moveTo(0f, size.height)
-                lineTo(size.width / 2, 0f)
-                lineTo(size.width, size.height)
-                close()
-            } else {
-                moveTo(0f, 0f)
-                lineTo(size.width / 2, size.height)
-                lineTo(size.width, 0f)
-                close()
-            }
-        }
-        drawPath(path, color)
-    }
-}
-
-// ============== Previews ==============
-
-@Preview(showBackground = true)
-@Composable
-private fun FailedMessageActionContentPreview() {
-    DifftThemePreview {
-        FailedMessageActionContent(
-            arrowConfig = ArrowConfig(isBelow = true, arrowOffsetX = 60.dp),
-            onResendClick = {},
-            onDeleteClick = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, name = "Dark Theme")
-@Composable
-private fun FailedMessageActionContentDarkPreview() {
-    DifftThemePreview(darkTheme = true) {
-        FailedMessageActionContent(
-            arrowConfig = ArrowConfig(isBelow = false, arrowOffsetX = 60.dp),
-            onResendClick = {},
-            onDeleteClick = {}
-        )
-    }
-}

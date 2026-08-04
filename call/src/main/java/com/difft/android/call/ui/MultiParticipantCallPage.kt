@@ -2,7 +2,6 @@ package com.difft.android.call.ui
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,20 +10,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -133,45 +127,17 @@ fun MultiParticipantCallPage(
                 displayInfoMap = displayInfoMap
             )
         } else {
-            CompositionLocalProvider(
-                LocalOverscrollConfiguration provides null
-            ) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .testTag("call_render_multi_grid")
-                        .padding(
-                            start = 16.dp,
-                            top = topInset + 16.dp,
-                            end = 16.dp,
-                            bottom = 4.dp),
-                ) {
-                    items(
-                        count = participants.size,
-                        key = { index -> participants[index].sid.value }
-                    ) { index ->
-                        val participant = participants[index]
-                        val uid = when (participant) {
-                            is LocalParticipant -> globalServices.myId
-                            else -> participant.identity?.value ?: ""
-                        }
-                        MultiParticipantItem(
-                            viewModel = viewModel,
-                            room = room,
-                            participant = participant,
-                            modifier = Modifier.fillMaxHeight().aspectRatio(1f),
-                            uid = uid,
-                            userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
-                            participantIndex = index,
-                            muteOtherEnabled = muteOtherEnabled,
-                            onClickMute = { viewModel.toggleMute(participant) },
-                            coroutineScope = coroutineScope
-                        )
-                    }
-                }
-            }
+            PortraitParticipantLayout(
+                participants = participants,
+                viewModel = viewModel,
+                room = room,
+                muteOtherEnabled = muteOtherEnabled,
+                topInset = topInset,
+                coroutineScope = coroutineScope,
+                displayInfoMap = displayInfoMap,
+                // PiP 小窗口空间有限，无论人数多少都用 2 列方形滚动网格，避免固定布局挤压。
+                forceScrollGrid = isInPipMode
+            )
         }
     } else {
         whoSharedScreen?.let { sharedParticipant ->
@@ -389,5 +355,3 @@ private fun OverflowParticipantCell(
         }
     }
 }
-
-

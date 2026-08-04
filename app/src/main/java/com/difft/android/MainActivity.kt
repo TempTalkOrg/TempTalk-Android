@@ -9,6 +9,7 @@ import android.text.TextUtils
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
 import com.auth0.android.jwt.JWT
+import com.difft.android.app.TempTalkApplication
 import com.difft.android.app.startup.needsIdentityKeyRelogin
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
@@ -34,6 +35,7 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.DatabaseRecoveryState
 import org.difft.app.database.WCDB
 import org.difft.app.database.wcdb
+import util.PendingScreenLockDeeplink
 import util.ScreenLockUtil
 import javax.inject.Inject
 
@@ -122,7 +124,22 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                 // above; tryOpenPopupChat re-validates id format. Falls back to deeplink path
                 // (IndexActivity.handleDeeplink runs ValidatorUtil too) if the id is malformed.
                 shouldOpenPopupChat() -> {
-                    if (tryOpenPopupChat()) {
+                    val app = application as? TempTalkApplication
+                    // Fail closed: if the app class can't be resolved (should never happen) OR the lock
+                    // is required, do NOT open the popup. Queue it for replay after unlock and run a
+                    // single-pass lock check (the full check's 1100ms second pass could re-lock right
+                    // after a fast unlock+replay). Route to IndexActivity only on a cold start (task
+                    // root); otherwise finish to return to the previous top — IndexActivity is
+                    // singleTask and would clear it (reset to home).
+                    if (app == null || app.isScreenLockRequiredOrShowing()) {
+                        L.i { "[MainActivity] popup gated by app lock, queued for replay after unlock" }
+                        PendingScreenLockDeeplink.offer(intent)
+                        if (isTaskRoot) {
+                            startActivity(Intent(this@MainActivity, IndexActivity::class.java))
+                        }
+                        app?.triggerScreenLockCheckOnce()
+                        finish()
+                    } else if (tryOpenPopupChat()) {
                         finish()
                     } else {
                         L.w { "[MainActivity] popup intent rejected (invalid id), falling back to deeplink path" }

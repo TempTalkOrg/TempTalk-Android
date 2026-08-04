@@ -76,11 +76,11 @@ import com.difft.android.setting.language.LanguageActivity
 import com.difft.android.setting.language.LanguageFragment
 import com.difft.android.setting.theme.ThemeActivity
 import com.difft.android.setting.theme.ThemeFragment
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
+import com.difft.android.selector.basic.PictureSelector
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.selector.language.LanguageConfig
+import com.difft.android.selector.pictureselector.GlideEngine
+import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn

@@ -99,6 +99,16 @@ class RoomModel {
     var criticalAlertType: Int = 0
 
     /**
+     * Aggregate outgoing-send signal for the conversation list tag.
+     * 0: no failure (default) / 1: reserved "sending" / 2: has a failed outgoing message.
+     * Values + invariants: [difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE].
+     * Derived, purely local state — never synced (a failed message never reached the server).
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var sendStatus: Int = 0
+
+    /**
      * Conversation-level save to photos setting
      * null: Follow global setting (default)
      * 0: Disabled (never)
@@ -129,6 +139,7 @@ class RoomModel {
                 groupMembersNumber == other.groupMembersNumber &&
                 confidentialMode == other.confidentialMode &&
                 criticalAlertType == other.criticalAlertType &&
+                sendStatus == other.sendStatus &&
                 roomId == other.roomId &&
                 roomName == other.roomName &&
                 roomAvatarJson == other.roomAvatarJson &&
@@ -158,6 +169,7 @@ class RoomModel {
         groupMembersNumber,
         confidentialMode,
         criticalAlertType,
+        sendStatus,
         saveToPhotos,
         emptyRoomSince
     )
@@ -182,6 +194,7 @@ class RoomModel {
                 ", groupMembersNumber=" + groupMembersNumber +
                 ", confidentialMode=" + confidentialMode +
                 ", criticalAlertType=" + criticalAlertType +
+                ", sendStatus=" + sendStatus +
                 ", saveToPhotos=" + saveToPhotos +
                 ", emptyRoomSince=" + emptyRoomSince +
                 '}'

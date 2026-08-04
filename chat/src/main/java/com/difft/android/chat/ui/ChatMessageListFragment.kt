@@ -86,14 +86,14 @@ import com.difft.android.chat.widget.VoiceMessageView
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.config.GlobalConfigsManager
-import com.luck.picture.lib.basic.IBridgeViewLifecycle
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.engine.ExoVideoPlayerEngine
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnExternalPreviewEventListener
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
+import com.difft.android.selector.basic.IBridgeViewLifecycle
+import com.difft.android.selector.basic.PictureSelector
+import com.difft.android.selector.engine.ExoVideoPlayerEngine
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.selector.interfaces.OnExternalPreviewEventListener
+import com.difft.android.selector.language.LanguageConfig
+import com.difft.android.selector.pictureselector.GlideEngine
+import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
@@ -470,10 +470,11 @@ class ChatMessageListFragment : Fragment() {
                     when (newState) {
                         RecyclerView.SCROLL_STATE_IDLE -> {
                             isDragging = false
+                            // Sync the floating date to the final resting position (throttle may have skipped it)
+                            showDayTime(linearLayoutManager.findFirstVisibleItemPosition())
                             viewLifecycleOwner.lifecycleScope.launch {
                                 if (userScrolling) {
                                     checkAndLoadMessages(linearLayoutManager)
-                                    hideDayTime()
                                 }
                                 sendAndUpdateMessageRead()
                                 checkAndRecordConfidentialPlaceholders()
@@ -502,12 +503,11 @@ class ChatMessageListFragment : Fragment() {
 
                     val currentTime = System.currentTimeMillis()
 
-                    // 对showDayTime进行节流
-                    if (userScrolling) {
-                        if (currentTime - lastDayTimeUpdate >= dayTimeUpdateInterval) {
-                            showDayTime(firstVisibleItemPosition)
-                            lastDayTimeUpdate = currentTime
-                        }
+                    // Throttle showDayTime; dy == 0 means a layout-dispatched callback — let it
+                    // through so the header shows immediately on entering the conversation
+                    if (dy == 0 || currentTime - lastDayTimeUpdate >= dayTimeUpdateInterval) {
+                        showDayTime(firstVisibleItemPosition)
+                        lastDayTimeUpdate = currentTime
                     }
 
                     // Detect confidential placeholders during dragging (throttled 500ms, skip flying state)
@@ -1492,12 +1492,7 @@ class ChatMessageListFragment : Fragment() {
         }
 
         override fun onMoreInfo(message: TextChatMessage) {
-            // Find the message view for navigation
-            val position = chatMessageAdapter.currentList.indexOfFirst { it.id == message.id }
-            if (position >= 0) {
-                val viewHolder = binding.recyclerViewMessage.findViewHolderForAdapterPosition(position)
-                viewHolder?.itemView?.let { gotoDetailPage(it, message) }
-            }
+            currentItemView(message.id)?.let { gotoDetailPage(it, message) }
         }
 
         override fun onFavoriteGif(message: TextChatMessage) {
@@ -1871,6 +1866,14 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 
+    /** Re-resolve the current itemView for a message by id (RecyclerView reuse-safe). */
+    private fun currentItemView(messageId: String): View? =
+        resolveByMessageId(
+            messageId,
+            indexOf = { id -> chatMessageAdapter.currentList.indexOfFirst { it.id == id } },
+            itemAt = { pos -> binding.recyclerViewMessage.findViewHolderForAdapterPosition(pos)?.itemView }
+        )
+
     private fun gotoDetailPage(rootView: View, message: TextChatMessage) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -1980,8 +1983,14 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun showDayTime(firstVisibleItemPosition: Int) {
-        dayTimeHideJob?.cancel()
         if (firstVisibleItemPosition == RecyclerView.NO_POSITION) {
+            binding.cvDayTime.visibility = View.GONE
+            return
+        }
+
+        // When the list can't scroll, every inline date separator is already on screen —
+        // the floating header would be redundant and cover content
+        if (!binding.recyclerViewMessage.canScrollVertically(1) && !binding.recyclerViewMessage.canScrollVertically(-1)) {
             binding.cvDayTime.visibility = View.GONE
             return
         }
@@ -1992,32 +2001,10 @@ class ChatMessageListFragment : Fragment() {
             binding.cvDayTime.visibility = View.GONE
             return
         }
-        binding.cvDayTime.alpha = 1f
         binding.cvDayTime.visibility = View.VISIBLE
         binding.tvDayTime.text = TimeFormatter.getConversationDateHeaderString(
             requireContext(), language, data.systemShowTimestamp
         )
-    }
-
-    private var dayTimeHideJob: Job? = null
-
-    private fun hideDayTime() {
-        dayTimeHideJob?.cancel()
-        dayTimeHideJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(3000L)
-            if (!isAdded || view == null) return@launch
-            // Animate the CardView (cvDayTime) instead of just the TextView
-            // This ensures both background and text fade out together
-            binding.cvDayTime.animate()
-                .alpha(0f)
-                .setDuration(300)
-                .withEndAction {
-                    if (!isAdded || view == null) return@withEndAction
-                    binding.cvDayTime.visibility = View.GONE
-                    binding.cvDayTime.alpha = 1f
-                }
-                .start()
-        }
     }
 
     private fun getLastVisibleMessage(): ChatMessage? {
@@ -2488,4 +2475,18 @@ class ChatMessageListFragment : Fragment() {
             }
         }
     }
+}
+
+/**
+ * Resolve an item by message id: look up its current position via [indexOf], then resolve the item
+ * via [itemAt]. Returns null when the id is absent (position < 0) — [itemAt] is never invoked then.
+ * Pure logic behind [ChatMessageListFragment.currentItemView], extracted for unit testing (H8/H9).
+ */
+internal fun <T> resolveByMessageId(
+    messageId: String,
+    indexOf: (String) -> Int,
+    itemAt: (Int) -> T?
+): T? {
+    val position = indexOf(messageId)
+    return if (position >= 0) itemAt(position) else null
 }

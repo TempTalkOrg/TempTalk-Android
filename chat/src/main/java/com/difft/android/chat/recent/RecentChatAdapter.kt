@@ -2,11 +2,7 @@ package com.difft.android.chat.recent
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
-import android.text.Spannable
-import android.text.SpannableString
 import android.text.TextUtils
-import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -33,8 +29,6 @@ import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
 import com.difft.android.chat.group.getAvatarData
 import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
-import difft.android.messageserialization.model.MENTIONS_TYPE_ALL
-import difft.android.messageserialization.model.MENTIONS_TYPE_ME
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager.EntryPoint
 import com.difft.android.call.state.OnGoingCallStateManager
@@ -192,6 +186,9 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
     private val binding = ChatFragmentRecentChatListItemBinding.bind(itemView)
     private var currentIsSelected: Boolean = false
 
+    /** RecyclerView width, already measured by the time onCreateViewHolder runs. */
+    private val containerWidthPx: Int = container.width
+
     @SuppressLint("ClickableViewAccessibility")
     fun bind(searchKey: String, data: RoomViewData, isSelected: Boolean = false, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
         currentIsSelected = isSelected
@@ -264,46 +261,10 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, bgColorRes))
 
         binding.textviewDate.text = data.lastActiveTimeText
-        if (!data.draftPreview.isNullOrEmpty()) {
-            binding.textviewDetail.text = applyDraftStyle(data.draftPreview, binding.root.context)
-        } else {
-            binding.textviewDetail.text = data.lastDisplayContent
-            if (data.unreadMessageNum != 0 && !data.isMuted) {
-                binding.textviewDetail.setTextColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.t_primary))
-            } else {
-                binding.textviewDetail.setTextColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.t_third))
-            }
-        }
+        applyDetailRow(data)
         binding.textviewMissedNumber.text =
             if (data.unreadMessageNum > 99) "99+" else data.unreadMessageNum.toString()
-
-        // 构建标签文本: Critical Alert 在最前面，然后是 mention
-        val alertTagBuilder = StringBuilder()
-
-        // 检查是否有 Critical Alert
-        if (data.criticalAlertType == difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_ALERT) {
-            alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_critical_alert))
-        }
-
-        // 检查是否有 mention
-        when (data.mentionType) {
-            MENTIONS_TYPE_ME -> {
-                if (alertTagBuilder.isNotEmpty()) alertTagBuilder.append(" ")
-                alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_at_you))
-            }
-            MENTIONS_TYPE_ALL -> {
-                if (alertTagBuilder.isNotEmpty()) alertTagBuilder.append(" ")
-                alertTagBuilder.append(binding.root.context.getString(R.string.chat_list_at_all))
-            }
-        }
-
-        // 设置显示
-        if (alertTagBuilder.isNotEmpty()) {
-            binding.textviewAt.visibility = View.VISIBLE
-            binding.textviewAt.text = alertTagBuilder.toString()
-        } else {
-            binding.textviewAt.visibility = View.GONE
-        }
+        applyTagRow(data)
 
         showMissingNumber(data.unreadMessageNum, data.isMuted)
 
@@ -335,17 +296,74 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         }
     }
 
-    private fun applyDraftStyle(content: String, context: Context): SpannableString {
-        val draftPrefix = "[${context.getString(R.string.chat_draft)}] "
-        val fullText = draftPrefix + content  // Combine prefix with the actual message
-        val spannable = SpannableString(fullText)
-        // Apply red color to the '[Draft] ' prefix
-        spannable.setSpan(
-            ForegroundColorSpan(ContextCompat.getColor(context, R.color.red_500)),
-            0, draftPrefix.length,
-            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+    /**
+     * Content only: the draft body when a draft exists, otherwise the message preview. A draft is
+     * "present" only when non-null AND non-empty — the same test [applyTagRow] uses for the
+     * `[Draft]` tag, so the two can never disagree about whether a draft EXISTS.
+     *
+     * They can still disagree about labelling: `[Draft]` is the first tag width degradation drops,
+     * and this row is not degraded, so a crowded row shows the draft body with no `[Draft]` label.
+     * Deliberate — the body is the useful part. Making them inseparable would mean moving the draft
+     * indicator into this row as a prefix, which is a design change.
+     */
+    private fun applyDetailRow(data: RoomViewData) {
+        val context = binding.root.context
+        binding.textviewDetail.text =
+            data.draftPreview?.takeIf { it.isNotEmpty() } ?: data.lastDisplayContent
+        binding.textviewDetail.setTextColor(
+            ContextCompat.getColor(context, detailColorRes(data.unreadMessageNum, data.isMuted))
         )
-        return spannable
+    }
+
+    /**
+     * Assembles the preview tag run into a single TextView and degrades it to the available width.
+     *
+     * Precondition: [updateTextSizes] has already run — `textviewAt.paint` carries the final text
+     * size, and measuring before it would under-estimate at the larger size and drop too few tags.
+     *
+     * The tag run is derived solely from [RoomViewData] fields; it must never query the message or
+     * room tables, which would put a per-row DB read on the list-refresh path.
+     *
+     * Colour comes solely from `android:textColor="@color/t.error"` in the layout.
+     */
+    private fun applyTagRow(data: RoomViewData) {
+        val context = binding.root.context
+        val labels = ChatListTagLabels(
+            criticalAlert = context.getString(R.string.chat_list_critical_alert),
+            sendFailed = context.getString(R.string.chat_list_send_failed),
+            atYou = context.getString(R.string.chat_list_at_you),
+            atAll = context.getString(R.string.chat_list_at_all),
+            draft = context.getString(R.string.chat_list_draft),
+        )
+        val all = buildTagSegments(
+            criticalAlertType = data.criticalAlertType,
+            sendStatus = data.sendStatus,
+            mentionType = data.mentionType,
+            hasDraft = !data.draftPreview.isNullOrEmpty(),
+            labels = labels,
+        )
+        val rowWidthPx = resolveRowWidthPx(
+            itemViewWidthPx = itemView.width,
+            containerWidthPx = containerWidthPx,
+            displayWidthPx = context.resources.displayMetrics.widthPixels,
+        )
+        val visible = selectVisibleTags(
+            tags = all,
+            availableWidthPx = computeTagAvailableWidthPx(
+                rowWidthPx = rowWidthPx,
+                density = context.resources.displayMetrics.density,
+                hasUnreadBadge = data.unreadMessageNum != 0,
+                // Mirrors updateCallBarDuration()'s visibility test without reordering it: that
+                // method also rewrites the row background and the click listener.
+                hasCallBar = !data.callData?.roomId.isNullOrEmpty(),
+                isLargerText = TextSizeUtil.isLarger,
+            ),
+            measureText = binding.textviewAt.paint::measureText,
+        )
+        // Driven by `visible`, not `all`: a run made entirely of droppable tags can degrade to
+        // nothing, and an empty-but-VISIBLE TextView would still consume its marginEnd.
+        binding.textviewAt.isVisible = visible.isNotEmpty()
+        binding.textviewAt.text = joinTags(visible)
     }
 
     private fun showMissingNumber(missedNumber: Int, isMuted: Boolean) {

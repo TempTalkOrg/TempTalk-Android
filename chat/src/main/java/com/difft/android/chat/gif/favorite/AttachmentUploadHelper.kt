@@ -12,7 +12,7 @@ import com.difft.android.network.requests.ProgressRequestBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.RequestBody
-import util.FileUtils
+import util.FileSystemUtils
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -145,7 +145,7 @@ class AttachmentUploadHelper @Inject constructor(
                     attachmentId = res.attachmentId,
                     authorizeId = res.authorizeId,
                     key = originKey,
-                    digest = FileUtils.decodeDigestHex(res.cipherHash),
+                    digest = FileSystemUtils.decodeDigestHex(res.cipherHash),
                     fileHash = fileHash,
                     fileSize = fileSize
                 )
@@ -161,7 +161,7 @@ class AttachmentUploadHelper @Inject constructor(
                     numbers = recipients,
                     attachmentId = res.attachmentId,
                     fileHash = fileHash,
-                    cipherHash = FileUtils.bytesToHex(cipherDigest),
+                    cipherHash = FileSystemUtils.bytesToHex(cipherDigest),
                     cipherHashType = "MD5",
                     hashAlg = "SHA-256",
                     keyAlg = "SHA-512",
@@ -215,7 +215,7 @@ class AttachmentUploadHelper @Inject constructor(
                 attachmentId = res.attachmentId,
                 authorizeId = res.authorizeId,
                 key = ByteArray(0),          // caller supplies the real key (ref.key); not from isExist
-                digest = FileUtils.decodeDigestHex(res.cipherHash),
+                digest = FileSystemUtils.decodeDigestHex(res.cipherHash),
                 fileHash = fileHash,
                 fileSize = 0                 // unknown here; caller carries the message size
             )

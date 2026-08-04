@@ -33,16 +33,16 @@ import com.difft.android.login.viewmodel.LoginViewModel
 import com.difft.android.login.viewmodel.LoginViewModel.Companion.DIFFERENT_ACCOUNT_LOGIN_ERROR_CODE
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.viewmodel.Status
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.config.SelectMimeType
-import com.luck.picture.lib.config.SelectModeConfig
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.ImageFileCompressEngine
-import com.luck.picture.lib.pictureselector.ImageFileCropEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.luck.picture.lib.utils.ToastUtils
+import com.difft.android.selector.basic.PictureSelector
+import com.difft.android.selector.config.SelectMimeType
+import com.difft.android.selector.config.SelectModeConfig
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.selector.language.LanguageConfig
+import com.difft.android.selector.pictureselector.GlideEngine
+import com.difft.android.selector.pictureselector.ImageFileCompressEngine
+import com.difft.android.selector.pictureselector.ImageFileCropEngine
+import com.difft.android.selector.pictureselector.PictureSelectorUtils
+import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -107,6 +107,8 @@ class ContactProfileSettingFragment : Fragment() {
     private val pictureSelectorLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        // Re-engage the lock immediately on selector return (OK or cancel both land here).
+        ScreenLockUtil.temporarilyDisabled = false
         if (!isAdded || view == null) return@registerForActivityResult
         if (result.resultCode == Activity.RESULT_OK) {
             val selectedMedia = PictureSelector.obtainSelectorList(result.data)

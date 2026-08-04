@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.luck.picture.lib.magical.MagicalView
+    <com.difft.android.selector.magical.MagicalView
         android:id="@+id/magical"
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -15,7 +15,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
 
-    <com.luck.picture.lib.widget.PreviewTitleBar
+    <com.difft.android.selector.widget.PreviewTitleBar
         android:id="@+id/title_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -27,7 +27,7 @@
         tools:layout_height="48dp" />
 
 
-    <com.luck.picture.lib.widget.PreviewBottomNavBar
+    <com.difft.android.selector.widget.PreviewBottomNavBar
         android:id="@+id/bottom_nar_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -38,7 +38,7 @@
         app:layout_constraintStart_toStartOf="parent"
         tools:layout_height="48dp" />
 
-    <com.luck.picture.lib.widget.MediumBoldTextView
+    <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/ps_tv_selected"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -51,7 +51,7 @@
         app:layout_constraintEnd_toStartOf="@+id/ps_tv_selected_word"
         app:layout_constraintTop_toTopOf="@id/ps_tv_selected_word" />
 
-    <com.luck.picture.lib.widget.MediumBoldTextView
+    <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/ps_tv_selected_word"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -84,7 +84,7 @@
         app:layout_constraintTop_toTopOf="@id/select_click_area"
         app:tint="@color/t.primary" />
 
-    <com.luck.picture.lib.widget.CompleteSelectView
+    <com.difft.android.selector.widget.CompleteSelectView
         android:id="@+id/ps_complete_select"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

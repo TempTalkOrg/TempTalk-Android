@@ -2,10 +2,11 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
+    id("kotlin-parcelize")
 }
 
 android {
-    namespace = "com.luck.picture.lib"
+    namespace = "com.difft.android.selector"
 
     compileSdk = libs.versions.compileSdk.get().toInt()
 
