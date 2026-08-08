@@ -268,16 +268,16 @@ class NewSignalServiceMessageSender @Inject constructor(
                             )
                         ).resultOrThrow
                     }
-                    if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
+                    if (response.status == 11001 || response.data!!.missing.isNullOrEmpty().not() || response.data!!.stale.isNullOrEmpty().not()) {
                         L.w {
                             "[Message] [sendMessage][$timestamp] retry(ws) status=${response.status} " +
-                                "missing=${response.data.missing?.size ?: 0} " +
-                                "stale=${response.data.stale?.size ?: 0} " +
+                                "missing=${response.data!!.missing?.size ?: 0} " +
+                                "stale=${response.data!!.stale?.size ?: 0} " +
                                 "recipient=${recipient.id} roomType=${if (room is For.Group) "group" else "dm"}"
                         }
                         conversationManager.updateConversationMemberData(room)
-                        val flaggedUids = response.data.missing.orEmpty().map { it.uid } +
-                                response.data.stale.orEmpty().map { it.uid }
+                        val flaggedUids = response.data!!.missing.orEmpty().mapNotNull { it.uid } +
+                                response.data!!.stale.orEmpty().mapNotNull { it.uid }
                         if (flaggedUids.isNotEmpty()) {
                             // Server flagged specific uids — narrow refresh.
                             // For 1v1 (For.Account) also add recipient.id as extra hint; for groups,
@@ -303,11 +303,11 @@ class NewSignalServiceMessageSender @Inject constructor(
                     } else {
                         return SendMessageResult.success(
                             recipient.id,
-                            response.data.isNeedsSync,
+                            response.data!!.isNeedsSync,
                             System.currentTimeMillis() - startTime,
-                            response.data.systemShowTimestamp,
-                            response.data.notifySequenceId,
-                            response.data.sequenceId
+                            response.data!!.systemShowTimestamp,
+                            response.data!!.notifySequenceId,
+                            response.data!!.sequenceId
                         )
                     }
                 } catch (e: InvalidUnidentifiedAccessHeaderException) {
@@ -328,16 +328,16 @@ class NewSignalServiceMessageSender @Inject constructor(
                     L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
                 }
                 val response = messageSendRepository.sendMessage(newOutgoingMessage, recipient)
-                if (response.status == 11001 || response.data.missing.isNullOrEmpty().not() || response.data.stale.isNullOrEmpty().not()) {
+                if (response.status == 11001 || response.data!!.missing.isNullOrEmpty().not() || response.data!!.stale.isNullOrEmpty().not()) {
                     L.w {
                         "[Message] [sendMessage][$timestamp] retry(http) status=${response.status} " +
-                            "missing=${response.data.missing?.size ?: 0} " +
-                            "stale=${response.data.stale?.size ?: 0} " +
+                            "missing=${response.data!!.missing?.size ?: 0} " +
+                            "stale=${response.data!!.stale?.size ?: 0} " +
                             "recipient=${recipient.id} roomType=${if (room is For.Group) "group" else "dm"}"
                     }
                     conversationManager.updateConversationMemberData(room)
-                    val flaggedUids = response.data.missing.orEmpty().map { it.uid } +
-                            response.data.stale.orEmpty().map { it.uid }
+                    val flaggedUids = response.data!!.missing.orEmpty().mapNotNull { it.uid } +
+                            response.data!!.stale.orEmpty().mapNotNull { it.uid }
                     if (flaggedUids.isNotEmpty()) {
                         val staleUids = (flaggedUids +
                                 listOfNotNull((recipient as? For.Account)?.id)).distinct()
@@ -357,11 +357,11 @@ class NewSignalServiceMessageSender @Inject constructor(
                 } else {
                     return SendMessageResult.success(
                         recipient.id,
-                        response.data.isNeedsSync,
+                        response.data!!.isNeedsSync,
                         System.currentTimeMillis() - startTime,
-                        response.data.systemShowTimestamp,
-                        response.data.notifySequenceId,
-                        response.data.sequenceId
+                        response.data!!.systemShowTimestamp,
+                        response.data!!.notifySequenceId,
+                        response.data!!.sequenceId
                     )
                 }
             } catch (afe: NonSuccessfulResponseCodeException) {

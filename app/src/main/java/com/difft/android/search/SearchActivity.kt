@@ -269,6 +269,9 @@ class SearchActivity : BaseActivity() {
                     pinnedTime = room.pinnedTime,
                     mentionType = room.mentionType,
                     criticalAlertType = room.criticalAlertType,
+                    // Search results are rendered by the SAME RecentChatViewHolder as the main
+                    // conversation list, so omitting this would silently drop the tag here only.
+                    sendStatus = room.sendStatus,
                     messageExpiry = room.messageExpiry,
                     groupMembersNumber = room.groupMembersNumber
                 )

@@ -144,7 +144,7 @@ class LIncomingCallActivity : BaseActivity() {
     private fun handleCallControlMessage(controlMessage: OnGoingCallStateManager.ControlMessage?) {
         if (controlMessage == null) return
         when (controlMessage.actionType) {
-            CallActionType.REJECT, CallActionType.JOINED, CallActionType.CALLEND, CallActionType.CANCEL -> {
+            CallActionType.REJECT, CallActionType.JOINED, CallActionType.CALLEND, CallActionType.CANCEL, CallActionType.HANGUP -> {
                 if (controlMessage.roomId == callIntent.roomId) {
                     L.i { "[Call] handleControlMessage: actionType:${controlMessage.actionType} roomId:${controlMessage.roomId}" }
                     hangUpTheCall("LIncomingCallActivity hangUpTheCall actionType:${controlMessage.actionType}")

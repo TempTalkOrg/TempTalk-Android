@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.RequestBody
-import util.FileUtils
+import util.FileSystemUtils
 import com.difft.android.base.utils.Base64
 import java.io.File
 import java.security.MessageDigest
@@ -107,7 +107,7 @@ class SpeechToTextManager @Inject constructor(
                                 numbers = listOf(SPEECH_TO_TEXT),
                                 attachmentId = fileExistResp.attachmentId,
                                 fileHash = fileHash2,
-                                cipherHash = FileUtils.bytesToHex(attachment.digest),
+                                cipherHash = FileSystemUtils.bytesToHex(attachment.digest!!),
                                 cipherHashType = "MD5",
                                 hashAlg = "SHA-256",
                                 keyAlg = "SHA-512",

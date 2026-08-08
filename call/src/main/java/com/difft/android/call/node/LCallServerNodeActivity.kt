@@ -66,6 +66,8 @@ class LCallServerNodeActivity : BaseActivity() {
     @Composable
     fun NetworkDashboardUI() {
         val servers by viewModel.serverNodes.collectAsState()
+        val upstreamServers by viewModel.upstreamServerNodes.collectAsState()
+        val showUpstreamSection by viewModel.showUpstreamSection.collectAsState()
         val serverNodeConnected by viewModel.serverNodeConnected.collectAsState()
         val serverNodeSelected by viewModel.serverNodeSelected.collectAsState()
         val connectionType by viewModel.connectionType.collectAsState()
@@ -76,7 +78,8 @@ class LCallServerNodeActivity : BaseActivity() {
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF5F5F5))
-                .padding(top = topInset),
+                .padding(top = topInset)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (serverNodeConnected != null) {
@@ -94,6 +97,9 @@ class LCallServerNodeActivity : BaseActivity() {
                 },
                 onRefresh = { viewModel.refresh() },
             )
+            if (showUpstreamSection) {
+                UpstreamServersCard(servers = upstreamServers.toList())
+            }
         }
     }
 
@@ -184,9 +190,7 @@ class LCallServerNodeActivity : BaseActivity() {
             elevation = CardDefaults.cardElevation(4.dp)
         ) {
             Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.padding(16.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -216,44 +220,98 @@ class LCallServerNodeActivity : BaseActivity() {
                     if (index > 0) {
                         Spacer(Modifier.height(4.dp))
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                            .clickable { onServerSelected(server) },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.Top,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(server.flag, fontSize = 20.sp)
-                            Spacer(Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(server.name, fontSize = 16.sp)
-                                Text(
-                                    server.domain,
-                                    fontSize = 12.sp,
-                                    color = Color.Gray,
-                                )
-                                val ipsText = if (server.addrs.isEmpty()) {
-                                    stringResource(R.string.call_server_node_no_ips)
-                                } else {
-                                    "${stringResource(R.string.call_server_node_ips_label)}: ${server.addrs.joinToString(", ")}"
-                                }
-                                Text(
-                                    ipsText,
-                                    fontSize = 11.sp,
-                                    color = Color.Gray,
-                                )
-                            }
+                    ServerNodeRow(
+                        server = server,
+                        onClick = { onServerSelected(server) },
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Read-only card that surfaces the real upstream servers from `serviceurl/v2`
+     * (domain + IPs) while the proxy hides them from [ServerSelectionCard]. Not
+     * clickable — these servers are not used for the connection while proxied.
+     */
+    @Composable
+    fun UpstreamServersCard(servers: List<ServerNode>) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(4.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    stringResource(R.string.call_server_node_upstream_title),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.call_server_node_upstream_hint),
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (servers.isEmpty()) {
+                    Text(
+                        stringResource(R.string.call_server_node_upstream_empty),
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                    )
+                } else {
+                    servers.forEachIndexed { index, server ->
+                        if (index > 0) {
+                            Spacer(Modifier.height(4.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
-                        NodeRoleBadge(isPrimary = server.isPrimary)
+                        ServerNodeRow(server = server, onClick = null)
                     }
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun ServerNodeRow(server: ServerNode, onClick: (() -> Unit)?) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(server.flag, fontSize = 20.sp)
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(server.name, fontSize = 16.sp)
+                    Text(
+                        server.domain,
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                    )
+                    val ipsText = if (server.addrs.isEmpty()) {
+                        stringResource(R.string.call_server_node_no_ips)
+                    } else {
+                        "${stringResource(R.string.call_server_node_ips_label)}: ${server.addrs.joinToString(", ")}"
+                    }
+                    Text(
+                        ipsText,
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            NodeRoleBadge(isPrimary = server.isPrimary)
         }
     }
 

@@ -92,14 +92,14 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.GetConversationShareRequestBody
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.config.SelectMimeType
-import com.luck.picture.lib.config.SelectModeConfig
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
-import com.luck.picture.lib.utils.ToastUtils
+import com.difft.android.selector.basic.PictureSelector
+import com.difft.android.selector.config.SelectMimeType
+import com.difft.android.selector.config.SelectModeConfig
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.selector.language.LanguageConfig
+import com.difft.android.selector.pictureselector.GlideEngine
+import com.difft.android.selector.pictureselector.PictureSelectorUtils
+import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
@@ -154,7 +154,9 @@ import org.difft.app.database.sharedContacts
 import org.difft.app.database.wcdb
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.create
+import com.difft.android.chat.mediasend.MediaAttachmentStager
 import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.MediaSendFailureNotice
 import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
 import com.difft.android.chat.message.getRelevantAttachment
 import com.difft.android.chat.util.MediaUtil
@@ -164,7 +166,7 @@ import com.difft.android.chat.util.isHostActivityAlive
 import com.difft.android.chat.util.ServiceUtil
 import com.difft.android.chat.util.ViewUtil
 import com.difft.android.chat.util.visible
-import util.FileUtils
+import util.FileSystemUtils
 import util.ScreenLockUtil
 import java.io.File
 import java.text.SimpleDateFormat
@@ -958,7 +960,7 @@ class ChatMessageInputFragment : Fragment() {
 
         binding.buttonGif.setOnClickListener {
             if (!checkCanSpeak()) return@setOnClickListener
-            toggleGifPanel()
+            openGifPanel()
         }
 
         binding.buttonVoice.setOnClickListener {
@@ -1116,10 +1118,10 @@ class ChatMessageInputFragment : Fragment() {
                 ViewUtil.focusAndShowKeyboard(binding.edittextInput)
             }
         } else {
-            // Group-only: hide via INVISIBLE (not GONE) so button_at still occupies its grid cell in
-            // the more-actions Flow. This keeps photo/contact/attachment left-aligned at their fixed
-            // grid columns (same positions as in a group) instead of collapsing/redistributing.
-            binding.buttonAt.visibility = View.INVISIBLE
+            // Group-only: GONE (not INVISIBLE) — button_at now sits mid-row (photo, gif, @, file),
+            // so an INVISIBLE placeholder would leave a hole in the middle of the grid. GONE lets
+            // the Flow re-spread the remaining 4 entries into the same 4 columns as a group row.
+            binding.buttonAt.visibility = View.GONE
         }
 
         binding.rvAt.apply {
@@ -1211,6 +1213,8 @@ class ChatMessageInputFragment : Fragment() {
     private val pictureSelectorLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        // Re-engage the lock immediately on selector return (OK or cancel both land here).
+        ScreenLockUtil.temporarilyDisabled = false
         if (!isAdded || view == null) return@registerForActivityResult
         if (result.resultCode == Activity.RESULT_OK) {
             val selectedMedia = PictureSelector.obtainSelectorList(result.data)
@@ -1241,11 +1245,13 @@ class ChatMessageInputFragment : Fragment() {
                 val body = sendResult.body
                 viewLifecycleOwner.lifecycleScope.launch {
                     try {
-                        list.forEachIndexed { index, media ->
+                        list.forEachIndexed { index, (media, sendUri) ->
                             // Use original filename, fallback to extracting from original path (not realPath which may be UUID)
                             val fileName = media.fileName.takeIf { !it.isNullOrEmpty() }
-                                ?: FileUtils.getFileName(media.path)
-                            prepareSendAttachmentPush(media.realPath.toUri(), media.mimeType, fileName)
+                                ?: FileSystemUtils.getFileName(media.path)
+                            // sendUri was resolved at the transform boundary; re-deriving it here
+                            // would hand back the pre-edit source for every edited item.
+                            prepareSendAttachmentPush(sendUri, media.mimeType, fileName)
                             if (index < list.size - 1) delay(300)
                         }
                         delay(500)
@@ -1295,6 +1301,8 @@ class ChatMessageInputFragment : Fragment() {
     private val fileActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        // Re-engage the lock immediately on picker return (OK or cancel both land here).
+        ScreenLockUtil.temporarilyDisabled = false
         if (!isAdded || view == null) return@registerForActivityResult
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
 
@@ -1331,7 +1339,7 @@ class ChatMessageInputFragment : Fragment() {
             if (MediaUtil.isImageType(mimeType) || MediaUtil.isVideoType(mimeType)) {
                 val localMedia = LocalMedia().apply {
                     this.realPath = path
-                    this.mimeType = mimeType
+                    this.mimeType = mimeType ?: ""
                     this.fileName = originalFileName
                 }
                 val intent = Intent(requireContext(), MediaSelectionActivity::class.java).apply {
@@ -2244,7 +2252,7 @@ class ChatMessageInputFragment : Fragment() {
             val attachment = attachmentInfo?.let { info ->
                 withContext(Dispatchers.IO) {
                     val mediaWidthAndHeight = MediaUtil.getMediaWidthAndHeight(info.filePath, info.mimeType)
-                    val fileSize = FileUtils.getLength(info.filePath)
+                    val fileSize = FileSystemUtils.getLength(info.filePath)
 
                     Attachment(
                         messageId,
@@ -2297,6 +2305,18 @@ class ChatMessageInputFragment : Fragment() {
 
             // Optimistic add so the sent message renders instantly. Recall/reaction add no bubble.
             if (reactions.isEmpty() && recall == null) {
+                // Drop the NEW MESSAGES divider for the rest of this page session, but ONLY when the
+                // user actually composed something (iOS clearUnreadMessagesIndicator hooks the
+                // input-toolbar send path only). A non-null screenShot means this call came from
+                // sendScreenshotNotification(), which fires automatically on screenshot detection —
+                // that must not consume the divider. Recalls and reactions are already excluded by
+                // the enclosing guard; they take a different, bubble-less path.
+                //
+                // Called BEFORE the optimistic add so the emission it triggers already sees the
+                // cleared state instead of rendering the divider one last time.
+                if (screenShot == null) {
+                    chatViewModel.clearNewMessageDivider()
+                }
                 chatViewModel.addOneMessage(textMessage)
             }
 
@@ -2523,17 +2543,13 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     /**
-     * Toggle the inline GIF panel. Mutually exclusive with the keyboard and the more-actions
+     * Open the inline GIF panel. Mutually exclusive with the keyboard and the more-actions
      * grid: shows the GIF ComposeView (hiding the grid Flow) inside the shared ll_chat_actions
      * container, mirroring the more-actions panel's freeze/showPanel/hideKeyboard handshake.
+     * Never called while the GIF panel is showing — its only entry (the grid GIF item) is
+     * hidden in GIF mode; dismissal goes through "+" (back to the grid) or the keyboard paths.
      */
-    private fun toggleGifPanel() {
-        if (panelMode == PanelMode.GIF && binding.llChatActions.isVisible) {
-            // GIF panel already open -> return to keyboard.
-            ViewUtil.focusAndShowKeyboard(binding.edittextInput)
-            return
-        }
-
+    private fun openGifPanel() {
         // Deferred initial trending load: fire only when the panel is shown, not on VM
         // creation (conversation open). Idempotent across re-opens.
         gifPanelViewModel.onPanelShown()
@@ -2599,9 +2615,9 @@ class ChatMessageInputFragment : Fragment() {
      *   more-actions tap shows the grid, not a stale GIF panel).
      * - MORE: more-actions grid. more->GONE, moreClose->VISIBLE, grid content shown.
      * - GIF:  inline GIF panel. more->VISIBLE, moreClose->GONE so the user can tap "+" to switch
-     *   from the GIF panel to the more-actions grid (the GIF button carries its own highlight).
-     *   Tapping "+" routes through the existing MORE path (onClickMoreActions), which sets
-     *   PanelMode.MORE and swaps the content cleanly.
+     *   back from the GIF panel to the more-actions grid (where the GIF entry now lives). Tapping
+     *   "+" routes through the existing MORE path (onClickMoreActions), which sets PanelMode.MORE
+     *   and swaps the content cleanly.
      */
     private fun syncActionButtons(mode: PanelMode) {
         panelMode = mode
@@ -2662,16 +2678,12 @@ class ChatMessageInputFragment : Fragment() {
         val gridVisibility = if (gif) View.GONE else View.VISIBLE
         binding.flow.visibility = gridVisibility
         binding.buttonPhoto.visibility = gridVisibility
+        binding.buttonGif.visibility = gridVisibility
         binding.buttonContact.visibility = gridVisibility
         binding.buttonAttachment.visibility = gridVisibility
-        // @-mention is group-only. In the grid, a single chat uses INVISIBLE (not GONE) so button_at
-        // still holds its Flow grid cell and the other entries stay at fixed columns; GIF mode hides
-        // the whole grid so GONE is fine there.
-        binding.buttonAt.visibility = when {
-            gif -> View.GONE
-            isGroup -> View.VISIBLE
-            else -> View.INVISIBLE
-        }
+        // @-mention is group-only: GONE in a single chat so the Flow re-spreads the remaining
+        // entries instead of leaving a mid-row hole (button_at sits between gif and attachment).
+        binding.buttonAt.visibility = if (!gif && isGroup) View.VISIBLE else View.GONE
     }
 
     /**
@@ -2691,19 +2703,27 @@ class ChatMessageInputFragment : Fragment() {
 
         val timeStamp = System.currentTimeMillis()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
-        val fileName = originalFileName ?: FileUtils.getFileName(attachmentUri.path)
+        val fileName = originalFileName ?: FileSystemUtils.getFileName(attachmentUri.path)
         val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                val staged = withContext(Dispatchers.IO) {
+                    MediaAttachmentStager.stage(requireContext(), attachmentUri, filePath, mimeType, originalFileName)
+                }
+                if (staged is MediaAttachmentStager.StageResult.Failed) {
+                    // Do NOT enqueue: the previous code sent anyway and the upload then retried
+                    // against a file that was never created.
+                    MediaSendFailureNotice.showStagingFailure(requireContext(), staged.failure)
+                    return@launch
+                }
                 val isAnimatedImage = withContext(Dispatchers.IO) {
-                    FileUtils.copy(attachmentUri.path, filePath)
                     // Known-gif callers skip inspection; otherwise auto-detect on image sends only.
                     if (isGif) true
                     else if (MediaUtil.isImageType(mimeType)) detectAnimatedImage(filePath, mimeType)
                     else false
                 }
-                FileUtil.deleteTempFile(FileUtils.getFileName(attachmentUri.path))
+                FileUtil.deleteTempFile(FileSystemUtils.getFileName(attachmentUri.path))
                 // Our gif send-cache staging file holds decrypted plaintext; delete it once copied into
                 // the encrypted attachment dir so it never lingers in cache (deleteTempFile above does
                 // not cover the cacheDir/gif_send dir).
@@ -3000,6 +3020,9 @@ class ChatMessageInputFragment : Fragment() {
             ToastUtil.show(R.string.contact_non_friend_text_only)
             return
         }
+        // Same muted-member gate every other send entry point uses (fail-fast UX; the server is the
+        // authoritative check, but without this the user only learns the send failed after the preview flow).
+        if (!checkCanSpeak()) return
         // Handle file paste - similar to fileActivityLauncher callback
         viewLifecycleOwner.lifecycleScope.launch {
             // 优先判断文件大小是否超过200MB

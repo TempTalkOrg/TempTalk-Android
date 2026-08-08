@@ -2,6 +2,8 @@ package com.difft.android.chat.jobs
 
 import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.RoomChangeTracker
+import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.jobmanager.persistence.ConstraintSpec
 import com.difft.android.chat.jobmanager.persistence.FullSpec
@@ -9,7 +11,10 @@ import com.difft.android.chat.jobmanager.persistence.JobSpec
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Order
 import com.tencent.wcdb.winq.OrderingTerm
+import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import org.difft.app.database.WCDB
+import org.difft.app.database.roomIdsWithStaleSendingOutgoing
+import org.difft.app.database.writeRoomSendStatusFor
 import org.difft.app.database.models.DBJobConstraintModel
 import org.difft.app.database.models.DBJobSpecModel
 import org.difft.app.database.models.DBMessageModel
@@ -278,6 +283,11 @@ class WcdbJobStorage @Inject constructor(
      * `SendType.rawValue` is `Int` (from `SendMessageUtils.kt:21-23`):
      * - `SendType.Sending.rawValue` = 0
      * - `SendType.SentFailed.rawValue` = 2
+     *
+     * The message-row flip keeps its original predicate. Only the room-tag side narrows to real
+     * outgoing messages (`roomIdsWithStaleSendingOutgoing`, shared spelling with
+     * `hasFailedOutgoingMessage`): a locally created notify row such as the archive tombstone
+     * carries `sendType == 0` without ever having been sent, and must not earn its room a tag.
      */
     @WorkerThread
     fun sweepStaleSendingMessages(): Int = try {
@@ -297,12 +307,27 @@ class WcdbJobStorage @Inject constructor(
             L.i { "[JobStorage] sweepStaleSendingMessages: nothing to do" }
             return 0
         }
+        // Collected BEFORE the flip — afterwards no row matches. Tag-side scope only: rooms whose
+        // sole stale-looking row is a notify tombstone are excluded, so they never get a tag.
+        val roomsToFlag = wcdb.roomIdsWithStaleSendingOutgoing()
+        // Message rows first, room rows second — the same load-bearing ordering as
+        // PushTextSendJob.updateMessage: the clear side is a conditional UPDATE that re-reads the
+        // message table, so committing the message flip first is what makes any interleaving safe.
+        // Do NOT hoist the room write above the flip. No transaction: the failure window costs the
+        // room its tag only, and the room's next failure restores it — not worth a write lock on
+        // the startup path.
         wcdb.message.updateValue(
             Value(SendType.SentFailed.rawValue),
             DBMessageModel.sendType,
             DBMessageModel.sendType.eq(SendType.Sending.rawValue)
         )
-        L.i { "[JobStorage] sweepStaleSendingMessages count=$before Sending->SentFailed" }
+        wcdb.writeRoomSendStatusFor(roomsToFlag, ROOM_SEND_STATUS_FAILED)
+        // Best-effort nudge for an already-open conversation list; NOT the correctness path. The
+        // room rows are written directly above because this runs from Application.onCreate, BEFORE
+        // WCDBUpdateService registers its collector, and RoomChangeTracker.roomChanges is
+        // replay = 0 — an emission with no subscriber is dropped.
+        roomsToFlag.forEach { RoomChangeTracker.trackRoom(it, RoomChangeType.MESSAGE) }
+        L.i { "[JobStorage] sweepStaleSendingMessages count=$before rooms=${roomsToFlag.size} Sending->SentFailed" }
         before
     } catch (e: Exception) {
         L.e { "[JobStorage] sweepStaleSendingMessages failed: ${e.stackTraceToString()}" }

@@ -417,7 +417,6 @@ class MessageActionCoordinator(
             MessageAction.Type.RECALL -> actionListener?.onRecall(message)
             MessageAction.Type.MORE_INFO -> actionListener?.onMoreInfo(message)
             MessageAction.Type.FAVORITE_GIF -> actionListener?.onFavoriteGif(message)
-            MessageAction.Type.MORE -> { /* Handled by popup internally */ }
             MessageAction.Type.SELECT_ALL -> { /* Handled by TextSelectionPopup */ }
             MessageAction.Type.RESEND,
             MessageAction.Type.DELETE -> { /* Handled by FailedMessageActionPopup */ }

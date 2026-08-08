@@ -111,7 +111,7 @@ class LCallToChatControllerImpl @Inject constructor(
     }
 
     private val controlMessageSender by lazy {
-        CallControlMessageSender(callService, callMessageCreator, mySelfId)
+        CallControlMessageSender(callService, callMessageCreator, mySelfId, onGoingCallStateManager)
     }
 
     private val inviteExecutor by lazy {

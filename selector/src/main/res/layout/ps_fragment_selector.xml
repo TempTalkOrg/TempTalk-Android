@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.luck.picture.lib.widget.RecyclerPreloadView
+    <com.difft.android.selector.widget.RecyclerPreloadView
         android:id="@+id/recycler"
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -31,7 +31,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title_bar" />
 
-    <com.luck.picture.lib.widget.MediumBoldTextView
+    <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/tv_current_data_time"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -47,7 +47,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title_bar" />
 
-    <com.luck.picture.lib.widget.TitleBar
+    <com.difft.android.selector.widget.TitleBar
         android:id="@+id/title_bar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -57,7 +57,7 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:layout_height="48dp" />
 
-    <com.luck.picture.lib.widget.BottomNavBar
+    <com.difft.android.selector.widget.BottomNavBar
         android:id="@+id/bottom_nar_bar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -67,7 +67,7 @@
         tools:layout_height="45dp" />
 
 
-    <com.luck.picture.lib.widget.CompleteSelectView
+    <com.difft.android.selector.widget.CompleteSelectView
         android:id="@+id/ps_complete_select"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -78,7 +78,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/bottom_nar_bar" />
 
-    <com.luck.picture.lib.widget.MediumBoldTextView
+    <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/tv_data_empty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

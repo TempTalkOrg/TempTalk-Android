@@ -12,7 +12,7 @@
         android:alpha="0"
         android:background="@color/ps_color_80" />
 
-    <com.luck.picture.lib.widget.RoundCornerRelativeLayout
+    <com.difft.android.selector.widget.RoundCornerRelativeLayout
         android:id="@+id/round_group"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -26,7 +26,7 @@
             android:overScrollMode="never"
             android:scrollbars="none" />
 
-    </com.luck.picture.lib.widget.RoundCornerRelativeLayout>
+    </com.difft.android.selector.widget.RoundCornerRelativeLayout>
 
 
 </RelativeLayout>

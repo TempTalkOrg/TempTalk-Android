@@ -232,6 +232,52 @@
 
     </com.difft.android.chat.ui.ChatMessageContainerView>
 
+    <!-- Send-failed status row: sits OUTSIDE the bubble, right-aligned under it. The whole row is
+         the retry hit target; paddingVertical 8dp = the design's 4dp column gap + 4dp row padding,
+         collapsed so the row is exactly 32dp tall (min touch target) while the icon/label land at
+         the y the design specifies. marginTop is deliberately 0 so the GONE-collapse position of
+         cl_translate / cl_speech_to_text (which anchor to this row) is margin-independent and is
+         restored exactly by their layout_goneMarginTop. -->
+    <LinearLayout
+        android:id="@+id/ll_send_fail_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="40dp"
+        android:contentDescription="@string/chat_message_send_failed_retry"
+        android:gravity="center_vertical"
+        android:minHeight="32dp"
+        android:orientation="horizontal"
+        android:paddingVertical="8dp"
+        android:visibility="gone"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintEnd_toEndOf="@+id/contentContainer"
+        app:layout_constraintHorizontal_bias="1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/contentContainer"
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_send_fail_icon"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/chat_icon_message_sent_failed" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_send_fail_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="@string/chat_message_send_failed_retry"
+            android:textColor="@color/t.error"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/cl_translate"
         android:layout_width="wrap_content"
@@ -244,9 +290,10 @@
         app:layout_constraintEnd_toEndOf="@+id/contentContainer"
         app:layout_constraintHorizontal_bias="1"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/contentContainer"
+        app:layout_constraintTop_toBottomOf="@+id/ll_send_fail_status"
         app:layout_constraintWidth_max="0dp"
-        app:layout_goneMarginEnd="12dp">
+        app:layout_goneMarginEnd="12dp"
+        app:layout_goneMarginTop="5dp">
 
         <ProgressBar
             android:id="@+id/pb_translate"
@@ -290,9 +337,10 @@
         app:layout_constraintEnd_toEndOf="@+id/contentContainer"
         app:layout_constraintHorizontal_bias="1"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/contentContainer"
+        app:layout_constraintTop_toBottomOf="@+id/ll_send_fail_status"
         app:layout_constraintWidth_max="0dp"
-        app:layout_goneMarginEnd="12dp">
+        app:layout_goneMarginEnd="12dp"
+        app:layout_goneMarginTop="5dp">
 
         <ProgressBar
             android:id="@+id/pb_speech_to_text"
@@ -351,20 +399,8 @@
         tools:layout_height="20dp"
         tools:layout_width="20dp" />
 
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/iv_send_fail"
-        android:layout_width="13dp"
-        android:layout_height="13dp"
-        android:layout_marginEnd="8dp"
-        android:src="@drawable/chat_icon_message_sent_failed"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@+id/contentContainer"
-        app:layout_constraintEnd_toStartOf="@+id/tv_voice_speed"
-        app:layout_constraintTop_toTopOf="@+id/contentContainer"
-        tools:visibility="visible" />
-
     <!-- Voice playback speed button - shown only during audio playback -->
-    <!-- Position: right of iv_send_fail, left of contentContainer -->
+    <!-- Position: left of contentContainer -->
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tv_voice_speed"
         android:layout_width="36dp"

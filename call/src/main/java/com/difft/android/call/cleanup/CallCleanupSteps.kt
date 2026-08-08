@@ -13,6 +13,7 @@ import com.difft.android.call.manager.SpeakerStateHolder
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.media.CallAudioSetup
 import com.difft.android.call.service.ForegroundService
+import com.difft.android.call.session.CallTypeCoordinator
 import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStateHolder
 import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import io.livekit.android.audio.AudioSwitchHandler
@@ -44,6 +45,7 @@ internal object CallCleanupSteps {
         screenShareFloatingSpeakerStateHolder: ScreenShareFloatingSpeakerStateHolder?,
         screenSharePreWarmer: ScreenSharePreWarmer,
         roomEventDispatcher: RoomEventDispatcher?,
+        callTypeCoordinator: CallTypeCoordinator?,
         statisticsLogManager: CallStatisticsLogManager,
         feedbackBinder: CallFeedbackBinder,
         shouldTriggerFeedbackView: () -> Unit,
@@ -83,6 +85,7 @@ internal object CallCleanupSteps {
         CallCleanupExecutor.Step("cancelScreenShareFloatingSpeaker") { screenShareFloatingSpeakerStateHolder?.cancel() },
         CallCleanupExecutor.Step("cancelScreenSharePreWarmer") { screenSharePreWarmer.cancelJobs() },
         CallCleanupExecutor.Step("cancelRoomEventDispatcher") { roomEventDispatcher?.cancelJobs() },
+        CallCleanupExecutor.Step("cancelCallTypeCoordinator") { callTypeCoordinator?.cancelJobs() },
         CallCleanupExecutor.Step("clearE2eeKey") { clearE2eeKey() },
     )
 }

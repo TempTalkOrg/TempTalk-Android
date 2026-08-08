@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.luck.picture.lib.widget.SquareRelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.difft.android.selector.widget.SquareRelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
@@ -10,7 +10,7 @@
         android:importantForAccessibility="no"
         android:scaleType="centerCrop" />
 
-    <com.luck.picture.lib.widget.MediumBoldTextView
+    <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/tvCheck"
         android:layout_width="22dp"
         android:layout_height="22dp"
@@ -29,7 +29,7 @@
         android:background="@color/ps_color_transparent" />
 
 
-    <com.luck.picture.lib.widget.MediumBoldTextView
+    <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/tv_duration"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -43,4 +43,4 @@
         android:textColor="@color/ps_color_white"
         android:textSize="11sp" />
 
-</com.luck.picture.lib.widget.SquareRelativeLayout>
+</com.difft.android.selector.widget.SquareRelativeLayout>

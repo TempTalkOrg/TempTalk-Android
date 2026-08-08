@@ -26,6 +26,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.difft.android.chat.util.ViewUtil
+import util.PendingScreenLockDeeplink
+import util.ScreenLockUtil
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -283,6 +285,22 @@ class ScreenLockActivity : BaseActivity() {
         if (isVerificationMode) {
             // 验证模式下，返回成功结果
             setResult(RESULT_OK)
+        } else {
+            // Replay a queued popup only on a real app-entry unlock (not passcode setup); poll()
+            // clears the slot so it can never replay twice.
+            PendingScreenLockDeeplink.poll()?.let { pendingIntent ->
+                // Arm the one-shot popup-gate bypass ONLY if the replay actually launches — a failed
+                // startActivity must not leave the gate open for an unrelated later popup. Timing is
+                // safe: the replayed intent's processIntent runs on a later main-loop cycle, after
+                // this flag is set.
+                val launched = runCatching { startActivity(pendingIntent) }
+                    .onFailure { e -> L.w { "[ScreenLockActivity] replay startActivity failed: ${e.message}" } }
+                    .isSuccess
+                if (launched) {
+                    ScreenLockUtil.markRecentlyUnlocked()
+                    L.i { "[ScreenLockActivity] replaying queued deeplink after unlock" }
+                }
+            }
         }
 
         finish()

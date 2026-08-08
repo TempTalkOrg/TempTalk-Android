@@ -33,9 +33,8 @@ data class MessageAction(
         RECALL,
         MORE_INFO,
         FAVORITE_GIF,  // Add a gif message to GIF favorites (M3)
-        
+
         // Special
-        MORE,  // Opens more actions sheet
         SELECT_ALL,  // Text selection: select all text
         
         // Failed message actions
@@ -107,7 +106,9 @@ data class MessageAction(
         fun deleteSaved() = MessageAction(
             type = Type.DELETE_SAVED,
             iconRes = R.drawable.chat_message_action_delete,
-            labelRes = R.string.chat_message_action_delete
+            labelRes = R.string.chat_message_action_delete,
+            tintRes = com.difft.android.base.R.color.error,
+            isDestructive = true
         )
         
         fun recall() = MessageAction(
@@ -120,20 +121,14 @@ data class MessageAction(
         
         fun moreInfo() = MessageAction(
             type = Type.MORE_INFO,
-            iconRes = R.drawable.chat_message_action_more,
-            labelRes = R.string.chat_message_action_more_info
+            iconRes = R.drawable.chat_message_action_info,
+            labelRes = R.string.chat_message_action_info
         )
 
         fun favoriteGif() = MessageAction(
             type = Type.FAVORITE_GIF,
             iconRes = R.drawable.chat_message_action_favorite_star,
             labelRes = R.string.gif_favorites_add_full
-        )
-        
-        fun more() = MessageAction(
-            type = Type.MORE,
-            iconRes = R.drawable.ic_message_action_more_dots,
-            labelRes = R.string.chat_message_action_more
         )
         
         fun selectAll() = MessageAction(

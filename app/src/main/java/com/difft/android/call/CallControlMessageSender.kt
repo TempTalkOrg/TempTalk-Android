@@ -10,6 +10,7 @@ import com.difft.android.base.call.ControlMessageRequestBody
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.repo.LCallHttpService
+import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.websocket.api.messages.DetailMessageType
 import com.difft.android.websocket.api.util.CallMessageCreator
 import difft.android.messageserialization.For
@@ -28,6 +29,7 @@ internal class CallControlMessageSender(
     private val callService: LCallHttpService,
     private val callMessageCreator: CallMessageCreator,
     private val mySelfId: String,
+    private val onGoingCallStateManager: OnGoingCallStateManager,
 ) {
 
     suspend fun rejectCall(
@@ -141,6 +143,7 @@ internal class CallControlMessageSender(
                     roomId = roomId,
                     System.currentTimeMillis(),
                     cipherMessages = callEncryptResult.cipherMessages,
+                    clientCallId = onGoingCallStateManager.getClientCallId(),
                 )
                 val result = withContext(Dispatchers.IO) {
                     callService.controlMessages((globalServices.userManager.getUserData()?.microToken ?: ""), body)
@@ -190,6 +193,7 @@ internal class CallControlMessageSender(
                     System.currentTimeMillis(),
                     cipherMessages = cipherMessages,
                     detailMessageType = detailType,
+                    clientCallId = onGoingCallStateManager.getClientCallId(),
                 )
                 val result = callService.controlMessages((globalServices.userManager.getUserData()?.microToken ?: ""), body)
                 if (result.status == 0) {

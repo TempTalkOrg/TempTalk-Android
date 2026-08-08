@@ -22,6 +22,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.difft.android.base.BaseActivity
@@ -130,6 +131,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private val tabDetailFragments = mutableMapOf<Int, Fragment?>()
     private var currentTabIndex = 0
 
+    // Set on the first onRestoreInstanceState; a second one must not replay pager state.
+    private var hierarchyStateRestored = false
+
     private val indicators by lazy {
         listOf(
             binding.indicatorviewChats,
@@ -229,7 +233,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         setupDualPaneDivider()
 
-        binding.viewpager.apply {
+        binding.indexViewpager.apply {
             offscreenPageLimit = 1
             isUserInputEnabled = false
             // Disable overscroll effect in dual-pane mode
@@ -278,13 +282,13 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                     val index = indicators.indexOf(view)
                     if (index < 0) return@setOnClickListener
 
-                    binding.viewpager.setCurrentItem(index, false)
+                    binding.indexViewpager.setCurrentItem(index, false)
                 }
             }
         }
 
         // Reclaim recreation-restored detail fragments once the adapter + restored currentItem are ready.
-        binding.viewpager.post { restoreDetailFragmentsState() }
+        binding.indexViewpager.post { restoreDetailFragmentsState() }
 
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -399,6 +403,35 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         binding.indicatorviewChats.setBadgeText(badgeText, backgroundColorRes)
     }
 
+    /**
+     * Skips the pager's state restore once its adapter can no longer accept one — a restore
+     * already ran, or a layout pass bound a page first. Otherwise
+     * `FragmentStateAdapter.restoreState` throws "Expected the adapter to be 'fresh'"
+     * (Crashlytics bc077db1).
+     *
+     * Uses `isSaveFromParentEnabled` rather than catching the exception: ViewPager2 clears its
+     * pending adapter state only after `restoreState()` returns and re-saves it from
+     * `onSaveInstanceState()`, so a caught exception would carry the rejected bundle into the
+     * next recreation. The flag is re-armed after the dispatch — the same flag also gates
+     * `dispatchSaveInstanceState`, so leaving it off would stop this instance from ever saving
+     * the pager's state again.
+     */
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        val pager = binding.indexViewpager
+        val boundPages = (pager.getChildAt(0) as? RecyclerView)?.childCount ?: 0
+        val skipPagerRestore = hierarchyStateRestored || boundPages > 0
+        if (skipPagerRestore) {
+            L.w { "[IndexActivity] skip pager state restore restoredBefore=$hierarchyStateRestored boundPages=$boundPages" }
+            pager.isSaveFromParentEnabled = false
+        }
+        hierarchyStateRestored = true
+        try {
+            super.onRestoreInstanceState(savedInstanceState)
+        } finally {
+            if (skipPagerRestore) pager.isSaveFromParentEnabled = true
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -504,7 +537,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     override fun onResume() {
         super.onResume()
         // 刷新截屏状态（从后台恢复时需要重新检查屏幕锁）
-//        ScreenShotUtil.refreshWithPagePolicy(this, binding.viewpager.currentItem != 0)
+//        ScreenShotUtil.refreshWithPagePolicy(this, binding.indexViewpager.currentItem != 0)
         checkInsiderUpdate()
         checkNotificationFullScreenPermission()
         checkNotificationPermission()
@@ -1311,7 +1344,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             tabDetailFragments[tabIndex] = fragment
         }
 
-        currentTabIndex = binding.viewpager.currentItem
+        currentTabIndex = binding.indexViewpager.currentItem
 
         // Show only the current tab's fragment, hide the rest (overlap fix).
         val transaction = supportFragmentManager.beginTransaction()

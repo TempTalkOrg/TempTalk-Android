@@ -4,11 +4,11 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.application
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.websocket.api.crypto.AttachmentCipherStreamUtil
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import difft.android.messageserialization.model.Attachment
 
 /**
- * Builds [LocalMedia] entries for the full-screen [com.luck.picture.lib.PictureSelector] preview.
+ * Builds [LocalMedia] entries for the full-screen [com.difft.android.selector.PictureSelector] preview.
  *
  * Whenever a ciphertext file (`<base>.encrypt`) exists, the media `path` points at
  * [EncryptedAttachmentProvider] so the preview's image engine (Glide) and its save/share actions

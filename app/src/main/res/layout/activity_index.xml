@@ -5,8 +5,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Keep distinct from :chat's @id/viewpager — ids merge by name, and ContactsFragment
+         nests its own pager here, so a shared id collides in the window view-state map. -->
     <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/viewpager"
+        android:id="@+id/index_viewpager"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:nestedScrollingEnabled="true"

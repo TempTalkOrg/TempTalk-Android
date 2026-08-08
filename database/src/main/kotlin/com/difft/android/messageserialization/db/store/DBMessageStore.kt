@@ -190,6 +190,22 @@ constructor(
         try {
             val realMessageId = reaction.realSource?.mapToMessageId()?.idValue ?: return
             wcdb.db.runTransaction {
+                // target-scoping: reaction target must exist and belong to this conversation, otherwise defer/drop to prevent cross-conversation injection.
+                val targetMessage = wcdb.message.getFirstObject(DBMessageModel.id.eq(realMessageId))
+                if (targetMessage == null) {
+                    // Target message not arrived yet: don't blindly insert an orphan; defer and re-check after it arrives.
+                    if (reactionMessageId != null && envelopeBytes != null) {
+                        savePendingMessage(reactionMessageId, reaction.realSource.timestamp, envelopeBytes)
+                        L.i { "[Message] updateMessageReaction: target $realMessageId absent, defer via savePendingMessage." }
+                    } else {
+                        L.w { "[Message] updateMessageReaction: target $realMessageId absent and no envelope to defer, drop." }
+                    }
+                    return@runTransaction true
+                }
+                if (targetMessage.roomId != conversationId) {
+                    L.w { "[Message] updateMessageReaction: target $realMessageId belongs to room=${targetMessage.roomId} != conversation=$conversationId, drop (cross-conversation injection)" }
+                    return@runTransaction true
+                }
                 val currentEmojiReaction = wcdb.reaction.getAllObjects(
                     DBReactionModel.messageId.eq(realMessageId)
                         .and(DBReactionModel.emoji.eq(reaction.emoji))

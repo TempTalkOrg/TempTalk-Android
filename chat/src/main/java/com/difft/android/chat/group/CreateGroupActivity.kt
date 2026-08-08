@@ -43,18 +43,18 @@ import com.difft.android.chat.crypto.GroupKeyDistributor
 import com.difft.android.network.group.CreateGroupReq
 import com.difft.android.network.group.GroupMemberBinding
 import com.difft.android.network.group.GroupRepo
-import com.luck.picture.lib.pictureselector.GlideEngine
-import com.luck.picture.lib.pictureselector.ImageFileCompressEngine
-import com.luck.picture.lib.pictureselector.ImageFileCropEngine
-import com.luck.picture.lib.pictureselector.PictureSelectorUtils
+import com.difft.android.selector.pictureselector.GlideEngine
+import com.difft.android.selector.pictureselector.ImageFileCompressEngine
+import com.difft.android.selector.pictureselector.ImageFileCropEngine
+import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import com.hi.dhl.binding.viewbind
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.config.SelectMimeType
-import com.luck.picture.lib.config.SelectModeConfig
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnResultCallbackListener
-import com.luck.picture.lib.language.LanguageConfig
-import com.luck.picture.lib.utils.ToastUtils
+import com.difft.android.selector.basic.PictureSelector
+import com.difft.android.selector.config.SelectMimeType
+import com.difft.android.selector.config.SelectModeConfig
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.selector.interfaces.OnResultCallbackListener
+import com.difft.android.selector.language.LanguageConfig
+import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.Dispatchers
@@ -461,6 +461,7 @@ class CreateGroupActivity : BaseActivity() {
             .setCompressEngine(ImageFileCompressEngine())
             .forResult(object : OnResultCallbackListener<LocalMedia> {
                 override fun onResult(result: ArrayList<LocalMedia>) {
+                    ScreenLockUtil.temporarilyDisabled = false
                     if (result.isNotEmpty()) {
                         val localMedia = result[0]
                         mAvatarFilePath = localMedia.compressPath ?: localMedia.realPath
@@ -471,6 +472,7 @@ class CreateGroupActivity : BaseActivity() {
                 }
 
                 override fun onCancel() {
+                    ScreenLockUtil.temporarilyDisabled = false
                 }
             })
     }

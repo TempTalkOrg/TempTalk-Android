@@ -14,7 +14,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import org.difft.app.database.models.DBAttachmentModel
-import util.FileUtils
+import util.FileSystemUtils
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.media.EncryptedAttachmentAccess
@@ -282,7 +282,7 @@ class DownloadAttachmentJob private constructor(
                             uri = fileUri,
                             contentType = MediaUtil.getMimeType(context, fileUri) ?: "",
                             date = System.currentTimeMillis(),
-                            fileName = FileUtils.getFileName(filePath),
+                            fileName = FileSystemUtils.getFileName(filePath),
                             shouldShowToast = false
                         )
                         SaveAttachmentUtil.saveAttachment(context, attachment)

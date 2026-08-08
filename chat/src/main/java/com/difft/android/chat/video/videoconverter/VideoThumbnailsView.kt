@@ -24,8 +24,8 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.thoughtcrime.securesms.video.interfaces.MediaInput
-import org.thoughtcrime.securesms.video.videoconverter.VideoThumbnailsExtractor
+import com.difft.android.video.interfaces.MediaInput
+import com.difft.android.video.videoconverter.VideoThumbnailsExtractor
 import java.io.IOException
 import java.lang.ref.WeakReference
 
@@ -194,6 +194,10 @@ abstract class VideoThumbnailsView : View {
         collector: ArrayList<Bitmap>,
     ): Job {
         val viewRef = WeakReference(this)
+        // Snapshot the scheme rather than reading it through viewRef later: it is the one piece of
+        // context that tells a provider read from a bare-path read. Never the file name — a
+        // gallery item's name is user content.
+        val sourceScheme = currentUri?.scheme
         return extractionScope.launch {
             L.i { "$TAG generate $thumbnailCount thumbnails ${thumbnailWidth}x$thumbnailHeight" }
             var discoveredDuration = 0L
@@ -223,7 +227,7 @@ abstract class VideoThumbnailsView : View {
                     }
 
                     override fun failed() {
-                        L.w { "$TAG Thumbnail extraction failed" }
+                        L.w { "[MediaAccess] $TAG thumbnail extraction failed scheme=$sourceScheme" }
                     }
                 },
             )

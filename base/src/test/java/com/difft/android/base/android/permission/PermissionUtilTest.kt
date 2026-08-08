@@ -3,12 +3,16 @@ package com.difft.android.base.android.permission
 import android.Manifest
 import android.app.Activity
 import android.app.Application
+import android.content.ContentResolver
+import android.content.ContextWrapper
+import android.net.Uri
 import androidx.activity.result.ActivityResultLauncher
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.difft.android.base.android.permission.PermissionUtil.PermissionState
 import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.application.ScopeApplication
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import io.mockk.mockk
 import io.mockk.slot
@@ -21,9 +25,16 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import timber.log.Timber
+import java.io.IOException
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /**
  * Covers the Android 14 partial-access ("Select photos") permission matrix:
@@ -403,5 +414,173 @@ class PermissionUtilTest {
 
         assertEquals(1, usableCount)
         verify(exactly = 0) { launcher.launch(any<Array<String>>()) }
+    }
+
+    // ------------------------------------------------------------------------
+    // Media-send URI hardening: getMediaAccessState precondition pin (T12) and
+    // classifyReadDenial mapping (T90-T95).
+    // ------------------------------------------------------------------------
+
+    private val mediaUri: Uri = Uri.parse("content://media/external/images/media/1")
+
+    @Test
+    @Config(sdk = [29])
+    fun `T12 getMediaAccessState on 29 with read external storage granted is FULL`() {
+        grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+
+        assertEquals(MediaAccessState.FULL, PermissionUtil.getMediaAccessState())
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun `T12 getMediaAccessState on 29 with nothing granted is NONE`() {
+        assertEquals(MediaAccessState.NONE, PermissionUtil.getMediaAccessState())
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun `T12 getMediaAccessState on 29 ignores granted READ_MEDIA permissions`() {
+        // Precondition pin: the 29 tier reads only READ_EXTERNAL_STORAGE. Granting the 33+ strings
+        // must not move the state, so a future "let's also request READ_MEDIA_* on 29" change fails
+        // here instead of silently reporting readable media that the platform never grants.
+        grant(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            visualUserSelected,
+        )
+
+        assertEquals(MediaAccessState.NONE, PermissionUtil.getMediaAccessState())
+
+        grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+
+        assertEquals(MediaAccessState.FULL, PermissionUtil.getMediaAccessState())
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun `T90 classifyReadDenial on granted full access is GRANTED_BUT_UNREADABLE`() {
+        grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val cause = IOException("boom")
+
+        val denial = PermissionUtil.classifyReadDenial(mediaUri, cause)
+
+        assertEquals(MediaReadDenialKind.GRANTED_BUT_UNREADABLE, denial.kind)
+        assertSame(cause, denial.cause)
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun `T91 classifyReadDenial without any grant is PERMISSION_MISSING`() {
+        val denial = PermissionUtil.classifyReadDenial(mediaUri, IOException("boom"))
+
+        assertEquals(MediaReadDenialKind.PERMISSION_MISSING, denial.kind)
+    }
+
+    @Test
+    @Config(sdk = [34])
+    fun `T92 classifyReadDenial under partial selection is PARTIAL_SELECTION`() {
+        grantVisualUserSelected()
+
+        val denial = PermissionUtil.classifyReadDenial(mediaUri, IOException("boom"))
+
+        assertEquals(MediaReadDenialKind.PARTIAL_SELECTION, denial.kind)
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun `T93 classifyReadDenial on a sandbox file uri is NOT_MEDIA_SCOPED`() {
+        // A sandbox read failure must never be attributed to the permission layer.
+        grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val sandboxUri = Uri.parse("file:///data/user/0/pkg/files/draft_blobs/x.jpg")
+
+        val denial = PermissionUtil.classifyReadDenial(sandboxUri, IOException("boom"))
+
+        assertEquals(MediaReadDenialKind.NOT_MEDIA_SCOPED, denial.kind)
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun `T94 classifyReadDenial on a cross profile media authority takes the media branch`() {
+        grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val crossProfileUri = Uri.parse("content://0@media/external/images/media/1")
+
+        val denial = PermissionUtil.classifyReadDenial(crossProfileUri, IOException("boom"))
+
+        assertEquals(MediaReadDenialKind.GRANTED_BUT_UNREADABLE, denial.kind)
+    }
+
+    @Test
+    fun `T95 classifyReadDenial performs no IO and writes no log`() {
+        grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+        // Structural pin: this is a classifier, not a prober. Touching the ContentResolver here
+        // would turn permission state into a readability predicate, which it is not.
+        val noResolver = object : ContextWrapper(
+            ApplicationProvider.getApplicationContext<Application>()
+        ) {
+            override fun getContentResolver(): ContentResolver =
+                throw AssertionError("classifyReadDenial must not touch the ContentResolver")
+        }
+        val tree = RecordingTree()
+        L.plant(tree)
+        try {
+            tree.barrier("PermissionUtilTest-warmup")
+            tree.clear()
+
+            PermissionUtil.classifyReadDenial(mediaUri, IOException("boom"), noResolver)
+            PermissionUtil.classifyReadDenial(
+                Uri.parse("file:///data/user/0/pkg/files/draft_blobs/x.jpg"),
+                IOException("boom"),
+                noResolver
+            )
+
+            tree.barrier("PermissionUtilTest-probe")
+            val recorded = tree.snapshot()
+            assertEquals(
+                1,
+                recorded.size,
+                "classifyReadDenial must not log; recorded=$recorded"
+            )
+        } finally {
+            L.uproot(tree)
+        }
+    }
+
+    /**
+     * Records every message Timber receives, plus a FIFO barrier.
+     *
+     * [L] dispatches through a single unlimited channel consumed by one thread, so once a sentinel
+     * message has been observed, everything enqueued before it has been observed too — which turns
+     * "produced no log" into a deterministic assertion.
+     */
+    private class RecordingTree : Timber.Tree() {
+        private val recorded = CopyOnWriteArrayList<String>()
+
+        @Volatile
+        private var marker: String? = null
+
+        @Volatile
+        private var latch: CountDownLatch? = null
+
+        override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+            recorded += message
+            marker?.let { if (message.contains(it)) latch?.countDown() }
+        }
+
+        fun snapshot(): List<String> = recorded.toList()
+
+        fun clear() = recorded.clear()
+
+        fun barrier(sentinel: String) {
+            val gate = CountDownLatch(1)
+            marker = sentinel
+            latch = gate
+            L.i { sentinel }
+            assertTrue(
+                gate.await(5, TimeUnit.SECONDS),
+                "log barrier '$sentinel' never arrived; recorded=${snapshot()}"
+            )
+            marker = null
+            latch = null
+        }
     }
 }

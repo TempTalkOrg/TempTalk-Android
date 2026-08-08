@@ -20,12 +20,15 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -301,6 +304,95 @@ class ProxySettingsViewModelTest {
             expectNoEvents()
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    /**
+     * A stage-2 probe that announces its own start and then parks until released.
+     *
+     * The tests below must act while stage 2 is genuinely in flight, and
+     * [ProbeState.Checking] cannot express that — it covers stage 1 too, and stage 1
+     * hops through the real [kotlinx.coroutines.Dispatchers.IO], so a state-based wait
+     * can return before [ProxyE2eProbe.probe] was ever called (that raced green when the
+     * class ran alone and failed under a loaded full-suite run). [started] is the
+     * unambiguous signal; [released] then lets the test choose exactly when the verdict
+     * lands, reproducing the "arrives after the toggle already cleared the status"
+     * ordering that the real IO→Main resume produces.
+     *
+     * `NonCancellable` keeps a retired probe parked instead of unwinding at cancel, so a
+     * superseded run still delivers its (stale) verdict — the case the fix must survive.
+     */
+    private class FakeStage2Probe(runs: Int) {
+        val started = List(runs) { CompletableDeferred<Unit>() }
+        val released = List(runs) { CompletableDeferred<Unit>() }
+        private val invocations = AtomicInteger(0)
+
+        val invocationCount: Int get() = invocations.get()
+
+        suspend fun run(): Boolean {
+            val index = invocations.getAndIncrement()
+            started[index].complete(Unit)
+            withContext(NonCancellable) { released[index].await() }
+            return false
+        }
+    }
+
+    // T14: turning the switch OFF while stage 2 is in flight must leave the status area
+    // empty. Settling that late verdict used to repaint the red "unable to connect" line
+    // plus its recheck icon under a switch the user had just turned off.
+    @Test
+    fun `toggle off mid probe leaves status cleared`() = runTest {
+        every { provider.savedShareLink } returns "ytp://saved"
+        every { ProxyConnectivityChecker.check(any(), any()) } returns
+            ProxyConnectivityChecker.Outcome(ok = true)
+        val fake = FakeStage2Probe(runs = 1)
+        coEvery { probe.probe() } coAnswers { fake.run() }
+
+        val vm = buildViewModel()
+        fake.started[0].await()
+
+        every { provider.isEnabledByUser } returns false
+        every { provider.isEnabled } returns false
+        vm.onUseProxyChange(false)
+        assertEquals(ProbeState.None, vm.uiState.value.probe)
+
+        fake.released[0].complete(Unit)
+
+        verify { provider.setEnabled(false) }
+        assertEquals(ProbeState.None, vm.uiState.value.probe)
+    }
+
+    // T15: toggling OFF then straight back ON supersedes the first probe with one whose
+    // target is IDENTICAL (same address, switch ON again), so the staleness guard cannot
+    // tell them apart and only the retired job's cancelled state can. The late first
+    // verdict must not settle the status the second probe still owns.
+    @Test
+    fun `superseded probe does not settle status of the probe that replaced it`() = runTest {
+        every { provider.savedShareLink } returns "ytp://saved"
+        every { ProxyConnectivityChecker.check(any(), any()) } returns
+            ProxyConnectivityChecker.Outcome(ok = true)
+        val fake = FakeStage2Probe(runs = 2)
+        coEvery { probe.probe() } coAnswers { fake.run() }
+
+        val vm = buildViewModel()
+        fake.started[0].await()
+
+        every { provider.isEnabledByUser } returns false
+        every { provider.isEnabled } returns false
+        vm.onUseProxyChange(false)
+        every { provider.isEnabledByUser } returns true
+        every { provider.isEnabled } returns true
+        vm.onUseProxyChange(true)
+        fake.started[1].await()
+
+        // The retired probe reports failure; the second one is still in flight.
+        fake.released[0].complete(Unit)
+
+        assertEquals(2, fake.invocationCount)
+        assertEquals(ProbeState.Checking, vm.uiState.value.probe)
+
+        // `NonCancellable` means tearDown's viewModelScope.cancel() cannot unwind the
+        // second run, so release it here rather than leave it parked for the suite.
+        fake.released[1].complete(Unit)
     }
 
     // ---- PR1: switch / save action separation (design §2.2 / §5) ----

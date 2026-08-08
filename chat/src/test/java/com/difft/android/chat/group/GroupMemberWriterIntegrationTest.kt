@@ -75,9 +75,14 @@ class GroupMemberWriterIntegrationTest {
 
     /** I4: Empty gid violates the W5 stub-row contract guard and must throw. */
     @Test
-    fun empty_gid_throws_IllegalArgumentException() = runBlocking {
-        assertFailsWith<IllegalArgumentException> {
-            writer.replaceAllForGroup("", listOf(member("", "A")))
+    fun empty_gid_throws_IllegalArgumentException() {
+        // Block body, not `= runBlocking { ... }`: assertFailsWith returns the caught exception, so
+        // an expression body here infers a non-Unit return type, which JUnit4's method validator
+        // rejects for @Test methods (a block body defaults to Unit regardless of its last statement).
+        runBlocking {
+            assertFailsWith<IllegalArgumentException> {
+                writer.replaceAllForGroup("", listOf(member("", "A")))
+            }
         }
     }
 

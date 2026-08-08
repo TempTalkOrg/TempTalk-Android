@@ -242,6 +242,15 @@ object LCallManager {
     }
 
     /**
+     * Raw cached upstream [ServiceUrls] returned by `serviceurl/v2` (domain + IPs),
+     * bypassing the proxy tunnel-domain synthesis. Diagnostics only (Insider call
+     * service settings) — never used for connection routing.
+     */
+    fun getUpstreamCachedServiceUrls(): ServiceUrls? {
+        return callServiceUrlManager.getUpstreamCachedServiceUrls()
+    }
+
+    /**
      * Atomically gets and clears the call feedback info.
      *
      * @return current feedback info, or null if none

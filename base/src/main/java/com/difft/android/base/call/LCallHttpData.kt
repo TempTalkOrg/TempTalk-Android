@@ -12,6 +12,10 @@ data class StartCallRequestBody(
     val roomId: String? = null,
     val notification: Notification? = null,
     val publicKey: String? = null,
+    // Client-generated call identifier, reported on start so the server can bind
+    // clientCallId -> room and later locate the room for cancel/hangup when roomId
+    // is still absent (window W). Only the initiator sets it; null otherwise.
+    val clientCallId: String? = null,
 )
 
 data class CipherMessage(
@@ -90,7 +94,11 @@ data class ControlMessageRequestBody(
     val roomId: String?,
     val timestamp: Long,
     val cipherMessages: List<CipherMessage>? = null,
-    val detailMessageType: Int = 0
+    val detailMessageType: Int = 0,
+    // Fallback locator for the server when roomId is still absent (window W): the
+    // initiator's clientCallId lets the server find the room and fan out the
+    // cancel/hangup. Placeholder until the backend accepts it; harmless if ignored.
+    val clientCallId: String? = null
 )
 
 data class ControlMessageResponseData(

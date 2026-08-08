@@ -3,7 +3,7 @@ package com.difft.android.chat.common
 import android.content.Context
 import android.os.Environment
 import com.difft.android.base.log.lumberjack.L
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import java.io.File
 
 /**
@@ -11,7 +11,7 @@ import java.io.File
  * leaves on the app-private external storage while picking an avatar. Two locations are involved:
  *
  * - UCrop output: `Android/data/<pkg>/files/Pictures/CROP_*.jpg` (see
- *   [com.luck.picture.lib.utils.FileDirMap]).
+ *   [com.difft.android.selector.utils.FileDirMap]).
  * - Luban compression output: files under `Android/data/<pkg>/cache/luban_disk_cache/` (Luban's
  *   default disk cache under `Context.getExternalCacheDir()`; only created for sources larger than
  *   the `ignoreBy(100)` threshold in `ImageFileCompressEngine`).

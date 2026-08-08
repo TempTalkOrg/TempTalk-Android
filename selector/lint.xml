@@ -34,14 +34,7 @@
          for drag-to-reorder long-press feedback. Path-scoped to keep the rule
          enforced for any new selector code. -->
     <issue id="MissingPermission">
-        <ignore path="src/main/java/com/luck/picture/lib/PictureSelectorFragment.java" />
-        <ignore path="src/main/java/com/luck/picture/lib/PictureSelectorPreviewFragment.java" />
-    </issue>
-
-    <!-- LightStatusBarUtils uses MIUI-private reflection for status bar styling
-         on MIUI < 9. Upstream PictureSelector pattern; falls through to native
-         light-status-bar API on failure. -->
-    <issue id="PrivateApi">
-        <ignore path="src/main/java/com/luck/picture/lib/immersive/LightStatusBarUtils.java" />
+        <ignore path="src/main/java/com/difft/android/selector/PictureSelectorFragment.kt" />
+        <ignore path="src/main/java/com/difft/android/selector/PictureSelectorPreviewFragment.kt" />
     </issue>
 </lint>

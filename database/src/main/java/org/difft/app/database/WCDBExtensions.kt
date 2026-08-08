@@ -1154,6 +1154,11 @@ fun RoomModel.updateRoomUnreadState(readPosition: Long = this.readPosition) {
     )
 }
 
+/**
+ * Clears the READ state only. Do NOT add `sendStatus` here: a failed outgoing message is not an
+ * unread marker — opening and leaving a conversation must not drop its "send failed" signal. The
+ * only legal clear is `clearRoomSendStatusIfNoFailure`, driven by the message table.
+ */
 fun RoomModel.resetRoomUnreadState() {
     if (unreadMessageNum != 0) {
         L.d { "reset room unread state:$roomName" }

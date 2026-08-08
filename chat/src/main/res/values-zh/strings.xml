@@ -6,8 +6,6 @@
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">了解更多</string>
     <string name="SpanUtil__read_more">查看更多</string>
-    <!-- KeyCachingService -->
-    <string name="chat_draft">草稿</string>
 
     <string name="you">您</string>
 
@@ -78,19 +76,18 @@
     <string name="chat_message_action_copied">已复制</string>
     <string name="chat_message_action_forward">转发</string>
     <string name="chat_message_action_voice2text">转文字</string>
-    <string name="chat_message_action_voice2text_off">取消转文字</string>
+    <string name="chat_message_action_voice2text_off">收起文字</string>
     <string name="chat_message_action_voice2text_tip_title">信息</string>
     <string name="chat_message_action_voice2text_tip_info">语音转文字由Quicall服务器提供</string>
     <string name="chat_message_action_voice2text_tip_ok">确定</string>
-    <string name="chat_message_action_select_multiple">选择多个</string>
+    <string name="chat_message_action_select_multiple">多选</string>
     <string name="chat_message_action_select_max_limit">最多选择50条消息</string>
     <string name="chat_message_action_quote">引用</string>
     <string name="chat_message_action_recall">撤回</string>
-    <string name="chat_message_action_save_to_photos">保存到相册</string>
+    <string name="chat_message_action_save_to_photos">存至相册</string>
     <string name="chat_message_action_download">下载</string>
     <string name="chat_message_action_save_to_note">收藏</string>
-    <string name="chat_message_action_more">更多</string>
-    <string name="chat_message_action_more_info">更多信息</string>
+    <string name="chat_message_action_info">详情</string>
     <string name="chat_message_action_translate">翻译</string>
     <string name="chat_message_action_translate_off">关闭</string>
     <string name="chat_message_action_select_all">全选</string>
@@ -127,10 +124,13 @@
     <string name="chat_list_at_you">[@您]</string>
     <string name="chat_list_at_all">[@所有人]</string>
     <string name="chat_list_critical_alert">[🚨 紧急联络]</string>
+    <string name="chat_list_send_failed">[发送失败]</string>
+    <string name="chat_list_draft">[草稿]</string>
     <string name="chat_message_critical_alert">🚨 紧急联络</string>
     <string name="chat_status_sending">发送中</string>
     <string name="chat_status_sent">已发送</string>
     <string name="chat_status_fail">发送失败</string>
+    <string name="chat_message_send_failed_retry">发送失败 · 点击重试</string>
     <string name="chat_emoji_reaction">Emoji Reaction</string>
     <string name="chat_emoji_most_use">经常使用</string>
     <string name="chat_emoji_other">其他</string>
@@ -157,6 +157,7 @@
     <string name="chat_privacy_banner">🔒 隐私优先 · 全程匿名 · 端到端消息加密。请勿轻信陌生人。</string>
 
     <string name="chat_action_photo">照片</string>
+    <string name="chat_action_gif">GIF</string>
     <string name="chat_action_contact">联系人</string>
     <string name="chat_action_file">文件</string>
     <string name="chat_action_call">通话</string>
@@ -633,7 +634,7 @@
     <!-- GIF favorites (M3: favorites data flow) -->
     <string name="gif_favorites_empty">暂无 GIF 收藏</string>
     <!-- Unified favorite menu labels (message long-press menu + GIF grid long-press floating menu). -->
-    <string name="gif_favorites_add_full">添加到 GIF 收藏</string>
+    <string name="gif_favorites_add_full">收藏GIF</string>
     <string name="gif_favorites_remove">从 GIF 收藏移除</string>
     <string name="gif_favorites_added">已添加到 GIF 收藏</string>
     <string name="gif_favorites_failed">无法添加到 GIF 收藏，请稍后重试</string>
@@ -643,4 +644,37 @@
     <string name="gif_favorites_cap_message">GIF 收藏最多 200 个。你可以替换最早添加的一个，或先移除部分。</string>
     <string name="gif_favorites_cap_confirm">替换最早的</string>
     <string name="gif_favorites_cap_cancel">取消</string>
+    <!-- Media send failure surface: dialog titles, per-item lines, overflow line and buttons.
+         Deliberately does not reuse file_unavailable: that wording asserts the file was moved or
+         deleted, which is the wrong attribution for a read that the system refused. -->
+    <string name="media_send_failed_title_single">无法发送该文件</string>
+    <string name="media_send_failed_title_all">%1$d 项均无法发送</string>
+    <string name="media_send_failed_title_partial">%1$d 项中有 %2$d 项无法发送</string>
+    <string name="media_send_failed_item_named">第 %1$d 项（%2$s）：%3$s</string>
+    <string name="media_send_failed_item_unnamed">第 %1$d 项：%2$s</string>
+    <string name="media_send_failed_more">另有 %1$d 项未列出</string>
+    <string name="media_send_failed_named">无法发送“%1$s”：%2$s</string>
+    <string name="media_send_failed_unnamed">无法发送该文件：%1$s</string>
+    <string name="media_send_failed_retry">重试</string>
+    <string name="media_send_failed_back">返回修改</string>
+    <string name="media_send_failed_send_rest">发送其余 %1$d 项</string>
+    <!-- Short reason labels, one per failure reason. Kept to a fragment so they read inside an item line. -->
+    <string name="media_send_reason_unreadable">无法读取</string>
+    <string name="media_send_reason_unsupported">格式不支持</string>
+    <string name="media_send_reason_no_space">存储空间不足</string>
+    <string name="media_send_reason_transform">处理失败</string>
+    <string name="media_send_reason_unknown">未知错误</string>
+    <!-- Next-step guidance, one line per reason. media_send_next_restart_or_file covers both the
+         "read was refused with no attribution available" and "access looks granted yet the read
+         failed" cases, so it states only the observable fact and must not name a permission state;
+         it must keep the restart advice, which is what helps under either mechanism. The "文件"
+         literal in it and in media_send_next_reselect_photos must match chat_action_file. -->
+    <string name="media_send_next_restart_or_file">系统拒绝了对该文件的读取。请重启应用后重试；若仍失败，可改用“文件”方式发送。</string>
+    <string name="media_send_next_grant">应用当前没有相册访问权限。请在系统设置中允许后重试。</string>
+    <string name="media_send_next_reselect_photos">该文件不在你已授权访问的照片范围内。请重新选择要授权的照片，或改用“文件”方式发送。</string>
+    <string name="media_send_next_reselect_item">该文件已不可用，请重新选择。</string>
+    <string name="media_send_next_unsupported">该文件格式不受支持，或文件已损坏。请换一个文件。</string>
+    <string name="media_send_next_free_space">请清理设备存储空间后重试。</string>
+    <string name="media_send_next_retry_or_plain">请重试，或取消编辑后直接发送原文件。</string>
+    <string name="media_send_next_unknown">出现未知错误（%1$s），请重试。</string>
 </resources>

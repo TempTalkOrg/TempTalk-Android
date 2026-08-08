@@ -125,13 +125,14 @@ internal class CallSessionStarter(
         }
 
         when (callIntent.action) {
-            CallIntent.Action.START_CALL -> {
-                startCallRingTone(callType)
-                response.body.roomId?.let { rid ->
-                    addStartCallData(forWhat, callerId, callIntent.roomName, rid, callType, response.body.createdAt)
-                }
-                sendStartCallTextMessage(forWhat, callType, response.body.systemShowTimestamp)
-            }
+            CallIntent.Action.START_CALL -> onStartCallSucceeded(
+                forWhat = forWhat,
+                callerId = callerId,
+                callType = callType,
+                roomId = response.body.roomId,
+                createdAt = response.body.createdAt,
+                systemShowTimestamp = response.body.systemShowTimestamp,
+            )
             CallIntent.Action.JOIN_CALL -> {
                 response.body.roomId?.let { rid ->
                     sendJoinSyncControlMessage(forWhat, rid, callerId)
@@ -139,6 +140,70 @@ internal class CallSessionStarter(
                 }
             }
             else -> Unit
+        }
+    }
+
+    /**
+     * START_CALL 成功响应后的副作用编排。抽出为独立方法（与 LiveKit [Room] 解耦）以便单元测试。
+     *
+     * 门闩命中时（主叫已在窗口 W 退出）：**确定性地**跳过响铃 / 建本地 CallData / 发始通话消息，
+     * 避免向对端发出与取消矛盾的"始通话"消息——这是本方法对该竞态提供的可靠保证；随后调用
+     * [reCancelAfterInitiatorExit] 做 **best-effort** 补发权威取消。远端止铃的最终保证在后端
+     * clientCallId 墓碑（见 [reCancelAfterInitiatorExit] 说明），本方法不承担该保证。
+     *
+     * @return true = 已走正常主叫路径；false = 主叫已退出，跳过副作用并尝试补发取消。
+     */
+    internal suspend fun onStartCallSucceeded(
+        forWhat: For,
+        callerId: String,
+        callType: CallType,
+        roomId: String?,
+        createdAt: Long,
+        systemShowTimestamp: Long,
+    ): Boolean {
+        // 主叫已在窗口 W 退出：房间此刻才由服务端建出，不能再响铃/建本地数据/发始通话消息，
+        // 改为用权威 roomId 补发取消（1v1 cancel / group hangup），确保对端止铃。
+        if (onGoingCallStateManager.isInitiatorPreConnectCancelled()) {
+            reCancelAfterInitiatorExit(callType, roomId ?: "", callerId)
+            return false
+        }
+        startCallRingTone(callType)
+        roomId?.let { rid ->
+            addStartCallData(forWhat, callerId, callIntent.roomName, rid, callType, createdAt)
+        }
+        sendStartCallTextMessage(forWhat, callType, systemShowTimestamp)
+        return true
+    }
+
+    /**
+     * best-effort 快路径：仅当建房响应恰好赶在 teardown 取消 viewModelScope 之前到达时，才用已知的
+     * 权威 [roomId] 补发结束信令（1v1 cancel，group hangup=end-for-all；窗口 W 内尚无远端加入，
+     * callUidList 为空）。语义与 [com.difft.android.call.handler.CallExitHandler.handleInitiatorPreConnectExit] 对齐。
+     *
+     * 注意：这**不是保证**。快速退出时响应通常晚于 onEndCall() 取消 viewModelScope 并释放房间，届时
+     * 本方法不会执行、roomId 也无从得知。该窗口的权威远端止铃由**后端**负责——把退出时携带 clientCallId
+     * 的取消当作墓碑，使后续用同一 clientCallId 建房不再响铃。本路径只在能生效时缩短窗口，不承担正确性。
+     */
+    private suspend fun reCancelAfterInitiatorExit(callType: CallType, roomId: String, callerId: String) {
+        L.w { "[Call] CallSessionStarter start response arrived after initiator exit -> re-cancel roomId:$roomId type:$callType" }
+        val conversationId = callIntent.conversationId
+        if (callType == CallType.GROUP) {
+            callToChatController.hangUpCall(
+                callerId = callerId,
+                callRole = CallRole.CALLER,
+                type = callIntent.callType,
+                roomId = roomId,
+                conversationId = conversationId,
+                callUidList = emptyList(),
+            )
+        } else {
+            callToChatController.cancelCall(
+                callerId = callerId,
+                callRole = CallRole.CALLER,
+                type = callIntent.callType,
+                roomId = roomId,
+                conversationId = conversationId,
+            )
         }
     }
 
@@ -161,7 +226,13 @@ internal class CallSessionStarter(
         createdAt: Long,
     ) {
         val callData = CallData(
-            type = callType.type,
+            // The type already in effect, not the pre-join one: this entry can be created either
+            // before or after `Connected` resolves the authoritative type, and CallExitHandler reads
+            // CallData.type to choose LEAVE vs END. Created first → the resolve writes back into this
+            // entry; created second → it picks the resolved value up here. Both orders converge.
+            // Deliberately scoped to this field: `callType` still drives `forWhat` (E2EE key routing)
+            // and the outgoing start-call message, neither of which may follow the server value.
+            type = roomCtl.callType.value.ifEmpty { callType.type },
             version = 0,
             createdAt = createdAt,
             roomId = roomId,

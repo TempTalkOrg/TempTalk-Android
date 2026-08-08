@@ -165,6 +165,7 @@ class RecentChatViewModel @Inject constructor(
                         pinnedTime = it.pinnedTime,
                         mentionType = it.mentionType,
                         criticalAlertType = it.criticalAlertType,
+                        sendStatus = it.sendStatus,
                         messageExpiry = it.messageExpiry,
                         callData = callData,
                         draftPreview = allDrafts[it.roomId]?.draft?.content,

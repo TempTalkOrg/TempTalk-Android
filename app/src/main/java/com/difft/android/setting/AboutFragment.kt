@@ -29,6 +29,15 @@ class AboutFragment : Fragment() {
 
     companion object {
         fun newInstance() = AboutFragment()
+
+        /** Display name shown in parentheses after the version, per distribution channel. */
+        private fun channelDisplayName(channel: String): String = when (channel) {
+            "google" -> "Google"
+            "official" -> "Official"
+            "insider" -> "Insider"
+            "fdroid" -> "F-Droid"
+            else -> channel // fallback: show unknown channel as-is rather than hiding it
+        }
     }
 
     @Inject
@@ -48,6 +57,7 @@ class AboutFragment : Fragment() {
                     AboutPageView(
                         onBackClick = { activity?.finish() },
                         appVersion = PackageUtil.getAppVersionName() ?: "",
+                        channelLabel = channelDisplayName(globalServices.environmentHelper.getChannelName()),
                         buildVersion = PackageUtil.getAppVersionCode().toString(),
                         buildTime = TimeUtils.millis2String(BuildConfig.BUILD_TIME.toLong()),
                         onCheckForUpdateClick = {

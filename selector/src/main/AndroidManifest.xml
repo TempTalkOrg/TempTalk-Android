@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.luck.picture.lib">
+    package="com.difft.android.selector">
 
     <application>
         <provider
-            android:name="com.luck.picture.lib.basic.PictureFileProvider"
+            android:name="com.difft.android.selector.basic.PictureFileProvider"
             android:authorities="${applicationId}.luckProvider"
             android:exported="false"
             android:grantUriPermissions="true">

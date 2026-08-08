@@ -184,6 +184,40 @@ class ChatMessageViewModel @AssistedInject constructor(
     // 用于判断消息数据是否真正变化，避免 _readInfoList 变化时重复触发滚动
     private var lastMessageListTimestamp: Long = 0
 
+    /**
+     * Divider anchor for this page session. Captured from the first load that carries a
+     * readPosition and never recomputed, so pagination or an incoming message cannot move or drop
+     * the NEW MESSAGES divider: every non-initial [ChatMessageListBehavior] leaves `readPosition`
+     * null, which previously cleared the divider on the next emission at an unpredictable moment.
+     *
+     * Two writers on different threads, hence `@Volatile`: the capture below runs inside
+     * `assembleMessagesUIData` on `Dispatchers.Default`, while [clearNewMessageDivider] is called
+     * from the send path on Main. Do NOT reason about this like [lastMessageListTimestamp], which is
+     * single-coroutine. Neither field needs to change atomically with the other: the reader checks
+     * `dividerCleared` first, and the only losing interleaving re-captures from a `readPosition`
+     * that is null on every non-first-screen emission anyway.
+     *
+     * Lifetime is the ViewModel, i.e. one conversation-page open; reopening recaptures.
+     */
+    @Volatile
+    private var dividerReadPosition: Long? = null
+
+    /** Set once the divider is dropped, so the capture above cannot resurrect it. */
+    @Volatile
+    private var dividerCleared = false
+
+    /**
+     * Drop the NEW MESSAGES divider for the rest of this page session, called when the user sends a
+     * message (`ChatMessageInputFragment.sendTextPush`) — matches iOS `clearUnreadMessagesIndicator`.
+     *
+     * Deliberately NOT called for reactions, recalls or resends: none of them is the user composing
+     * a new message, and iOS hooks only its input-toolbar send path either.
+     */
+    fun clearNewMessageDivider() {
+        dividerReadPosition = null
+        dividerCleared = true
+    }
+
     // 添加输入框高度变化事件 Flow
     private val _inputHeightChanged = MutableSharedFlow<Unit>()
     val inputHeightChanged: SharedFlow<Unit> = _inputHeightChanged.asSharedFlow()
@@ -446,6 +480,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     fun reSendMessage(data: ChatMessage) {
+        L.i { "[ChatResend] resend requested id=${data.id}" }
         messageResend.tryEmit(data)
     }
 
@@ -743,8 +778,12 @@ class ChatMessageViewModel @AssistedInject constructor(
             it is NotifyChatMessage && it.notifyMessage?.showContent.isNullOrEmpty()
         }
 
-        // 使用传递过来的 readPosition，如果没有传递则为 null（不显示分割线）
-        val readPosition = chatMessageListBehavior.readPosition
+        // Capture the divider anchor on the first load that carries one, then reuse it for the rest
+        // of the page session — see [dividerReadPosition].
+        if (!dividerCleared && dividerReadPosition == null) {
+            dividerReadPosition = chatMessageListBehavior.readPosition
+        }
+        val readPosition = dividerReadPosition
 
         // 标记是否已经找到第一个未读的非自己发送的消息
         var firstUnreadFound = false
@@ -783,8 +822,8 @@ class ChatMessageViewModel @AssistedInject constructor(
 
             message.showTime = !isSameDayWithNextMessage || nextMessage?.isNotifyStyleMessage() == true || message.authorId != nextMessage?.authorId
 
-            // 设置新消息分割线：仅在初始化加载时（readPosition 不为 null）显示
-            // 在 readPosition 之后第一个不是自己发送的消息上显示
+            // NEW MESSAGES divider: on the first not-mine message after the session-scoped
+            // readPosition anchor. Null anchor (never captured, or cleared by a send) draws nothing.
             if (!firstUnreadFound && readPosition != null && message.systemShowTimestamp > readPosition && !message.isMine) {
                 message.showNewMsgDivider = true
                 firstUnreadFound = true

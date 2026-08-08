@@ -5,7 +5,6 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.LCallManager
-import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -84,15 +83,20 @@ internal fun CallMessageHandler.handleHangupMessage(
 ) {
     L.i { "[Call] handleCallMessage, hasHangup Message:${content.hangup.roomId}" }
 
+    // Case A: this device is already in the call (e.g. the host hangs up the
+    // whole call) — route the action to the ongoing-call UI.
     if (onGoingCallStateManager.isInCalling() &&
         onGoingCallStateManager.getCurrentRoomId() == roomId
     ) {
-        val controlMessage = OnGoingCallStateManager.ControlMessage(
-            actionType = CallActionType.HANGUP,
-            roomId = roomId,
-        )
-        onGoingCallStateManager.updateControlMessage(controlMessage)
+        updateControlMessage(CallActionType.HANGUP, roomId)
     }
+
+    // Case B: this device is a callee still being rung — cancel the
+    // incoming-call notification and stop the ringtone/incoming service, the
+    // same way Cancel/Reject/Joined do. Without this the ringtone keeps
+    // playing after a hangup until the call times out.
+    cancelNotificationAndHandleService(roomId, CallActionType.HANGUP, "hangup: caller hangup the call")
+
     callDataManager.removeCallData(roomId)
 }
 

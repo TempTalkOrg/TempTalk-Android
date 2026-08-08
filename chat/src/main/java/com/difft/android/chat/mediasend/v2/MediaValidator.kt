@@ -1,7 +1,7 @@
 package com.difft.android.chat.mediasend.v2
 
 import android.content.Context
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.chat.mms.MediaConstraints
 import com.difft.android.chat.util.MediaUtil
 

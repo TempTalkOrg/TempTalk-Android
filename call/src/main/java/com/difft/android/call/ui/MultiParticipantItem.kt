@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
@@ -58,7 +59,8 @@ fun MultiParticipantItem(
     participantIndex: Int,
     muteOtherEnabled: Boolean,
     onClickMute: () -> Unit,
-    coroutineScope: CoroutineScope
+    coroutineScope: CoroutineScope,
+    cornerRadius: Dp = 8.dp
 ) {
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
@@ -116,7 +118,7 @@ fun MultiParticipantItem(
     ) {
         ConstraintLayout(
             modifier = modifier
-                .clip(shape = RoundedCornerShape(8.dp))
+                .clip(shape = RoundedCornerShape(cornerRadius))
                 .background(color = DifftTheme.colors.background)
         ) {
             val (userView, statusView) = createRefs()

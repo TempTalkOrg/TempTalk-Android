@@ -15,7 +15,6 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
-import com.difft.android.call.data.RoomMetadata
 import com.difft.android.call.exception.DisconnectException
 import com.difft.android.call.data.CallStatisticsEvent
 import com.difft.android.call.manager.CallStatisticsLogManager
@@ -43,7 +42,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 
 /**
  * UI-layer side effects that cannot be moved cleanly out of the ViewModel.
@@ -58,7 +56,7 @@ data class RoomEventHost(
     val resetNoBodySpeakCheckFn: () -> Unit,
     val sendHangUpBroadcastFn: (String) -> Unit,
     val stopRingToneAndTimeoutCheckFn: () -> Unit,
-    val switchToInstantCallFn: () -> Unit,
+    val resolveCallTypeFn: () -> Unit,
     val handleConnectedStateFn: () -> Unit,
     val onFeedbackIdentityResolvedFn: (String, String?, String?) -> Unit,
     val onNetworkPoorStateChangedFn: (Boolean) -> Unit,
@@ -73,7 +71,13 @@ data class RoomEventHost(
     fun resetNoBodySpeakCheck() = resetNoBodySpeakCheckFn()
     fun sendHangUpBroadcast(roomId: String) = sendHangUpBroadcastFn(roomId)
     fun stopRingToneAndTimeoutCheck() = stopRingToneAndTimeoutCheckFn()
-    fun switchToInstantCall() = switchToInstantCallFn()
+
+    /**
+     * Re-runs the authoritative call-type decision synchronously (server `room.metadata.callType`
+     * plus the live participant count). Must complete before any decision that depends on the
+     * meeting type — notably the join-time microphone default in [RoomEventDispatcher.onConnected].
+     */
+    fun resolveCallType() = resolveCallTypeFn()
     fun handleConnectedState() = handleConnectedStateFn()
     fun onFeedbackIdentityResolved(userSid: String, userIdentity: String?, roomSid: String?) =
         onFeedbackIdentityResolvedFn(userSid, userIdentity, roomSid)
@@ -106,7 +110,6 @@ internal class RoomEventDispatcher(
     private val speakerState: SpeakerStateHolder,
     private val callDataManager: CallDataManager,
     private val statisticsLogManager: CallStatisticsLogManager,
-    private val json: Json,
     private val mySelfId: String,
     private val host: RoomEventHost,
 ) {
@@ -226,7 +229,9 @@ internal class RoomEventDispatcher(
                 screenSharePreWarmer.handleTrackSubscribedIfPending(::onResubscriptionSettled)
             }
             is RoomEvent.TrackUnsubscribed -> checkRemoteUserScreenShare(event.participant)
-            is RoomEvent.RoomMetadataChanged -> refreshRoomMetadata()
+            // RoomMetadataChanged is deliberately absent: CallTypeCoordinator collects
+            // `room.metadata` directly, which covers the initial value and every later change in one
+            // place (and de-duplicates equal values, unlike an event hook).
             is RoomEvent.ConnectionQualityChanged -> onConnectionQualityChanged(event.participant, event.quality)
             is RoomEvent.ActiveSpeakersChanged -> {
                 if (!callUiController.speakingEnabled.value) callUiController.setSpeakingEnabled(true)
@@ -273,6 +278,14 @@ internal class RoomEventDispatcher(
     }
 
     private fun onConnected() {
+        // FIRST, and above the roomId guard below: the microphone bring-up further down is a
+        // once-per-call decision driven by the meeting type, so the authoritative type has to be in
+        // place before it runs. This resolve reads `room.metadata`, which the server populates while
+        // handling JoinResponse and is therefore guaranteed present by the time Connected fires —
+        // unlike `roomId` and the CallData entry, which an outbound call only assigns once
+        // ttCallResp has been processed, on a different coroutine. Depending on those for the type
+        // would make the mic default hostage to that race.
+        host.resolveCallType()
         val rid = host.getCurrentRoomId() ?: return
         // The SDK re-emits RoomEvent.Connected (not Reconnected) after an ICE-restart / soft
         // resume, because a transient primary-PeerConnection DISCONNECTED clobbers the RESUMING
@@ -294,40 +307,33 @@ internal class RoomEventDispatcher(
             roomSid = room.sid?.sid,
         )
         callDataManager.updateCallingState(rid, isInCalling = true)
+        // Outside the type branch below on purpose. This clears a timeout the teardown armed: the old
+        // session emits a transient ParticipantDisconnected for the still-present remote, which on
+        // reconnect comes back via initial state sync rather than a ParticipantConnected event, so
+        // nothing else would ever clear it and it ends a live call with "对方未接听" ~60s later.
+        // Arming happens only while the call is 1v1, but resolveCallType() ran at the top of this
+        // method, so the switch window itself can have turned the call instant — a third participant
+        // joined, or the server flipped callType for an invite whose RoomUpdate the switch missed.
+        // Inside the 1v1 branch those cases would skip the cancel.
+        if (isManualSwitch) timeoutMonitor.cancelIfActive()
         if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
             if (isManualSwitch) {
                 // The call is already established; a manual switch is NOT a fresh outbound call,
                 // so re-apply the user's media intent rather than the first-connect bring-up.
                 restoreMediaAfterServerSwitch()
-                // Cancel any timeout the teardown armed: the old session emits a transient
-                // ParticipantDisconnected for the still-present remote (see onParticipantDisconnected),
-                // and on reconnect the remote returns via initial state sync (not a
-                // ParticipantConnected event), so nothing else would cancel it — it would fire
-                // "对方未接听" ~60s later and end a live call. Clear it, then re-decide from who is
-                // actually present after reconnect.
-                timeoutMonitor.cancelIfActive()
-                when {
-                    room.remoteParticipants.size > 1 -> {
-                        host.switchToInstantCall()
-                        host.handleConnectedState()
-                    }
-                    room.remoteParticipants.size == 1 -> host.handleConnectedState()
-                    // Narrow race: the remote genuinely left during the disconnect/reconnect
-                    // window (only self remains). Don't mark the call CONNECTED with nobody in
-                    // it — arm the 1v1 timeout so the empty call is detected and ended, matching
-                    // the first-connect branch.
-                    else -> timeoutMonitor.start1V1Timeout(rid)
-                }
+                // Upgrading the type on a crowded room is no longer decided here — resolveCallType()
+                // at the top of this method already did it from the live participant count. All that
+                // is left is: somebody is present → CONNECTED, nobody is → arm the 1v1 timeout.
+                // Narrow race for the empty case: the remote genuinely left during the
+                // disconnect/reconnect window. Don't mark the call CONNECTED with nobody in it — arm
+                // the timeout so the empty call is detected and ended, matching first connect. Note
+                // this arms AFTER the cancel above, which is the order that has to hold.
+                if (room.remoteParticipants.isNotEmpty()) host.handleConnectedState()
+                else timeoutMonitor.start1V1Timeout(rid)
             } else {
                 if (!hasMicPublication) host.setMicEnabled(true)
-                when {
-                    room.remoteParticipants.size > 1 -> {
-                        host.switchToInstantCall()
-                        host.handleConnectedState()
-                    }
-                    room.remoteParticipants.size == 1 -> host.handleConnectedState()
-                    else -> timeoutMonitor.start1V1Timeout(rid)
-                }
+                if (room.remoteParticipants.isNotEmpty()) host.handleConnectedState()
+                else timeoutMonitor.start1V1Timeout(rid)
             }
         } else {
             host.handleConnectedState()
@@ -341,7 +347,6 @@ internal class RoomEventDispatcher(
                 }
             }
         }
-        refreshRoomMetadata()
     }
 
     /**
@@ -377,11 +382,10 @@ internal class RoomEventDispatcher(
     private fun onParticipantConnected(participant: Participant) {
         host.showBarrage(participant, getString(R.string.call_barrage_message_join))
         host.stopRingToneAndTimeoutCheck()
-        if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
-            host.handleConnectedState()
-            if (room.remoteParticipants.size > 1) host.switchToInstantCall()
-        }
-        refreshRoomMetadata()
+        if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) host.handleConnectedState()
+        // After the "was this a 1v1" read above, since a third participant joining is exactly what
+        // downgrades `1on1` to instant — re-resolving first would make the read miss the transition.
+        host.resolveCallType()
         participantManager.updateAwaitingJoinInvitees()
     }
 
@@ -497,15 +501,6 @@ internal class RoomEventDispatcher(
         // 重连（track 可能是新对象、或底层流已替换）后新帧能恢复，避免永久卡在最后一帧。
         callUiController.incrementReconnectCount()
         participantManager.screenSharingUser.value?.let { checkRemoteUserScreenShare(it) }
-    }
-
-    private fun refreshRoomMetadata() {
-        val metadata = room.metadata?.takeIf { it.isNotBlank() } ?: return
-        scope.launch(Dispatchers.Default) {
-            runCatching { json.decodeFromString<RoomMetadata>(metadata) }
-                .onSuccess { decoded -> roomCtl.updateRoomMetadata(decoded) }
-                .onFailure { e -> L.e(e) { "[Call] RoomEventDispatcher metadata parse failed" } }
-        }
     }
 
     private fun onConnectionQualityChanged(participant: Participant, quality: ConnectionQuality) {

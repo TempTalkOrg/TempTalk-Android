@@ -623,6 +623,16 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     /**
+     * Single-pass lock check for the notification-gate path. Unlike [triggerScreenLockCheck]'s full
+     * 1100ms second pass, this won't re-show the lock right after a fast unlock+replay (which for
+     * lock-immediately users would force a second unlock). The bounded retry inside
+     * showScreenLockIfNeeded still covers a not-yet-resumed activity.
+     */
+    fun triggerScreenLockCheckOnce() {
+        scheduleQuickScreenLockCheck()
+    }
+
+    /**
      * Check whether to show the screen lock on foreground/background transitions.
      * The deeplink flow re-triggers this check in handleDeeplink().
      */
@@ -676,25 +686,51 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
     }
 
-    private fun showScreenLockIfNeeded() {
-        val userData = userManager.getUserData()
+    /**
+     * Popup gate for [MainActivity.processIntent]. The positional `is ScreenLockActivity` is an
+     * early-out only (the lock screen is already paused at popup-decision time, so it false-negatives
+     * in the bug scenario); shouldShowScreenLock is the authoritative check. recentlyUnlocked lets a
+     * just-unlocked replay through.
+     */
+    fun isScreenLockRequiredOrShowing(): Boolean {
+        if (ScreenLockUtil.recentlyUnlocked) return false
+        if (currentResumedActivity?.get() is ScreenLockActivity) return true
+        val userData = userManager.getUserData() ?: return false
+        return shouldShowScreenLock(userData)
+    }
+
+    /**
+     * Shows the app lock, rescheduling a bounded retry (3×150ms) when no resumed Activity is
+     * available yet instead of giving up. Re-evaluates shouldShowScreenLock each hop and
+     * self-terminates once backgrounded (startedActivityCount == 0), so it never outlives a
+     * background transition.
+     */
+    private fun showScreenLockIfNeeded(retriesLeft: Int = 3) {
         val activity = currentResumedActivity?.get()
 
-        // 如果当前就是锁屏页，不需要重复启动
+        // Never stack a second lock screen.
         if (activity is ScreenLockActivity) {
             L.d { "[ScreenLock] Already showing ScreenLockActivity" }
             return
         }
 
-        if (userData != null && shouldShowScreenLock(userData)) {
-            if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
-                L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
-                ScreenLockActivity.startActivity(activity)
-            } else {
-                L.w { "[ScreenLock] No valid activity to start ScreenLockActivity" }
+        val userData = userManager.getUserData()
+        if (userData == null || !shouldShowScreenLock(userData)) {
+            L.d { "[ScreenLock] Lock not needed" }
+            return
+        }
+
+        if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+            L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
+            ScreenLockActivity.startActivity(activity)
+        } else if (retriesLeft > 0 && startedActivityCount > 0) {
+            L.i { "[ScreenLock] No valid activity yet, retrying (retriesLeft=$retriesLeft)" }
+            launch(Dispatchers.Main) {
+                delay(150)
+                showScreenLockIfNeeded(retriesLeft - 1)
             }
         } else {
-            L.d { "[ScreenLock] Lock not needed" }
+            L.w { "[ScreenLock] Gave up starting ScreenLockActivity: retriesLeft=$retriesLeft, startedActivityCount=$startedActivityCount" }
         }
     }
 

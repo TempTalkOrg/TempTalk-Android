@@ -15,7 +15,6 @@ import androidx.appcompat.widget.AppCompatTextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
@@ -34,12 +33,15 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ConversationSetRequestBody
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import com.luck.picture.lib.entity.LocalMedia
-import util.FileUtils
+import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.mediasend.MediaMetadataSource
 import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.MediaSendFailureNotice
 import com.difft.android.chat.mediasend.VideoTrimTransform
-import org.thoughtcrime.securesms.video.VideoUtil
+import com.difft.android.chat.mediasend.mediaKey
+import com.difft.android.chat.mediasend.readableUri
+import com.difft.android.video.VideoUtil
 import com.difft.android.chat.mediasend.v2.HudCommand
 import com.difft.android.chat.mediasend.v2.MediaAnimations
 import com.difft.android.chat.mediasend.v2.MediaSelectionActivity
@@ -55,13 +57,13 @@ import com.difft.android.chat.util.adapter.mapping.MappingAdapter
 import com.difft.android.chat.util.fragments.requireListener
 import com.difft.android.chat.util.views.TouchInterceptingFrameLayout
 import com.difft.android.chat.util.visible
-import org.thoughtcrime.securesms.video.TranscodingQuality
+import com.difft.android.video.TranscodingQuality
 import com.difft.android.chat.video.videoconverter.VideoThumbnailsRangeSelectorView
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
-import java.io.File
+import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.annotation.meta.Exhaustive
@@ -327,23 +329,55 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
     }
 
     private fun performSend() {
-        progressWrapper.visible = true
-        progressWrapper.animate()
-            .setStartDelay(300)
-            .setInterpolator(MediaAnimations.interpolator)
-            .alpha(1f)
+        showSendProgress(true)
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val result = sharedViewModel.send()
-                callback.onSentWithResult(result)
+                val outcome = sharedViewModel.send()
+                val sentCount = outcome.result.media.size
+                when {
+                    outcome.failures.isEmpty() -> callback.onSentWithResult(outcome.result)
+                    sentCount == 0 -> {
+                        showSendProgress(false)
+                        MediaSendFailureNotice.showAllFailed(requireContext(), outcome.failures) { performSend() }
+                    }
+                    else -> {
+                        showSendProgress(false)
+                        MediaSendFailureNotice.showPartial(requireContext(), outcome.failures, sentCount) {
+                            callback.onSentWithResult(outcome.result)
+                        }
+                    }
+                }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                showSendProgress(false)
                 callback.onSendError(e)
             }
         }
     }
+
+    /**
+     * The overlay intercepts every touch, so any path that stops sending without hiding it again
+     * leaves the whole screen frozen with no way out but killing the process.
+     */
+    private fun showSendProgress(show: Boolean) {
+        progressWrapper.animate().cancel()
+        if (show) {
+            progressWrapper.visible = true
+            progressWrapper.alpha = 0f
+            progressWrapper.animate()
+                .setStartDelay(300)
+                .setInterpolator(MediaAnimations.interpolator)
+                .alpha(1f)
+        } else {
+            progressWrapper.visible = false
+            progressWrapper.alpha = 0f
+        }
+    }
+
+    /** Retry entry for the host activity's failure dialog. */
+    internal fun retrySend() = performSend()
 
     private fun presentAddMessageEntry(message: CharSequence?) {
         val hasMessage = !message.isNullOrEmpty()
@@ -399,19 +433,29 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         if (!MediaUtil.isVideoType(mediaItem.mimeType) || !MediaConstraints.isVideoTranscodeAvailable()) {
             return
         }
-        val uri = mediaItem.realPath.toUri()
-        val updatedInputInTimeline = videoTimeLine.setInput(uri)
+        val sourceUri = mediaItem.readableUri()
+        val key = mediaItem.mediaKey()
+        // setInput is declared @Throws(IOException) and this runs inside a LiveData observer: an
+        // escape here would abort the whole observer dispatch, not just skip the timeline.
+        val updatedInputInTimeline = try {
+            videoTimeLine.setInput(sourceUri)
+        } catch (e: IOException) {
+            L.w { "[MediaAccess] timeline input rejected scheme=${sourceUri.scheme} cause=${e.javaClass.simpleName}" }
+            return
+        }
         if (updatedInputInTimeline) {
             videoTimeLine.unregisterDragListener()
         }
-        val size: Long = FileUtils.getFileLength(mediaItem.realPath)
+        // MediaStore SIZE rather than a file probe: the bare path is exactly what may be
+        // unreadable, and a failed probe would report 0 and silently skip the duration cap.
+        val size: Long = MediaMetadataSource.sizeBytes(mediaItem)
         val maxSend = sharedViewModel.getMediaConstraints().getVideoMaxSize(requireContext())
         if (size > maxSend) {
             videoTimeLine.setTimeLimit(state.transcodingPreset.calculateMaxVideoUploadDurationInSeconds(maxSend), TimeUnit.SECONDS)
         }
 
         if (state.isTouchEnabled) {
-            val data = state.getOrCreateVideoTrimData(uri)
+            val data = state.getOrCreateVideoTrimData(key)
 
             if (data.totalInputDurationUs > 0) {
                 videoTimeLine.setRange(data.startTimeUs, data.endTimeUs)
@@ -421,13 +465,23 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
 
     private fun presentVideoSizeHint(state: MediaSelectionState) {
         val focusedMedia = state.focusedMedia ?: return
-        val trimData = state.getOrCreateVideoTrimData(focusedMedia.realPath.toUri())
+        val trimData = state.getOrCreateVideoTrimData(focusedMedia.mediaKey())
 
-        videoSizeHint.text = if (state.isVideoTrimmingVisible) {
-            val seconds = trimData.getDuration().inWholeSeconds
-            val bytes = calculateExpectedFileSize(focusedMedia, trimData, state)
+        if (!state.isVideoTrimmingVisible) {
+            videoSizeHint.text = null
+            return
+        }
+
+        val durationMs = MediaMetadataSource.durationMs(focusedMedia, trimData.getDuration().inWholeMilliseconds)
+        val bytes = calculateExpectedFileSize(focusedMedia, trimData, state)
+        // Hiding beats lying: "0:00 • 0.0MB" presents a failed read as a fact, which is exactly how
+        // the original defect stayed invisible. When the source really is unreadable the
+        // user-facing signal belongs on the send-time failure surface, not on this hint.
+        videoSizeHint.text = if (durationMs > 0 && bytes > 0) {
+            val seconds = durationMs / 1000
             String.format(Locale.getDefault(), "%d:%02d • %s", seconds / 60, seconds % 60, MemoryUnitFormat.formatBytes(bytes, MemoryUnitFormat.MEGA_BYTES, true))
         } else {
+            L.w { "[MediaAccess] size hint unavailable durationMs=$durationMs bytes=$bytes" }
             null
         }
     }
@@ -435,35 +489,38 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
     /**
      * Calculate expected file size based on whether compression will be needed.
      * Returns original file size if no compression needed, otherwise returns estimated compressed size.
+     *
+     * Pure arithmetic over already-known metadata: this runs on the main thread from a LiveData
+     * observer, and the file probes it replaces both blocked that thread and reported 0 for a
+     * gallery item whose bare path cannot be opened. -1 means unknown and the caller hides the hint.
      */
     private fun calculateExpectedFileSize(media: LocalMedia, trimData: com.difft.android.chat.mediasend.v2.videos.VideoTrimData, state: MediaSelectionState): Long {
-        val fileSize = File(media.realPath).length()
+        val fileSize = MediaMetadataSource.sizeBytes(media)
+        // Same duration the hint displays: the timeline reports nothing until it has read the
+        // source, and an estimate over a 0ms duration is 0 bytes, which hides the hint on an item
+        // whose duration the MediaStore row knew all along.
+        val durationMs = MediaMetadataSource.durationMs(media, trimData.getDuration().inWholeMilliseconds)
 
         // Trimming always requires transcode -> show estimated size
         if (trimData.isDurationEdited) {
-            return TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+            return TranscodingQuality.createFromPreset(state.transcodingPreset, durationMs).byteCountEstimate
         }
 
-        // Check if compression is needed
+        // Check if compression is needed. An unknown bitrate (-1) makes needsCompression take its
+        // conservative branch, matching what VideoTrimTransform will decide at send time.
         val constraints = MediaConstraints.getPushMediaConstraints(state.quality)
         val maxFileSize = constraints.getCompressedVideoMaxSize(requireContext())
-        val (inputBitRate, targetBitRate) = getBitrateInfo(media.realPath, constraints)
+        val preset = constraints.videoTranscodingSettings
+        val inputBitRate = VideoUtil.inputBitRate(fileSize, MediaMetadataSource.durationMs(media))
+        val targetBitRate = preset.videoBitRate + preset.audioBitRate
 
         val compressionNeeded = VideoTrimTransform.needsCompression(inputBitRate, targetBitRate, fileSize, maxFileSize)
 
         return if (compressionNeeded) {
-            TranscodingQuality.createFromPreset(state.transcodingPreset, trimData.getDuration().inWholeMilliseconds).byteCountEstimate
+            TranscodingQuality.createFromPreset(state.transcodingPreset, durationMs).byteCountEstimate
         } else {
             fileSize // No compression, fast remux keeps original size
         }
-    }
-
-    /**
-     * Get input bitrate and target bitrate for compression decision.
-     */
-    private fun getBitrateInfo(inputPath: String, constraints: MediaConstraints): Pair<Int, Int> {
-        val preset = constraints.videoTranscodingSettings
-        return VideoUtil.getBitrateInfo(inputPath, preset.videoBitRate, preset.audioBitRate)
     }
 
     private fun computeViewStateAndAnimate(state: MediaSelectionState) {

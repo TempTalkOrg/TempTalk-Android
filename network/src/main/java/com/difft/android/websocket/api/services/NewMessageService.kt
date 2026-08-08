@@ -71,7 +71,7 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
         val responseMapper = DefaultResponseMapper.extend(
             NewSendMessageResponse::class.java
         )
-            .withResponseMapper { status: Int, body: String?, getHeader: Function<String?, String?>? ->
+            .withResponseMapper { status: Int, body: String, getHeader: Function<String, String> ->
                 val newSendMessageResponse =
                     if (Util.isEmpty(body)) NewSendMessageResponse(
                         0, 0, "",
@@ -84,14 +84,14 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
             }
             .withCustomError(
                 404
-            ) { status: Int, body: String?, getHeader: Function<String?, String?>? ->
+            ) { status: Int, body: String, getHeader: Function<String, String> ->
                 NotFoundException(
                     "not found"
                 )
             }
             .withCustomError(
                 409
-            ) { status: Int, errorBody: String?, getHeader: Function<String?, String?>? ->
+            ) { status: Int, errorBody: String, getHeader: Function<String, String> ->
                 if (isGroup) {
                     return@withCustomError GroupMismatchedDevicesException(
                         JsonUtil.fromJsonResponse<Array<GroupMismatchedDevices>>(
@@ -110,7 +110,7 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
             }
             .withCustomError(
                 410
-            ) { status: Int, errorBody: String?, getHeader: Function<String?, String?>? ->
+            ) { status: Int, errorBody: String, getHeader: Function<String, String> ->
                 if (isGroup) {
                     return@withCustomError GroupStaleDevicesException(
                         JsonUtil.fromJsonResponse<Array<GroupStaleDevices>>(

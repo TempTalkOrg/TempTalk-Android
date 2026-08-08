@@ -50,7 +50,7 @@ import com.difft.android.call.handler.RtmMessageHandler
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.session.CallObservers
 import com.difft.android.call.session.CallSessionStarter
-import com.difft.android.call.session.InstantCallConverter
+import com.difft.android.call.session.CallTypeCoordinator
 import com.difft.android.call.session.createRtmHandler
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.screenshare.ScreenShareFallbackSource
@@ -106,7 +106,12 @@ class LCallViewModel @AssistedInject constructor(
     private val proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider,
 ) : AndroidViewModel(application) {
 
-    private val json = Json { ignoreUnknownKeys = true }
+    // coerceInputValues so an explicit `null` for a non-null field falls back to its default rather
+    // than failing the decode — room metadata must parse field-by-field (see [RoomMetadataPatch]).
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
     private var cameraProvider: CameraCapturerUtils.CameraProvider? = null
 
     private val mySelfId: String by lazy { globalServices.myId }
@@ -249,7 +254,7 @@ class LCallViewModel @AssistedInject constructor(
             resetNoBodySpeakCheckFn = ::resetNoBodySpeakCheck,
             sendHangUpBroadcastFn = ::sendHangUpBroadcast,
             stopRingToneAndTimeoutCheckFn = ::stopRingToneAndTimeoutCheck,
-            switchToInstantCallFn = ::switchToInstantCall,
+            resolveCallTypeFn = { callTypeCoordinator.resolveNow() },
             handleConnectedStateFn = ::handleConnectedState,
             onFeedbackIdentityResolvedFn = feedbackBinder::onIdentityResolved,
             onNetworkPoorStateChangedFn = { feedbackBinder.currentCallNetworkPoor = it },
@@ -273,24 +278,31 @@ class LCallViewModel @AssistedInject constructor(
             speakerState = speakerState,
             callDataManager = callDataManager,
             statisticsLogManager = callStatisticsLogManager,
-            json = json,
             mySelfId = mySelfId,
             host = roomEventHost,
         )
     }
     private val roomEventDispatcher by _roomEventDispatcherLazy
 
-    private val instantCallConverter by lazy {
-        InstantCallConverter(
+    private val _callTypeCoordinatorLazy = lazy {
+        CallTypeCoordinator(
             scope = viewModelScope,
+            // Non-throwing accessor: the coordinator's room.metadata collector lives in
+            // viewModelScope and can process a late emission after disconnectAndRelease() flipped
+            // `released`; the fail-loud `room` getter would crash there ("room accessed after
+            // release"). roomOrNull() yields null once released so that emission is dropped.
+            roomProvider = { roomCtl.roomOrNull() },
+            roomCtl = roomCtl,
             callDataManager = callDataManager,
             contactorCacheManager = contactorCacheManager,
-            roomCtl = roomCtl,
             callIntent = callIntent,
             callRole = callRole,
             mySelfId = mySelfId,
+            json = json,
+            roomIdGetter = { roomId },
         )
     }
+    private val callTypeCoordinator by _callTypeCoordinatorLazy
 
     private val sessionStarter by lazy {
         CallSessionStarter(
@@ -339,6 +351,9 @@ class LCallViewModel @AssistedInject constructor(
         initRtmHandler()
         if (roomCtl.isReleaseIntended()) { L.i { "[Call] Phase B abort: release in flight" }; return }
         applyInitialVoicePreset()
+        // Before the room events collector: the coordinator subscribes to room.metadata, whose
+        // current value already carries the authoritative callType by the time Connected is handled.
+        callTypeCoordinator.start()
         roomEventDispatcher.startCollectingRoomEvents()
         roomEventDispatcher.startCollectingParticipants()
         CallObservers.register(
@@ -369,7 +384,7 @@ class LCallViewModel @AssistedInject constructor(
     fun getRoomId(): String? = roomId
 
     fun getCallRoomName(): String {
-        val name = instantCallConverter.currentRoomName
+        val name = callTypeCoordinator.currentRoomName
         // Read the participants StateFlow (already includes the local participant, so its
         // size equals room.remoteParticipants.size + 1) instead of touching the fail-loud
         // room getter. This Composable is invoked imperatively during recomposition and can
@@ -430,13 +445,15 @@ class LCallViewModel @AssistedInject constructor(
         timerManager.startCallTimer { show -> roomId?.let { onGoingCallStateManager.updateCallingTime(it, show) } }
     }
 
+    /** See [CallTypeCoordinator.applyInviteUpgrade]. */
+    fun applyInviteUpgrade() = callTypeCoordinator.applyInviteUpgrade()
+
     fun stopRingToneAndTimeoutCheck() {
         callRingtoneManager.stopRingTone()
         callVibrationManager.stopVibration()
         timeoutMonitor.cancelIfActive()
     }
 
-    fun switchToInstantCall() = instantCallConverter.switchToInstantCall(roomId)
     fun doExitClear() = cleanupExecutor.start(reason = "doExitClear", steps = buildCleanupSteps())
 
     override fun onCleared() {
@@ -459,6 +476,7 @@ class LCallViewModel @AssistedInject constructor(
         screenShareFloatingSpeakerStateHolder = _screenShareSpeakerLazy.takeIf { it.isInitialized() }?.value,
         screenSharePreWarmer = screenSharePreWarmer,
         roomEventDispatcher = _roomEventDispatcherLazy.takeIf { it.isInitialized() }?.value,
+        callTypeCoordinator = _callTypeCoordinatorLazy.takeIf { it.isInitialized() }?.value,
         statisticsLogManager = callStatisticsLogManager,
         feedbackBinder = feedbackBinder,
         shouldTriggerFeedbackView = { shouldTriggerFeedbackView() },
@@ -505,7 +523,15 @@ class LCallViewModel @AssistedInject constructor(
     else
         callStatus.value == CallStatus.CONNECTED || callStatus.value == CallStatus.RECONNECTED
 
-    private fun getCurrentCallType(): String = callDataManager.getCallData(roomId)?.type ?: ""
+    /**
+     * The single in-call source of truth for the meeting type, written only by [CallTypeCoordinator].
+     *
+     * Previously read `CallData.type`, which the UI never consulted and which is not populated until
+     * an outbound call has processed `ttCallResp` — so room-event handlers could branch on an empty
+     * type while the UI already showed the right one. Reading `roomCtl.callType` puts both on the
+     * same value; the coordinator mirrors it onto `CallData.type` for the exit-semantics path.
+     */
+    private fun getCurrentCallType(): String = roomCtl.callType.value
     private fun checkCriticalAlertStatusById(callIntent: CallIntent) = criticalAlertDispatcher.refreshGroupStatus(callIntent)
 
     private fun showToastMessage(message: String) {

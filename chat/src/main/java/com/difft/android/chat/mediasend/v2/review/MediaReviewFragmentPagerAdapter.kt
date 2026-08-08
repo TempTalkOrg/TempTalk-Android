@@ -1,11 +1,11 @@
 package com.difft.android.chat.mediasend.v2.review
 
-import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.chat.mediasend.readableUri
 import com.difft.android.chat.mediasend.v2.gif.MediaReviewGifPageFragment
 import com.difft.android.chat.mediasend.v2.images.MediaReviewImagePageFragment
 import com.difft.android.chat.mediasend.v2.videos.MediaReviewVideoPageFragment
@@ -31,18 +31,20 @@ class MediaReviewFragmentPagerAdapter(fragment: Fragment) : androidx.viewpager2.
             return RecyclerView.NO_ID
         }
 
-        return mediaList[position].realPath.toUri().hashCode().toLong()
+        return mediaList[position].readableUri().hashCode().toLong()
     }
 
     override fun containsItem(itemId: Long): Boolean {
-        return mediaList.any { it.realPath.toUri().hashCode().toLong() == itemId }
+        return mediaList.any { it.readableUri().hashCode().toLong() == itemId }
     }
 
     override fun getItemCount(): Int = mediaList.size
 
     override fun createFragment(position: Int): Fragment {
         val mediaItem: LocalMedia = mediaList[position]
-        val mediaUri = mediaItem.realPath.toUri()
+        // Root of the whole derivation chain: this URI becomes each page fragment's ARG_URI, from
+        // which every editor-state key and every preview sink downstream is derived.
+        val mediaUri = mediaItem.readableUri()
         return when {
             MediaUtil.isGif(mediaItem.mimeType) -> MediaReviewGifPageFragment.newInstance(mediaUri)
             MediaUtil.isImageType(mediaItem.mimeType) -> MediaReviewImagePageFragment.newInstance(mediaUri)
@@ -62,7 +64,8 @@ class MediaReviewFragmentPagerAdapter(fragment: Fragment) : androidx.viewpager2.
         override fun getNewListSize(): Int = newList.size
 
         override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-            return oldList[oldItemPosition].realPath == newList[newItemPosition].realPath
+            // Same identity notion as getItemId / containsItem, so the two cannot drift apart.
+            return oldList[oldItemPosition].readableUri() == newList[newItemPosition].readableUri()
         }
 
         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {

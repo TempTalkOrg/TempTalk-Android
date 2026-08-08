@@ -84,7 +84,7 @@ import org.difft.app.database.models.DBGroupModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.RoomModel
-import util.FileUtils
+import util.FileSystemUtils
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.util.MediaUtil
 import java.io.File
@@ -886,7 +886,7 @@ class SelectChatsUtils @Inject constructor(
         fileHash: String
     ) {
         val attachment = forward.attachments?.find { attachment -> attachment.id == attachmentId }
-        attachment?.digest = FileUtils.decodeDigestHex(fileExistResp.cipherHash)
+        attachment?.digest = FileSystemUtils.decodeDigestHex(fileExistResp.cipherHash)
         attachment?.authorityId = fileExistResp.authorizeId
         attachment?.fileHash = fileHash
 
@@ -991,15 +991,15 @@ class SelectChatsUtils @Inject constructor(
         val timeStamp = getSafeTimestamp()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
-        val fileName = FileUtils.getFileName(attachmentUri.path)
+        val fileName = FileSystemUtils.getFileName(attachmentUri.path)
         //copy file
         try {
             val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-            FileUtils.copy(attachmentUri.path, filePath)
+            FileSystemUtils.copy(attachmentUri.path, filePath)
 
             val mimeType = MediaUtil.getMimeType(com.difft.android.base.utils.application, filePath.toUri()) ?: ""
             val mediaWidthAndHeight = MediaUtil.getMediaWidthAndHeight(filePath, mimeType)
-            val fileSize = FileUtils.getLength(filePath)
+            val fileSize = FileSystemUtils.getLength(filePath)
 
             val attachment = Attachment(
                 messageId,

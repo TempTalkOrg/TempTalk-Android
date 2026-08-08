@@ -1,12 +1,12 @@
 package com.difft.android.chat.mediasend.v2
 
-import android.net.Uri
-import com.luck.picture.lib.entity.LocalMedia
+import com.difft.android.selector.entity.LocalMedia
+import com.difft.android.chat.mediasend.MediaKey
 import com.difft.android.chat.mediasend.v2.videos.VideoTrimData
 import com.difft.android.chat.mms.MediaConstraints
 import com.difft.android.chat.mms.SentMediaQuality
 import com.difft.android.chat.util.MediaUtil
-import org.thoughtcrime.securesms.video.TranscodingPreset
+import com.difft.android.video.TranscodingPreset
 
 data class MediaSelectionState(
     val selectedMedia: List<LocalMedia> = listOf(),
@@ -17,7 +17,15 @@ data class MediaSelectionState(
     val isSent: Boolean = false,
     val isPreUploadEnabled: Boolean = false,
     val isMeteredConnection: Boolean = false,
-    val editorStateMap: Map<Uri, Any> = mapOf(),
+    /**
+     * Editor state (crop / drawing / trim) by media identity.
+     *
+     * Keyed by [MediaKey] rather than a plain `Uri` so that every writer and reader is forced
+     * through the single key derivation: a key written from one URI shape and read from another
+     * discards the user's edit with no error at all, which the compiler can only catch if the key
+     * domain is its own type. Not persisted and not parceled, so narrowing the type is free.
+     */
+    val editorStateMap: Map<MediaKey, Any> = mapOf(),
     val suppressEmptyError: Boolean = true,
     val confidentialMode: Int = 0,
     val showConfidentialToggle: Boolean = false
@@ -29,8 +37,8 @@ data class MediaSelectionState(
 
     val canSend = !isSent && selectedMedia.isNotEmpty()
 
-    fun getOrCreateVideoTrimData(uri: Uri): VideoTrimData {
-        return editorStateMap[uri] as? VideoTrimData ?: VideoTrimData()
+    fun getOrCreateVideoTrimData(key: MediaKey): VideoTrimData {
+        return editorStateMap[key] as? VideoTrimData ?: VideoTrimData()
     }
 
     enum class ViewOnceToggleState(val code: Int) {

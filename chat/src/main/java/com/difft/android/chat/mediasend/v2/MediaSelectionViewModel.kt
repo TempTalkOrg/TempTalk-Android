@@ -1,18 +1,20 @@
 package com.difft.android.chat.mediasend.v2
 
 import android.content.Context
-import android.net.Uri
-import androidx.core.net.toUri
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.luck.picture.lib.entity.LocalMedia
+import androidx.lifecycle.viewModelScope
+import com.difft.android.selector.entity.LocalMedia
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.chat.mediasend.MediaSendActivityResult
+import com.difft.android.chat.mediasend.MediaKey
+import com.difft.android.chat.mediasend.mediaKey
 import com.difft.android.chat.mediasend.v2.videos.VideoTrimData
 import com.difft.android.chat.mms.MediaConstraints
 import com.difft.android.chat.mms.SentMediaQuality
@@ -86,18 +88,18 @@ class MediaSelectionViewModel(
             // Note: We initialize with totalInputDurationUs=0, and the accurate duration will be set
             // when onEditVideoDuration is called with the precise value from MediaExtractor
             val initializedVideoEditorStates = newSelectionList
-                .filterNot { media -> it.editorStateMap.containsKey(media.realPath.toUri()) }
+                .filterNot { media -> it.editorStateMap.containsKey(media.mediaKey()) }
                 .filter { media -> MediaUtil.isVideoType(media.mimeType) }
                 .associate { media: LocalMedia ->
-                    media.realPath.toUri() to VideoTrimData()
+                    media.mediaKey() to VideoTrimData()
                 }
 
             // For images, preserve existing editor states (e.g., drawings, stickers)
             val initializedImageEditorStates = newSelectionList
-                .filterNot { media -> it.editorStateMap.containsKey(media.realPath.toUri()) }
+                .filterNot { media -> it.editorStateMap.containsKey(media.mediaKey()) }
                 .filter { media -> MediaUtil.isImageAndNotGif(media.mimeType) }
                 .associate { media: LocalMedia ->
-                    media.realPath.toUri() to ImageEditorFragment.Data()
+                    media.mediaKey() to ImageEditorFragment.Data()
                 }
 
             it.copy(
@@ -171,7 +173,7 @@ class MediaSelectionViewModel(
             it.copy(
                 selectedMedia = newMediaList,
                 focusedMedia = newFocus,
-                editorStateMap = it.editorStateMap - media.realPath.toUri()
+                editorStateMap = it.editorStateMap - media.mediaKey()
             )
         }
 
@@ -180,7 +182,10 @@ class MediaSelectionViewModel(
         }
 
         selectedMediaSubject.tryEmit(newMediaList)
-        repository.deleteBlobs(listOf(media))
+        // Snapshotted before the coroutine starts so the deletion set is fixed at the moment of
+        // removal. deleteBlobs canonicalizes paths, which is IO and must not run on this thread.
+        val removed = listOf(media)
+        viewModelScope.launch(Dispatchers.IO) { repository.deleteBlobs(removed) }
     }
 
     fun clearMediaErrors() {
@@ -214,8 +219,8 @@ class MediaSelectionViewModel(
 
     fun onEditVideoDuration(context: Context, totalDurationUs: Long, startTimeUs: Long, endTimeUs: Long, touchEnabled: Boolean) {
         store.update {
-            val uri = it.focusedMedia?.realPath?.toUri() ?: return@update it
-            val data = it.getOrCreateVideoTrimData(uri)
+            val key = it.focusedMedia?.mediaKey() ?: return@update it
+            val data = it.getOrCreateVideoTrimData(key)
             val clampedStartTime = max(startTimeUs, 0)
 
             val unedited = !data.isDurationEdited
@@ -245,26 +250,26 @@ class MediaSelectionViewModel(
 
             it.copy(
                 isTouchEnabled = touchEnabled,
-                editorStateMap = it.editorStateMap + (uri to updatedData)
+                editorStateMap = it.editorStateMap + (key to updatedData)
             )
         }
     }
 
-    fun getEditorState(uri: Uri): Any? {
-        return store.state.editorStateMap[uri]
+    fun getEditorState(key: MediaKey): Any? {
+        return store.state.editorStateMap[key]
     }
 
-    fun setEditorState(uri: Uri, state: Any) {
+    fun setEditorState(key: MediaKey, state: Any) {
         store.update {
-            it.copy(editorStateMap = it.editorStateMap + (uri to state))
+            it.copy(editorStateMap = it.editorStateMap + (key to state))
         }
     }
 
     suspend fun send(
         scheduledDate: Long? = null
-    ): MediaSendActivityResult = send()
+    ): MediaSendOutcome = send()
 
-    suspend fun send(): MediaSendActivityResult {
+    suspend fun send(): MediaSendOutcome {
         return repository.send(
             selectedMedia = store.state.selectedMedia,
             stateMap = store.state.editorStateMap,
