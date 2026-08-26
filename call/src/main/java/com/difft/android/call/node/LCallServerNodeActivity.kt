@@ -9,14 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallEngine
 import com.difft.android.call.R
@@ -72,33 +72,45 @@ class LCallServerNodeActivity : BaseActivity() {
         val serverNodeSelected by viewModel.serverNodeSelected.collectAsState()
         val connectionType by viewModel.connectionType.collectAsState()
         val isLoading by viewModel.isLoading.collectAsState()
-        val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFF5F5F5))
-                .padding(top = topInset)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (serverNodeConnected != null) {
-                ConnectionStatusCard(serverNodeConnected, connectionType, connected = true)
-            } else {
-                val server = serverNodeSelected ?: servers.firstOrNull()
-                ConnectionStatusCard(server, connectionType, connected = false)
-            }
-            ServerSelectionCard(
-                servers = servers.toList(),
-                isLoading = isLoading,
-                onServerSelected = { server ->
-                    ToastUtil.show(getString(R.string.call_server_node_select_route, server.name))
-                    LCallEngine.setSelectedServerNode(server)
-                },
-                onRefresh = { viewModel.refresh() },
-            )
-            if (showUpstreamSection) {
-                UpstreamServersCard(servers = upstreamServers.toList())
+        // The dashboard body below hardcodes a light palette, so pin the light theme
+        // for the whole page (title bar included) until the page is DifftTheme-ized.
+        DifftTheme(darkTheme = false) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFF5F5F5))
+                    .systemBarsPadding()
+            ) {
+                TitleBar(
+                    titleText = stringResource(R.string.call_server_node_page_title),
+                    onBackClick = { finish() }
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (serverNodeConnected != null) {
+                        ConnectionStatusCard(serverNodeConnected, connectionType, connected = true)
+                    } else {
+                        val server = serverNodeSelected ?: servers.firstOrNull()
+                        ConnectionStatusCard(server, connectionType, connected = false)
+                    }
+                    ServerSelectionCard(
+                        servers = servers.toList(),
+                        isLoading = isLoading,
+                        onServerSelected = { server ->
+                            ToastUtil.show(getString(R.string.call_server_node_select_route, server.name))
+                            LCallEngine.setSelectedServerNode(server)
+                        },
+                        onRefresh = { viewModel.refresh() },
+                    )
+                    if (showUpstreamSection) {
+                        UpstreamServersCard(servers = upstreamServers.toList())
+                    }
+                }
             }
         }
     }

@@ -46,6 +46,8 @@ class MessageForegroundService : Service() {
     @InstallIn(SingletonComponent::class)
     interface ServiceEntryPoint {
         fun webSocketManager(): WebSocketManager
+
+        fun messageServiceManager(): MessageServiceManager
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("MessageForegroundService") + dbKeyFailSoftExceptionHandler)
@@ -91,6 +93,11 @@ class MessageForegroundService : Service() {
                 val entryPoint = EntryPointAccessors.fromApplication(
                     applicationContext, ServiceEntryPoint::class.java
                 )
+                // Instantiate the manager so alarm-chain self-healing is active even on a
+                // START_STICKY revival where no other component touches it. Isolated so a
+                // manager-graph construction failure cannot block the WebSocket start below.
+                runCatching { entryPoint.messageServiceManager() }
+                    .onFailure { L.e { "[MessageForegroundService] Failed to init MessageServiceManager: ${it.stackTraceToString()}" } }
                 entryPoint.webSocketManager().start()
             } catch (e: Exception) {
                 L.e { "[MessageForegroundService] Failed to start WebSocket: ${e.stackTraceToString()}" }

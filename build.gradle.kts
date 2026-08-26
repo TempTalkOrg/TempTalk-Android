@@ -25,6 +25,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.roborazzi) apply false
     alias(libs.plugins.detekt) apply false
+    alias(libs.plugins.androidx.benchmark) apply false
 }
 
 // Detekt — apply to all subprojects EXCEPT :detekt-rules itself.
@@ -157,10 +158,16 @@ allprojects {
                 (requested.name == "bcprov-jdk18on" ||
                     requested.name == "bcpkix-jdk18on" ||
                     requested.name == "bcutil-jdk18on")) {
-                useVersion("1.84")
-                because("Fix CVE: Broken Crypto Algorithm, Timing Attack, LDAP Injection")
+                useVersion("1.85")
+                because("Fix CVE: cert validation bypass (CVE-2026-8763/58062), input validation (CVE-2026-59650), signature verification bypass (CVE-2026-12860/59639), integrity check validation (CVE-2026-12802/12803/12816/58061/59642), oversized memory allocation (CVE-2026-12185/14682/58060), uncontrolled recursion (CVE-2026-13506/59645), inadequate encryption strength (CVE-2026-59651), algorithmic complexity DoS (CVE-2026-58059), unbounded resource allocation (CVE-2026-13586/15055/58063/59647) — plus the 1.84 fixes for Broken Crypto Algorithm, Timing Attack, LDAP Injection")
             }
-            if (requested.group == "com.google.protobuf" &&
+            // AGP's Unified Test Platform (connectedAndroidTest runner) is compiled
+            // against protobuf 4.x (references RuntimeVersion, absent in 3.x); forcing
+            // 3.25.5 onto its internal configurations crashes the UTP worker. The CVE
+            // pin below targets app/runtime classpaths, which never see these configs.
+            val isUtpConfig = name.startsWith("unified-test-platform")
+            if (!isUtpConfig &&
+                requested.group == "com.google.protobuf" &&
                 (requested.name == "protobuf-java" ||
                     requested.name == "protobuf-javalite" ||
                     requested.name == "protobuf-kotlin-lite")) {

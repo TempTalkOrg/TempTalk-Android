@@ -50,6 +50,8 @@ object AppStateKeys {
     val VOICE_PLAYBACK_SPEED = floatPreferencesKey("voice_playback_speed")
     val DUAL_PANE_RATIO = floatPreferencesKey("dual_pane_ratio")
     val CALL_VOICE_CHANGER_PRESET = stringPreferencesKey("call_voice_changer_preset")
+    val CALL_MIC_PERMISSION_REQUESTED = booleanPreferencesKey("call_mic_permission_requested")
+    val CALL_CAMERA_PERMISSION_REQUESTED = booleanPreferencesKey("call_camera_permission_requested")
     val KEEP_ALIVE_ENABLED = booleanPreferencesKey("keep_alive_enabled")
     val AUTO_START_MESSAGE_SERVICE = booleanPreferencesKey("auto_start_message_service")
     val MESSAGE_SERVICE_TIPS_SHOWED_VERSION = stringPreferencesKey("message_service_tips_showed_version")
@@ -143,6 +145,8 @@ object AppStateDefaults {
     /** Sentinel -1f = no user override; UI falls back to mode default (mirrors DualPaneRatioUtil.NO_OVERRIDE). */
     const val DUAL_PANE_RATIO = -1f
     const val CALL_VOICE_CHANGER_PRESET = "original"
+    const val CALL_MIC_PERMISSION_REQUESTED = false
+    const val CALL_CAMERA_PERMISSION_REQUESTED = false
     const val KEEP_ALIVE_ENABLED = false
     const val AUTO_START_MESSAGE_SERVICE = true
     /** Nullable-string sentinel — see [MOST_USE_EMOJIS]. */

@@ -37,6 +37,7 @@ import com.difft.android.chat.databinding.ChatItemChatMessageListNotifyBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextMineBinding
 import com.difft.android.chat.databinding.ChatItemChatMessageListTextOthersBinding
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
@@ -100,7 +101,8 @@ sealed class MessageCallbacks {
      * 预留用于扩展通知消息特有的交互（如接受好友请求等）
      */
     data class NotifyInteraction(
-        val placeholder: Unit = Unit
+        val placeholder: Unit = Unit,
+        val onE2eeHeaderClick: (() -> Unit)? = null,
     ) : MessageCallbacks()
 }
 
@@ -830,8 +832,20 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             // 使用 ContentBinder 绑定内容（Notify消息不需要saveToPhotos，使用默认值false）
             contentBinder.bind(binding.contentFrame, message, contactorCache, shouldSaveToPhotos, containerWidth)
 
-            // 未来可以在这里使用 cb 中的回调
-            // 例如：cb.onAcceptFriendRequest?.(message)
+            if (message is EncryptionHeaderChatMessage) {
+                binding.root.minimumHeight = 48.dp // accessibility touch target
+                binding.root.isClickable = true
+                binding.root.setOnClickListener { cb.onE2eeHeaderClick?.invoke() }
+            } else {
+                // Defensive: RecyclerView pools ViewHolders per viewType, not across viewTypes — a
+                // VIEW_TYPE_E2EE_HEADER instance is never recycled into the NOTIFY/SCREENSHOT/
+                // CONFIDENTIAL_PLACEHOLDER pools or vice versa. This else branch exists because
+                // Notify.bind() is the single shared function body all 4 viewTypes' ViewHolders
+                // call — it keeps the other 3 viewTypes' rows non-clickable/listener-free on
+                // every bind, regardless of the if-branch above.
+                binding.root.setOnClickListener(null)
+                binding.root.isClickable = false
+            }
         }
     }
 

@@ -109,6 +109,17 @@ class RoomModel {
     var sendStatus: Int = 0
 
     /**
+     * Whether the conversation holds at least one outgoing message still in Sending state.
+     * 0: none (default) / 1: has a sending outgoing message.
+     * Deliberately a SEPARATE column from [sendStatus]: the two signals are written by
+     * different paths concurrently, and independent cells make the set-vs-clear race
+     * structurally impossible (see RoomSendStatusQueries.kt). Derived, purely local state.
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var sendingStatus: Int = 0
+
+    /**
      * Conversation-level save to photos setting
      * null: Follow global setting (default)
      * 0: Disabled (never)
@@ -140,6 +151,7 @@ class RoomModel {
                 confidentialMode == other.confidentialMode &&
                 criticalAlertType == other.criticalAlertType &&
                 sendStatus == other.sendStatus &&
+                sendingStatus == other.sendingStatus &&
                 roomId == other.roomId &&
                 roomName == other.roomName &&
                 roomAvatarJson == other.roomAvatarJson &&
@@ -170,6 +182,7 @@ class RoomModel {
         confidentialMode,
         criticalAlertType,
         sendStatus,
+        sendingStatus,
         saveToPhotos,
         emptyRoomSince
     )
@@ -195,6 +208,7 @@ class RoomModel {
                 ", confidentialMode=" + confidentialMode +
                 ", criticalAlertType=" + criticalAlertType +
                 ", sendStatus=" + sendStatus +
+                ", sendingStatus=" + sendingStatus +
                 ", saveToPhotos=" + saveToPhotos +
                 ", emptyRoomSince=" + emptyRoomSince +
                 '}'

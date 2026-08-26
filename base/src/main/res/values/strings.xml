@@ -43,15 +43,29 @@
     <string name="preview_dialog_confirm" translatable="false">确定</string>
     <string name="preview_dialog_cancel" translatable="false">取消</string>
 
-    <!-- Network certificate validation failure (possible man-in-the-middle attack) warning -->
-    <string name="net_risk_warning_title">Network Risk Warning</string>
-    <string name="net_risk_warning_message">Application may be running under Man-in-the-middle Attack!</string>
-    <string name="net_risk_warning_ignore">Ignore</string>
-    <string name="net_risk_warning_quit">Quit</string>
+    <!-- Network certificate validation failure (possible man-in-the-middle attack) warning.
+         `_ignore` / `_quit` name the actions they trigger, not the labels shown. -->
+    <string name="net_risk_warning_title">Network Security Warning</string>
+    <string name="net_risk_warning_message">Your current network may not be secure. We recommend switching networks before continuing.</string>
+    <string name="net_risk_warning_ignore">Continue</string>
+    <string name="net_risk_warning_quit">Exit</string>
 
     <!-- Suspicious link (homograph / phishing) open confirmation -->
     <string name="link_safety_warning_title">Security Notice</string>
     <string name="link_safety_confirm_message">We can\'t confirm this link is safe. Open it anyway?\n%1$s</string>
     <string name="link_safety_open_anyway">Open</string>
     <string name="link_safety_cancel">Cancel</string>
+
+    <!-- openExternalBrowser failure (no browser app available on device) -->
+    <string name="base_link_open_failed">Couldn\'t open link</string>
+
+    <!-- E2EE explainer bottom sheet -->
+    <string name="e2ee_sheet_title">Your chats and calls are private</string>
+    <string name="e2ee_sheet_body">End-to-end encryption helps make sure only you and the people you choose to chat with can read messages or listen to calls. No one else can read or listen, not even Quicall. Protected content includes:</string>
+    <string name="e2ee_sheet_item_message">Text and voice messages</string>
+    <string name="e2ee_sheet_item_call">Voice and video calls</string>
+    <string name="e2ee_sheet_item_file">Photos, videos, and files</string>
+    <string name="e2ee_sheet_caveat">End-to-end encryption doesn\'t stop the people you chat with from copying, saving, forwarding, taking screenshots, or recording. Share sensitive content only with people you trust.</string>
+    <string name="e2ee_sheet_got_it">OK</string>
+    <string name="e2ee_learn_more">Learn more</string>
 </resources>

@@ -272,6 +272,7 @@ class SearchActivity : BaseActivity() {
                     // Search results are rendered by the SAME RecentChatViewHolder as the main
                     // conversation list, so omitting this would silently drop the tag here only.
                     sendStatus = room.sendStatus,
+                    sendingStatus = room.sendingStatus,
                     messageExpiry = room.messageExpiry,
                     groupMembersNumber = room.groupMembersNumber
                 )

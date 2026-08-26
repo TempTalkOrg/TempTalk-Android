@@ -1,7 +1,6 @@
 package com.difft.android.chat.group
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -10,8 +9,6 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.ChatMessageViewModelFactory
 import com.difft.android.ChatSettingViewModelFactory
@@ -21,9 +18,9 @@ import com.difft.android.base.android.permission.PermissionUtil.launchSinglePerm
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.InsetAwareConstraintLayout
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.base.utils.SecureModeUtil
@@ -34,10 +31,12 @@ import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
 import com.difft.android.chat.ui.ChatMessageListFragment
 import com.difft.android.chat.ui.ChatMessageListProvider
 import com.difft.android.chat.ui.ChatMessageViewModel
+import com.difft.android.chat.ui.KeyboardPanelHost
+import com.difft.android.chat.ui.popup.PopupChatSheetController
+import com.difft.android.chat.ui.popup.PopupSheetViews
 import com.difft.android.chat.widget.RecordingState
 import com.difft.android.create
 import com.difft.android.network.responses.ConversationSetResponseBody
-import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.hi.dhl.binding.viewbind
 import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
@@ -62,7 +61,7 @@ import javax.inject.Inject
  * Used when opening group chat from group member popup.
  */
 @AndroidEntryPoint
-class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
+class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost {
 
     companion object {
         const val INTENT_EXTRA_GROUP_ID = "INTENT_EXTRA_GROUP_ID"
@@ -120,9 +119,12 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         onAudioPermissionForMessageResult(it)
     }
 
-    private lateinit var bottomSheetBehavior: BottomSheetBehavior<View>
-    private lateinit var bottomSheetCallback: BottomSheetBehavior.BottomSheetCallback
     private lateinit var backPressedCallback: OnBackPressedCallback
+
+    // Constructed eagerly in onCreate rather than by lazy: a child fragment hosted here can call
+    // back into the KeyboardPanelHost overrides below, and a lazy initializer would leave a
+    // reentrancy window where those callbacks touch a half-built controller.
+    private lateinit var sheetController: PopupChatSheetController
 
     // Disable BaseActivity auto padding - this Activity handles insets itself
     override fun shouldApplySystemBarsPadding(): Boolean = false
@@ -136,144 +138,21 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
         chatViewModel
         chatSettingViewModel
 
-        setupBottomSheet()
+        sheetController = PopupChatSheetController(
+            activity = this,
+            views = PopupSheetViews(
+                coordinatorRoot = mBinding.coordinatorRoot,
+                bottomSheet = mBinding.bottomSheet,
+                scrim = mBinding.scrim,
+                dragHandle = mBinding.dragHandle,
+            ),
+        )
+        sheetController.setup()
         setupBackPressedCallback()
 
         lifecycleScope.launch {
             onCreateForShowingMessages(savedInstanceState)
         }
-    }
-
-    private var isBottomSheetConfigured = false
-    private var baseHeight = 0
-    private var navigationBarHeight = 0
-    private var statusBarHeight = 0
-
-    private fun setupBottomSheet() {
-        val bottomSheet = mBinding.bottomSheet
-        val scrim = mBinding.scrim
-
-        // Handle window insets for navigation bar and IME (keyboard)
-        ViewCompat.setOnApplyWindowInsetsListener(mBinding.coordinatorRoot) { _, insets ->
-            navigationBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            val imeHeight = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            val isImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-
-            // Configure bottom sheet behavior only once (to get base height)
-            if (!isBottomSheetConfigured) {
-                configureBottomSheetBehavior(bottomSheet, scrim)
-                isBottomSheetConfigured = true
-            }
-
-            // Handle keyboard visibility (skip during maximize animation)
-            if (!isMaximizeAnimating) {
-                if (isImeVisible && imeHeight > 0) {
-                    // Keyboard is visible - expand bottom sheet height and add keyboard padding
-                    val newHeight = baseHeight + imeHeight
-                    bottomSheet.layoutParams = bottomSheet.layoutParams.apply {
-                        height = newHeight
-                    }
-                    bottomSheet.setPadding(0, 0, 0, imeHeight)
-                    bottomSheetBehavior.peekHeight = newHeight
-                } else {
-                    // Keyboard is hidden - only adjust padding, keep height to avoid jump during drag
-                    bottomSheet.setPadding(0, 0, 0, navigationBarHeight)
-                }
-            }
-
-            insets
-        }
-        mBinding.coordinatorRoot.requestApplyInsets()
-    }
-
-    private fun configureBottomSheetBehavior(bottomSheet: View, scrim: View) {
-        val screenHeight = WindowSizeClassUtil.getWindowHeightPx(this)
-        baseHeight = (screenHeight * 0.5).toInt()
-
-        // Set fixed height for bottom sheet
-        bottomSheet.layoutParams = bottomSheet.layoutParams.apply {
-            height = baseHeight
-        }
-
-        // Apply navigation bar padding initially
-        bottomSheet.setPadding(0, 0, 0, navigationBarHeight)
-
-        // Start scrim transparent, will fade in with bottom sheet animation
-        scrim.alpha = 0f
-
-        bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
-        bottomSheetBehavior.apply {
-            peekHeight = baseHeight
-            isFitToContents = true
-            isHideable = true
-            isDraggable = true  // Enable drag to dismiss
-            skipCollapsed = true
-            state = BottomSheetBehavior.STATE_HIDDEN  // Start hidden for animation
-        }
-
-        // Show bottom sheet after layout is complete
-        bottomSheet.post {
-            bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-        }
-
-        // Scrim click handler - close popup
-        scrim.setOnClickListener {
-            bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        }
-
-        // Bottom sheet callback - handle state changes and scrim animation
-        bottomSheetCallback = object : BottomSheetBehavior.BottomSheetCallback() {
-            private var hasOpened = false  // Track if bottom sheet has finished opening
-            private var isClosing = false  // Track if bottom sheet is being closed
-            private var keyboardDismissed = false  // Track if keyboard has been dismissed during close
-
-            // Intentional partial coverage — only EXPANDED/SETTLING/HIDDEN drive UI state.
-            // COLLAPSED/DRAGGING/HALF_EXPANDED are no-ops for this dialog (no half-expanded peek).
-            @SuppressLint("SwitchIntDef")
-            override fun onStateChanged(bottomSheet: View, newState: Int) {
-                when (newState) {
-                    BottomSheetBehavior.STATE_EXPANDED -> {
-                        // Fade in scrim after bottom sheet is fully visible (first time only)
-                        if (!hasOpened) {
-                            hasOpened = true
-                            scrim.animate()
-                                .alpha(0.5f)
-                                .setDuration(150)
-                                .start()
-                        }
-                        isClosing = false
-                        keyboardDismissed = false
-                    }
-                    BottomSheetBehavior.STATE_SETTLING -> {
-                        // If already opened and now settling, it means closing
-                        if (hasOpened) {
-                            isClosing = true
-                        }
-                    }
-                    BottomSheetBehavior.STATE_HIDDEN -> {
-                        finish()
-                        @Suppress("DEPRECATION")
-                        overridePendingTransition(0, 0)
-                    }
-                }
-            }
-
-            override fun onSlide(bottomSheet: View, slideOffset: Float) {
-                // slideOffset: -1 (hidden) to 0 (expanded)
-                // Hide keyboard when starting to close (covers all close scenarios)
-                if (hasOpened && slideOffset < 0 && !keyboardDismissed) {
-                    currentFocus?.let { ViewUtil.hideKeyboard(this@GroupChatPopupActivity, it) }
-                    keyboardDismissed = true
-                }
-                // Fade scrim when closing
-                if (hasOpened && isClosing && slideOffset < 0) {
-                    // Map -1..0 to 0..0.5
-                    scrim.alpha = ((slideOffset + 1f) * 0.5f).coerceIn(0f, 0.5f)
-                }
-            }
-        }
-        bottomSheetBehavior.addBottomSheetCallback(bottomSheetCallback)
     }
 
     private fun setupBackPressedCallback() {
@@ -282,9 +161,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
                 if (chatViewModel.selectMessagesState.value.editModel) {
                     chatViewModel.selectMessagesState.value =
                         chatViewModel.selectMessagesState.value.copy(editModel = false)
-                } else if (::bottomSheetBehavior.isInitialized) {
-                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                } else {
+                } else if (!sheetController.dismiss()) {
                     finish()
                 }
             }
@@ -297,77 +174,20 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
      * Animates the bottom sheet to full screen height before transitioning.
      */
     fun maximizeToFullActivity() {
-        // Prevent double-click
-        if (isMaximizing) return
-        isMaximizing = true
-
         // Get current scroll position before animation
         val scrollPosition = getChatMessageListFragment()?.getFirstVisibleMessageTimestamp()
 
-        // Hide keyboard first if visible
-        val currentFocus = currentFocus
-        if (currentFocus != null) {
-            ViewUtil.hideKeyboard(this, currentFocus)
+        sheetController.maximize {
+            GroupChatContentActivity.startActivity(
+                this,
+                chatViewModel.forWhat.id,
+                jumpMessageTimeStamp = scrollPosition ?: intent.jumpMessageTimeStamp
+            )
+            finish()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(android.R.anim.fade_in, 0)
         }
-
-        // Disable inset handling during maximize animation
-        isMaximizeAnimating = true
-
-        // Hide drag handle so header aligns to top
-        mBinding.dragHandle.visibility = View.GONE
-
-        // Use the actual laid out height of coordinatorRoot which spans the full screen in edge-to-edge mode
-        val fullHeight = mBinding.coordinatorRoot.height
-        // Target height stops at status bar bottom (aligns with full GroupChatContentActivity's title bar position)
-        val targetHeight = fullHeight - statusBarHeight
-        // Start from current height (which may include keyboard height)
-        val currentHeight = mBinding.bottomSheet.layoutParams.height
-        // Check if keyboard is visible (height exceeds base height)
-        val hasKeyboard = currentHeight > baseHeight
-        // Capture initial padding to animate it out smoothly (only needed when keyboard is visible)
-        val initialPadding = if (hasKeyboard) mBinding.bottomSheet.paddingBottom else 0
-
-        // Animate bottom sheet to target height (just below status bar)
-        android.animation.ValueAnimator.ofInt(currentHeight, targetHeight).apply {
-            duration = 250
-            addUpdateListener { animator ->
-                val height = animator.animatedValue as Int
-                mBinding.bottomSheet.layoutParams = mBinding.bottomSheet.layoutParams.apply {
-                    this.height = height
-                }
-                // Gradually reduce bottom padding as we expand (only when keyboard was visible)
-                if (hasKeyboard) {
-                    val progress = (height - currentHeight).toFloat() / (targetHeight - currentHeight)
-                    val newPadding = (initialPadding * (1 - progress)).toInt()
-                    mBinding.bottomSheet.setPadding(0, 0, 0, newPadding)
-                }
-                bottomSheetBehavior.peekHeight = height
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    // Start full GroupChatContentActivity after animation completes
-                    GroupChatContentActivity.startActivity(
-                        this@GroupChatPopupActivity,
-                        chatViewModel.forWhat.id,
-                        jumpMessageTimeStamp = scrollPosition ?: intent.jumpMessageTimeStamp
-                    )
-                    finish()
-                    @Suppress("DEPRECATION")
-                    overridePendingTransition(android.R.anim.fade_in, 0)
-                }
-            })
-            start()
-        }
-
-        // Fade out scrim simultaneously
-        mBinding.scrim.animate()
-            .alpha(0f)
-            .setDuration(250)
-            .start()
     }
-
-    private var isMaximizing = false
-    private var isMaximizeAnimating = false
 
     /** Cache: whether confidential toggle should be hidden due to group member limit */
     private var shouldHideConfidentialForGroupLimit = false
@@ -568,9 +388,35 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider {
     }
 
 
+    // --- KeyboardPanelHost ------------------------------------------------------------------
+    // ChatMessageInputFragment is a direct FragmentContainerView child here, so it has no parent
+    // fragment and resolves its keyboard/panel host to this Activity. Every method forwards to the
+    // sheet controller, the single owner of the sheet's height and bottom padding.
+
+    override fun addKeyboardStateListener(listener: InsetAwareConstraintLayout.KeyboardStateListener) {
+        sheetController.addKeyboardStateListener(listener)
+    }
+
+    override fun removeKeyboardStateListener(listener: InsetAwareConstraintLayout.KeyboardStateListener) {
+        sheetController.removeKeyboardStateListener(listener)
+    }
+
+    override fun freezeKeyboardPadding() {
+        sheetController.freezeKeyboardPadding()
+    }
+
+    override fun releaseKeyboardPaddingFreeze() {
+        sheetController.releaseKeyboardPaddingFreeze()
+    }
+
+    override fun onChatPanelVisibilityChanged(visible: Boolean, panelHeightPx: Int) {
+        sheetController.onChatPanelVisibilityChanged(visible, panelHeightPx)
+    }
+
     override fun onDestroy() {
-        if (::bottomSheetBehavior.isInitialized && ::bottomSheetCallback.isInitialized) {
-            bottomSheetBehavior.removeBottomSheetCallback(bottomSheetCallback)
+        // Guard: onCreate may abort before the controller is built (e.g. super.onCreate throws).
+        if (::sheetController.isInitialized) {
+            sheetController.release()
         }
         super.onDestroy()
     }

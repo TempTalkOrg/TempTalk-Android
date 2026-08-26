@@ -23,30 +23,15 @@ fun SignalServiceProtos.ReadPosition.toOutgoingReadPositionEntity() =
     )
 
 fun ByteArray.transformGroupIdFromServerToLocal(): String {
-    return when (size) {
-//        16 -> {
-//            "WEEK" + Hex.toStringCondensed(this).uppercase(Locale.getDefault())
-//        }
-        32, 36 -> {
-            String(this, Charsets.UTF_8)
-        }
-
-        else -> {
-            val utf8Result = try {
-                String(this, Charsets.UTF_8)
-            } catch (e: Exception) {
-                L.e { "group id UTF8 conversion failed: ${e.message}" }
-                null
-            }
-
-            val hexResult = Hex.toStringCondensed(this)
-
-            // 上报异常，包含两种转换结果对比
-            val errorMsg = "Invalid group id length: $size, UTF8: ${utf8Result ?: "FAILED"}, Hex: $hexResult"
-            L.e { errorMsg }
-            utf8Result ?: hexResult
-        }
+    // Mirror iOS/Desktop: 16-byte legacy id -> "WEEK" + uppercase hex; everything else -> UTF-8 string.
+    // String(bytes, Charset) never throws (malformed bytes -> U+FFFD), so no try/catch is needed.
+    if (size == 16) {
+        return "WEEK" + Hex.toStringCondensed(this).uppercase(Locale.getDefault())
     }
+    if (size != 32 && size != 36) {
+        L.w { "[GroupId] unexpected server group id length=$size, decoding as UTF-8" }
+    }
+    return String(this, Charsets.UTF_8)
 }
 
 fun String.transformGroupIdFromLocalToServer(): ByteArray {

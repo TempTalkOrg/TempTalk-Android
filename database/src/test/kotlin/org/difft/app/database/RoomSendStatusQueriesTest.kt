@@ -7,6 +7,8 @@ import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Order
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_ACTIVE
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 import difft.android.messageserialization.model.needsSendStatusRecompute
@@ -479,4 +481,100 @@ class RoomSendStatusQueriesTest {
 
         assertEquals(ROOM_SEND_STATUS_NONE, storedSendStatus("r-race-control"))
     }
+
+    // region sendingStatus — the independent "sending" aggregate (same machinery, cloned per column)
+
+    private fun insertRoomSending(roomId: String, sendingStatus: Int, roomType: Int = 0) {
+        wcdbInstance.room.insertObject(RoomModel().apply {
+            this.roomId = roomId
+            this.roomType = roomType
+            this.sendingStatus = sendingStatus
+        })
+    }
+
+    private fun storedSendingStatus(roomId: String): Int? =
+        wcdbInstance.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.sendingStatus
+
+    // The tombstone leaves sendType at 0 (== SENDING), so without the type exclusion every
+    // archived-only conversation would show the sending icon forever.
+    @Test
+    fun `hasSendingOutgoingMessage ignores the archive tombstone`() {
+        insertArchiveTombstone("rs-tombstone")
+
+        assertFalse(wcdbInstance.hasSendingOutgoingMessage("rs-tombstone"))
+    }
+
+    @Test
+    fun `hasSendingOutgoingMessage sees a real sending row`() {
+        insertMessage("rs-m1", "rs-real", ts = 100L, sendType = MessageModel.SEND_TYPE_SENDING)
+
+        assertTrue(wcdbInstance.hasSendingOutgoingMessage("rs-real"))
+    }
+
+    @Test
+    fun `guarded sending clear clears when no sending row remains`() {
+        insertRoomSending("rs-clear-a", ROOM_SENDING_STATUS_ACTIVE)
+        insertMessage("rs-a-sent", "rs-clear-a", ts = 100L, sendType = MessageModel.SEND_TYPE_SENT)
+
+        wcdbInstance.clearRoomSendingStatusIfNoSending("rs-clear-a")
+
+        assertEquals(ROOM_SENDING_STATUS_NONE, storedSendingStatus("rs-clear-a"))
+    }
+
+    @Test
+    fun `guarded sending clear is a no-op while a sending row remains`() {
+        insertRoomSending("rs-clear-b", ROOM_SENDING_STATUS_ACTIVE)
+        insertMessage("rs-b-sending", "rs-clear-b", ts = 100L, sendType = MessageModel.SEND_TYPE_SENDING)
+
+        wcdbInstance.clearRoomSendingStatusIfNoSending("rs-clear-b")
+
+        assertEquals(ROOM_SENDING_STATUS_ACTIVE, storedSendingStatus("rs-clear-b"))
+    }
+
+    @Test
+    fun `guarded sending clear leaves other rooms alone`() {
+        insertRoomSending("rs-clear-target", ROOM_SENDING_STATUS_ACTIVE)
+        insertRoomSending("rs-clear-other", ROOM_SENDING_STATUS_ACTIVE)
+        insertMessage("rs-other-sending", "rs-clear-other", ts = 100L, sendType = MessageModel.SEND_TYPE_SENDING)
+
+        wcdbInstance.clearRoomSendingStatusIfNoSending("rs-clear-target")
+
+        assertEquals(ROOM_SENDING_STATUS_NONE, storedSendingStatus("rs-clear-target"))
+        assertEquals(ROOM_SENDING_STATUS_ACTIVE, storedSendingStatus("rs-clear-other"))
+    }
+
+    // RACE-1 transplanted: a clear based on a stale probe must not undo an ACTIVE that a new
+    // send committed in the meantime (its message row lands first — the load-bearing ordering).
+    @Test
+    fun `a stale sending clear cannot undo a concurrent new send`() {
+        insertRoomSending("rs-race", ROOM_SENDING_STATUS_ACTIVE)
+        insertMessage("rs-race-sending", "rs-race", ts = 200L, sendType = MessageModel.SEND_TYPE_SENDING)
+
+        wcdbInstance.clearRoomSendingStatusIfNoSending("rs-race")
+        assertEquals(ROOM_SENDING_STATUS_ACTIVE, storedSendingStatus("rs-race"))
+
+        wcdbInstance.writeRoomSendingStatus("rs-race", ROOM_SENDING_STATUS_ACTIVE)
+
+        assertEquals(ROOM_SENDING_STATUS_ACTIVE, storedSendingStatus("rs-race"))
+    }
+
+    // The sweep's post-flip cleanup: GLOBAL scope, so a room flagged stale for a reason
+    // unrelated to the flip heals on the same pass; a room with a live sending row survives.
+    @Test
+    fun `flagged-room listing plus per-room guarded clears heal only truly stale flags`() {
+        insertRoomSending("rs-global-stale", ROOM_SENDING_STATUS_ACTIVE)
+        insertRoomSending("rs-global-live", ROOM_SENDING_STATUS_ACTIVE)
+        insertRoomSending("rs-global-clean", ROOM_SENDING_STATUS_NONE)
+        insertMessage("rs-live-sending", "rs-global-live", ts = 100L, sendType = MessageModel.SEND_TYPE_SENDING)
+
+        val flagged = wcdbInstance.roomIdsWithSendingStatusFlagged()
+        assertEquals(setOf("rs-global-stale", "rs-global-live"), flagged.toSet())
+        flagged.forEach { wcdbInstance.clearRoomSendingStatusIfNoSending(it) }
+
+        assertEquals(ROOM_SENDING_STATUS_NONE, storedSendingStatus("rs-global-stale"))
+        assertEquals(ROOM_SENDING_STATUS_ACTIVE, storedSendingStatus("rs-global-live"))
+        assertEquals(ROOM_SENDING_STATUS_NONE, storedSendingStatus("rs-global-clean"))
+    }
+
+    // endregion
 }

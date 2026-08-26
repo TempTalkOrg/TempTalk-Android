@@ -123,4 +123,23 @@ class WcdbJobStorageSweepTest {
         //   Executable form: RoomSendStatusQueriesTest
         //          `roomIdsWithStaleSendingOutgoing narrows to real outgoing messages`.
     }
+
+    @Test
+    fun sweep_run_path_clears_stale_sendingStatus_flags_globally() {
+        // Expected behavior:
+        //   Setup: room A holds a Sending TEXT row and sendingStatus = ACTIVE; room B has
+        //          sendingStatus = ACTIVE but NO sending row (stale for an unrelated reason);
+        //          no PushTextSendJob persisted (sweep runs).
+        //   storage.sweepStaleSendingMessages()
+        //   Post-state: BOTH rooms read sendingStatus = NONE — the cleanup queries ALL flagged
+        //          rooms (global scope, not just roomsToFlag) and clears each via the per-room
+        //          guarded UPDATE, executed AFTER the flip consumed every Sending row.
+        //   NOT covered: the before == 0 short-circuit returns before this cleanup — a flag
+        //          with zero sending rows anywhere heals on its room's next MESSAGE event
+        //          instead (accepted parity with the FAILED flag's identical residual).
+        //   A send racing AHEAD of the flip is flipped with it (bounded, self-heals when its
+        //          live job settles); the guard only protects sends committing after the flip.
+        //   Executable form: RoomSendStatusQueriesTest
+        //          `flagged-room listing plus per-room guarded clears heal only truly stale flags`.
+    }
 }

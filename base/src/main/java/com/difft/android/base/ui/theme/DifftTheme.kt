@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -27,19 +28,37 @@ import androidx.core.graphics.drawable.toDrawable
  * @param useFlatBackground If false (default), uses `colors.bg` — the settings idiom
  *   page background that the majority of screens want. If true, uses `colors.background`
  *   (= bg1, pure white in light / #181A20 in dark) for immersive content pages such as
- *   FilePreSendActivity that need a flat surface without elevated cards.
+ *   FilePreSendActivity that need a flat surface without elevated cards. Only selects which
+ *   color feeds [backgroundColor] below (`colorScheme.background` vs `extendedColors.bg`) —
+ *   it does not affect colorScheme, typography, or any other rendered content, and is
+ *   independent of [applyWindowBackground] (the two parameters compose freely).
+ * @param applyWindowBackground Whether this composition may write the computed background
+ *   color onto the host Activity's `window` (affects the status/navigation bar tint on
+ *   Android 15+). Defaults to `true`: a `DifftTheme` call is normally a one-time Activity-root
+ *   mount and should own its window. Pass `false` when this instance does NOT own the host
+ *   window — temporary overlays added directly onto an Activity's root view (popups, floating
+ *   panels), independent floating windows whose Context still resolves to a host Activity, or
+ *   content persistently embedded in a shared container it does not own. `false` is a pure
+ *   opt-out: it does not snapshot or restore the window background, because the correct state
+ *   for such content is to never have touched the window in the first place.
  * @param content The composable content to display within the theme.
  */
 @Composable
 fun DifftTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     useFlatBackground: Boolean = false,
+    applyWindowBackground: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
 
-    // Select color scheme and extended colors based on theme
-    val colorScheme = if (darkTheme) createDarkColorScheme() else createLightColorScheme()
+    // remember(darkTheme): the factory functions are zero-parameter — darkTheme is the
+    // complete key. ColorScheme has no equals/hashCode override (reference identity only);
+    // without remember, every unrelated DifftTheme recomposition allocates a new instance
+    // and forces every MaterialTheme.colorScheme.* consumer to recompose needlessly.
+    val colorScheme = remember(darkTheme) {
+        if (darkTheme) createDarkColorScheme() else createLightColorScheme()
+    }
     val extendedColors = if (darkTheme) createDarkExtendedColors() else createLightExtendedColors()
 
     // Default = settings idiom (colors.bg). Immersive pages opt out with useFlatBackground = true.
@@ -49,12 +68,17 @@ fun DifftTheme(
         extendedColors.bg       // settings idiom — page bg, cards use colors.bgElevated
     }
 
-    // Set window background color to affect status bar on Android 15+
-    SideEffect {
-        val activity = context as? Activity
-        activity?.window?.setBackgroundDrawable(
-            backgroundColor.toArgb().toDrawable()
-        )
+    // Set window background color to affect status bar on Android 15+.
+    // applyWindowBackground = false: this composition does not own the host window
+    // (temporary overlay / floating window / non-owning embedded subtree) — skip entirely,
+    // no snapshot, no restore.
+    if (applyWindowBackground) {
+        SideEffect {
+            val activity = context as? Activity
+            activity?.window?.setBackgroundDrawable(
+                backgroundColor.toArgb().toDrawable()
+            )
+        }
     }
 
     // Create Material3 Typography and Shapes

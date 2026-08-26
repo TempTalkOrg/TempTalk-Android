@@ -5,6 +5,7 @@ import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
 import com.tencent.wcdb.winq.StatementSelect
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBRoomModel
@@ -236,3 +237,79 @@ fun WCDB.roomIdsWithNonNoneSendStatus(): Set<String> =
         DBRoomModel.roomId,
         DBRoomModel.sendStatus.notEq(ROOM_SEND_STATUS_NONE)
     ).filter { !it.isNullOrEmpty() }.toSet()
+
+// ─── `RoomModel.sendingStatus` — the independent "sending" aggregate ─────────────────────────
+// Same machinery as the FAILED aggregate above, cloned per column ON PURPOSE: the failed-writer
+// and sending-writer run concurrently, and separate columns (separate statements) make the
+// set-vs-clear race structurally impossible. A generic column-parameterized helper was rejected:
+// it would blur the per-column single-statement pattern the correctness argument depends on.
+
+private fun sendingOutgoingCondition(roomId: String): Expression =
+    DBMessageModel.roomId.eq(roomId)
+        .and(DBMessageModel.sendType.eq(MessageModel.SEND_TYPE_SENDING))
+        .and(realOutgoingMessageScope())
+
+/**
+ * Whether [roomId] still has at least one real outgoing message in Sending state.
+ * DESC order for the same early-exit reason as [hasFailedOutgoingMessage] (in-flight messages
+ * are almost always the newest rows). Cost filter for the clear — NOT the correctness guard.
+ */
+@WorkerThread
+fun WCDB.hasSendingOutgoingMessage(roomId: String): Boolean =
+    message.getFirstObject(
+        sendingOutgoingCondition(roomId),
+        DBMessageModel.systemShowTimestamp.order(Order.Desc)
+    ) != null
+
+/**
+ * Set source only (PushTextSendJob.updateMessage writes ACTIVE, message row first — the same
+ * load-bearing ordering as the FAILED write). Never use it to write NONE: clearing must go
+ * through [clearRoomSendingStatusIfNoSending] so a send that raced in is not wiped.
+ */
+@WorkerThread
+fun WCDB.writeRoomSendingStatus(roomId: String, status: Int) {
+    room.updateRow(
+        arrayOf(Value(status)),
+        arrayOf(DBRoomModel.sendingStatus),
+        DBRoomModel.roomId.eq(roomId)
+    )
+}
+
+/**
+ * Clear [roomId]'s sending aggregate, but ONLY if the message table holds no sending real
+ * outgoing row AT THE INSTANT THIS STATEMENT EXECUTES. Verbatim transplant of
+ * [clearRoomSendStatusIfNoFailure]'s guarded-UPDATE construction — read its KDoc for the full
+ * interleaving proof (why not a plain write, why not a snapshot CAS, why message-before-room
+ * ordering at the set source closes every window). The proof transfers because the set source
+ * commits the message row (sendType=SENDING) strictly before the room row, exactly like the
+ * FAILED path.
+ */
+@WorkerThread
+fun WCDB.clearRoomSendingStatusIfNoSending(roomId: String) {
+    val stillSending = StatementSelect()
+        .select(DBMessageModel.id)
+        .from("message")
+        .where(sendingOutgoingCondition(roomId))
+        .limit(1)
+    room.updateRow(
+        arrayOf(Value(ROOM_SENDING_STATUS_NONE)),
+        arrayOf(DBRoomModel.sendingStatus),
+        DBRoomModel.roomId.eq(roomId)
+            .and(DBRoomModel.sendingStatus.notEq(ROOM_SENDING_STATUS_NONE))
+            .and(Expression.notExists(stillSending))
+    )
+}
+
+/**
+ * All roomIds currently flagged sending. Serves the cold-start sweep's post-flip cleanup:
+ * GLOBAL scope on purpose (not just the rooms the sweep flipped) so flags stale for any other
+ * reason heal on the same pass. Each returned room is then cleared via the per-room guarded
+ * [clearRoomSendingStatusIfNoSending], which keeps every statement individually race-safe
+ * against a send racing the sweep.
+ */
+@WorkerThread
+fun WCDB.roomIdsWithSendingStatusFlagged(): List<String> =
+    room.getOneColumnString(
+        DBRoomModel.roomId,
+        DBRoomModel.sendingStatus.notEq(ROOM_SENDING_STATUS_NONE)
+    ).filter { !it.isNullOrEmpty() }

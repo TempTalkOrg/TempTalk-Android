@@ -34,6 +34,7 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.ui.video.VideoItemTrackSelector
 import com.difft.android.call.ui.video.ViewType
@@ -57,6 +58,7 @@ fun MultiParticipantItem(
     uid: String,
     userDisplayInfo: CallUserDisplayInfo,
     participantIndex: Int,
+    participantCount: Int,
     muteOtherEnabled: Boolean,
     onClickMute: () -> Unit,
     coroutineScope: CoroutineScope,
@@ -201,6 +203,17 @@ fun MultiParticipantItem(
                 ShowSpeakerStatusView(participant, userDisplayInfo.name, speakingEnabled = speakingEnabled)
             }
         }
+
+        // Declared after the ConstraintLayout: inside a Box the later sibling draws on top.
+        ParticipantWeakNetworkBadge(
+            controller = viewModel.callUiController,
+            localIdentity = remember { globalServices.myId },
+            identity = uid,
+            // Headcount comes from the parent layout, which already collects the participant list it
+            // is rendering — this cell must not open a collector of its own (see [WeakNetworkBadge]).
+            participantCount = participantCount,
+            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+        )
 
         ShowItemOnClickView(listOf("Mute"), expanded, setExpanded = { value -> expanded = value },
             onClickItem = { index ->

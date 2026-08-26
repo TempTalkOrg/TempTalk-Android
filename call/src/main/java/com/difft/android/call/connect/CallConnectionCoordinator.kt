@@ -3,6 +3,7 @@ package com.difft.android.call.connect
 import com.difft.android.base.utils.globalServices
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.core.net.toUri
 import com.difft.android.base.call.ServiceUrls
 import com.difft.android.base.log.lumberjack.L
@@ -34,9 +35,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import javax.net.ssl.SSLHandshakeException
 import kotlin.concurrent.Volatile
 
 /**
@@ -51,7 +49,11 @@ import kotlin.concurrent.Volatile
  *    [inferConnectedNode]).
  *
  * Extracted from `LCallViewModel` so the ViewModel can stay focused on call orchestration
- * and UI state, and to keep each file within the project's 500-line limit.
+ * and UI state. Failure classification lives in [classifyConnectFailure] so the retry-vs-abort
+ * decision can be unit-tested without a coordinator harness.
+ *
+ * This file is still over the project's 500-line guideline: failover, manual switch, and URL/node
+ * resolution are three responsibilities that want separate homes.
  *
  * Thread-safety: instances are expected to be used from a single call session; the only
  * shared state is [isRetryUrlConnecting] which is marked [Volatile] so the Room event
@@ -118,6 +120,13 @@ internal class CallConnectionCoordinator(
         if (ProxyConfigProvider.isProxyActiveForCall) null
         else DefaultGlobalConfigCallServiceUrlsReader.read(appContext)
 
+    /** Milliseconds left before [CONNECT_BUDGET_MS] runs out, never negative. */
+    private fun remainingBudgetMs(deadlineMs: Long): Long =
+        (deadlineMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+
+    /** True once [CONNECT_BUDGET_MS] has elapsed; see that constant for why the cap exists. */
+    private fun budgetExhausted(deadlineMs: Long): Boolean = remainingBudgetMs(deadlineMs) == 0L
+
     /**
      * Call media TLS pins trust to the chative CA; a certificate validation failure on any
      * connect attempt (failover or user-initiated manual switch) is a possible MITM attack,
@@ -172,14 +181,19 @@ internal class CallConnectionCoordinator(
             return false
         }
 
-        statisticsLogManager.setRoomLocalId(roomCtl.room.localId)
+        // roomOrNull, not the fail-loud getter: this read sits outside the attempt loop's try, so a
+        // teardown racing it would throw straight out of the coordinator — past the classification
+        // below and past failWith, leaving the caller with no CONNECTED_FAILED at all.
+        statisticsLogManager.setRoomLocalId(roomCtl.roomOrNull()?.localId)
 
         var failureCount = 0
         var hadQuicFailure = false
         var hadPrimaryFailure = false
         var lastFailedErrorMsg = ""
         isRetryUrlConnecting = true
+        val deadlineMs = SystemClock.elapsedRealtime() + CONNECT_BUDGET_MS
         for (phase in 0 until 3) {
+            if (budgetExhausted(deadlineMs)) break
             if (phase == 1) {
                 delay(2_000L)
                 LCallManager.fetchCallServiceUrlAndCache()
@@ -198,7 +212,21 @@ internal class CallConnectionCoordinator(
 
             for ((idx, att) in attempts.withIndex()) {
                 if (failureCount > 0) {
-                    delay(ConnectionBackoff.delayMsBeforeRetryAfterFailure(failureCount))
+                    // Clamped to what is left of the budget: the backoff climbs to a 30s ceiling,
+                    // so an unclamped sleep could run well past the deadline and then break
+                    // without ever attempting — pure dead time for the user.
+                    val backoffMs = ConnectionBackoff.delayMsBeforeRetryAfterFailure(failureCount)
+                    delay(backoffMs.coerceAtMost(remainingBudgetMs(deadlineMs)))
+                }
+                // Stop starting new attempts once the budget is spent. Checked here rather than
+                // wrapping the loop in withTimeout so an in-flight handshake is never cut mid-way,
+                // which bounds the total at the budget plus one attempt's own connect timeout.
+                if (budgetExhausted(deadlineMs)) {
+                    L.w {
+                        "[Call] meeting connect budget exhausted after ${CONNECT_BUDGET_MS}ms " +
+                            "(failures=$failureCount, phase=$phase, lastErr=$lastFailedErrorMsg)"
+                    }
+                    break
                 }
                 L.i {
                     "[Call] meeting connect phase=$phase ${idx + 1}/${attempts.size} url=${att.connectUrl} quic=${att.useQuic}"
@@ -216,18 +244,22 @@ internal class CallConnectionCoordinator(
                 ) { t ->
                     if (t is CancellationException) throw t
                     L.e { "[Call] connect exception url=${att.connectUrl} err=${t}" }
-                    when (t) {
-                        is SocketTimeoutException, is RoomException.ConnectTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
+                    when (classifyConnectFailure(t)) {
+                        ConnectFailureCategory.TRANSIENT -> {
                             reportCertRiskIfNeeded(t, att.serverHost)
                             LCallEngine.reportConnectionFailure(att.connectUrl)
                             roomCtl.disconnectQuietly()
                             transientErrorMsg = "${t.javaClass.simpleName}: ${t.message.orEmpty()}"
                         }
-                        is RoomException.NoAuthException, is RoomException.StartCallException, is StartCallException -> {
+                        ConnectFailureCategory.SERVER_VERDICT -> {
+                            L.w { "[Call] server verdict status=${serverVerdictStatus(t)} url=${att.connectUrl}" }
                             terminalError = StartCallException(t.message)
                         }
-                        else -> {
-                            terminalError = ServerConnectionException(t.message)
+                        ConnectFailureCategory.PRECONDITION -> {
+                            // Localized copy for the user: these messages describe an internal
+                            // guard. The guard's own text rides on the cause so the log and the
+                            // uploaded failure record keep the real, locale-independent reason.
+                            terminalError = ServerConnectionException(getString(R.string.call_params_startcall_exception_tip), t)
                         }
                     }
                 }
@@ -239,7 +271,9 @@ internal class CallConnectionCoordinator(
                     return true
                 }
 
-                val errorMsg = terminalError?.let { "${it.javaClass.simpleName}: ${it.message.orEmpty()}" }
+                // Prefer the cause when one is attached: a PRECONDITION failure carries localized
+                // user copy as its message, which must not become the uploaded failure reason.
+                val errorMsg = terminalError?.let { "${it.javaClass.simpleName}: ${(it.cause ?: it).message.orEmpty()}" }
                     ?: transientErrorMsg.orEmpty()
                 reportConnectFail(att, errorMsg)
 
@@ -260,7 +294,7 @@ internal class CallConnectionCoordinator(
                     }
                 }
                 isRetryUrlConnecting = idx < attempts.lastIndex || phase < 2
-                if (failureCount > 20) {
+                if (failureCount > MAX_TRANSIENT_FAILURES) {
                     isRetryUrlConnecting = false
                     failWith(ServerConnectionException(getString(R.string.call_connect_timeout_tip)))
                     return false
@@ -337,19 +371,24 @@ internal class CallConnectionCoordinator(
             // an unrelated (ICE-restart) Connected later — reset here so it isn't misclassified as
             // the manual-switch reconnect and made to run restore / cancel a legitimate 1v1 timeout.
             isManualSwitchReconnecting = false
-            when (e) {
-                is SocketTimeoutException, is SSLHandshakeException, is UnknownHostException -> {
+            // Same classification as connectToRoomWithFailover so a failure means the same
+            // thing on both paths; only the outcome differs (a manual switch has no further
+            // candidate to try, so a transient failure reports the retryable-timeout copy).
+            when (classifyConnectFailure(e)) {
+                ConnectFailureCategory.TRANSIENT -> {
                     L.e { "[Call] manualSwitch transient url=$connectUrl err=${e.message}" }
                     reportCertRiskIfNeeded(e, serverHost)
                     LCallEngine.reportConnectionFailure(connectUrl)
                     roomCtl.disconnectQuietly()
                     failWith(ServerConnectionException(getString(R.string.call_connect_timeout_tip)))
                 }
-                is RoomException.NoAuthException, is RoomException.StartCallException, is StartCallException -> {
+                ConnectFailureCategory.SERVER_VERDICT -> {
+                    L.w { "[Call] manualSwitch server verdict status=${serverVerdictStatus(e)} url=$connectUrl" }
                     failWith(StartCallException(e.message))
                 }
-                else -> {
-                    failWith(ServerConnectionException(e.message))
+                ConnectFailureCategory.PRECONDITION -> {
+                    L.e { "[Call] manualSwitch precondition url=$connectUrl err=${e.message}" }
+                    failWith(ServerConnectionException(getString(R.string.call_params_startcall_exception_tip), e))
                 }
             }
             false
@@ -638,7 +677,8 @@ internal class CallConnectionCoordinator(
         )
     }
 
-    private companion object {
+    // Internal (not private) so the retry bounds below can be pinned by unit tests.
+    internal companion object {
         /** Poll interval while waiting for the room to reach DISCONNECTED after disconnect(). */
         const val MANUAL_SWITCH_DISCONNECT_POLL_MS = 20L
 
@@ -655,5 +695,27 @@ internal class CallConnectionCoordinator(
          * between leave and that callback was ~300ms; kept modest to bound switch latency.
          */
         const val MANUAL_SWITCH_SETTLE_DELAY_MS = 300L
+
+        /**
+         * Wall-clock ceiling on the whole multi-phase failover, checked before each new attempt.
+         *
+         * The candidate count alone does not bound the wait: [ConnectionBackoff] escalates to a
+         * 30s ceiling, so a full candidate list whose failures are all transient schedules several
+         * MINUTES of delay, and nothing outside bounds it — the 1v1 timeout
+         * ([com.difft.android.call.manager.CallTimeoutManager.DEF_ONGOING_CALL_TIMEOUT]) only arms
+         * once the room reports Connected, i.e. after this loop has already succeeded. A caller
+         * staring at "connecting" for minutes is a failed call either way, so cap it here and
+         * report the retryable timeout copy while the user still has patience for a second try.
+         * Matches the 1v1 timeout's own 60s scale.
+         */
+        const val CONNECT_BUDGET_MS = 60_000L
+
+        /**
+         * Backstop on the failure count (the loop ends once it is EXCEEDED, i.e. on the 21st).
+         * Under the current backoff curve [CONNECT_BUDGET_MS] always runs out first — the
+         * cumulative delay passes 60s by the 8th failure — so this bound is unreachable in
+         * practice and exists only so a future backoff change cannot make the loop unbounded.
+         */
+        const val MAX_TRANSIENT_FAILURES = 20
     }
 }

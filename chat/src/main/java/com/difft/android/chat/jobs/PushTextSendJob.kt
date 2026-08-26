@@ -35,6 +35,7 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_ACTIVE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
@@ -49,6 +50,7 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.wcdb
 import org.difft.app.database.writeRoomSendStatus
+import org.difft.app.database.writeRoomSendingStatus
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
@@ -285,11 +287,16 @@ class PushTextSendJob @AssistedInject constructor(
         //
         // That ordering — not atomicity — is what carries the correctness, so the two writes are
         // NOT wrapped in a transaction: a failure in between costs this room its tag only, and the
-        // room's next failure restores it. Sending/Sent need no room write at all (the gated clear
-        // handles them).
+        // room's next failure restores it. Sent needs no room write at all (the gated clears
+        // handle it). SENDING escalates its own independent column under the same ordering rule;
+        // the two aggregates never write each other's cell, which is what keeps a concurrent
+        // failure-write and sending-clear race-free without any cross-column reasoning.
         writeMessageStatusRow(status)
         if (status == MessageModel.SEND_TYPE_FAILED) {
             wcdb.writeRoomSendStatus(textMessage.forWhat.id, ROOM_SEND_STATUS_FAILED)
+        }
+        if (status == MessageModel.SEND_TYPE_SENDING) {
+            wcdb.writeRoomSendingStatus(textMessage.forWhat.id, ROOM_SENDING_STATUS_ACTIVE)
         }
         RoomChangeTracker.trackRoom(textMessage.forWhat.id, RoomChangeType.MESSAGE)
     }

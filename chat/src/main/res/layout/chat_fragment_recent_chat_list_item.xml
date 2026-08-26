@@ -111,6 +111,23 @@
             android:orientation="horizontal">
 
             <!--
+                Sending indicator: independent of the tag run (a room can show both). Tint lives
+                HERE via app:tint, never in the drawable — its strokeColor is baked in and shared
+                with the bubble's own sending icon (ChatMessageViewHolder), which must keep it.
+            -->
+            <!-- Deliberately larger than the bubble's 13dp iv_send_status: sized to the 14sp
+                 preview line (user-adjudicated; the 12dp-intrinsic vector scales cleanly). -->
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/imageview_sending"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="4dp"
+                android:src="@drawable/chat_icon_message_sending_new"
+                android:visibility="gone"
+                app:tint="@color/t.third"
+                tools:visibility="visible" />
+
+            <!--
                 lines/ellipsize are the last-resort guard: without them an over-long tag run wraps
                 and grows the row to two lines. Colour is owned here, so the tag text needs no spans.
             -->

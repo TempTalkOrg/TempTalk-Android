@@ -11,6 +11,8 @@ import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.difft.android.base.android.permission.PermissionUtil
+import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AutoLeave
@@ -21,6 +23,7 @@ import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.defaultBarrageTexts
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.permission.CallMediaPermission
 import com.difft.android.call.handler.CallActionHandler
 import com.difft.android.call.handler.CallErrorHandler
 import com.difft.android.call.handler.CallExitHandler
@@ -141,6 +144,22 @@ class LCallActivity : AppCompatActivity() {
     internal lateinit var appUnlockListener: (Boolean) -> Unit
 
     internal val callbackId = "LCallActivity_${System.identityHashCode(this)}"
+
+    // Registered at construction time (required before RESUMED). Results route through
+    // LCallActivityMediaPermissions.onMediaPermissionResult; taps come from the Compose toolbar
+    // via onMediaControlTapped.
+    private val micPermissionLauncher = registerPermission {
+        onMediaPermissionResult(CallMediaPermission.Microphone, it)
+    }
+    private val cameraPermissionLauncher = registerPermission {
+        onMediaPermissionResult(CallMediaPermission.Camera, it)
+    }
+
+    internal fun mediaPermissionLauncher(permission: CallMediaPermission): PermissionUtil.Permission =
+        when (permission) {
+            CallMediaPermission.Microphone -> micPermissionLauncher
+            CallMediaPermission.Camera -> cameraPermissionLauncher
+        }
 
     internal val viewModel: LCallViewModel by viewModels(extrasProducer = {
         defaultViewModelCreationExtras.withCreationCallback<LCallViewModelFactory> {
@@ -313,6 +332,9 @@ class LCallActivity : AppCompatActivity() {
         if (viewModel.isRequestingPermission()) {
             viewModel.callUiController.setRequestPermissionStatus(false)
         }
+        // Settings return / any foreground return: refresh badge + tap routing state.
+        // Never auto-enables anything — a fresh grant still waits for the next tap.
+        viewModel.mediaPermissions.refresh(this)
         updateScreenshotListeningState()
         ViewUtil.hideNavigationBar(window)
     }

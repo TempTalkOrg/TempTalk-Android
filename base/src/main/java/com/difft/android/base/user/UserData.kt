@@ -107,6 +107,10 @@ data class UserData(
     var callLastFeedbackResetTime: Long = 0, //上次重置通话反馈采样的时间
     var callFeedbackRandomThreshold: Int = 3, //通话反馈随机采样阈值
     var callFeedbackHasTriggered: Boolean = false, //本周期反馈是否已触发
+    // Disambiguates NotDetermined vs PermanentlyDenied: both report rationale=false, so the
+    // permission layer needs "has the app ever fired the system request" as a third input.
+    var callMicPermissionRequested: Boolean = false, //是否发起过 RECORD_AUDIO 系统权限请求
+    var callCameraPermissionRequested: Boolean = false, //是否发起过 CAMERA 系统权限请求
 
     // — Network module —
     var bestHost: String? = null, //speed-test 选出的最佳 host(原 sp_speed_test_success_host)

@@ -61,8 +61,7 @@ import kotlin.reflect.KProperty0
 
 /**
  * Integration tests for the two-phase `LCallViewModel` initialization that moves WebRTC
- * `LiveKit.create()` room creation off the main thread (design `tmp/anr-call-vm-room-init/
- * design-report.md`, §6 test inventory). Covers the VM/Robolectric rows:
+ * `LiveKit.create()` room creation off the main thread. Covers the VM/Robolectric rows:
  *
  *  - **T1**   Phase A (construction) performs NO room creation.
  *  - **T2**   Phase B `createRoom()` runs off the main thread.
@@ -160,6 +159,10 @@ class LCallViewModelTwoPhaseInitTest {
         mockkConstructor(CallAudioSetup::class)
         every { anyConstructed<CallAudioSetup>().start() } just Runs
         every { anyConstructed<CallAudioSetup>().stop() } just Runs
+        // Phase B hands the room's state flow to the route lifecycle guard. Stubbed explicitly: the
+        // `flow` extension is stubbed by erased type above, so letting the real body run would feed
+        // the guard a flow whose element type is not Room.State.
+        every { anyConstructed<CallAudioSetup>().bindRoomState(any()) } just Runs
 
         // --- Phase-B collaborator member-stubbing (ordering / side-effect free) -----------
         mockkConstructor(CallMediaController::class)
@@ -215,6 +218,7 @@ class LCallViewModelTwoPhaseInitTest {
         httpClient = dagger.Lazy { mockk(relaxed = true) },
         userManager = mockk(relaxed = true),
         proxyConfigProvider = mockk(relaxed = true),
+        urlManager = mockk(relaxed = true),
     )
 
     // ---------------------------------------------------------------------------------

@@ -7,9 +7,12 @@ import com.difft.android.base.utils.application
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 object TimeFormatter {
+
+    private const val MILLIS_PER_DAY = 86_400_000L
 
     // Cache the result to avoid repeated ContentProvider IPC calls on every message bind.
     // The 12/24-hour format setting rarely changes; the app restart picks up any change.
@@ -100,17 +103,29 @@ object TimeFormatter {
                 && cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
     }
 
-    // 判断两个时间戳是否是同一天
+    /**
+     * Whether two timestamps fall on the same day in the device's current timezone.
+     *
+     * Day-ordinal arithmetic rather than two `Calendar` instances: this is called three times per
+     * row of the message window, so the allocations dominated the assembly pass. Semantics are
+     * unchanged — both forms partition instants at local midnight of the default timezone.
+     */
     fun isSameDay(timestamp1: Long, timestamp2: Long): Boolean {
-        val calendar1 = Calendar.getInstance()
-        val calendar2 = Calendar.getInstance()
-
-        calendar1.timeInMillis = timestamp1
-        calendar2.timeInMillis = timestamp2
-
-        return calendar1.get(Calendar.YEAR) == calendar2.get(Calendar.YEAR) &&
-                calendar1.get(Calendar.DAY_OF_YEAR) == calendar2.get(Calendar.DAY_OF_YEAR)
+        // Read the default zone once per call, exactly as the two Calendar instances did.
+        val zone = TimeZone.getDefault()
+        return localDayOrdinal(timestamp1, zone) == localDayOrdinal(timestamp2, zone)
     }
+
+    /**
+     * Days elapsed since the epoch at [zone]'s local midnight boundaries.
+     *
+     * The offset is resolved per timestamp, not once for the zone: on a DST transition day the two
+     * halves carry different offsets and a single offset would move one of them across midnight.
+     * `floorDiv` (not `/`) keeps pre-epoch timestamps on the day below instead of truncating them
+     * toward zero, which would merge the first day before the epoch with the first day after it.
+     */
+    private fun localDayOrdinal(timestamp: Long, zone: TimeZone): Long =
+        (timestamp + zone.getOffset(timestamp)).floorDiv(MILLIS_PER_DAY)
 
     fun getConversationDateHeaderString(context: Context, locale: Locale, timestamp: Long): String {
         return if (isToday(timestamp)) {

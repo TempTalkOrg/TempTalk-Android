@@ -107,7 +107,7 @@ class FailedMessageActionPopup(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             
             setContent {
-                DifftTheme {
+                DifftTheme(applyWindowBackground = false) {
                     var showPopup by remember { mutableStateOf(true) }
                     
                     // Handle back press
@@ -141,20 +141,6 @@ class FailedMessageActionPopup(
         }
         
         // Full-screen overlay
-        // Save original window background before adding ComposeView
-        val originalBackground = activity.window.decorView.background
-        
-        // Use OnPreDrawListener to restore background before first frame is drawn (avoids flicker)
-        rootView.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
-            override fun onPreDraw(): Boolean {
-                rootView.viewTreeObserver.removeOnPreDrawListener(this)
-                if (originalBackground != null) {
-                    activity.window.setBackgroundDrawable(originalBackground)
-                }
-                return true
-            }
-        })
-        
         rootView.addView(composeView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
     }
     

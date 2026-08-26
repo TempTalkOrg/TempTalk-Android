@@ -32,8 +32,8 @@ fun RecyclerView.noSmoothScrollToBottom() {
                 val offset = itemBottom - recyclerViewHeight
 
                 if (offset > 0) {
-                    // Scroll by the offset without animation
-                    recyclerView.scrollBy(0, offset)
+                    // scrollBy is posted because doOnNextLayout runs inside the layout pass. See issue 32a90db4.
+                    recyclerView.post { recyclerView.scrollBy(0, offset) }
                 }
             }
         }

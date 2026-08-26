@@ -31,9 +31,9 @@
     <string name="widget_chat_heder_loading">加载中…</string>
 
     <!-- Network certificate validation failure (possible man-in-the-middle attack) warning -->
-    <string name="net_risk_warning_title">网络风险警告</string>
-    <string name="net_risk_warning_message">应用可能正遭受中间人攻击！</string>
-    <string name="net_risk_warning_ignore">忽略</string>
+    <string name="net_risk_warning_title">网络安全警告</string>
+    <string name="net_risk_warning_message">当前网络可能不安全，建议切换网络后继续使用。</string>
+    <string name="net_risk_warning_ignore">继续</string>
     <string name="net_risk_warning_quit">退出</string>
 
     <!-- Suspicious link (homograph / phishing) open confirmation -->
@@ -41,4 +41,17 @@
     <string name="link_safety_confirm_message">不确定此链接是否安全，确认要打开吗？\n%1$s</string>
     <string name="link_safety_open_anyway">打开</string>
     <string name="link_safety_cancel">取消</string>
+
+    <!-- openExternalBrowser failure (no browser app available on device) -->
+    <string name="base_link_open_failed">无法打开链接</string>
+
+    <!-- E2EE explainer bottom sheet -->
+    <string name="e2ee_sheet_title">你的聊天和通话都是私密的</string>
+    <string name="e2ee_sheet_body">端到端加密可确保只有你和你选择聊天的对象可以查看消息或收听通话。除此之外的任何人都无法查看或收听，Quicall 也不例外。保护内容包括：</string>
+    <string name="e2ee_sheet_item_message">文字和语音消息</string>
+    <string name="e2ee_sheet_item_call">语音和视频通话</string>
+    <string name="e2ee_sheet_item_file">照片、视频和文件</string>
+    <string name="e2ee_sheet_caveat">端到端加密不能阻止聊天对象复制、保存、转发、截图或录音。请只与信任的人分享敏感内容。</string>
+    <string name="e2ee_sheet_got_it">知道了</string>
+    <string name="e2ee_learn_more">了解更多</string>
 </resources>

@@ -8,7 +8,7 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="52dp"
         android:background="@color/bg1">
 
         <androidx.appcompat.widget.AppCompatImageButton
@@ -16,8 +16,8 @@
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:background="@null"
-            android:padding="10dp"
-            android:src="@drawable/chat_contact_detail_ic_back"
+            android:padding="12dp"
+            android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/t.primary" />
@@ -77,7 +77,6 @@
                         android:layout_height="wrap_content"
                         android:background="@null"
                         android:gravity="center"
-                        android:src="@drawable/chat_contact_detail_ic_back"
                         android:textColor="@color/t.primary"
                         android:textSize="14sp"
                         tools:text="@string/chat_sent" />
@@ -89,7 +88,6 @@
                         android:layout_marginStart="12dp"
                         android:background="@null"
                         android:gravity="center"
-                        android:src="@drawable/chat_contact_detail_ic_back"
                         android:textColor="@color/t.third"
                         android:textSize="14sp"
                         tools:text="今日 11:35" />
@@ -189,7 +187,6 @@
                         android:layout_height="wrap_content"
                         android:background="@null"
                         android:gravity="center"
-                        android:src="@drawable/chat_contact_detail_ic_back"
                         android:text="@string/chat_message_sender"
                         android:textColor="@color/t.primary"
                         android:textSize="14sp" />
@@ -201,7 +198,6 @@
                         android:layout_marginStart="12dp"
                         android:background="@null"
                         android:gravity="center"
-                        android:src="@drawable/chat_contact_detail_ic_back"
                         android:textColor="@color/t.third"
                         android:textSize="14sp"
                         tools:text="nate" />
@@ -219,7 +215,6 @@
                         android:layout_height="wrap_content"
                         android:background="@null"
                         android:gravity="center"
-                        android:src="@drawable/chat_contact_detail_ic_back"
                         android:text="@string/chat_received"
                         android:textColor="@color/t.primary"
                         android:textSize="14sp" />
@@ -231,7 +226,6 @@
                         android:layout_marginStart="12dp"
                         android:background="@null"
                         android:gravity="center"
-                        android:src="@drawable/chat_contact_detail_ic_back"
                         android:textColor="@color/t.third"
                         android:textSize="14sp"
                         tools:text="今日 11:35" />
@@ -392,7 +386,6 @@
                     android:layout_height="wrap_content"
                     android:background="@null"
                     android:gravity="center"
-                    android:src="@drawable/chat_contact_detail_ic_back"
                     android:text="@string/chat_message_file_name"
                     android:textColor="@color/t.primary"
                     android:textSize="14sp" />
@@ -404,7 +397,6 @@
                     android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:background="@null"
-                    android:src="@drawable/chat_contact_detail_ic_back"
                     android:textColor="@color/t.third"
                     android:textSize="14sp"
                     tools:text="123.png" />

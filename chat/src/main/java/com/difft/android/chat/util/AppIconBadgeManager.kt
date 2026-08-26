@@ -72,14 +72,20 @@ class AppIconBadgeManager @Inject constructor(
     }
 
     private fun setBadgeCount(badgeCount: Int) {
-        when (Build.MANUFACTURER.lowercase()) {
-            "samsung" -> setSamsungBadgeCount(context, badgeCount)
-            "xiaomi" -> setXiaomiBadgeCount(context, badgeCount)
-            "huawei" -> setHuaweiBadgeCount(context, badgeCount)
-            "oppo" -> setOppoBadgeCount(context, badgeCount)
-            else -> {
-                //don't support show badge count in other brands device
+        try {
+            when (Build.MANUFACTURER.lowercase()) {
+                "samsung" -> setSamsungBadgeCount(context, badgeCount)
+                "xiaomi" -> setXiaomiBadgeCount(context, badgeCount)
+                "huawei" -> setHuaweiBadgeCount(context, badgeCount)
+                "oppo" -> setOppoBadgeCount(context, badgeCount)
+                else -> {
+                    //don't support show badge count in other brands device
+                }
             }
+        } catch (e: Exception) {
+            // Launcher badge providers are OEM-specific and may be absent (third-party
+            // launcher, repackaged builds) — ContentResolver.call then throws IllegalArgumentException.
+            L.w { "[AppIconBadge] setBadgeCount failed count=$badgeCount: ${e.stackTraceToString()}" }
         }
     }
 }

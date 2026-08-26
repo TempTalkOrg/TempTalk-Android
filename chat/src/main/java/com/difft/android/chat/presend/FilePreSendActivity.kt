@@ -232,9 +232,9 @@ private fun FilePreSendScreen(
             contentDescription = null,
             colorFilter = ColorFilter.tint(DifftTheme.colors.onSurface),
             modifier = Modifier
-                .size(44.dp)
+                .size(48.dp)
                 .clickable { onBack() }
-                .padding(10.dp)
+                .padding(12.dp)
         )
 
         // File info - centered

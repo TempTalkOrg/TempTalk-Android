@@ -10,9 +10,11 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_MUTE
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_RESUME_CALL
+import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SERVER_END_CALL
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
 import com.difft.android.call.data.RtmDataPacket
 import com.difft.android.call.data.RtmMessage
+import com.difft.android.call.data.ServerEndCallRtmMessage
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
@@ -70,7 +72,15 @@ class RtmMessageHandler(
      * different handler functions based on the message topic. It supports multiple message types including
      * chat messages, mute/unmute requests, call control commands, and countdown timer operations.
      */
-    fun handleDataReceived(event: RoomEvent.DataReceived, onChat: (Participant, String, Int?) -> Unit, onMuteMe: () -> Unit, onResumeMe: () -> Unit, onEndCall: () -> Unit, onCountDown: (CountDownTimerData, String) -> Unit) {
+    fun handleDataReceived(
+        event: RoomEvent.DataReceived,
+        onChat: (Participant, String, Int?) -> Unit,
+        onMuteMe: () -> Unit,
+        onResumeMe: () -> Unit,
+        onEndCall: () -> Unit,
+        onServerEndCall: () -> Unit,
+        onCountDown: (CountDownTimerData, String) -> Unit,
+    ) {
         val topic = event.topic ?: return
         when (topic) {
             RTM_MESSAGE_TOPIC_CHAT, RTM_MESSAGE_TOPIC_MUTE, RTM_MESSAGE_TOPIC_RESUME_CALL -> {
@@ -96,6 +106,7 @@ class RtmMessageHandler(
                     if (topic == rtm?.topic) onEndCall()
                 }
             }
+            RTM_MESSAGE_TOPIC_SERVER_END_CALL -> handleServerEndCallPacket(event, topic, onServerEndCall)
             RTM_MESSAGE_TOPIC_SET_COUNTDOWN, RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN, RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN, RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN -> {
                 val packet = try { json.decodeFromString<RtmDataPacket>(String(event.data, Charsets.UTF_8)) } catch (e: Exception) {
                     L.e { "[Call] handleDataReceived decode countdown rtm message failed, error = ${e.message}" }
@@ -109,8 +120,46 @@ class RtmMessageHandler(
                     if (data != null) onCountDown(data, topic)
                 }
             }
-
         }
+    }
+
+    /**
+     * Validates the plaintext `server-end-call` packet (RTM protocol §4.1). Trust
+     * model: `event.participant` must be null (server-injected); no decrypt / no PA.
+     * Any validation failure logs and drops.
+     */
+    private fun handleServerEndCallPacket(
+        event: RoomEvent.DataReceived,
+        outerTopic: String,
+        onServerEndCall: () -> Unit,
+    ) {
+        val p = event.participant
+        if (p != null) {
+            L.w { "[Call] server-end-call REJECTED - participant not null (identity=${p.identity?.value})" }
+            return
+        }
+        val packet = try {
+            json.decodeFromString<RtmDataPacket>(String(event.data, Charsets.UTF_8))
+        } catch (e: Exception) {
+            L.w { "[Call] server-end-call REJECTED - decode outer failed: ${e.message}" }
+            return
+        }
+        val inner = try {
+            json.decodeFromString<ServerEndCallRtmMessage>(packet.payload)
+        } catch (e: Exception) {
+            L.w { "[Call] server-end-call REJECTED - decode inner failed: ${e.message}" }
+            return
+        }
+        if (inner.topic != outerTopic) {
+            L.w { "[Call] server-end-call REJECTED - inner topic '${inner.topic}' != outer '$outerTopic'" }
+            return
+        }
+        if (inner.sendTimestamp != packet.sendTimestamp) {
+            L.w { "[Call] server-end-call REJECTED - inner ts ${inner.sendTimestamp} != outer ${packet.sendTimestamp}" }
+            return
+        }
+        L.i { "[Call] server-end-call ACCEPTED uuid=${packet.uuid} sendTimestamp=${inner.sendTimestamp}" }
+        onServerEndCall()
     }
 
     /**

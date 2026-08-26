@@ -295,6 +295,10 @@ private fun WideScreenParticipantLayout(
                                 uid = uid,
                                 userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
                                 participantIndex = rowOffset + colIndex,
+                                // The full room headcount, not displayParticipants.size: the
+                                // widescreen grid truncates its tiles behind an overflow cell, but
+                                // the badge's two-person rule is about the room.
+                                participantCount = participants.size,
                                 muteOtherEnabled = muteOtherEnabled,
                                 onClickMute = { viewModel.toggleMute(participant) },
                                 coroutineScope = coroutineScope

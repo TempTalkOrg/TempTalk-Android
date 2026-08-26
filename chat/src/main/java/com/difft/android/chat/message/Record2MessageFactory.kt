@@ -3,19 +3,12 @@ package com.difft.android.chat.message
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
-import org.difft.app.database.attachment
-import org.difft.app.database.forwardContext
 import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.screenShot
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.base.utils.globalServices
-import org.difft.app.database.mentions
-import org.difft.app.database.quote
-import org.difft.app.database.reactions
-import org.difft.app.database.sharedContacts
-import org.difft.app.database.speechToTextData
-import org.difft.app.database.translateData
+import org.difft.app.database.hydration.MessageSubData
 import org.difft.app.database.wcdb
 import com.difft.android.base.R
 import com.difft.android.chat.common.SendType
@@ -109,13 +102,23 @@ fun calculateReadStatus(
     }
 }
 
+/**
+ * Builds the UI model for [record]. Pure CPU: every child-table row it needs arrives in [subData],
+ * already resolved by `MessageHydrator` in one batched pass over the whole window.
+ *
+ * [subData] deliberately has NO default value. A default would let a forgotten call site compile
+ * while silently rendering a message with no attachment, quote, forward, mention, reaction, shared
+ * contact or translation — a failure that looks like missing data, not like a bug.
+ */
+@Suppress("LongParameterList")
 fun generateMessageTwo(
     forWhat: For,
     record: MessageModel,
     contactor: List<ContactorModel>,
     readInfoList: List<ReadInfoModel>?,
     isLargeGroup: Boolean = false,
-    groupMemberCount: Int = 0
+    groupMemberCount: Int = 0,
+    subData: MessageSubData,
 ): ChatMessage? {
     val isFromMySelf = globalServices.myId == record.fromWho
     val authorId = record.fromWho ?: ""
@@ -138,24 +141,28 @@ fun generateMessageTwo(
             // For unsupported messages, show a placeholder text
             this.message = if (record.type == MessageModel.TYPE_UNSUPPORTED) {
                 ResUtils.getString(R.string.chat_message_unsupported)
-            } else if (record.forwardContext() != null) {
+            } else if (subData.forwardContext != null) {
                 ""
             } else {
                 record.messageText
             }
-            this.attachment = record.attachment()
-            this.quote = record.quote()
-            this.forwardContext = record.forwardContext()
-            this.mentions = record.mentions()
-            this.reactions = record.reactions()
-            this.sharedContacts = record.sharedContacts()
+            this.attachment = subData.attachment
+            this.quote = subData.quote
+            // Same reference the branch above tested — the forward context is resolved once per
+            // message by the hydrator, so the double `forwardContext()` query is gone structurally.
+            this.forwardContext = subData.forwardContext
+            this.mentions = subData.mentions
+            this.reactions = subData.reactions
+            this.sharedContacts = subData.sharedContacts
             val readResult = calculateReadStatus(forWhat, record, readInfoList, isLargeGroup, systemShowTimestamp, groupMemberCount)
             this.readStatus = readResult.readStatus
             this.readContactNumber = readResult.readContactNumber
             this.playStatus = record.playStatus
-            this.translateData = record.translateData()
-            this.speechToTextData = record.speechToTextData()
+            this.translateData = subData.translateData
+            this.speechToTextData = subData.speechToTextData
             this.criticalAlertType = record.criticalAlertType
+            // Still a direct call: screenShot() parses the in-memory screenShotJson column, it is
+            // not a DB read, so there is nothing for the hydrator to batch.
             this.isScreenShotMessage = record.screenShot() != null
         }
     } else if (record.type == MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER) {

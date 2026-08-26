@@ -14,12 +14,14 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
+import io.livekit.android.room.track.LocalTrackPublication
+import io.livekit.android.room.track.Track
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import livekit.LivekitTemptalk
 import org.junit.After
@@ -53,6 +55,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
+@OptIn(ExperimentalCoroutinesApi::class)
 class RoomEventDispatcherManualSwitchMediaRestoreTest {
 
     @get:Rule(order = 0)
@@ -72,6 +75,9 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
     /** Records every host.setCameraEnabled(enabled) invocation. */
     private val setCameraCalls = mutableListOf<Boolean>()
 
+    /** Records duration-timer starts triggered by the media-ready gate. */
+    private var startCallTimerCalls = 0
+
     @Before
     fun setUp() {
         ApplicationHelper.init(ApplicationProvider.getApplicationContext())
@@ -81,6 +87,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         timeoutMonitor = mockk(relaxed = true)
         every { coordinator.isRetryUrlConnecting } returns false
         every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.CONNECTED)
+        every { room.state } returns Room.State.CONNECTED
     }
 
     @After
@@ -88,6 +95,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         unmockkAll()
         setMicCalls.clear()
         setCameraCalls.clear()
+        startCallTimerCalls = 0
     }
 
     private fun buildDispatcher(callType: String): RoomEventDispatcher {
@@ -102,13 +110,14 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
             stopRingToneAndTimeoutCheckFn = {},
             resolveCallTypeFn = {},
             handleConnectedStateFn = {},
+            startCallDurationTimerFn = { startCallTimerCalls++ },
             onFeedbackIdentityResolvedFn = { _, _, _ -> },
             onNetworkPoorStateChangedFn = {},
             getCurrentCallTypeFn = { callType },
             getCurrentRoomIdFn = { "room-1" },
         )
         return RoomEventDispatcher(
-            scope = CoroutineScope(Dispatchers.Unconfined),
+            scope = CoroutineScope(dispatcherRule.testDispatcher),
             room = room,
             roomCtl = roomCtl,
             rtm = mockk(relaxed = true),
@@ -122,6 +131,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
             callDataManager = mockk(relaxed = true),
             statisticsLogManager = mockk(relaxed = true),
             mySelfId = "self",
+            networkQuality = mockk(relaxed = true),
             host = host,
         )
     }
@@ -138,6 +148,26 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
             .getDeclaredMethod("dispatch", RoomEvent::class.java)
         method.isAccessible = true
         method.invoke(dispatcher, event)
+    }
+
+    private fun armCallTimerGate(
+        dispatcher: RoomEventDispatcher,
+        remote: Participant? = mockk<RemoteParticipant>(relaxed = true),
+    ) {
+        val method = RoomEventDispatcher::class.java
+            .getDeclaredMethod("armCallTimerGate", Participant::class.java)
+        method.isAccessible = true
+        method.invoke(dispatcher, remote)
+    }
+
+    private fun localTrackSubscribed(source: Track.Source): RoomEvent.LocalTrackSubscribed {
+        val publication = mockk<LocalTrackPublication>(relaxed = true)
+        every { publication.source } returns source
+        return RoomEvent.LocalTrackSubscribed(
+            room,
+            publication,
+            mockk<LocalParticipant>(relaxed = true),
+        )
     }
 
     private fun stubMediaState(mic: Boolean, camera: Boolean) {
@@ -277,6 +307,83 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         dispatch(dispatcher, RoomEvent.ParticipantDisconnected(room, mockk<RemoteParticipant>(relaxed = true)))
 
         verify(exactly = 1) { timeoutMonitor.onParticipantDisconnected(true) }
+    }
+
+    @Test
+    fun `call teardown cancels pending media-ready fallback`() {
+        val dispatcher = buildDispatcher(CallType.ONE_ON_ONE.type)
+        armCallTimerGate(dispatcher)
+
+        dispatcher.cancelJobs()
+        dispatcherRule.testDispatcher.scheduler.advanceTimeBy(5_000)
+        dispatcherRule.testDispatcher.scheduler.runCurrent()
+
+        assertEquals(0, startCallTimerCalls)
+    }
+
+    @Test
+    fun `microphone subscription after gate arm starts timer once`() {
+        val dispatcher = buildDispatcher(CallType.ONE_ON_ONE.type)
+        armCallTimerGate(dispatcher)
+
+        dispatch(dispatcher, localTrackSubscribed(Track.Source.MICROPHONE))
+        dispatch(dispatcher, localTrackSubscribed(Track.Source.MICROPHONE))
+
+        assertEquals(1, startCallTimerCalls)
+    }
+
+    @Test
+    fun `early microphone subscription starts timer when gate arms`() {
+        val dispatcher = buildDispatcher(CallType.ONE_ON_ONE.type)
+
+        dispatch(dispatcher, localTrackSubscribed(Track.Source.MICROPHONE))
+        assertEquals(0, startCallTimerCalls)
+        armCallTimerGate(dispatcher)
+
+        assertEquals(1, startCallTimerCalls)
+    }
+
+    @Test
+    fun `remote active alone does not start timer`() {
+        val dispatcher = buildDispatcher(CallType.ONE_ON_ONE.type)
+        val remote = mockk<RemoteParticipant>(relaxed = true)
+        armCallTimerGate(dispatcher, remote)
+
+        dispatch(
+            dispatcher,
+            RoomEvent.ParticipantStateChanged(
+                room,
+                remote,
+                Participant.State.ACTIVE,
+                Participant.State.JOINED,
+            ),
+        )
+
+        assertEquals(0, startCallTimerCalls)
+    }
+
+    @Test
+    fun `camera and screen share subscriptions never start timer`() {
+        val dispatcher = buildDispatcher(CallType.ONE_ON_ONE.type)
+        armCallTimerGate(dispatcher)
+
+        dispatch(dispatcher, localTrackSubscribed(Track.Source.CAMERA))
+        dispatch(dispatcher, localTrackSubscribed(Track.Source.SCREEN_SHARE))
+
+        assertEquals(0, startCallTimerCalls)
+    }
+
+    @Test
+    fun `gate does not arm while room is disconnected`() {
+        every { room.state } returns Room.State.DISCONNECTED
+        val dispatcher = buildDispatcher(CallType.ONE_ON_ONE.type)
+
+        armCallTimerGate(dispatcher)
+        dispatch(dispatcher, localTrackSubscribed(Track.Source.MICROPHONE))
+        dispatcherRule.testDispatcher.scheduler.advanceTimeBy(5_000)
+        dispatcherRule.testDispatcher.scheduler.runCurrent()
+
+        assertEquals(0, startCallTimerCalls)
     }
 
     // ---------------------------------------------------------------------------------

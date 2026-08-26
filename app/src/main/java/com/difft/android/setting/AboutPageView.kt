@@ -39,7 +39,7 @@ fun AboutPageView(
     onCheckForUpdateClick: () -> Unit,
     joinDesktopClick: () -> Unit,
     callServerUrlNodeClick: () -> Unit,
-    isInsider: Boolean,
+    showCallServerEntry: Boolean,
     showBackButton: Boolean = true
 ) {
     Column(
@@ -67,7 +67,7 @@ fun AboutPageView(
                 onCheckForUpdateClick = onCheckForUpdateClick,
                 joinDesktopClick = joinDesktopClick,
                 callServerUrlNodeClick = callServerUrlNodeClick,
-                isInsider = isInsider
+                showCallServerEntry = showCallServerEntry
             )
         }
     }
@@ -137,7 +137,7 @@ fun SettingsScreen(
     onCheckForUpdateClick: () -> Unit,
     joinDesktopClick: () -> Unit,
     callServerUrlNodeClick: () -> Unit,
-    isInsider: Boolean
+    showCallServerEntry: Boolean
 ) {
     Column(
         modifier = Modifier
@@ -196,7 +196,7 @@ fun SettingsScreen(
             )
         }
 
-        if(isInsider) {
+        if(showCallServerEntry) {
             Spacer(modifier = Modifier.height(25.dp))
 
             Column(
@@ -228,6 +228,6 @@ private fun DefaultAboutPageView() {
         onCheckForUpdateClick = {},
         joinDesktopClick = {},
         callServerUrlNodeClick = {},
-        isInsider = false
+        showCallServerEntry = false
     )
 }

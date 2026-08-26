@@ -108,7 +108,7 @@ class TextSelectionMenuPopup(
         
         val newComposeView = ComposeView(activity).apply {
             setContent {
-                DifftTheme {
+                DifftTheme(applyWindowBackground = false) {
                     val density = LocalDensity.current
                     var offsetX by remember { mutableIntStateOf(0) }
                     var offsetY by remember { mutableIntStateOf(0) }

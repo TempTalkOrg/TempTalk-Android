@@ -15,8 +15,8 @@
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:background="@null"
-            android:padding="10dp"
-            android:src="@drawable/chat_contact_detail_ic_back"
+            android:padding="12dp"
+            android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/t.primary" />
@@ -27,7 +27,6 @@
             android:layout_height="match_parent"
             android:background="@null"
             android:gravity="center"
-            android:src="@drawable/chat_contact_detail_ic_back"
             android:text="@string/me_privacy"
             android:textColor="@color/t.primary"
             android:textSize="20sp"
@@ -46,7 +45,7 @@
     <!--        android:layout_marginStart="16dp"-->
     <!--        android:layout_marginTop="16dp"-->
     <!--        android:background="@null"-->
-    <!--        android:src="@drawable/chat_contact_detail_ic_back"-->
+    <!--        android:src="@drawable/chative_ic_back"-->
     <!--        android:text="@string/settings_security"-->
     <!--        android:textColor="@color/t.secondary"-->
     <!--        android:textSize="12sp"-->
@@ -103,7 +102,6 @@
         android:background="@null"
         android:paddingStart="32dp"
         android:paddingEnd="28dp"
-        android:src="@drawable/chat_contact_detail_ic_back"
         android:text="@string/settings_screen_lock_tips"
         android:textColor="@color/t.secondary"
         android:textSize="12sp"
@@ -226,7 +224,6 @@
         android:background="@null"
         android:paddingStart="32dp"
         android:paddingEnd="28dp"
-        android:src="@drawable/chat_contact_detail_ic_back"
         android:textColor="@color/t.secondary"
         android:textSize="12sp"
         android:visibility="gone"
@@ -291,7 +288,7 @@
     <!--            android:layout_marginStart="16dp"-->
     <!--            android:layout_marginTop="30dp"-->
     <!--            android:background="@null"-->
-    <!--            android:src="@drawable/chat_contact_detail_ic_back"-->
+    <!--            android:src="@drawable/chative_ic_back"-->
     <!--            android:text="@string/settings_privacy_find_me"-->
     <!--            android:textColor="@color/t.secondary"-->
     <!--            android:textSize="12sp"-->

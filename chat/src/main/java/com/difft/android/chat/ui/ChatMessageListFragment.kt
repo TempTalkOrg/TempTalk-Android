@@ -42,6 +42,7 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMultiplePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheet
 import com.difft.android.base.ui.noSmoothScrollToBottom
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
@@ -55,13 +56,12 @@ import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.chat.ChatNormalPaginationController.Companion.TRIM_HIGH_WATER
 import com.difft.android.chat.R
 import com.difft.android.chat.ScrollAction
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
-import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDialogFragment
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.data.ChatMessageListUIState
@@ -69,6 +69,7 @@ import com.difft.android.chat.databinding.ChatFragmentMessageListBinding
 import com.difft.android.chat.group.GroupChatPopupActivity
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
+import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.MessageActionHelper
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageFromForward
@@ -77,6 +78,11 @@ import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.singleForwardableAttachment
 import difft.android.messageserialization.model.isLongText
 import com.difft.android.chat.message.isConfidential
+import com.difft.android.chat.pagination.PageLoadDecision
+import com.difft.android.chat.pagination.PageLoadTrigger
+import com.difft.android.chat.pagination.decidePageLoad
+import com.difft.android.chat.pagination.launchScrollPrefetch
+import com.difft.android.chat.pagination.runGatedPageLoad
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.messageaction.FailedMessageActionPopup
 import com.difft.android.chat.ui.messageaction.MessageActionCoordinator
@@ -85,6 +91,7 @@ import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.chat.widget.VoiceMessageView
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
+import com.difft.android.network.UrlManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.selector.basic.IBridgeViewLifecycle
 import com.difft.android.selector.basic.PictureSelector
@@ -112,16 +119,18 @@ import difft.android.messageserialization.model.keepEncryptedAtRest
 import difft.android.messageserialization.model.isVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import com.difft.android.base.widget.InsetAwareConstraintLayout
 import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.wcdb
 import com.difft.android.chat.components.reaction.ReactionEmojisAdapter
@@ -152,11 +161,13 @@ class ChatMessageListFragment : Fragment() {
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
 
+    @Inject
+    lateinit var urlManager: UrlManager
+
     private val messageActionHelper by lazy {
         MessageActionHelper(requireActivity(), viewLifecycleOwner.lifecycleScope)
     }
 
-    private var isFriend = false
     private var needsCallHeaderScrollCompensation = false
 
     private lateinit var binding: ChatFragmentMessageListBinding
@@ -395,6 +406,15 @@ class ChatMessageListFragment : Fragment() {
             override fun onSelectedMessage(messageId: String, selected: Boolean) {
                 chatViewModel.selectedMessage(messageId, selected)
             }
+
+            override fun onE2eeHeaderClick() {
+                L.i { "[Chat] E2EE header clicked roomId=${chatViewModel.forWhat.id}" }
+                E2eeInfoSheet.show(
+                    activity = requireActivity(),
+                    darkTheme = ThemeUtil.isDarkNotificationTheme(requireContext()),
+                    learnMoreUrl = urlManager.e2eeLearnMoreUrl,
+                )
+            }
         }
     }
 
@@ -412,6 +432,20 @@ class ChatMessageListFragment : Fragment() {
 
     private var userScrolling = false
     private var isDragging = false
+
+    /**
+     * One signal per `onScrolled`, so a page-load check can run DURING a fling instead of only after
+     * it settles. Capacity 1 + DROP_OLDEST: the signal carries no data, so a dropped one is fully
+     * replaced by the next frame's.
+     */
+    private val scrollPrefetchSignals = MutableSharedFlow<Unit>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** Serialises page loads across directions; see `runGatedPageLoad`. */
+    private val pageLoadGate = Mutex()
 
     private var lastScrollPos: Int = -1 //上次滚动位置
     private var lastMessageCount: Int = -1 //上次消息数量
@@ -474,7 +508,7 @@ class ChatMessageListFragment : Fragment() {
                             showDayTime(linearLayoutManager.findFirstVisibleItemPosition())
                             viewLifecycleOwner.lifecycleScope.launch {
                                 if (userScrolling) {
-                                    checkAndLoadMessages(linearLayoutManager)
+                                    checkAndLoadMessages(PageLoadTrigger.IDLE)
                                 }
                                 sendAndUpdateMessageRead()
                                 checkAndRecordConfidentialPlaceholders()
@@ -495,6 +529,9 @@ class ChatMessageListFragment : Fragment() {
 
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     super.onScrolled(recyclerView, dx, dy)
+                    // Runs every frame, so it must stay a non-suspending emit with no viewport
+                    // reads: the collector does the throttled reading off this callback.
+                    scrollPrefetchSignals.tryEmit(Unit)
                     val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return
                     val firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
 
@@ -517,6 +554,8 @@ class ChatMessageListFragment : Fragment() {
                     }
                 }
             })
+
+            observeScrollPrefetch()
 
             //右滑item进行引用消息功能
             val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.RIGHT, ItemTouchHelper.RIGHT) {
@@ -722,35 +761,6 @@ class ChatMessageListFragment : Fragment() {
                 L.i { "[SaveToPhotos] conversationSetting: ${conversationSet?.saveToPhotos}, globalSetting: $globalSaveToPhotos, result: $shouldSaveToPhotos" }
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
-
-        initPrivacyBanner()
-    }
-
-    private fun initPrivacyBanner() {
-        if (chatViewModel.forWhat is For.Account && !chatViewModel.forWhat.id.isOfficialAccount()) {
-            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                isFriend = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(chatViewModel.forWhat.id)) != null
-                withContext(Dispatchers.Main) {
-                    if (!isAdded || view == null) return@withContext
-                    updatePrivacyBanner()
-                }
-            }
-
-            ContactorUtil.contactsUpdate
-                .onEach {
-                    if (it.contains(chatViewModel.forWhat.id)) {
-                        withContext(Dispatchers.IO) {
-                            isFriend = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(chatViewModel.forWhat.id)) != null
-                        }
-                        updatePrivacyBanner()
-                    }
-                }
-                .launchIn(viewLifecycleOwner.lifecycleScope)
-        }
-    }
-
-    private fun updatePrivacyBanner() {
-        binding.tvPrivacyBanner.visibility = if (!isFriend) View.VISIBLE else View.GONE
     }
 
     private fun observeChatMessageListState() {
@@ -808,7 +818,11 @@ class ChatMessageListFragment : Fragment() {
     }
 
     private fun handleChatMessageListState(state: ChatMessageListUIState) {
-        L.i { "[${chatViewModel.forWhat.id}] handleChatMessageListState: size=${state.chatMessages.size}, scrollAction=${state.scrollAction}" }
+        L.i {
+            "[${chatViewModel.forWhat.id}] handleChatMessageListState: size=${state.chatMessages.size}, " +
+                "window=${state.windowSize}, scrollAction=${state.scrollAction}, " +
+                "reachedLatest=${state.hasReachedLatest}, reachedHistoryStart=${state.hasReachedHistoryStart}"
+        }
         if (!isAdded || view == null || !this::binding.isInitialized) return
 
         binding.lottieViewLoading.clearAnimation()
@@ -868,6 +882,10 @@ class ChatMessageListFragment : Fragment() {
 
             // After list update, check visible area for newly appeared placeholder messages
             checkAndRecordConfidentialPlaceholders()
+
+            // Last thing in the commit callback: the layout the trim decision reads is the one this
+            // submitList just produced.
+            maybeTrimWindow(state)
         }
 
         if (isFirstShow) {
@@ -1907,17 +1925,66 @@ class ChatMessageListFragment : Fragment() {
     private var isLoadingTop = false
     private var isLoadingBottom = false
 
-    private suspend fun checkAndLoadMessages(linearLayoutManager: LinearLayoutManager) {
+    /** Starts the throttled prefetch collector; one signal per `onScrolled`, one check per period. */
+    private fun observeScrollPrefetch() {
+        viewLifecycleOwner.lifecycleScope.launchScrollPrefetch(
+            signals = scrollPrefetchSignals,
+            lifecycle = viewLifecycleOwner.lifecycle,
+        ) { checkAndLoadMessages(PageLoadTrigger.PREFETCH) }
+    }
 
-        if (isAtBottom(linearLayoutManager)) {
-            L.d { "[message] isAtBottom" }
-            loadNextPage()
-        }
+    /** Snapshots the live viewport + UI state into the pure decision. Non-suspending, Main-only. */
+    private fun currentPageLoadDecision(): PageLoadDecision {
+        val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
+            ?: return PageLoadDecision.NONE
+        val state = chatViewModel.chatMessageListUIState.value
+        return decidePageLoad(
+            userScrolling = userScrolling,
+            firstVisible = layoutManager.findFirstVisibleItemPosition(),
+            lastVisible = layoutManager.findLastVisibleItemPosition(),
+            itemCount = layoutManager.itemCount,
+            isAtBottom = isAtBottom(layoutManager),
+            // An absent UI state must NOT suppress paging — false keeps the pre-gating behaviour.
+            hasReachedHistoryStart = state?.hasReachedHistoryStart ?: false,
+            hasReachedLatest = state?.hasReachedLatest ?: false,
+        )
+    }
 
-        if (isAtTop(linearLayoutManager)) {
-            L.d { "[message] isAtTop" }
-            loadPreviousPage()
-        }
+    /**
+     * @param trigger IDLE waits out an in-flight load, because the read receipts sent right after it
+     *   in the IDLE block must go out after pagination completes; PREFETCH drops the check while the
+     *   gate is busy, since the next scroll signal or the next IDLE re-issues it.
+     */
+    private suspend fun checkAndLoadMessages(trigger: PageLoadTrigger) = runGatedPageLoad(
+        gate = pageLoadGate,
+        waitIfBusy = trigger == PageLoadTrigger.IDLE,
+        decide = ::currentPageLoadDecision,
+        loadNewer = { loadNextPage(trigger) },
+        loadOlder = { loadPreviousPage(trigger) },
+    )
+
+    /**
+     * Asks the ViewModel to trim the loaded window back to its cap, but only while the user is
+     * parked at the bottom.
+     *
+     * That gate is the CRIT-2 defence: trimming drops rows off the OLDEST end, which is exactly
+     * where the viewport is when the user has scrolled back into history. Called from the
+     * `submitList` commit callback so the layout it reads is current, and from
+     * `viewLifecycleOwner.lifecycleScope` (`Main.immediate`) so `trimToLatest()` reaches its
+     * `update {}` in this same main-loop turn — see that function's KDoc.
+     */
+    private fun maybeTrimWindow(state: ChatMessageListUIState) {
+        val layoutManager = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager ?: return
+        val trim = shouldTrimWindow(
+            windowSize = state.windowSize,
+            highWater = TRIM_HIGH_WATER,
+            // pageLoadGate on top of the two direction flags: a page load overwrites the
+            // controller's state whole, so one running concurrently with a trim writes the pre-trim
+            // window straight back — self-healing, but it wastes a full re-transform.
+            isLoadingPage = isLoadingTop || isLoadingBottom || pageLoadGate.isLocked,
+        ) { isAtBottom(layoutManager) }
+        if (!trim) return
+        viewLifecycleOwner.lifecycleScope.launch { chatViewModel.trimToLatest() }
     }
 
     private fun notifyItemChangedAndAnchorBottom(position: Int) {
@@ -1947,28 +2014,43 @@ class ChatMessageListFragment : Fragment() {
 
     }
 
-    // 检查是否滑动到顶部
-    private fun isAtTop(layoutManager: LinearLayoutManager): Boolean {
-        return layoutManager.findFirstVisibleItemPosition() == 0
-    }
-
     // 加载下一页数据的方法
-    private suspend fun loadNextPage() {
+    private suspend fun loadNextPage(trigger: PageLoadTrigger) {
         if (!isLoadingBottom) {
             isLoadingBottom = true  // 标记为正在加载数据
-            chatViewModel.loadNextPage()
-            isLoadingBottom = false  // 标记为加载完成
+            // finally: a throwing load must not strand the flag true — that would permanently
+            // no-op this direction and block window trimming for the rest of the view's life.
+            try {
+                logPageLoadStart("loadNextPage", trigger)
+                chatViewModel.loadNextPage()
+            } finally {
+                isLoadingBottom = false  // 标记为加载完成
+            }
             L.i { "[message] loadNextPage done" }
         }
     }
 
     // 加载上一页数据的方法
-    private suspend fun loadPreviousPage() {
+    private suspend fun loadPreviousPage(trigger: PageLoadTrigger) {
         if (!isLoadingTop) {
             isLoadingTop = true
-            chatViewModel.loadPreviousPage()
-            isLoadingTop = false
+            // finally: see loadNextPage — a stranded flag disables this direction permanently.
+            try {
+                logPageLoadStart("loadPreviousPage", trigger)
+                chatViewModel.loadPreviousPage()
+            } finally {
+                isLoadingTop = false
+            }
             L.i { "[message] loadPreviousPage Done" }
+        }
+    }
+
+    /** Pairs with the existing `done` lines so one page load's cost and trigger are both readable. */
+    private fun logPageLoadStart(what: String, trigger: PageLoadTrigger) {
+        val lm = binding.recyclerViewMessage.layoutManager as? LinearLayoutManager
+        L.i {
+            "[message] $what start src=${trigger.tag} first=${lm?.findFirstVisibleItemPosition()} " +
+                "last=${lm?.findLastVisibleItemPosition()} count=${lm?.itemCount}"
         }
     }
 
@@ -1998,6 +2080,12 @@ class ChatMessageListFragment : Fragment() {
         val data = chatMessageAdapter.currentList.getOrNull(firstVisibleItemPosition) ?: return
         // Archive tombstone carries a sentinel sort timestamp, not a real date
         if (data.systemShowTimestamp == MessageModel.ARCHIVE_TOMBSTONE_SORT_SENTINEL) {
+            binding.cvDayTime.visibility = View.GONE
+            return
+        }
+        // E2EE header row carries no real date either — hide the floating pill while it's the
+        // first visible item; scrolling past it to a real message row restores the pill above.
+        if (data is EncryptionHeaderChatMessage) {
             binding.cvDayTime.visibility = View.GONE
             return
         }
@@ -2476,6 +2564,24 @@ class ChatMessageListFragment : Fragment() {
         }
     }
 }
+
+/**
+ * The window-trim decision behind [ChatMessageListFragment.maybeTrimWindow].
+ *
+ * Pure, so the CRIT-2 gate can be exhausted by unit tests — `ChatMessageListFragment`'s Hilt graph
+ * makes direct instantiation impractical, the same reason [resolveByMessageId] was lifted out. Only
+ * the already-computed `Boolean` crosses the boundary; the viewport reading itself stays in the
+ * Fragment.
+ *
+ * [isAtBottom] is a lambda, not a value, so the viewport read (three `computeVerticalScroll*` calls)
+ * happens only once the two cheap guards pass — this runs on every list commit.
+ */
+internal fun shouldTrimWindow(
+    windowSize: Int,
+    highWater: Int,
+    isLoadingPage: Boolean,
+    isAtBottom: () -> Boolean,
+): Boolean = windowSize >= highWater && !isLoadingPage && isAtBottom()
 
 /**
  * Resolve an item by message id: look up its current position via [indexOf], then resolve the item

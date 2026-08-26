@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Tabler "phone" icon. Placeholder color only — see base_tabler_lock.xml header
+         comment on the tint discipline all 4 E2EE icons share. -->
+    <path
+        android:pathData="M5,4h4l2,5l-2.5,1.5a11,11 0,0 0,5 5l1.5,-2.5l5,2v4a2,2 0,0 1,-2 2a16,16 0,0 1,-15 -15a2,2 0,0 1,2 -2z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

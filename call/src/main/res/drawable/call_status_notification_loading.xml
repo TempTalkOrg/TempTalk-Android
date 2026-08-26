@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><!-- Figma line-md:loading-loop (node 17129:3373): quarter-circle arc spinner, rotated by the caller. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:pathData="M8,2C11.313,2 14,4.687 14,8"
+        android:strokeWidth="1.33333"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#EAECEF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

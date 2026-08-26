@@ -231,7 +231,7 @@ private fun TopBar(
         if (isPopupMode || showBackButton) {
             Icon(
                 painter = painterResource(
-                    id = if (isPopupMode) R.drawable.ic_close else R.drawable.chat_contact_detail_ic_back
+                    id = if (isPopupMode) R.drawable.ic_close else com.difft.android.base.R.drawable.chative_ic_back
                 ),
                 contentDescription = null,
                 modifier = Modifier

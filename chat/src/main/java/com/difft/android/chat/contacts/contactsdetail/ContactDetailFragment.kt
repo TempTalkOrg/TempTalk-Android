@@ -200,7 +200,7 @@ class ContactDetailFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DifftTheme {
+                DifftTheme(applyWindowBackground = !isPopupMode) {
                     ContactDetailScreen(
                         uiState = uiState.copy(commonGroupsCount = commonGroupsCount),
                         isPopupMode = isPopupMode,

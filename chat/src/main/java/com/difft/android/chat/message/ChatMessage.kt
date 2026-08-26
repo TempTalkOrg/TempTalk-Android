@@ -105,7 +105,8 @@ fun ChatMessage.isConfidentialPlaceholder(): Boolean {
 
 /** Whether this message renders as a centered notify-style row (no chat bubble). */
 fun ChatMessage.isNotifyStyleMessage(): Boolean {
-    return this is NotifyChatMessage || (this is TextChatMessage && this.isScreenShotMessage)
+    return this is NotifyChatMessage || this is EncryptionHeaderChatMessage ||
+        (this is TextChatMessage && this.isScreenShotMessage)
 }
 
 /**

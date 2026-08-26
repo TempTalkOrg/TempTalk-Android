@@ -118,7 +118,9 @@ class CallFeedbackManager @Inject constructor(
     fun showCallFeedbackView(activity: Activity, callInfo: FeedbackCallInfo) {
         val composeView = ComposeView(activity)
         composeView.setContent {
-            DifftTheme {
+            // This overlay never owns the host Activity's window — the host is whatever
+            // Activity onActivityResumed happened to land on, not this call site's own root.
+            DifftTheme(applyWindowBackground = false) {
                 CallRatingFeedbackView(
                     callInfo = callInfo,
                     onDisplay = {

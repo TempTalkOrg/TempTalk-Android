@@ -27,4 +27,47 @@ object LCallUiConstants {
 
     val DEFAULT_BUBBLE_TEXTS = listOf("Agree ✅", "Disagree ⛔", "Bye 👋", "Can't hear 🙉", "Speed up 🐰", "Slow down 🐢")
 
+    // ---- Call chrome geometry (dp magnitudes; convert with `.dp` at the use site) ----
+    //
+    // Owner principle: each constant is owned by the component that RENDERS it. Consumers
+    // reserve space from the *_TOTAL_* values and never re-derive a bar's internals.
+
+    /** Rendered height of the top status bar box. Owner: MainPageWithTopStatusView TopStatusBar. */
+    const val TOP_BAR_HEIGHT_DP = 52
+
+    /** Gap between the status-bar inset and the top bar. Owner: MainPageWithTopStatusView column. */
+    const val TOP_BAR_MARGIN_TOP_DP = 0
+
+    /** Gap below the top bar. Owner: MainPageWithTopStatusView column. */
+    const val TOP_BAR_MARGIN_BOTTOM_DP = 4
+
+    /**
+     * Total vertical space the top bar occupies **below the status-bar inset**.
+     * Callers add their own `topInset`; this constant never includes it.
+     */
+    const val TOP_BAR_TOTAL_HEIGHT_DP =
+        TOP_BAR_MARGIN_TOP_DP + TOP_BAR_HEIGHT_DP + TOP_BAR_MARGIN_BOTTOM_DP  // 56
+
+    /** Diameter of one bottom control button. Owner: MainPageWithBottomControlView. */
+    const val BOTTOM_BAR_CONTROL_SIZE_DP = 48
+
+    /** Portrait bottom margin under the control row. Owner: MainPageWithBottomControlView. */
+    const val BOTTOM_BAR_MARGIN_BOTTOM_DP = 32
+
+    /** Total vertical space the portrait bottom control bar occupies. */
+    const val BOTTOM_BAR_TOTAL_HEIGHT_DP =
+        BOTTOM_BAR_CONTROL_SIZE_DP + BOTTOM_BAR_MARGIN_BOTTOM_DP  // 80
+
+    /** Barrage entry (smiley) icon size. Owner: ShouldShowBarrageInput. */
+    const val BARRAGE_ENTRY_ICON_SIZE_DP = 20
+
+    /** Barrage entry button padding, applied on all four sides. Owner: ShouldShowBarrageInput. */
+    const val BARRAGE_ENTRY_PADDING_DP = 12
+
+    /** Intrinsic height of the barrage entry button (icon + vertical padding). */
+    const val BARRAGE_ENTRY_TOTAL_HEIGHT_DP =
+        BARRAGE_ENTRY_ICON_SIZE_DP + BARRAGE_ENTRY_PADDING_DP * 2  // 44
+
+    /** Breathing gap between full-screen content and the chrome bars / entry button. */
+    const val CHROME_CONTENT_GAP_DP = 8
 }

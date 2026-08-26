@@ -72,6 +72,7 @@
     <string name="chat_proxy_status">Proxy status</string>
     <string name="chat_add_options">New chat</string>
     <string name="chat_message_input_hint">Message</string>
+    <string name="chat_message_input_hint_e2ee">End-to-end encrypted</string>
     <string name="chat_message_input_hint_confidential">Confidential Message</string>
     <string name="chat_message_confidential_tips">Swipe left to read, swipe right to turn pages.</string>
     <string name="chat_message_action_copy">Copy</string>
@@ -131,6 +132,7 @@
     <string name="chat_list_critical_alert">[🚨 Critical Alert]</string>
     <string name="chat_list_send_failed">[Send failed]</string>
     <string name="chat_list_draft">[Draft]</string>
+    <string name="chat_list_e2ee_hint">Messages and calls are end-to-end encrypted.</string>
     <string name="chat_message_critical_alert">🚨 Critical Alert.</string>
     <string name="chat_status_sending">Sending</string>
     <string name="chat_status_sent">Sent</string>
@@ -159,7 +161,8 @@
     <string name="chat_confidential_tip_content">Read once, then gone.</string>
     <string name="chat_confidential_message_viewed">Confidential message has been viewed</string>
     <string name="chat_do_not_trust_warning">⚠️ DO NOT trust unknown users.</string>
-    <string name="chat_privacy_banner">🔒 Privacy first. Fully anonymous and end-to-end encrypted. DO NOT trust unknown users.</string>
+    <string name="chat_e2ee_header_hint">Messages and calls are end-to-end encrypted — only you and the people in this chat can read messages or listen to calls.</string>
+    <string name="chat_e2ee_header_non_friend">Privacy first. Fully anonymous and end-to-end encrypted. DO NOT trust unknown users.</string>
 
     <string name="chat_action_photo">Photos</string>
     <string name="chat_action_gif">GIF</string>

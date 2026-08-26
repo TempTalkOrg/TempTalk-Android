@@ -22,9 +22,11 @@ import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
+import com.difft.android.websocket.api.messages.ConversationVerdict
 import com.difft.android.websocket.api.messages.NotifyConversation
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.difft.android.websocket.api.messages.crossCheckConversation
 import com.difft.android.websocket.api.util.mapToMessageId
 import com.difft.android.websocket.api.util.transformGroupIdFromServerToLocal
 import com.google.gson.Gson
@@ -55,7 +57,6 @@ import difft.android.messageserialization.model.TextMessage
 import org.difft.app.database.convertToTextMessage
 import org.difft.app.database.delete
 import org.difft.app.database.getContactorFromAllTable
-import org.difft.app.database.isGroupMember
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
@@ -105,7 +106,7 @@ class MessageContentProcessor @Inject constructor(
      * intermediate results are persisted to the database if the app were to crash.
      */
     suspend fun process(content: SignalServiceDataClass, tag: String): Message? {
-        L.i { "[Message][${tag}] process message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}" }
+        L.i { "[Message][${tag}] process message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}  stamp:${content.envelopeConversation?.id ?: "absent"}" }
         return handleMessage(content, tag)
     }
 
@@ -119,11 +120,8 @@ class MessageContentProcessor @Inject constructor(
             } else if (serviceContent.hasNotifyMessage()) {
                 return handleClientNotifyMessage(content, tag)
             } else if (serviceContent.hasDataMessage()) {
-                return handleDataMessage(
-                    content,
-                    isSyncMessage = false,
-                    tag = tag,
-                )
+                if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
+                return handleDataMessage(content, isSyncMessage = false, tag = tag)
             } else if (serviceContent.hasSyncMessage()) {
                 if (content.senderId != globalServices.myId) {
                     L.w { "[Message][${tag}] received sync message from another id, senderId:${content.senderId}." }
@@ -194,6 +192,7 @@ class MessageContentProcessor @Inject constructor(
                 LCallManager.removePendingMessage(content.signalServiceEnvelope.source, content.signalServiceEnvelope.timestamp.toString())
                 lCallManagerProvider.get().handleCallMessage(content)
             } else if (serviceContent.hasActivityNotice()) {
+                if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
                 // Place ahead of forwardNotice — same rationale as the sync branch
                 // above: prefer the generic channel if both fields are populated.
                 L.i { "[Message][${tag}] process activity notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
@@ -205,6 +204,7 @@ class MessageContentProcessor @Inject constructor(
                     tag = tag
                 )
             } else if (serviceContent.hasForwardNotice()) {
+                if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
                 L.i { "[Message][${tag}] process forward notice -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 return handleForwardNoticeMessage(
                     content = content,
@@ -216,6 +216,29 @@ class MessageContentProcessor @Inject constructor(
             }
         }
         return null
+    }
+
+    /**
+     * Cross-conversation injection guard (cross-platform-proposal §1-3): the content-resolved
+     * conversation must equal the server-stamped envelope conversation, else the message is dropped.
+     * Gated on content shape (covers MSG_RECALL), not msgType — msgType is attacker-controllable.
+     * isSyncMessage is always false here, so the isSyncOrSelf exemption reduces to senderId==myId.
+     * Returns true when the message must be dropped (no render/persist; eager-ACK already sent).
+     */
+    private fun isCrossConversationInjection(content: SignalServiceDataClass, tag: String): Boolean {
+        val reject = crossCheckConversation(
+            contentConversation = content.conversation,
+            envelopeConversation = content.envelopeConversation,
+            isSyncOrSelf = content.senderId == content.myId,
+        ) == ConversationVerdict.REJECT
+        if (reject) {
+            L.w {
+                "[Message][${tag}] conversation cross-check REJECT drop " +
+                    "claimedConv=${content.conversation.id} sender=${content.senderId} " +
+                    "ts=${content.signalServiceEnvelope.timestamp}"
+            }
+        }
+        return reject
     }
 
     /**
@@ -246,22 +269,6 @@ class MessageContentProcessor @Inject constructor(
                 "[Message][${tag}] forwardNotice has unknown/unset scene=${forwardNotice.scene}, drop"
             }
             return null
-        }
-        // Cross-conversation injection guard: if resolved conversation is a group,
-        // verify the envelope sender is actually a member of that group. Without
-        // this check, a peer could craft payload.conversation.groupId pointing at
-        // any group the victim is in and inject a fake "forwarded" system message
-        // via a 1v1 envelope.
-        if (conversation is For.Group) {
-            val senderId = envelop.source
-            if (!wcdb.isGroupMember(conversation.id, senderId)) {
-                L.w {
-                    "[Message][${tag}] forwardNotice group=${conversation.id} " +
-                        "envelope.source=$senderId is NOT a member of that group, " +
-                        "drop (cross-conversation injection attempt)"
-                }
-                return null
-            }
         }
         val noticeData = ForwardNoticeData(
             scene = sceneKt,
@@ -351,23 +358,6 @@ class MessageContentProcessor @Inject constructor(
                 }
                 return null
             }
-
-        // Cross-conversation injection guard (group case): if resolved conversation
-        // is a group, verify the envelope sender is actually a member. Without this,
-        // a peer could craft payload.conversation.groupId pointing at any group the
-        // victim is in and inject a fake "X copied your messages" system message via
-        // a 1v1 envelope. Same defense as forward notice (PR #683).
-        if (conversation is For.Group) {
-            val senderId = envelop.source
-            if (!wcdb.isGroupMember(conversation.id, senderId)) {
-                L.w {
-                    "[Message][${tag}] activityNotice group=${conversation.id} " +
-                        "envelope.source=$senderId is NOT a member of that group, " +
-                        "drop (cross-conversation injection attempt)"
-                }
-                return null
-            }
-        }
 
         L.i {
             "[Message][${tag}] handle activity notice -> operator=$operatorId, " +

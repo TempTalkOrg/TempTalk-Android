@@ -60,14 +60,24 @@ class CallMediaController(
         audioProcessor.setSoundTouchPreset(preset.sdkKey)
     }
 
-    /** Enables or disables the local microphone with optional publish-muted control. */
+    /**
+     * Enables or disables the local microphone with optional publish-muted control.
+     *
+     * Last-line permission gate for EVERY enable path (toolbar tap, 1v1 auto-enable,
+     * silence pre-publish, server-switch restore): without RECORD_AUDIO nothing may reach
+     * `setMicrophoneEnabled(true)` — SDK 2.27.0.1 only logs a warning and would still
+     * create/publish the track. Disabling is deliberately NOT gated (spec: close never
+     * checks permission), and a blocked enable resets the controller state so the toggle
+     * cannot render an "on" state that publishes nothing.
+     */
     fun setMicEnabled(
         enabled: Boolean,
         publishMuted: Boolean = false,
         isShowBarrage: Boolean = true,
     ) {
-        if (!PermissionUtil.arePermissionsGranted(ApplicationHelper.instance, arrayOf(Manifest.permission.RECORD_AUDIO))) {
-            L.e { "[call] CallMediaController setMicEnabled no permission" }
+        if (enabled && !PermissionUtil.arePermissionsGranted(ApplicationHelper.instance, arrayOf(Manifest.permission.RECORD_AUDIO))) {
+            L.w { "[call] CallMediaController setMicEnabled blocked, RECORD_AUDIO missing" }
+            roomCtl.updateMicEnabled(false)
             return
         }
 
@@ -107,8 +117,18 @@ class CallMediaController(
         showBarrage(room.localParticipant, message)
     }
 
-    /** Enables or disables the local camera with error/permission fallback. */
+    /**
+     * Enables or disables the local camera with error/permission fallback.
+     *
+     * Same last-line gate as [setMicEnabled]: covers the non-UI enable paths (server-switch
+     * restore in RoomEventDispatcher) that skip the toolbar permission flow. Disable is not gated.
+     */
     fun setCameraEnabled(enabled: Boolean) {
+        if (enabled && !PermissionUtil.arePermissionsGranted(ApplicationHelper.instance, arrayOf(Manifest.permission.CAMERA))) {
+            L.w { "[Call] CallMediaController setCameraEnabled blocked, CAMERA missing" }
+            roomCtl.updateCameraEnabled(false)
+            return
+        }
         scope.launch {
             try {
                 if (room.localParticipant.videoTrackPublications.isEmpty()) {

@@ -16,6 +16,7 @@ private interface UrlProtocol {
     val avatarStorage: String
     val installationGuideUrl: String
     val appVersionConfigUrl: String
+    val e2eeLearnMoreUrl: String
 }
 
 private class ChativeOnlineUrlProtocol : UrlProtocol {
@@ -23,6 +24,7 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
     override val installationGuideUrl: String = "https://quicall.app"
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/prod-buildversion/insider-version.json"
+    override val e2eeLearnMoreUrl: String = "https://quicall.app/security"
 }
 
 private class ChativeDevelopmentUrlProtocol : UrlProtocol {
@@ -30,6 +32,7 @@ private class ChativeDevelopmentUrlProtocol : UrlProtocol {
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
     override val installationGuideUrl: String = "https://quicall.app"
     override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/test-buildversion/insider-version.json"
+    override val e2eeLearnMoreUrl: String = "https://quicall.app/security"
 }
 
 class UrlManager @Inject constructor(
@@ -230,6 +233,9 @@ class UrlManager @Inject constructor(
 
     val appVersionConfigUrl
         get() = protocol.appVersionConfigUrl
+
+    val e2eeLearnMoreUrl: String
+        get() = protocol.e2eeLearnMoreUrl
 
     fun isTrustedHost(host: String): Boolean {
         val trustedHosts = setOf(

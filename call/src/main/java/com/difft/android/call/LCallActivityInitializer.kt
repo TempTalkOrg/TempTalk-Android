@@ -197,7 +197,6 @@ internal fun LCallActivity.initializeView() {
                 CallContent(
                     room = room,
                     viewModel = viewModel,
-                    audioSwitchHandler = viewModel.audioHandler,
                     inviteCallHandler = inviteCallManager,
                     isUserSharingScreen = isUserSharingScreen,
                     callConfig = callConfig,

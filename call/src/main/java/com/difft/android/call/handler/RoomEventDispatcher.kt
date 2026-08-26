@@ -17,12 +17,12 @@ import com.difft.android.call.data.RTM_MESSAGE_TOPIC_SET_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.exception.DisconnectException
 import com.difft.android.call.data.CallStatisticsEvent
-import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.CallDataManager
-import com.difft.android.call.exception.NetworkConnectionPoorException
+import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.ParticipantManager
 import com.difft.android.call.manager.SpeakerStateHolder
 import com.difft.android.call.manager.TimerManager
+import com.difft.android.call.network.NetworkQualityCoordinator
 import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import com.difft.android.call.util.IdUtil
 import io.livekit.android.events.DisconnectReason
@@ -58,6 +58,7 @@ data class RoomEventHost(
     val stopRingToneAndTimeoutCheckFn: () -> Unit,
     val resolveCallTypeFn: () -> Unit,
     val handleConnectedStateFn: () -> Unit,
+    val startCallDurationTimerFn: () -> Unit,
     val onFeedbackIdentityResolvedFn: (String, String?, String?) -> Unit,
     val onNetworkPoorStateChangedFn: (Boolean) -> Unit,
     val getCurrentCallTypeFn: () -> String,
@@ -79,6 +80,7 @@ data class RoomEventHost(
      */
     fun resolveCallType() = resolveCallTypeFn()
     fun handleConnectedState() = handleConnectedStateFn()
+    fun startCallDurationTimer() = startCallDurationTimerFn()
     fun onFeedbackIdentityResolved(userSid: String, userIdentity: String?, roomSid: String?) =
         onFeedbackIdentityResolvedFn(userSid, userIdentity, roomSid)
     fun onNetworkPoorStateChanged(poor: Boolean) = onNetworkPoorStateChangedFn(poor)
@@ -92,7 +94,6 @@ data class RoomEventHost(
  * Extracted from `LCallViewModel.handleRoomEvents` so the ViewModel can stay
  * within the 500-line project limit. Owns:
  *  - The single event-collector coroutine
- *  - Network-quality debounce state
  *  - Active-speaker → UI enable watchdog
  *  - Screen share state transitions (start/stop + resubscription verification)
  */
@@ -111,14 +112,13 @@ internal class RoomEventDispatcher(
     private val callDataManager: CallDataManager,
     private val statisticsLogManager: CallStatisticsLogManager,
     private val mySelfId: String,
+    private val networkQuality: NetworkQualityCoordinator,
     private val host: RoomEventHost,
 ) {
 
     private val goodQualities = setOf(ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD)
-    private val networkPoorInterval = 60_000L
     private val speakingWatchdogTimeoutMs = 3000L
 
-    private var lastLocalPoorErrorTime: Long = 0L
     private var speakingWatchdogJob: Job? = null
 
     /**
@@ -132,6 +132,88 @@ internal class RoomEventDispatcher(
      * from the single serial event-collector coroutine, so a plain set is thread-safe.
      */
     private val remoteMicOnAnnounced = mutableSetOf<String>()
+
+    /**
+     * Timing probe for the 1v1 "when can the remote actually hear me" question. Measures the gap
+     * between the three milestones we currently conflate: local room connect, the remote joining
+     * (signaling only — its PeerConnection may still be connecting), and the remote reaching
+     * ACTIVE, which the SFU sets once that participant's primary transport is connected — the
+     * point its subscriber path can actually carry our audio. Observation only; no behaviour
+     * depends on these.
+     */
+    private var connectedAtMs: Long = 0L
+    private var remoteJoinedAtMs: Long = 0L
+
+    private fun logCallTiming(stage: String, extra: String = "") {
+        val now = SystemClock.elapsedRealtime()
+        val sinceConnected = if (connectedAtMs > 0L) now - connectedAtMs else -1L
+        val sinceRemoteJoined = if (remoteJoinedAtMs > 0L) now - remoteJoinedAtMs else -1L
+        L.i {
+            "[Call][1v1Timing] stage=$stage sinceConnected=${sinceConnected}ms " +
+                "sinceRemoteJoined=${sinceRemoteJoined}ms callType=${host.getCurrentCallType()}$extra"
+        }
+    }
+
+    /**
+     * 1v1 media-ready gate for the call duration timer.
+     *
+     * The timer starts when the remote subscribes to the local microphone. A
+     * [MEDIA_READY_FALLBACK_MS] fallback covers calls without that signal so the UI never remains
+     * on "connecting" indefinitely.
+     */
+    private var callTimerStarted = false
+    private var callTimerGateArmed = false
+    private var micTrackSubscribed = false
+    private var callTimerFallbackJob: Job? = null
+
+    /**
+     * Armed only when this client is connected and a remote is present. The subscription signal is
+     * sticky because it can arrive before this lifecycle gate is ready.
+     */
+    private fun armCallTimerGate(remote: Participant?) {
+        if (callTimerStarted || callTimerGateArmed) return
+        if (room.state != Room.State.CONNECTED || remote == null) return
+        callTimerGateArmed = true
+
+        startCallTimerIfTrackSubscribed()
+        if (callTimerStarted) return
+
+        if (callTimerFallbackJob != null) return
+        callTimerFallbackJob = scope.launch {
+            delay(MEDIA_READY_FALLBACK_MS)
+            startCallTimerOnce("fallbackTimeout")
+        }
+    }
+
+    /** Sticky notification that the remote subscribed to the local microphone track. */
+    private fun onLocalMicTrackSubscribed() {
+        if (micTrackSubscribed) return
+        micTrackSubscribed = true
+        startCallTimerIfTrackSubscribed()
+    }
+
+    /**
+     * The single release point. Group/instant never arm the gate, so they never take this path;
+     * their timer keeps starting from room connect. The subscription notifier deliberately records
+     * the signal before [callTimerGateArmed] because the SDK cannot query it afterwards.
+     */
+    private fun startCallTimerIfTrackSubscribed() {
+        if (!callTimerGateArmed || !micTrackSubscribed) return
+        startCallTimerOnce("trackSubscribed")
+    }
+
+    /** Idempotent: reconnects and server switches must not restart or reset a running timer. */
+    private fun startCallTimerOnce(reason: String) {
+        if (callTimerStarted) return
+        callTimerStarted = true
+        callTimerFallbackJob?.cancel()
+        callTimerFallbackJob = null
+        logCallTiming(
+            "callTimerStarted",
+            " reason=$reason micTrackSubscribed=$micTrackSubscribed",
+        )
+        host.startCallDurationTimer()
+    }
 
     fun startCollectingRoomEvents() {
         scope.launch {
@@ -169,6 +251,8 @@ internal class RoomEventDispatcher(
     fun cancelJobs() {
         speakingWatchdogJob?.cancel()
         speakingWatchdogJob = null
+        callTimerFallbackJob?.cancel()
+        callTimerFallbackJob = null
     }
 
     private fun dispatch(event: RoomEvent) {
@@ -212,6 +296,19 @@ internal class RoomEventDispatcher(
                 screenSharePreWarmer.markReconnecting()
             }
             is RoomEvent.Connected -> onConnected()
+            is RoomEvent.ParticipantStateChanged -> {
+                if (event.participant is RemoteParticipant) {
+                    val isActive = event.newState == Participant.State.ACTIVE
+                    logCallTiming(
+                        if (isActive) "participantActive" else "participantState",
+                        " identity=${event.participant.identity?.value} state=${event.newState}",
+                    )
+                }
+            }
+            is RoomEvent.LocalTrackSubscribed -> {
+                logCallTiming("localTrackSubscribed", " source=${event.publication.source}")
+                if (event.publication.source == Track.Source.MICROPHONE) onLocalMicTrackSubscribed()
+            }
             is RoomEvent.TrackMuted -> onTrackMuted(event)
             is RoomEvent.TrackUnmuted -> onTrackUnmuted(event)
             is RoomEvent.TrackSubscribed -> {
@@ -251,6 +348,17 @@ internal class RoomEventDispatcher(
                 if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) host.resetNoBodySpeakCheck()
             },
             onEndCall = {
+                host.getCurrentRoomId()?.let { rid ->
+                    callDataManager.removeCallData(rid)
+                    host.sendHangUpBroadcast(rid)
+                }
+            },
+            onServerEndCall = serverEndCall@{
+                // RTM protocol §4.1. Downstream teardown is idempotent — server retries are safe.
+                if (roomCtl.roomOrNull() !== room) {
+                    L.w { "[Call] server-end-call ignored - inactive room" }
+                    return@serverEndCall
+                }
                 host.getCurrentRoomId()?.let { rid ->
                     callDataManager.removeCallData(rid)
                     host.sendHangUpBroadcast(rid)
@@ -301,6 +409,20 @@ internal class RoomEventDispatcher(
         // path; later ICE-restart re-emits (tracks preserved) fall through to the normal branch.
         val isManualSwitch = connectionCoordinator.consumeManualSwitchReconnecting()
         L.i { "[Call] RoomEventDispatcher room event connected. hasMicPublication=$hasMicPublication manualSwitch=$isManualSwitch" }
+        val isFirstConnect = connectedAtMs == 0L
+        if (isFirstConnect) connectedAtMs = SystemClock.elapsedRealtime()
+        logCallTiming("roomConnected", " firstConnect=$isFirstConnect remotes=${room.remoteParticipants.size}")
+        // The remote can already be in the room when we connect (callee joining a room the caller is
+        // waiting in), in which case no ParticipantConnected will ever fire for it.
+        room.remoteParticipants.values.firstOrNull()?.let { remote ->
+            if (remoteJoinedAtMs == 0L) {
+                remoteJoinedAtMs = SystemClock.elapsedRealtime()
+                logCallTiming(
+                    "remoteAlreadyPresent",
+                    " alreadyActive=${remote.state == Participant.State.ACTIVE}",
+                )
+            }
+        }
         host.onFeedbackIdentityResolved(
             userSid = room.localParticipant.sid.value,
             userIdentity = room.localParticipant.identity?.value,
@@ -317,6 +439,7 @@ internal class RoomEventDispatcher(
         // Inside the 1v1 branch those cases would skip the cancel.
         if (isManualSwitch) timeoutMonitor.cancelIfActive()
         if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
+            val presentRemote = room.remoteParticipants.values.firstOrNull()
             if (isManualSwitch) {
                 // The call is already established; a manual switch is NOT a fresh outbound call,
                 // so re-apply the user's media intent rather than the first-connect bring-up.
@@ -328,12 +451,16 @@ internal class RoomEventDispatcher(
                 // disconnect/reconnect window. Don't mark the call CONNECTED with nobody in it — arm
                 // the timeout so the empty call is detected and ended, matching first connect. Note
                 // this arms AFTER the cancel above, which is the order that has to hold.
-                if (room.remoteParticipants.isNotEmpty()) host.handleConnectedState()
-                else timeoutMonitor.start1V1Timeout(rid)
+                if (presentRemote != null) {
+                    host.handleConnectedState()
+                    armCallTimerGate(presentRemote)
+                } else timeoutMonitor.start1V1Timeout(rid)
             } else {
                 if (!hasMicPublication) host.setMicEnabled(true)
-                if (room.remoteParticipants.isNotEmpty()) host.handleConnectedState()
-                else timeoutMonitor.start1V1Timeout(rid)
+                if (presentRemote != null) {
+                    host.handleConnectedState()
+                    armCallTimerGate(presentRemote)
+                } else timeoutMonitor.start1V1Timeout(rid)
             }
         } else {
             host.handleConnectedState()
@@ -380,9 +507,14 @@ internal class RoomEventDispatcher(
     }
 
     private fun onParticipantConnected(participant: Participant) {
+        if (remoteJoinedAtMs == 0L) remoteJoinedAtMs = SystemClock.elapsedRealtime()
+        logCallTiming("remoteJoined", " identity=${participant.identity?.value}")
         host.showBarrage(participant, getString(R.string.call_barrage_message_join))
         host.stopRingToneAndTimeoutCheck()
-        if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) host.handleConnectedState()
+        if (host.getCurrentCallType() == CallType.ONE_ON_ONE.type) {
+            host.handleConnectedState()
+            armCallTimerGate(participant)
+        }
         // After the "was this a 1v1" read above, since a third participant joining is exactly what
         // downgrades `1on1` to instant — re-resolving first would make the read miss the transition.
         host.resolveCallType()
@@ -390,6 +522,10 @@ internal class RoomEventDispatcher(
     }
 
     private fun onParticipantDisconnected(participant: Participant) {
+        // Above the switch/reconnect guard on purpose: a dropped verdict is re-seeded on the next
+        // CONNECTED, while keeping one risks a stale badge for someone who really left.
+        networkQuality.onParticipantLeft(participant.identity?.value)
+
         // A manual server switch / failover reconnect tears the old session down, which emits a
         // transient ParticipantDisconnected for the still-present remote. Arming the "participant
         // left" timeout here would fire "对方未接听" after reconnect, because the remote comes back
@@ -504,20 +640,18 @@ internal class RoomEventDispatcher(
     }
 
     private fun onConnectionQualityChanged(participant: Participant, quality: ConnectionQuality) {
-        L.i { "[Call] RoomEventDispatcher ConnectionQualityChanged ${participant.identity?.value} quality = ${quality.name}." }
+        // Local AND remote readings feed the verdict unit, which owns the hysteresis and logs real
+        // tier transitions — no per-event log here: the SDK re-reports the same tier repeatedly.
+        networkQuality.onQualityChanged(
+            identity = participant.identity?.value,
+            quality = quality,
+            isLocal = participant is LocalParticipant,
+        )
+        // Local-only, and BELOW the feed: this drives the post-call rating trigger, whose "was MY
+        // network bad" meaning must not change. `goodQualities` stays verbatim — it counts UNKNOWN as
+        // poor, unlike the render-side mapping; re-classifying it would change the rating frequency.
         if (participant !is LocalParticipant) return
-        val isPoorNow = quality !in goodQualities
-        val now = SystemClock.elapsedRealtime()
-        if (isPoorNow) {
-            val shouldNotify = (now - lastLocalPoorErrorTime > networkPoorInterval)
-            if (shouldNotify) {
-                roomCtl.collectError(NetworkConnectionPoorException(getString(R.string.call_myself_network_poor_tip)))
-                lastLocalPoorErrorTime = now
-            }
-            host.onNetworkPoorStateChanged(true)
-        } else {
-            host.onNetworkPoorStateChanged(false)
-        }
+        host.onNetworkPoorStateChanged(quality !in goodQualities)
     }
 
     private fun resetSpeakingWatchdog(hasSpeakers: Boolean) {
@@ -539,5 +673,8 @@ internal class RoomEventDispatcher(
          * 测试完毕后务必改回 false。
          */
         private const val DEBUG_FAKE_PARTICIPANTS = false
+
+        /** See [armCallTimerGate]. */
+        private const val MEDIA_READY_FALLBACK_MS = 5_000L
     }
 }

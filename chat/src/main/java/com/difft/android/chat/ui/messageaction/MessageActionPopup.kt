@@ -93,8 +93,6 @@ class MessageActionPopup(
      * @param anchorView The view to anchor the popup to
      * @param config Configuration built by MessageActionConfigBuilder
      * @param containerView Optional container view to determine available bounds (e.g., RecyclerView)
-     * @param restoreWindowBackground Whether to restore window background after showing popup (default true).
-     *        Set to false when background is set on a view rather than window (e.g., in popup-style activities)
      * @param textView Optional text view that should remain interactive for text selection
      * @param callbacks Callbacks for user interactions
      */
@@ -102,7 +100,6 @@ class MessageActionPopup(
         anchorView: View,
         config: MessageActionConfigBuilder.Config,
         containerView: View? = null,
-        restoreWindowBackground: Boolean = true,
         textView: View? = null,
         callbacks: Callbacks
     ) {
@@ -202,7 +199,7 @@ class MessageActionPopup(
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             
             setContent {
-                DifftTheme {
+                DifftTheme(applyWindowBackground = false) {
                     var showPopup by remember { mutableStateOf(true) }
                     val menuMode by menuModeState
                     
@@ -316,19 +313,9 @@ class MessageActionPopup(
             addView(composeView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         
-        // Save original window background before adding ComposeView
-        val originalBackground = if (restoreWindowBackground) {
-            activity.window.decorView.background
-        } else null
-        
         // Full-screen overlay
         rootView.addView(overlayContainer, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        
-        // Immediately restore window background after adding ComposeView (synchronous, no delay)
-        if (originalBackground != null) {
-            activity.window.setBackgroundDrawable(originalBackground)
-        }
-        
+
         // Cancel any ongoing touch sequence on the anchor view to prevent swipe gestures
         // This is needed because the long-press that triggered the popup may still have
         // an active touch sequence that could trigger swipe-to-reply or other gestures

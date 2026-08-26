@@ -7,6 +7,8 @@
     <string name="call_is_calling_tip">You are already in a meeting.</string>
     <string name="call_status_calling">Calling…</string>
     <string name="call_connecting_title">Connecting…</string>
+    <string name="call_media_send_issue">Others may not hear you. Recovering...</string>
+    <string name="call_status_encrypted">End-to-end encrypted</string>
     <string name="call_connecting_retry_tip">The meeting is connecting, please try again later.</string>
     <string name="call_disconnected_title">Disconnected</string>
     <string name="call_screen_sharing_title">\'s Screen Sharing</string>
@@ -40,8 +42,11 @@
     <string name="call_barrage_message_critical_alert_limited">Send too frequently. Please try again later.</string>
     <string name="call_attendees">Attendees</string>
     <string name="call_barrage_message_input_tip">Message(30 characters)</string>
-    <string name="call_myself_network_poor_tip">Your network connection is poor.</string>
-    <string name="call_current_audio_device">%s ✓</string>
+    <string name="call_myself_network_poor_tip">Your network is poor, call quality may be affected</string>
+    <string name="call_other_network_poor_tip">The other party\'s network is poor</string>
+    <string name="call_audio_device_status_active">✓</string>
+    <string name="call_audio_device_status_connecting">Connecting…</string>
+    <string name="call_audio_device_status_failed">Failed</string>
     <string name="call_button_group_leave_meeting">Leave</string>
     <string name="call_button_group_alert_cancel_text">Cancel</string>
     <string name="call_button_group_alert_end_text">End for all</string>
@@ -105,10 +110,11 @@
     <string name="call_permission_button_setting_go">Go to Settings</string>
     <string name="call_pip_permission_setting_failed">Unable to open settings. Please enable floating window permission manually.</string>
     <string name="call_permission_button_setting_cancel">Cancel</string>
-    <string name="call_microphone_permission_deny_title">Microphone Permission Disabled</string>
-    <string name="call_camera_permission_deny_title">Camera Permission Disabled</string>
-    <string name="call_microphone_permission_deny_content">Please go to system settings and enable the microphone permission, otherwise voice features will not be available.</string>
-    <string name="call_camera_permission_deny_content">Please go to system settings and enable the camera permission, otherwise video features will not be available.</string>
+    <string name="call_microphone_permission_deny_title">Cannot Access Microphone</string>
+    <string name="call_camera_permission_deny_title">Cannot Access Camera</string>
+    <string name="call_microphone_permission_deny_content">Allow %1$s to use your microphone in system settings, then return to %1$s and try again.</string>
+    <string name="call_camera_permission_deny_content">Allow %1$s to use your camera in system settings, then return to %1$s and try again.</string>
+    <string name="call_permission_button_settings">Settings</string>
     <string name="fullscreen_notification_settings_huawei_tip">Please go to App Settings → Other Permissions and enable “Background Popup” to allow incoming calls to appear on the lock screen.</string>
     <string name="fullscreen_notification_settings_xiaomi_tip">Please go to App Settings → Other Permissions and enable “Background Popup Interface” to allow incoming calls to appear on the lock screen.</string>
     <string name="fullscreen_notification_settings_mainland_default_tip">Please make sure “Banner Notifications” are enabled in the app settings to allow incoming calls to appear on the lock screen.</string>
@@ -137,6 +143,7 @@
     <string name="call_critical_alert_tooltip">Breaks through Silent Mode and Do Not Disturb. Use only for urgent situations.</string>
 
     <!-- Server node selection (not translatable) -->
+    <string name="call_server_node_page_title" translatable="false">Call Network</string>
     <string name="call_server_node_select_route" translatable="false">Selected: %s</string>
     <string name="call_server_node_connected" translatable="false">Connected</string>
     <string name="call_server_node_disconnected" translatable="false">Disconnected</string>

@@ -13,6 +13,8 @@ import com.tencent.wcdb.winq.Order
 import com.tencent.wcdb.winq.OrderingTerm
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import org.difft.app.database.WCDB
+import org.difft.app.database.clearRoomSendingStatusIfNoSending
+import org.difft.app.database.roomIdsWithSendingStatusFlagged
 import org.difft.app.database.roomIdsWithStaleSendingOutgoing
 import org.difft.app.database.writeRoomSendStatusFor
 import org.difft.app.database.models.DBJobConstraintModel
@@ -322,12 +324,23 @@ class WcdbJobStorage @Inject constructor(
             DBMessageModel.sendType.eq(SendType.Sending.rawValue)
         )
         wcdb.writeRoomSendStatusFor(roomsToFlag, ROOM_SEND_STATUS_FAILED)
+        // The flip just consumed every Sending row, so sending flags are stale. GLOBAL scope
+        // (all flagged rooms, not just roomsToFlag) so flags stale for any other reason heal on
+        // the same pass; per-room guarded clears keep each statement race-safe against a send
+        // racing this sweep. A send whose row committed BEFORE the flip was flipped with it
+        // (bounded, self-heals when its live job settles) — the guard only protects later sends.
+        // NOT reached when `before == 0` short-circuits above: a flag with zero sending rows
+        // anywhere heals on its room's next MESSAGE event instead — accepted parity with the
+        // FAILED flag's identical residual.
+        val sendingRoomsToClear = wcdb.roomIdsWithSendingStatusFlagged()
+        sendingRoomsToClear.forEach { wcdb.clearRoomSendingStatusIfNoSending(it) }
         // Best-effort nudge for an already-open conversation list; NOT the correctness path. The
         // room rows are written directly above because this runs from Application.onCreate, BEFORE
         // WCDBUpdateService registers its collector, and RoomChangeTracker.roomChanges is
         // replay = 0 — an emission with no subscriber is dropped.
-        roomsToFlag.forEach { RoomChangeTracker.trackRoom(it, RoomChangeType.MESSAGE) }
-        L.i { "[JobStorage] sweepStaleSendingMessages count=$before rooms=${roomsToFlag.size} Sending->SentFailed" }
+        (roomsToFlag + sendingRoomsToClear).distinct()
+            .forEach { RoomChangeTracker.trackRoom(it, RoomChangeType.MESSAGE) }
+        L.i { "[JobStorage] sweepStaleSendingMessages count=$before rooms=${roomsToFlag.size} sendingCleared=${sendingRoomsToClear.size} Sending->SentFailed" }
         before
     } catch (e: Exception) {
         L.e { "[JobStorage] sweepStaleSendingMessages failed: ${e.stackTraceToString()}" }

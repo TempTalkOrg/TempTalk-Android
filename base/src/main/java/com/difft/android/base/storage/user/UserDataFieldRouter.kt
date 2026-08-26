@@ -194,6 +194,12 @@ internal object UserDataFieldRouter {
             if (prev.callFeedbackHasTriggered != new.callFeedbackHasTriggered) {
                 add(AppStateChange.BooleanChange(AppStateKeys.CALL_FEEDBACK_HAS_TRIGGERED, new.callFeedbackHasTriggered))
             }
+            if (prev.callMicPermissionRequested != new.callMicPermissionRequested) {
+                add(AppStateChange.BooleanChange(AppStateKeys.CALL_MIC_PERMISSION_REQUESTED, new.callMicPermissionRequested))
+            }
+            if (prev.callCameraPermissionRequested != new.callCameraPermissionRequested) {
+                add(AppStateChange.BooleanChange(AppStateKeys.CALL_CAMERA_PERMISSION_REQUESTED, new.callCameraPermissionRequested))
+            }
             if (prev.bestHost != new.bestHost) {
                 add(AppStateChange.StringChange(AppStateKeys.SP_KEY_BEST_HOST, new.bestHost.orEmpty()))
             }
@@ -270,6 +276,8 @@ internal object UserDataFieldRouter {
             AppStateKeys.CALL_LAST_FEEDBACK_RESET_TIME -> base.copy(callLastFeedbackResetTime = value as Long)
             AppStateKeys.CALL_FEEDBACK_RANDOM_THRESHOLD -> base.copy(callFeedbackRandomThreshold = value as Int)
             AppStateKeys.CALL_FEEDBACK_HAS_TRIGGERED -> base.copy(callFeedbackHasTriggered = value as Boolean)
+            AppStateKeys.CALL_MIC_PERMISSION_REQUESTED -> base.copy(callMicPermissionRequested = value as Boolean)
+            AppStateKeys.CALL_CAMERA_PERMISSION_REQUESTED -> base.copy(callCameraPermissionRequested = value as Boolean)
             AppStateKeys.SP_KEY_BEST_HOST ->
                 base.copy(bestHost = (value as String).takeIf { it.isNotEmpty() })
             AppStateKeys.GRAY_MAP_JSON ->
@@ -328,6 +336,8 @@ internal object UserDataFieldRouter {
             callLastFeedbackResetTime = appState[AppStateKeys.CALL_LAST_FEEDBACK_RESET_TIME] ?: base.callLastFeedbackResetTime,
             callFeedbackRandomThreshold = appState[AppStateKeys.CALL_FEEDBACK_RANDOM_THRESHOLD] ?: base.callFeedbackRandomThreshold,
             callFeedbackHasTriggered = appState[AppStateKeys.CALL_FEEDBACK_HAS_TRIGGERED] ?: base.callFeedbackHasTriggered,
+            callMicPermissionRequested = appState[AppStateKeys.CALL_MIC_PERMISSION_REQUESTED] ?: base.callMicPermissionRequested,
+            callCameraPermissionRequested = appState[AppStateKeys.CALL_CAMERA_PERMISSION_REQUESTED] ?: base.callCameraPermissionRequested,
             bestHost = appState[AppStateKeys.SP_KEY_BEST_HOST]?.takeIf { it.isNotEmpty() } ?: base.bestHost,
             grayMapJson = appState[AppStateKeys.GRAY_MAP_JSON]?.takeIf { it.isNotEmpty() } ?: base.grayMapJson,
         )

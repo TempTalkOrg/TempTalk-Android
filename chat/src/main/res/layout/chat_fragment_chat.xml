@@ -24,7 +24,7 @@
         android:id="@+id/fragment_container_view_header"
         android:name="com.difft.android.chat.ui.ChatHeaderFragment"
         android:layout_width="0dp"
-        android:layout_height="44dp"
+        android:layout_height="wrap_content"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_call"

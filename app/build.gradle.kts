@@ -9,7 +9,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val appVersionName = "2.3.6"
+val appVersionName = "2.3.9"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -20,7 +20,7 @@ fun getCurrentDayTimestamp(): String {
 
 // F-Droid uses a fixed versionCode (official channel versionCode + 1).
 // No getTimeBasedVersionCode()/VERSION_CODE env — F-Droid builds reproducibly.
-val appVersionCode = 833070
+val appVersionCode = 863311
 val resolvedBuildTimestamp = getCurrentDayTimestamp()
 
 fun getBuildTime(): String {

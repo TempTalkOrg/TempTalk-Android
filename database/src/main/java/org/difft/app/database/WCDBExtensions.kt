@@ -39,17 +39,12 @@ import difft.android.messageserialization.model.Mention
 import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.NotifyMessage
 import difft.android.messageserialization.model.Quote
-import difft.android.messageserialization.model.QuotedAttachment
 import difft.android.messageserialization.model.Reaction
 import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.SharedContact
-import difft.android.messageserialization.model.SharedContactName
-import difft.android.messageserialization.model.SharedContactPhone
 import difft.android.messageserialization.model.SpeechToTextData
-import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.TranslateData
-import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.model.isAudioFile
@@ -139,6 +134,18 @@ fun WCDB.getContactorFromAllTable(id: String): ContactorModel? {
     // Weak-snapshot fallback: keeps message rendering from degrading to a bare UID after the peer deregisters.
     return pendingRemovalContact.getFirstObject(DBPendingRemovalContactModel.uid.eq(id))?.deserializeSnapshot()
 }
+
+/**
+ * Whether [uid] already has a row in the local contactor table. Used by the E2EE hint's
+ * non-friend decision.
+ *
+ * Exists as an extension so the winq `Expression` it builds sits behind a function the host-JVM
+ * tests can replace via `mockkStatic("org.difft.app.database.WCDBExtensionsKt")` — referencing a
+ * winq type directly from the ViewModel loads `CppObject`'s native library, which the host JVM
+ * cannot provide.
+ */
+fun WCDB.isKnownContact(uid: String): Boolean =
+    contactor.getFirstObject(DBContactorModel.id.eq(uid)) != null
 
 /** Fetch a single message row by id. */
 fun WCDB.getMessageById(id: String): MessageModel? =
@@ -379,91 +386,54 @@ fun Attachment.toAttachmentModel(forwardDatabaseId: Long): AttachmentModel {
     }
 }
 
-fun MessageModel.attachment(): Attachment? {
-    return wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(id))
-        .firstOrNull()?.let {
-            Attachment(
-                id = it.id!!,
-                authorityId = it.authorityId!!,
-                contentType = it.contentType!!,
-                key = it.key,
-                size = it.size,
-                thumbnail = it.thumbnail,
-                digest = it.digest,
-                fileName = it.fileName,
-                flags = it.flags,
-                width = it.width,
-                height = it.height,
-                path = it.path,
-                status = it.status,
-                totalTime = it.totalTime,
-                amplitudes = convertAmplitudes(it.amplitudes),
-            )
-        }
-}
+// The child-row point queries below and the batch hydration path
+// (org.difft.app.database.hydration) share the mappers in ChildRowMappers.kt, and both order by
+// `databaseId ASC`. The ORDER BY is an identity transform today (databaseId is the rowid, so every
+// plan already returns insertion order) but it turns that plan coincidence into a contract: these
+// lists take part in ChatMessage.equals, so a different intra-group order between the two paths
+// would show up as a DiffUtil inequality and a full-window rebind.
 
-fun MessageModel.mentions(): List<Mention> {
-    return wcdb.mention.getAllObjects(DBMentionModel.messageId.eq(id)).map {
-        Mention(
-            start = it.start,
-            length = it.length,
-            uid = it.uid,
-            type = it.type
-        )
-    }
-}
+fun MessageModel.attachment(): Attachment? =
+    wcdb.attachment.getAllObjects(
+        DBAttachmentModel.messageId.eq(id),
+        DBAttachmentModel.databaseId.order(Order.Asc),
+    ).firstOrNull()?.toAttachment()
 
-fun MessageModel.reactions(): List<Reaction> {
-    return wcdb.reaction.getAllObjects(DBReactionModel.messageId.eq(id)).map {
-        Reaction(
-            emoji = it.emoji,
-            uid = it.uid ?: "",
-            originTimestamp = it.timeStamp
-        )
-    }
-}
+fun MessageModel.mentions(): List<Mention> =
+    wcdb.mention.getAllObjects(
+        DBMentionModel.messageId.eq(id),
+        DBMentionModel.databaseId.order(Order.Asc),
+    ).map { it.toMention() }
 
-fun MessageModel.sharedContacts(): List<SharedContact> {
-    return wcdb.sharedContact.getAllObjects(DBSharedContactModel.messageId.eq(id)).map { model ->
-        val name = SharedContactName(
-            model.givenName,
-            model.familyName,
-            model.namePrefix,
-            model.nameSuffix,
-            model.middleName,
-            model.displayName
-        )
+fun MessageModel.reactions(): List<Reaction> =
+    wcdb.reaction.getAllObjects(
+        DBReactionModel.messageId.eq(id),
+        DBReactionModel.databaseId.order(Order.Asc),
+    ).map { it.toReaction() }
+
+fun MessageModel.sharedContacts(): List<SharedContact> =
+    wcdb.sharedContact.getAllObjects(
+        DBSharedContactModel.messageId.eq(id),
+        DBSharedContactModel.databaseId.order(Order.Asc),
+    ).map { model ->
         val phones = wcdb.sharedContactPhone.getAllObjects(
-            DBSharedContactPhoneModel.sharedContactDatabaseId.eq(model.databaseId)
-        ).map {
-            SharedContactPhone(
-                value = it.phoneNumber,
-                type = it.phoneNumberType,
-                label = it.phoneNumberLabel
-            )
-        }
-        SharedContact(name, phones, null, null, null, null)
+            DBSharedContactPhoneModel.sharedContactDatabaseId.eq(model.databaseId),
+            DBSharedContactPhoneModel.databaseId.order(Order.Asc),
+        ).map { it.toSharedContactPhone() }
+        SharedContact(model.toSharedContactName(), phones, null, null, null, null)
     }
-}
 
-fun MessageModel.translateData(): TranslateData? {
-    return wcdb.translate.getFirstObject(DBTranslateModel.messageId.eq(id))?.let {
-        TranslateData(
-            translateStatus = TranslateStatus.fromIntOrDefault(it.translateStatus),
-            translatedContentCN = it.translatedContentCN,
-            translatedContentEN = it.translatedContentEN
-        )
-    }
-}
+fun MessageModel.translateData(): TranslateData? =
+    wcdb.translate.getFirstObject(
+        DBTranslateModel.messageId.eq(id),
+        DBTranslateModel.databaseId.order(Order.Asc),
+    )?.toTranslateData()
 
-fun MessageModel.speechToTextData(): SpeechToTextData? {
-    return wcdb.speechToText.getFirstObject(DBSpeechToTextModel.messageId.eq(id))?.let {
-        SpeechToTextData(
-            convertStatus = SpeechToTextStatus.fromIntOrDefault(it.convertStatus),
-            speechToTextContent = it.speechToTextContent,
-        )
-    }
-}
+fun MessageModel.speechToTextData(): SpeechToTextData? =
+    wcdb.speechToText.getFirstObject(
+        DBSpeechToTextModel.messageId.eq(id),
+        DBSpeechToTextModel.databaseId.order(Order.Asc),
+    )?.toSpeechToTextData()
 
 fun MessageModel.screenShot(): ScreenShot? {
     return screenShotJson?.takeIf { it.isNotEmpty() }?.let {
@@ -478,29 +448,11 @@ fun MessageModel.screenShot(): ScreenShot? {
 fun MessageModel.quote(): Quote? = quoteDatabaseId?.let { qId ->
     wcdb.quote.getFirstObject(DBQuoteModel.databaseId.eq(qId))?.let { qm ->
         val attachments = wcdb.attachment
-            .getAllObjects(DBAttachmentModel.quoteModelDatabaseId.eq(qId))
-            .map { am ->
-                QuotedAttachment(
-                    contentType = am.contentType ?: "",
-                    fileName = am.fileName ?: "",
-                    thumbnail = Attachment(
-                        id = am.id ?: "",
-                        authorityId = am.authorityId ?: 0L,
-                        contentType = am.contentType ?: "",
-                        key = am.key,
-                        size = am.size,
-                        thumbnail = am.thumbnail?.takeIf { it.isNotEmpty() }, // null = no bytes (mirrors write)
-                        digest = am.digest,
-                        fileName = am.fileName,
-                        flags = am.flags,
-                        width = am.width,
-                        height = am.height,
-                        path = am.path,
-                        status = am.status
-                    ),
-                    flags = am.flags
-                )
-            }
+            .getAllObjects(
+                DBAttachmentModel.quoteModelDatabaseId.eq(qId),
+                DBAttachmentModel.databaseId.order(Order.Asc),
+            )
+            .map { it.toQuotedAttachment() }
         Quote(
             id = qm.id,
             author = qm.author,
@@ -510,41 +462,23 @@ fun MessageModel.quote(): Quote? = quoteDatabaseId?.let { qId ->
     }
 }
 
-fun ForwardModel.attachments(): List<Attachment> {
-    return wcdb.attachment.getAllObjects(DBAttachmentModel.forwardModelDatabaseId.eq(databaseId)).map {
-        Attachment(
-            id = it.id!!,
-            authorityId = it.authorityId!!,
-            contentType = it.contentType!!,
-            key = it.key,
-            size = it.size,
-            thumbnail = it.thumbnail,
-            digest = it.digest,
-            fileName = it.fileName,
-            flags = it.flags,
-            width = it.width,
-            height = it.height,
-            path = it.path,
-            status = it.status,
-            totalTime = it.totalTime,
-            amplitudes = convertAmplitudes(it.amplitudes),
-        )
-    }
-}
+fun ForwardModel.attachments(): List<Attachment> =
+    wcdb.attachment.getAllObjects(
+        DBAttachmentModel.forwardModelDatabaseId.eq(databaseId),
+        DBAttachmentModel.databaseId.order(Order.Asc),
+    ).map { it.toAttachment() }
 
-fun ForwardModel.mentions(): List<Mention> {
-    return wcdb.mention.getAllObjects(DBMentionModel.forwardModelDatabaseId.eq(databaseId)).map {
-        Mention(
-            start = it.start,
-            length = it.length,
-            uid = it.uid,
-            type = it.type
-        )
-    }
-}
+fun ForwardModel.mentions(): List<Mention> =
+    wcdb.mention.getAllObjects(
+        DBMentionModel.forwardModelDatabaseId.eq(databaseId),
+        DBMentionModel.databaseId.order(Order.Asc),
+    ).map { it.toMention() }
 
 fun ForwardModel.forwards(): List<Forward> {
-    return wcdb.forward.getAllObjects(DBForwardModel.parentForwardModelDatabaseId.eq(databaseId)).map { fm ->
+    return wcdb.forward.getAllObjects(
+        DBForwardModel.parentForwardModelDatabaseId.eq(databaseId),
+        DBForwardModel.databaseId.order(Order.Asc),
+    ).map { fm ->
         val fwdAttachments = fm.attachments()
         val fwdForwards = fm.forwards()
         val fwdMentions = fm.mentions()
@@ -566,7 +500,8 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
     wcdb.forwardContext.getFirstObject(DBForwardContextModel.databaseId.eq(fcId))?.let { fc ->
         val forwards = wcdb.forward.getAllObjects(
             DBForwardModel.forwardContextDatabaseId.eq(fcId)
-                .and(DBForwardModel.parentForwardModelDatabaseId.isNull)
+                .and(DBForwardModel.parentForwardModelDatabaseId.isNull),
+            DBForwardModel.databaseId.order(Order.Asc),
         ).map { fm ->
             val fwdAttachments = fm.attachments()
             val fwdForwards = fm.forwards()
@@ -1275,10 +1210,8 @@ fun WCDB.getReadInfoList(roomId: String): List<ReadInfoModel> {
  * Uses a composite `gid + id` predicate that returns at most one row, so the
  * full member list is never loaded into memory (matters for large groups).
  *
- * Typical use: receive-side guards that need to validate a group identity
- * declared by a remote peer (e.g. ForwardNotice checking that `envelope.source`
- * is actually in the `groupId` the payload claims, to prevent cross-conversation
- * injection).
+ * General single-row membership predicate: true iff `userId` has a member row
+ * in group `gid`.
  */
 fun WCDB.isGroupMember(gid: String, userId: String): Boolean {
     return groupMemberContactor.getFirstObject(
