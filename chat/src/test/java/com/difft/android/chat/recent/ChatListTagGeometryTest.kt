@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * T4-12 … T4-17 — the width budget the tag run may spend, and the row-width fallback chain.
+ * T4-12 … T4-18 — the width budget the tag run may spend, and the row-width fallback chain.
  *
  * Pure JVM. Every expected number is written out as an explicit dp sum so a change to any reserve
  * constant fails here with the arithmetic visible, rather than silently shifting how many tags
@@ -25,12 +25,14 @@ class ChatListTagGeometryTest {
         hasUnreadBadge: Boolean = false,
         hasCallBar: Boolean = false,
         isLargerText: Boolean = false,
+        hasSendingIcon: Boolean = false,
     ): Float = computeTagAvailableWidthPx(
         rowWidthPx = rowWidthPx,
         density = density,
         hasUnreadBadge = hasUnreadBadge,
         hasCallBar = hasCallBar,
         isLargerText = isLargerText,
+        hasSendingIcon = hasSendingIcon,
     )
 
     // ── T4-12 ────────────────────────────────────────────────────────────────
@@ -65,6 +67,19 @@ class ChatListTagGeometryTest {
         assertEquals(
             width() - density * 28 - density * 30,
             width(isLargerText = true, hasUnreadBadge = true),
+            0f,
+        )
+    }
+
+    // ── T4-18 ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `T4-18 the sending icon costs 20dp regardless of text scale`() {
+        // icon 16 + marginEnd 4; single tier — fixed-size icon, no LARGE variant
+        assertEquals(width() - density * 20, width(hasSendingIcon = true), 0f)
+        assertEquals(
+            width(isLargerText = true) - density * 20,
+            width(isLargerText = true, hasSendingIcon = true),
             0f,
         )
     }

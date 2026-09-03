@@ -1,10 +1,14 @@
 package com.difft.android.chat.widget
 
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.PlaybackParams
+import android.os.Build
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.application
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.message.TextChatMessage
 import difft.android.messageserialization.model.isAudioMessage
@@ -19,6 +23,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.difft.android.chat.util.FileDecryptionUtil
+import com.difft.android.chat.util.ServiceUtil
 import java.io.File
 
 object AudioMessageManager {
@@ -56,10 +61,72 @@ object AudioMessageManager {
     private var playJob: kotlinx.coroutines.Job? = null
     private var prepareTimeoutJob: kotlinx.coroutines.Job? = null
 
+    /**
+     * Built-in output types. Anything outside this set counts as an external output, so the set is
+     * a whitelist on purpose: unknown or newly added external types (HDMI, DOCK, BLE broadcast)
+     * fall on the safe side and leave the platform route alone. A blacklist would wrongly force
+     * the earpiece for any type it does not enumerate.
+     */
+    private val BUILTIN_OUTPUT_TYPES: Set<Int> = buildSet {
+        add(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        add(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+        add(AudioDeviceInfo.TYPE_TELEPHONY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            add(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE)
+        }
+    }
+
+    /**
+     * Read-only device enumeration only. Process-global communication state (mode,
+     * communication device, speakerphone) belongs exclusively to the call module; writing it from
+     * here tears down in-call Bluetooth routing.
+     */
+    private val audioManager: AudioManager
+        get() = ServiceUtil.getAudioManager(application)
+
     init {
         ProximitySensorManager.setAudioDeviceChangeListener(object : ProximitySensorManager.AudioDeviceChangeListener {
-            override fun onAudioDeviceChanged(isNear: Boolean) {}
+            override fun onAudioDeviceChanged(isNear: Boolean) = applyProximityRoute(isNear)
         })
+    }
+
+    /**
+     * Target output for the voice-message player, or null to fall back to platform default
+     * routing. The earpiece is only forced when no external output is attached: with a headset
+     * connected, "phone at ear" carries no routing intent.
+     */
+    internal fun preferredOutputType(isNear: Boolean, availableTypes: Set<Int>): Int? {
+        if (!isNear) return null
+        if (availableTypes.any { it !in BUILTIN_OUTPUT_TYPES }) return null
+        return AudioDeviceInfo.TYPE_BUILTIN_EARPIECE.takeIf { it in availableTypes }
+    }
+
+    /**
+     * Routes the voice-message player only, through player-scoped device affinity. Never touches
+     * process-global communication state. A rejected or failed apply degrades to the platform
+     * default route; it must not fall back to writing global state.
+     *
+     * `MediaPlayer#setPreferredDevice`/`#getRoutedDevice` require API 28 (minSdk is 26): on 26/27
+     * this is a deliberate no-op, not a fallback to global `AudioManager` writes — voice-message
+     * playback simply keeps the platform's default route and the "phone at ear -> earpiece"
+     * sub-feature is unavailable on those two versions.
+     */
+    internal fun applyProximityRoute(isNear: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        val player = mediaPlayer ?: return
+        try {
+            val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val targetType = preferredOutputType(isNear, outputs.mapTo(mutableSetOf()) { it.type })
+            val target = targetType?.let { type -> outputs.firstOrNull { it.type == type } }
+            val accepted = player.setPreferredDevice(target) // null reverts to default routing
+            if (accepted) {
+                L.i { "[AudioMessageManager] voice route applied isNear=$isNear target=${targetType ?: "default"} routed=${player.routedDevice?.type}" }
+            } else {
+                L.w { "[AudioMessageManager] voice route rejected isNear=$isNear target=${targetType ?: "default"} routed=${player.routedDevice?.type}" }
+            }
+        } catch (e: Exception) {
+            L.e { "[AudioMessageManager] applyProximityRoute failed isNear=$isNear: ${e.stackTraceToString()}" }
+        }
     }
 
     /**
@@ -233,6 +300,9 @@ object AudioMessageManager {
                     isPaused = true
                     currentPlayPosition = currentPosition // 保存当前播放进度
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_PAUSED)
+
+                    // No playback to route while paused; resumeAudio() restarts the sensor.
+                    ProximitySensorManager.stop()
                 }
             }
         } catch (e: Exception) {
@@ -253,6 +323,10 @@ object AudioMessageManager {
                     start()
                     isPaused = false
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_START)
+
+                    // Existing affinity is kept so the route stays continuous across the pause;
+                    // the first (undebounced) sensor event confirms or corrects it.
+                    ProximitySensorManager.start()
                 }
             }
         } catch (e: Exception) {

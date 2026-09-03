@@ -100,6 +100,9 @@ private const val BADGE_RESERVE_LARGE_DP = 30   // same at 12sp (see updateTextS
 private const val PREVIEW_FLOOR_DP = 56         // ~4 CJK / ~7 latin chars @14sp
 private const val PREVIEW_FLOOR_LARGE_DP = 84   // 56 * 21/14
 private const val SAFETY_SLACK_DP = 4           // emoji width variance across ROMs
+// imageview_sending 16 + its marginEnd 4. Single tier on purpose (like CALL_BAR_RESERVE_DP,
+// unlike the two-tier badge): the icon is fixed-size regardless of text scale.
+private const val SENDING_ICON_RESERVE_DP = 20
 
 /**
  * Width the tag TextView may occupy before the preview stops being readable. Deliberately
@@ -112,13 +115,15 @@ fun computeTagAvailableWidthPx(
     hasUnreadBadge: Boolean,
     hasCallBar: Boolean,
     isLargerText: Boolean,
+    hasSendingIcon: Boolean = false,
 ): Float {
     fun dp(v: Int) = v * density
     val reserved = dp(AVATAR_BLOCK_DP) + dp(TEXT_COLUMN_MARGIN_DP) +
         dp(TAG_MARGIN_END_DP) + dp(DETAIL_MARGIN_END_DP) + dp(SAFETY_SLACK_DP) +
         dp(if (isLargerText) PREVIEW_FLOOR_LARGE_DP else PREVIEW_FLOOR_DP) +
         (if (hasCallBar) dp(CALL_BAR_RESERVE_DP) else 0f) +
-        (if (hasUnreadBadge) dp(if (isLargerText) BADGE_RESERVE_LARGE_DP else BADGE_RESERVE_DP) else 0f)
+        (if (hasUnreadBadge) dp(if (isLargerText) BADGE_RESERVE_LARGE_DP else BADGE_RESERVE_DP) else 0f) +
+        (if (hasSendingIcon) dp(SENDING_ICON_RESERVE_DP) else 0f)
     return rowWidthPx - reserved
 }
 

@@ -278,6 +278,14 @@ class ChatMessageInputFragment : Fragment() {
 
     private var keyboardStateListener: InsetAwareConstraintLayout.KeyboardStateListener? = null
 
+    /** Resolved once per view lifecycle; null when the host provides no keyboard/panel coordination. */
+    private var keyboardPanelHost: KeyboardPanelHost? = null
+
+    // Last state pushed to the host — suppresses duplicate notifications so a host can treat every
+    // call as a real transition (panel animations must not restart on a no-op re-notify).
+    private var lastNotifiedPanelVisible = false
+    private var lastNotifiedPanelHeight = 0
+
     private var screenshotDetector: ScreenshotDetector? = null
 
     private var inputLayoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
@@ -302,7 +310,7 @@ class ChatMessageInputFragment : Fragment() {
         // panel was likely open. The callback has ~944ms system delay (Pixel Android 14+),
         // so 2000ms safely covers ROM variation while staying below the notification-panel minimum.
         private const val SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
-        private const val PANEL_ANIM_DURATION = 250L
+        private const val PANEL_ANIM_DURATION = CHAT_PANEL_ANIM_DURATION_MS
     }
 
     /**
@@ -326,8 +334,40 @@ class ChatMessageInputFragment : Fragment() {
         return binding.root
     }
 
+    /**
+     * Full-screen chat (ChatFragment / GroupChatFragment) hosts this fragment inside an
+     * InsetAwareConstraintLayout root — that path keeps first priority and is unchanged.
+     * The popup chat Activities host it directly, with no parent fragment, and implement
+     * [KeyboardPanelHost] themselves. Any other host yields null and every call site no-ops.
+     *
+     * Uses [activity], not requireActivity(): a detached fragment must resolve to null, never throw.
+     */
+    private fun resolveKeyboardPanelHost(): KeyboardPanelHost? {
+        (parentFragment?.view as? InsetAwareConstraintLayout)?.let {
+            return InsetAwareKeyboardPanelHost(it)
+        }
+        return activity as? KeyboardPanelHost
+    }
+
+    /** Panel height the host should make room for: the target the panel is animated to. */
+    private fun panelLiftHeightPx(): Int =
+        binding.llChatActions.minHeight.takeIf { it > 0 } ?: cachedPanelHeightPx()
+
+    /** Single emission point for panel geometry. Deduped so hosts see only real transitions. */
+    private fun notifyPanelState(visible: Boolean, heightPx: Int = 0) {
+        if (view == null) return
+        if (visible == lastNotifiedPanelVisible && heightPx == lastNotifiedPanelHeight) return
+        lastNotifiedPanelVisible = visible
+        lastNotifiedPanelHeight = heightPx
+        keyboardPanelHost?.onChatPanelVisibilityChanged(visible, heightPx)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Resolved before initView() so every click handler that reads the field sees it set.
+        keyboardPanelHost = resolveKeyboardPanelHost()
+        L.i { "[ChatInput] keyboard/panel host=${keyboardPanelHost?.javaClass?.simpleName ?: "none"}" }
 
         isGroup = chatViewModel.forWhat is For.Group
 
@@ -636,7 +676,7 @@ class ChatMessageInputFragment : Fragment() {
                 if (binding.llChatActions.isVisible) {
                     // Tap list while panel open → close panel (same as "×" button)
                     hidePanel {
-                        (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+                        keyboardPanelHost?.releaseKeyboardPaddingFreeze()
                     }
                 }
 
@@ -916,8 +956,6 @@ class ChatMessageInputFragment : Fragment() {
         }
 
         binding.buttonMoreActions.setOnClickListener {
-            val root = parentFragment?.view as? InsetAwareConstraintLayout
-
             if (binding.llChatActions.isVisible) {
                 // Panel already on-screen. Switching GIF -> MORE (or refreshing MORE) must ONLY swap
                 // content in place; re-running showPanel would replay the 0->height animation and
@@ -932,8 +970,12 @@ class ChatMessageInputFragment : Fragment() {
                 // Panel not visible: enter panel mode fresh (animate), freeze padding, hide keyboard.
                 val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
                     ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                root?.freezeKeyboardPadding()
-                val keyboardHeight = InsetAwareConstraintLayout.getKeyboardHeight(requireContext())
+                keyboardPanelHost?.freezeKeyboardPadding()
+                // Must use the same source as panelLiftHeightPx(), so the rendered panel height
+                // (minHeight) and the lift reported to the host are the same number in every cache
+                // state — including a cold cache, where the raw IME height is still 0. The GIF path
+                // does the same.
+                val keyboardHeight = cachedPanelHeightPx()
                 if (keyboardHeight > 0) {
                     binding.llChatActions.minHeight = keyboardHeight
                 }
@@ -976,7 +1018,7 @@ class ChatMessageInputFragment : Fragment() {
                 chatViewModel.setVoiceVisibility(true)
 
                 hidePanel {
-                    (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+                    keyboardPanelHost?.releaseKeyboardPaddingFreeze()
                 }
                 // Voice is mutually exclusive with any panel: collapse to NONE.
                 syncActionButtons(PanelMode.NONE)
@@ -1895,7 +1937,7 @@ class ChatMessageInputFragment : Fragment() {
             // Hide confidential toggle (group member limit exceeded or bot chat)
             binding.ivConfidential.visibility = View.GONE
             binding.ivConfidentialRight.visibility = View.GONE
-            binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
+            binding.edittextInput.hint = getString(chatViewModel.neutralInputHintRes)
             binding.vConfidentialLine.visibility = View.GONE
             applyConfidentialAreaStyle(false)
         } else {
@@ -1924,7 +1966,7 @@ class ChatMessageInputFragment : Fragment() {
                 binding.vConfidentialLine.visibility = View.VISIBLE
                 applyConfidentialAreaStyle(true)
             } else {
-                binding.edittextInput.hint = getString(R.string.chat_message_input_hint)
+                binding.edittextInput.hint = getString(chatViewModel.neutralInputHintRes)
                 binding.vConfidentialLine.visibility = View.GONE
                 applyConfidentialAreaStyle(false)
             }
@@ -2419,7 +2461,7 @@ class ChatMessageInputFragment : Fragment() {
             androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.gifPanelCompose.setContent {
-            com.difft.android.base.ui.theme.DifftTheme {
+            com.difft.android.base.ui.theme.DifftTheme(applyWindowBackground = false) {
                 com.difft.android.chat.gif.compose.GifInlinePanel(
                     viewModel = gifPanelViewModel,
                     favoriteViewModel = favoriteViewModel,
@@ -2574,13 +2616,12 @@ class ChatMessageInputFragment : Fragment() {
             syncActionButtons(PanelMode.GIF)
         } else {
             // Panel not visible: enter GIF panel mode fresh (animate when no keyboard to displace).
-            val root = parentFragment?.view as? InsetAwareConstraintLayout
             val hasKeyboard = ViewCompat.getRootWindowInsets(binding.root)
                 ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-            root?.freezeKeyboardPadding()
+            keyboardPanelHost?.freezeKeyboardPadding()
             // Use a fallback height when the IME height isn't known yet (keyboard never shown this
             // session) so the panel is bounded — otherwise the GIF lazy grid fills the whole screen.
-            binding.llChatActions.minHeight = gifPanelHeightPx()
+            binding.llChatActions.minHeight = cachedPanelHeightPx()
             syncActionButtons(PanelMode.GIF)
             showPanel(animated = !hasKeyboard)
             chatViewModel.setVoiceVisibility(false)
@@ -2594,7 +2635,7 @@ class ChatMessageInputFragment : Fragment() {
     private fun hideGifPanel() {
         if (panelMode != PanelMode.GIF) return
         hidePanel {
-            (parentFragment?.view as? InsetAwareConstraintLayout)?.releaseKeyboardPaddingFreeze()
+            keyboardPanelHost?.releaseKeyboardPaddingFreeze()
         }
         // Restore the GIF ComposeView's default height so the shared ll_chat_actions container and
         // the more-actions grid path are unaffected by the keyboard-height bound set on show.
@@ -2638,6 +2679,14 @@ class ChatMessageInputFragment : Fragment() {
                 setActionContentMode(gif = true)
             }
         }
+        // Re-assert panel geometry for the IN-PLACE swaps (MORE<->GIF on an already-open panel),
+        // which deliberately skip showPanel() and so never reach its emission point. Deduped to
+        // nothing in every other case. NONE is excluded because the collapse paths call this right
+        // after hidePanel(), while the panel is still VISIBLE mid-collapse — re-asserting there
+        // would undo the (false, 0) that hidePanel just emitted.
+        if (mode != PanelMode.NONE && binding.llChatActions.isVisible) {
+            notifyPanelState(true, panelLiftHeightPx())
+        }
     }
 
     /**
@@ -2652,11 +2701,11 @@ class ChatMessageInputFragment : Fragment() {
      * more-grid / collapsed paths are unaffected.
      */
     /**
-     * Height (px) for the GIF panel. Uses the measured IME height when known; otherwise falls back to
-     * a sane default so the panel's lazy grid is bounded instead of filling the screen (the IME height
-     * is unavailable until the keyboard has been shown at least once this session).
+     * Height (px) for a fresh panel open. Uses the measured IME height when known; otherwise falls
+     * back to a sane default so the panel's lazy grid is bounded instead of filling the screen (the
+     * IME height is unavailable until the keyboard has been shown at least once this session).
      */
-    private fun gifPanelHeightPx(): Int {
+    private fun cachedPanelHeightPx(): Int {
         val kb = InsetAwareConstraintLayout.getKeyboardHeight(requireContext())
         return if (kb > 0) kb else (280 * resources.displayMetrics.density).toInt()
     }
@@ -2668,7 +2717,7 @@ class ChatMessageInputFragment : Fragment() {
             binding.gifPanelCompose.updateLayoutParams {
                 // Always bind an explicit height (with fallback when the IME height is unknown) so the
                 // lazy grid is bounded; otherwise the GIF panel fills the whole screen.
-                height = (gifPanelHeightPx() - verticalPadding).coerceAtLeast(0)
+                height = (cachedPanelHeightPx() - verticalPadding).coerceAtLeast(0)
             }
         } else {
             binding.gifPanelCompose.updateLayoutParams {
@@ -3195,16 +3244,25 @@ class ChatMessageInputFragment : Fragment() {
         super.onDestroyView()
         screenshotDetector?.release()
         screenshotDetector = null
-        (parentFragment?.view as? InsetAwareConstraintLayout)?.let { insetLayout ->
-            keyboardStateListener?.let { insetLayout.removeKeyboardStateListener(it) }
+        keyboardPanelHost?.let { host ->
+            keyboardStateListener?.let { host.removeKeyboardStateListener(it) }
             // Ensure freeze is released if Fragment is destroyed while panel is open
-            insetLayout.releaseKeyboardPaddingFreeze()
+            host.releaseKeyboardPaddingFreeze()
+            // Ensure a popup host does not stay lifted for a panel whose owner is gone.
+            // Called directly, not via notifyPanelState: that helper reads binding, which must not
+            // be touched after super.onDestroyView().
+            host.onChatPanelVisibilityChanged(false, 0)
         }
         keyboardStateListener = null
+        keyboardPanelHost = null
+        // The Fragment instance survives view re-creation, so stale dedupe state would suppress the
+        // first real notification after the view returns.
+        lastNotifiedPanelVisible = false
+        lastNotifiedPanelHeight = 0
     }
 
     private fun registerKeyboardStateListener() {
-        val insetLayout = (parentFragment?.view as? InsetAwareConstraintLayout) ?: return
+        val host = keyboardPanelHost ?: return
         keyboardStateListener = object : InsetAwareConstraintLayout.KeyboardStateListener {
             override fun onKeyboardShown() {
                 if (!isAdded || view == null) return
@@ -3225,13 +3283,13 @@ class ChatMessageInputFragment : Fragment() {
                 val panelVisible = binding.llChatActions.isVisible
                 if (isKeyboardVisible && panelVisible) {
                     hidePanel(animated = false)
-                    insetLayout.releaseKeyboardPaddingFreeze()
+                    keyboardPanelHost?.releaseKeyboardPaddingFreeze()
                     // Keyboard replaced the panel: reset content to the grid so the next
                     // more-actions tap shows the grid, not a stale GIF panel.
                     syncActionButtons(PanelMode.NONE)
                 }
             }
-        }.also { insetLayout.addKeyboardStateListener(it) }
+        }.also { host.addKeyboardStateListener(it) }
     }
 
     private var panelAnimator: android.animation.ValueAnimator? = null
@@ -3244,6 +3302,9 @@ class ChatMessageInputFragment : Fragment() {
      */
     private fun showPanel(animated: Boolean = true) {
         panelAnimator?.cancel()
+        // Emitted BEFORE the 0->height animator starts, so a host lifts in the same frame instead
+        // of after the panel has already expanded.
+        notifyPanelState(true, panelLiftHeightPx())
         val panel = binding.llChatActions
         val targetHeight = panel.minHeight
         if (animated && targetHeight > 0) {
@@ -3281,6 +3342,9 @@ class ChatMessageInputFragment : Fragment() {
             onEnd?.invoke()
             return
         }
+        // Emitted at the START of the collapse, for the same lockstep reason as showPanel. Covers
+        // every close path with one line.
+        notifyPanelState(false)
         if (animated) {
             val startHeight = panel.height
             val lp = panel.layoutParams

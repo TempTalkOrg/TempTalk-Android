@@ -9,6 +9,7 @@ import com.difft.android.call.CallIntent
 import com.difft.android.call.connect.MeetingConnectionPlanner
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.RoomMetadata
+import com.difft.android.call.exception.CallPreconditionException
 import com.difft.android.network.proxy.ProxyConfig
 import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.network.proxy.ProxyTunnelDns
@@ -43,6 +44,8 @@ import kotlinx.coroutines.withContext
 import livekit.LivekitTemptalk
 import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 import androidx.core.net.toUri
+
+private const val QUIC_CONNECT_TIMEOUT_MS = 3000
 
 class CallRoomController(
     private val appContext: Context,
@@ -131,11 +134,17 @@ class CallRoomController(
     /**
      * Non-creating, fail-loud getter. Reading before [createRoom] throws (the on-main-creation bug guard);
      * reading after release also throws so a stale, already-released [Room] is never handed out.
+     *
+     * Both throw [CallPreconditionException] rather than [IllegalStateException] because [connect]
+     * reads this getter inside its try block: a teardown that releases the room while an attempt is
+     * in flight must end the connection failover, not send it through every remaining candidate
+     * re-reading a room that is gone (connection failover treats unclassified failures as
+     * candidate-specific and retryable — see [com.difft.android.call.connect.classifyConnectFailure]).
      */
     val room: Room
         get() {
-            check(!released) { "[Call] room accessed after release" }
-            return roomInstance ?: error("[Call] room accessed before createRoom()")
+            if (released) throw CallPreconditionException("[Call] room accessed after release")
+            return roomInstance ?: throw CallPreconditionException("[Call] room accessed before createRoom()")
         }
 
     /**
@@ -187,8 +196,8 @@ class CallRoomController(
     /**
      * Best-effort disconnect that never throws on a not-yet-created or already-released room.
      * For connect-failure / manual-switch paths that can race with teardown: unlike
-     * `room.disconnect()` via the fail-loud getter, a gone room is a no-op here instead of an
-     * IllegalStateException crash. Threading is the caller's responsibility — disconnect() may do
+     * `room.disconnect()` via the fail-loud getter, a gone room is a no-op here instead of a
+     * throwing [CallPreconditionException]. Threading is the caller's responsibility — disconnect() may do
      * network I/O (TLS close_notify under an active proxy), so call it off the main thread.
      */
     fun disconnectQuietly() {
@@ -382,7 +391,9 @@ class CallRoomController(
                 if (pin.isNullOrBlank()) {
                     // Fail-CLOSED: TURN relay is forced but we have no pin to verify
                     // coturn's self-signed leaf. Refusing beats connecting unverified.
-                    throw IllegalStateException(
+                    // Typed as a precondition so failover reports it instead of retrying
+                    // every candidate against the same unsatisfiable guard.
+                    throw CallPreconditionException(
                         "[Call] proxy TURN relay active but SPKI pin absent — refusing unverified connect"
                     )
                 }
@@ -417,6 +428,7 @@ class CallRoomController(
                     quicProxySni = quicProxy?.outerSni(),
                     quicProxyCaCertPem = null,
                     quicProxySpkiPin = quicProxy?.spkiPinBase64,
+                    quicConnectTimeoutMs = QUIC_CONNECT_TIMEOUT_MS,
                 )
             )
             L.i { "[Call] connectToRoom connected" }

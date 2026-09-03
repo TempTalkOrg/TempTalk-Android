@@ -33,8 +33,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import org.difft.app.database.isGroupMember
-import org.difft.app.database.wcdb
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Content
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.ConversationId
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelope
@@ -75,13 +73,6 @@ class MessageContentProcessorForwardNoticeTest {
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         every { com.difft.android.base.utils.globalServices } returns globalServicesMock
         every { globalServicesMock.myId } returns MY_ID
-
-        // handleForwardNoticeMessage validates group membership via `wcdb.isGroupMember`
-        // (cross-conversation injection guard). The `wcdb` top-level property and the
-        // extension live in WCDBExtensions.kt → compiled class is `WCDBExtensionsKt`.
-        // Each group-scene test stubs membership for its own peer id via
-        // `stubSenderIsMember(...)`; default (no stub) returns null → NOT a member → drop.
-        mockkStatic("org.difft.app.database.WCDBExtensionsKt")
 
         localMessageCreator = mockk(relaxed = true)
         coEvery {
@@ -124,9 +115,6 @@ class MessageContentProcessorForwardNoticeTest {
         val groupIdAscii = "a".repeat(32)
         val timestamp = 1_700_000_000_000L
         val sourceDevice = 2
-
-        // Stub the group-membership check: peer IS a member of groupIdAscii.
-        stubSenderIsMember(true)
 
         val forwardNotice = ForwardNoticeMessage.newBuilder()
             .setScene(ForwardNoticeMessage.ForwardScene.COMBINED)
@@ -367,33 +355,12 @@ class MessageContentProcessorForwardNoticeTest {
     }
 
     // ------------------------------------------------------------------
-    // Cross-conversation injection guard: peer sends `Content.forwardNotice`
-    // with payload.groupId = <some group the victim is in> BUT peer is NOT a
-    // member of that group. Handler must drop, not insert the fake notice
-    // into that group on the victim's device.
-    // ------------------------------------------------------------------
-    @Test
-    fun `forwardNotice drops when envelope source is not a member of the target group`() = runTest {
-        val spoofingPeer = "+19990001"
-        val victimGroup = "b".repeat(32)
-        // Envelope.source (spoofingPeer) is NOT in the group member list
-        stubSenderIsMember(false)
-
-        val forwardNotice = ForwardNoticeMessage.newBuilder()
-            .setScene(ForwardNoticeMessage.ForwardScene.SINGLE)
-            .addSourceAuthorIds("+19990002")
-            .setMessageCount(1)
-            .setConversation(ConversationId.newBuilder().setGroupId(ByteString.copyFromUtf8(victimGroup)).build())
-            .build()
-        val envelope = minimalEnvelope(spoofingPeer, 700L)
-        val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
-
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
-        assertNull(result)
-        coVerify(exactly = 0) {
-            localMessageCreator.createForwardNoticeMessage(any(), any(), any(), any(), any(), any())
-        }
-    }
+    // Cross-conversation injection is enforced at the handleMessage mount via the
+    // conversation cross-check (envelope-stamped conversation vs content-declared);
+    // membership is not consulted for a present-match forward. Those scenarios
+    // (wrong-channel forward => REJECT, legit member forward => PROCESS) are covered in
+    // MessageContentProcessorConversationCrossCheckTest (FWD-INJECT / FWD-PASS /
+    // FWD-REGRESS-REMOVED-GUARD).
 
     // ------------------------------------------------------------------
     // The receiver does NOT truncate `sourceAuthorIds` at the processor
@@ -439,17 +406,6 @@ class MessageContentProcessorForwardNoticeTest {
         .setTimestamp(ts)
         .setSystemShowTimestamp(ts)
         .build()
-
-    /**
-     * Stubs `wcdb.isGroupMember(gid, userId)` directly. Stubbing the chain
-     * `wcdb.groupMemberContactor.getFirstObject(...)` triggers WCDB `Table`
-     * native linking in the relaxed mock (UnsatisfiedLinkError), so we target
-     * the extension — `mockkStatic("org.difft.app.database.WCDBExtensionsKt")`
-     * already enables this — and short-circuit the Table layer entirely.
-     */
-    private fun stubSenderIsMember(senderIsMember: Boolean) {
-        every { wcdb.isGroupMember(any(), any()) } returns senderIsMember
-    }
 
     companion object {
         private const val MY_ID = "+10000000"

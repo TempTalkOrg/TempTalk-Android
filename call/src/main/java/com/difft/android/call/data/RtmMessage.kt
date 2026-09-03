@@ -16,6 +16,8 @@ const val RTM_MESSAGE_TOPIC_RESTART_COUNTDOWN = "restart-countdown"
 const val RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN = "extend-countdown"
 const val RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN = "clear-countdown"
 const val RTM_MESSAGE_TOPIC_END_CALL = "end-call"
+/** Server → Client plaintext meeting-ended sync (RTM protocol §4.1). */
+const val RTM_MESSAGE_TOPIC_SERVER_END_CALL = "server-end-call"
 const val RTM_MESSAGE_KEY_TEXT = "text"
 const val RTM_MESSAGE_KEY_TOPIC = "topic"
 const val RTM_MESSAGE_KEY_TYPE = "type"
@@ -70,6 +72,13 @@ data class CountDownTimerData(
 
 @Serializable
 data class EndCallRtmMessage(
+    val topic: String? = null,
+    val sendTimestamp: Long,
+)
+
+/** Inner jsonData for the plaintext `server-end-call` topic (RTM protocol §4.1). */
+@Serializable
+data class ServerEndCallRtmMessage(
     val topic: String? = null,
     val sendTimestamp: Long,
 )

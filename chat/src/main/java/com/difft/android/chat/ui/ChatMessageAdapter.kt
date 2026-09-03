@@ -10,6 +10,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.compose.SelectMessageState
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
+import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.isAttachmentMessage
@@ -85,6 +86,7 @@ abstract class ChatMessageAdapter(
         const val VIEW_TYPE_NOTIFY = 200  // 调整到 200，避免冲突
         const val VIEW_TYPE_SCREENSHOT = 201  // 截屏消息
         const val VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER = 202  // Confidential message placeholder (same style as notify)
+        const val VIEW_TYPE_E2EE_HEADER = 203  // does NOT reuse VIEW_TYPE_NOTIFY (its binder hard-casts)
 
         // 内容类型配置表（layout + binder）
         private val contentTypeConfigs = mapOf(
@@ -107,6 +109,10 @@ abstract class ChatMessageAdapter(
         val message = getItem(position)
 
         // === 第一层：消息类型 ===
+        if (message is EncryptionHeaderChatMessage) {
+            return VIEW_TYPE_E2EE_HEADER
+        }
+
         if (message is ConfidentialPlaceholderChatMessage) {
             return VIEW_TYPE_CONFIDENTIAL_PLACEHOLDER
         }
@@ -198,6 +204,15 @@ abstract class ChatMessageAdapter(
      * - 普通消息：根据内容类型和发送者创建 Message ViewHolder
      */
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatMessageViewHolder {
+        // E2EE 说明头（复用 Notify 外壳，独立 binder）
+        if (viewType == VIEW_TYPE_E2EE_HEADER) {
+            return ChatMessageViewHolder.Notify(
+                parentView = parent,
+                contentLayoutRes = R.layout.chat_item_content_e2ee_header,
+                contentBinder = E2eeHeaderContentBinder,
+            )
+        }
+
         // 通知消息
         if (viewType == VIEW_TYPE_NOTIFY) {
             return ChatMessageViewHolder.Notify(
@@ -284,8 +299,7 @@ abstract class ChatMessageAdapter(
         // 根据 ViewHolder 类型创建对应的 callbacks
         val callbacks = when (holder) {
             is ChatMessageViewHolder.Notify -> {
-                // Notify 使用 NotifyInteraction（目前为空，未来可扩展）
-                MessageCallbacks.NotifyInteraction()
+                MessageCallbacks.NotifyInteraction(onE2eeHeaderClick = { onE2eeHeaderClick() })
             }
 
             is ChatMessageViewHolder.Message -> {
@@ -403,4 +417,9 @@ abstract class ChatMessageAdapter(
     )
 
     open fun onSelectedMessage(messageId: String, selected: Boolean) = Unit
+
+    // Not abstract: only ChatMessageListFragment's anonymous subclass ever shows an
+    // EncryptionHeaderChatMessage. ChatForwardMessageFragment's anonymous subclass never submits
+    // one and must not be forced to implement a callback it can never trigger.
+    open fun onE2eeHeaderClick() = Unit
 }

@@ -73,11 +73,17 @@ class AboutFragment : Fragment() {
                             val intent = Intent(requireContext(), LCallServerNodeActivity::class.java)
                             startActivity(intent)
                         },
-                        isInsider = globalServices.environmentHelper.isInsiderChannel(),
+                        // Call-service diagnostics: insider channel, plus any debug build so
+                        // devs can reach the node switcher without an insider-flavor install.
+                        showCallServerEntry = isDebugOrInsider(),
                         showBackButton = !isInDualPaneMode()
                     )
                 }
             }
         }
     }
+
+    /** Builds that may see diagnostics affordances: insider installs and any debug build. */
+    private fun isDebugOrInsider(): Boolean =
+        BuildConfig.DEBUG || globalServices.environmentHelper.isInsiderChannel()
 }

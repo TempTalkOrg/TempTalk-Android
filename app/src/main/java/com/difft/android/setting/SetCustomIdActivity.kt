@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.airbnb.lottie.LottieAnimationView
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.chat.R
 import com.difft.android.setting.viewmodel.SetCustomIdViewModel
@@ -83,14 +85,16 @@ class SetCustomIdActivity : BaseActivity() {
 
     private fun initializeView() {
         setContent {
-            SetOwnIdScreen(
-                viewModel = viewModel,
-                initialValue = contactId,
-                onBack = { finish() },
-                onSave = { customUid -> viewModel.submitCustomUid(customUid, callback = { status ->
-                    handleSaveButtonClick(status)
-                }) }
-            )
+            DifftTheme {
+                SetOwnIdScreen(
+                    viewModel = viewModel,
+                    initialValue = contactId,
+                    onBack = { finish() },
+                    onSave = { customUid -> viewModel.submitCustomUid(customUid, callback = { status ->
+                        handleSaveButtonClick(status)
+                    }) }
+                )
+            }
         }
     }
 
@@ -150,42 +154,10 @@ fun SetOwnIdScreen(
         horizontalAlignment = Alignment.Start,
     ) {
         Spacer(modifier = Modifier.height(topInset))
-        // Top AppBar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.chat_contact_detail_ic_back), // 替换为你的返回图标
-                contentDescription = "Back",
-                modifier = Modifier
-                    .size(24.dp)
-                    .clickable { onBack() },
-                tint = colorResource(com.difft.android.base.R.color.t_secondary)
-            )
-
-            Box(
-                modifier = Modifier.weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_title),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(510),
-                        color = colorResource(com.difft.android.base.R.color.t_primary),
-                    )
-                )
-            }
-
-            // 占位，保证左右对称
-            Spacer(modifier = Modifier.size(24.dp))
-        }
+        TitleBar(
+            titleText = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_title),
+            onBackClick = onBack,
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 

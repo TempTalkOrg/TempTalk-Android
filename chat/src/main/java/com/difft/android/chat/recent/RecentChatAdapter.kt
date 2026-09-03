@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -50,6 +51,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
     }) {
     companion object {
         const val VIEW_TYPE_SEARCH_INPUT = 0
+        const val VIEW_TYPE_E2EE_FOOTER = 1
         const val VIEW_TYPE_CHAT_ITEM = 2
     }
 
@@ -65,6 +67,12 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                 RecentChatViewHolder(activity, parent, globalServices.myId, isForSearch)
             }
 
+            VIEW_TYPE_E2EE_FOOTER -> {
+                val inflater = LayoutInflater.from(parent.context)
+                val view = inflater.inflate(R.layout.chat_fragment_recent_chat_footer_item, parent, false)
+                RecentChatFooterViewHolder(view)
+            }
+
             else -> throw IllegalArgumentException("Invalid view type")
         }
     }
@@ -72,6 +80,13 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
     abstract fun onItemClicked(roomViewData: RoomViewData, position: Int)
 
     abstract fun onItemLongClicked(view: View, roomViewData: RoomViewData, position: Int, touchX: Int, touchY: Int)
+
+    /**
+     * Whole-row tap target for the list-footer E2EE hint. Deliberately NOT abstract:
+     * [com.difft.android.search.SearchActivity]'s `RecentChatAdapter` subclass never submits
+     * [ListItem.E2eeFooter] and must not be forced to implement a callback it can never trigger.
+     */
+    open fun onFooterClicked() = Unit
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
@@ -100,6 +115,11 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                     { onItemClicked(data, position - 2) }, // Adjust position
                     { onItemLongClicked(holder.itemView, data, position - 2, lastTouchX, lastTouchY) })
             }
+
+            is ListItem.E2eeFooter -> {
+                val footerHolder = holder as RecentChatFooterViewHolder
+                footerHolder.bind(onFooterClicked = { onFooterClicked() })
+            }
         }
     }
 
@@ -110,10 +130,11 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         return when (getItem(position)) {
             is ListItem.SearchInput -> VIEW_TYPE_SEARCH_INPUT
             is ListItem.ChatItem -> VIEW_TYPE_CHAT_ITEM
-            else -> {
-                throw IllegalArgumentException("Invalid item type")
-            }
+            is ListItem.E2eeFooter -> VIEW_TYPE_E2EE_FOOTER
         }
+        // No `else` branch: ListItem is sealed and this `when` is an EXPRESSION, so the compiler
+        // enforces exhaustiveness — a future ListItem subtype without a branch is now a COMPILE
+        // error, not the runtime IllegalArgumentException the old `else -> throw` produced.
     }
 
     private var recyclerView: RecyclerView? = null
@@ -328,6 +349,9 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
      */
     private fun applyTagRow(data: RoomViewData) {
         val context = binding.root.context
+        // Independent of the tag run below — a room can show the icon AND [Send failed] at once.
+        val showSendingIcon = data.sendingStatus != ROOM_SENDING_STATUS_NONE
+        binding.imageviewSending.isVisible = showSendingIcon
         val labels = ChatListTagLabels(
             criticalAlert = context.getString(R.string.chat_list_critical_alert),
             sendFailed = context.getString(R.string.chat_list_send_failed),
@@ -357,6 +381,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 // method also rewrites the row background and the click listener.
                 hasCallBar = !data.callData?.roomId.isNullOrEmpty(),
                 isLargerText = TextSizeUtil.isLarger,
+                hasSendingIcon = showSendingIcon,
             ),
             measureText = binding.textviewAt.paint::measureText,
         )
@@ -439,6 +464,11 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
 sealed class ListItem {
     object SearchInput : ListItem()
     data class ChatItem(val data: RoomViewData) : ListItem()
+
+    /** Stateless list-footer singleton — the same instance is referentially equal across every
+     * `submitList` call, so [DiffUtil.ItemCallback.areItemsTheSame]'s `oldItem == newItem`
+     * fallthrough is unconditionally true for it, giving "no change" for free. */
+    object E2eeFooter : ListItem()
 
     fun chatItemData(): RoomViewData? {
         return (this as? ChatItem)?.data

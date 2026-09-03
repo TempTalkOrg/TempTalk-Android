@@ -145,7 +145,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
                 binding.ibBack.setOnClickListener { chatViewModel.selectModel(false) }
             } else {
                 binding.ibBack.visibility = View.VISIBLE
-                binding.ibBack.setImageResource(R.mipmap.chat_tabler_arrow_left)
+                binding.ibBack.setImageResource(com.difft.android.base.R.drawable.chative_ic_back)
                 binding.ibBack.setOnClickListener { activity?.finish() }
             }
         }.launchIn(viewLifecycleOwner.lifecycleScope)

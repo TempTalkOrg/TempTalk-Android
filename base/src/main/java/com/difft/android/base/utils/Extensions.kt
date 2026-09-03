@@ -11,8 +11,10 @@ import android.view.View
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import com.difft.android.base.BuildConfig
+import com.difft.android.base.R
 import com.difft.android.base.application.ScopeApplication
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.internal.managers.ViewComponentManager.FragmentContextWrapper
 import kotlinx.coroutines.CoroutineName
@@ -39,8 +41,15 @@ fun String.utf8Substring(maxUtf8Len: Int): String {
 }
 
 fun Context.openExternalBrowser(url: String) {
-    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-    startActivity(intent)
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+        startActivity(intent)
+    }.onFailure { e ->
+        // Never log e.stackTraceToString() here: ActivityNotFoundException's message embeds the
+        // full failed Intent URI (including query params) — log the exception class + url host only.
+        L.w { "[Base] openExternalBrowser failed url_host=${url.toUri().host} exception=${e.javaClass.simpleName}" }
+        ToastUtil.show(R.string.base_link_open_failed)
+    }
 }
 
 suspend inline fun <T, R> T.suspendLet(block: suspend (T) -> R): R {

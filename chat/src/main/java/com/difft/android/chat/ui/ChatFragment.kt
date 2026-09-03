@@ -322,6 +322,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
         }
 
         updateConfidential()
+        binding.includeFullInput.edittextFullInput.hint = getString(chatViewModel.neutralInputHintRes)
         chatSettingViewModel.conversationSet
             .filterNotNull()
             .onEach {

@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Tabler "lock" icon. Colors below are placeholder-only (see Vector Drawable
+         Pre-flight): tinted exclusively via Icon()/Drawable.setTint() (BlendMode.SrcIn) at
+         every call site — never rendered through Image()/painterResource, which would
+         freeze this baked-in color instead of adapting to theme/context. -->
+    <path
+        android:pathData="M5,13a2,2 0,0 1,2 -2h10a2,2 0,0 1,2 2v6a2,2 0,0 1,-2 2h-10a2,2 0,0 1,-2 -2v-6z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M11,16a1,1 0,1 0,2 0a1,1 0,0 0,-2 0"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M8,11v-4a4,4 0,1 1,8 0v4"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

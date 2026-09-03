@@ -12,6 +12,7 @@ import com.difft.android.chat.messages.reportPermanentDrop
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.responses.PendingMessage
+import com.difft.android.websocket.api.util.transformGroupIdFromLocalToServer
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -214,7 +215,9 @@ class PendingMessageHelper @Inject constructor(
                         if (conversation.contains(":")) {
                             number = conversation.replace(globalServices.myId, "").replace(":", "")
                         } else {
-                            groupId = ByteString.copyFrom(conversation.toByteArray())
+                            // Match C2's copyWithMsgExtraConversationId encoder (byte-identical
+                            // no-op for plain-ASCII ids) so both round-trip identically.
+                            groupId = ByteString.copyFrom(conversation.transformGroupIdFromLocalToServer())
                         }
                     }
                     msgExtra = msgExtra {

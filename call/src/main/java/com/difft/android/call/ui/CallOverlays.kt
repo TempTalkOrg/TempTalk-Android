@@ -4,15 +4,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import com.difft.android.base.call.CallRole
+import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheetDialog
 import com.difft.android.base.user.CallConfig
 import com.difft.android.call.CallIntent
 import com.difft.android.call.ui.alert.ShowCriticalAlertConfirmView
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
-import io.livekit.android.audio.AudioSwitchHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
@@ -26,7 +29,6 @@ fun CommonCallOverlays(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
     isUserSharingScreen: Boolean,
-    audioSwitchHandler: AudioSwitchHandler?,
     callConfig: CallConfig,
     callIntent: CallIntent,
     callRole: CallRole,
@@ -36,17 +38,19 @@ fun CommonCallOverlays(
     onWindowZoomOutClick: () -> Unit,
     onExitClick: (CallExitParams, CallEndType?) -> Unit
 ) {
+    var showE2eeSheet by remember { mutableStateOf(false) }
+
     RenderTopAndBottomOverlays(
         viewModel = viewModel,
         isOneVOneCall = isOneVOneCall,
         isUserSharingScreen = isUserSharingScreen,
-        audioSwitchHandler = audioSwitchHandler,
         callConfig = callConfig,
         callIntent = callIntent,
         callRole = callRole,
         conversationId = conversationId,
         onWindowZoomOutClick = onWindowZoomOutClick,
-        onExitClick = onExitClick
+        onExitClick = onExitClick,
+        onE2eeHintClick = { showE2eeSheet = true },
     )
     ShowItemsBottomView(
         viewModel,
@@ -73,6 +77,20 @@ fun CommonCallOverlays(
             }
         }
     )
+
+    // Follows the exact "state + !isInPipMode" idiom already used by ShowItemsBottomView:
+    // PiP entry force-dismisses the sheet (bottom sheets cannot render in PiP).
+    val isInPipModeForSheet by viewModel.callUiController.isInPipMode.collectAsState(false)
+    // Reset the underlying state on PiP entry, not just the derived `showSheet` gate below —
+    // otherwise returning from PiP with `showE2eeSheet` still true reopens the sheet unprompted.
+    LaunchedEffect(isInPipModeForSheet) {
+        if (isInPipModeForSheet) showE2eeSheet = false
+    }
+    E2eeInfoSheetDialog(
+        showSheet = showE2eeSheet && !isInPipModeForSheet,
+        learnMoreUrl = viewModel.e2eeLearnMoreUrl,
+        onDismissRequest = { showE2eeSheet = false },
+    )
 }
 
 @Composable
@@ -80,13 +98,13 @@ private fun RenderTopAndBottomOverlays(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
     isUserSharingScreen: Boolean,
-    audioSwitchHandler: AudioSwitchHandler?,
     callConfig: CallConfig,
     callIntent: CallIntent,
     callRole: CallRole,
     conversationId: String?,
     onWindowZoomOutClick: () -> Unit,
-    onExitClick: (CallExitParams, CallEndType?) -> Unit
+    onExitClick: (CallExitParams, CallEndType?) -> Unit,
+    onE2eeHintClick: () -> Unit,
 ) {
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
 
@@ -123,7 +141,8 @@ private fun RenderTopAndBottomOverlays(
         isUserSharingScreen = isUserSharingScreen,
         callConfig = callConfig,
         callIntent = callIntent,
-        windowZoomOutAction = onWindowZoomOutClick
+        windowZoomOutAction = onWindowZoomOutClick,
+        onE2eeHintClick = onE2eeHintClick,
     )
 
     if (!isInPipMode) {
@@ -131,7 +150,6 @@ private fun RenderTopAndBottomOverlays(
             viewModel = viewModel,
             isOneVOneCall = isOneVOneCall,
             isUserSharingScreen = isUserSharingScreen,
-            audioSwitchHandler = audioSwitchHandler,
             endCallAction = { callType, callEndType ->
                 val callExitParams = CallExitParams(
                     viewModel.getRoomId(),

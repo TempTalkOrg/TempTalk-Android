@@ -4,6 +4,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.BarrageMessage
 import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.TextBubbleMessage
+import com.difft.android.call.network.NetworkQualityView
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,6 +76,17 @@ class CallUiController() {
 
     private val _reconnectCount = MutableStateFlow(0)
     val reconnectCount = _reconnectCount.asStateFlow()
+
+    /**
+     * Room-wide weak-network verdict. Both suppression rules are already applied by
+     * [com.difft.android.call.network.NetworkQualityTracker], so the UI must never re-implement
+     * them — and must never branch on [NetworkQualityView.suppressed], because the snapshot is
+     * already empty when that flag is true.
+     *
+     * Written only by NetworkQualityCoordinator, on the main dispatcher.
+     */
+    private val _networkQuality = MutableStateFlow(NetworkQualityView.NONE)
+    val networkQuality = _networkQuality.asStateFlow()
 
     /**
      * Updates the Picture-in-Picture (PiP) mode state for the current call.
@@ -197,6 +209,17 @@ class CallUiController() {
 
     fun incrementReconnectCount() {
         _reconnectCount.value++
+    }
+
+    /**
+     * Publishes a whole new weak-network snapshot. A full replacement, not a read-modify-write, so
+     * plain assignment is correct here; `MutableStateFlow` drops equal values, which is the
+     * de-duplication for the 500 ms tick.
+     *
+     * Public so the render-layer Compose tests can drive the UI with a bare `CallUiController()`.
+     */
+    fun setNetworkQuality(view: NetworkQualityView) {
+        _networkQuality.value = view
     }
 
     @Volatile

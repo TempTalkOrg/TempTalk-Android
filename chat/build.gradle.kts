@@ -81,6 +81,7 @@ dependencies {
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
+    testImplementation(testFixtures(project(":database")))
     // Compose test
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)

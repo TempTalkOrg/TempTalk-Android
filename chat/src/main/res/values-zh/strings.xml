@@ -70,6 +70,7 @@
     <string name="chat_contacts">通讯录</string>
     <string name="chat_me">我</string>
     <string name="chat_message_input_hint">消息</string>
+    <string name="chat_message_input_hint_e2ee">已端到端加密</string>
     <string name="chat_message_input_hint_confidential">机密消息</string>
     <string name="chat_message_confidential_tips">左边下滑以阅读，右边下滑以翻页</string>
     <string name="chat_message_action_copy">复制</string>
@@ -126,6 +127,7 @@
     <string name="chat_list_critical_alert">[🚨 紧急联络]</string>
     <string name="chat_list_send_failed">[发送失败]</string>
     <string name="chat_list_draft">[草稿]</string>
+    <string name="chat_list_e2ee_hint">消息和通话都已端到端加密。</string>
     <string name="chat_message_critical_alert">🚨 紧急联络</string>
     <string name="chat_status_sending">发送中</string>
     <string name="chat_status_sent">已发送</string>
@@ -154,7 +156,8 @@
     <string name="chat_confidential_tip_content">查看后，消息将消失。</string>
     <string name="chat_confidential_message_viewed">机密消息已被查看</string>
     <string name="chat_do_not_trust_warning">⚠️ 请勿轻信陌生人。</string>
-    <string name="chat_privacy_banner">🔒 隐私优先 · 全程匿名 · 端到端消息加密。请勿轻信陌生人。</string>
+    <string name="chat_e2ee_header_hint">消息和通话已端到端加密，只有你和聊天里的人可以查看消息或收听通话。</string>
+    <string name="chat_e2ee_header_non_friend">隐私优先 · 全程匿名 · 端到端消息加密。请勿轻信陌生人。</string>
 
     <string name="chat_action_photo">照片</string>
     <string name="chat_action_gif">GIF</string>

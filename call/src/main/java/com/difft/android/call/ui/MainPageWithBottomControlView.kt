@@ -1,6 +1,5 @@
 package com.difft.android.call.ui
 
-import android.Manifest
 import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -28,8 +27,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -49,26 +46,21 @@ import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.LCallActivity
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallEndType
-import com.difft.android.call.util.openAppSettings
-import com.difft.android.call.util.rememberPermissionChecker
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.twilio.audioswitch.AudioDevice
-import io.livekit.android.audio.AudioSwitchHandler
+import com.difft.android.call.onMediaControlTapped
+import com.difft.android.call.permission.CallMediaPermission
 
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
     isUserSharingScreen: Boolean = false,
-    audioSwitchHandler: AudioSwitchHandler? = null,
     endCallAction: (callType: String, callEndType: CallEndType) -> Unit
 ){
     // 直接 collectAsState；可见性变化会让本 composable 重组一次，按钮 Row 等
@@ -78,7 +70,6 @@ fun MainPageWithBottomControlView(
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val micEnabled by viewModel.micEnabled.collectAsState(false)
     val videoEnabled by viewModel.cameraEnabled.collectAsState(false)
-    val currentAudioDevice by viewModel.currentAudioDevice.collectAsState()
     val currentCallType by viewModel.callType.collectAsState()
     val voicePreset by viewModel.voicePreset.collectAsState()
     val configuration = LocalConfiguration.current
@@ -91,68 +82,14 @@ fun MainPageWithBottomControlView(
     val micClosePainter = painterResource(id = R.drawable.call_btn_microphone_close)
     val cameraOpenPainter = painterResource(id = R.drawable.call_btn_camera_open)
     val cameraClosePainter = painterResource(id = R.drawable.call_btn_camera_close)
-    val volumePhonePainter = painterResource(id = R.drawable.call_btn_volume_phone)
-    val volumeSpeakerPainter = painterResource(id = R.drawable.call_btn_volume_speaker)
-    val volumeHeadphonesPainter = painterResource(id = R.drawable.call_btn_volume_headphones)
-    val volumeAirpodPainter = painterResource(id = R.drawable.call_btn_volume_airpod)
     val usersPainter = painterResource(id = R.drawable.users)
     val dotsPainter = painterResource(id = R.drawable.call_btn_tabler_dots)
 
-    val requestMicPermission = rememberPermissionChecker(
-        viewModel = viewModel,
-        permission = Manifest.permission.RECORD_AUDIO,
-        onGranted = {
-            // Update foreground service type when microphone permission is granted
-            // This must be done before enabling microphone to ensure service type is correct
-            if (context is LCallActivity) {
-                context.updateForegroundServiceType()
-            }
-            // Enable microphone after updating service type
-            viewModel.setMicEnabled(!viewModel.micEnabled.value)
-        },
-        onDenied =  {
-            ComposeDialogManager.showMessageDialog(
-                context = context,
-                cancelable = true,
-                title = ResUtils.getString(R.string.call_microphone_permission_deny_title),
-                message = ResUtils.getString(R.string.call_microphone_permission_deny_content),
-                confirmText = ResUtils.getString(R.string.call_permission_button_setting_go),
-                cancelText = ResUtils.getString(R.string.call_permission_button_setting_cancel),
-                onConfirm = {
-                    openAppSettings(context)
-                    viewModel.callUiController.setRequestPermissionStatus(true)
-                }
-            )
-        }
-    )
-
-    val requestCameraPermission = rememberPermissionChecker(
-        viewModel = viewModel,
-        permission = Manifest.permission.CAMERA,
-        onGranted = {
-            // Update foreground service type when camera permission is granted
-            // This must be done before enabling camera to ensure service type is correct
-            if (context is LCallActivity) {
-                context.updateForegroundServiceType()
-            }
-            // Enable camera after updating service type
-            viewModel.setCameraEnabled(!viewModel.cameraEnabled.value)
-        },
-        onDenied = {
-            ComposeDialogManager.showMessageDialog(
-                context = context,
-                cancelable = true,
-                title = ResUtils.getString(R.string.call_camera_permission_deny_title),
-                message = ResUtils.getString(R.string.call_camera_permission_deny_content),
-                confirmText = ResUtils.getString(R.string.call_permission_button_setting_go),
-                cancelText = ResUtils.getString(R.string.call_permission_button_setting_cancel),
-                onConfirm = {
-                    openAppSettings(context)
-                    viewModel.callUiController.setRequestPermissionStatus(true)
-                }
-            )
-        }
-    )
+    // Tap routing + system-request launching + Settings guide all live in
+    // LCallActivityMediaPermissions (single decision point). Compose only renders
+    // the mic badge from the coordinator state — camera is dialog-only, no badge.
+    val micPermissionState by viewModel.mediaPermissions.micState.collectAsState()
+    val showMicPermissionBadge = micPermissionState.showsBadge
 
     val isBottomVisible = isOneVOneCall && !isUserSharingScreen || showBottomState.value
 
@@ -160,8 +97,9 @@ fun MainPageWithBottomControlView(
         modifier = Modifier
             .then(
                 if (!isLandscape) {
-                    Modifier.padding(bottom = 32.dp)
+                    Modifier.padding(bottom = LCallUiConstants.BOTTOM_BAR_MARGIN_BOTTOM_DP.dp)
                 } else {
+                    // Landscape-only margin, not mirrored anywhere — stays a literal.
                     Modifier.padding(bottom = 16.dp)
                 }
             )
@@ -178,7 +116,7 @@ fun MainPageWithBottomControlView(
                     viewModel.callUiController.toggleOverlays()
                 }
         ) {
-            val controlSize = 48.dp
+            val controlSize = LCallUiConstants.BOTTOM_BAR_CONTROL_SIZE_DP.dp
             val controlPadding = if (isLandscape) 16.dp else 12.dp
             Row(
                 modifier = Modifier
@@ -192,7 +130,10 @@ fun MainPageWithBottomControlView(
                         modifier = Modifier.size(controlSize),
                         color = Color.Transparent,
                         shape = CircleShape,
-                        border = if (voicePreset.isEnabled) BorderStroke(
+                        // Preset ring hides with the preset badge while mic permission is
+                        // denied: the voice changer only shapes local capture, and with no
+                        // RECORD_AUDIO there is no capture — advertising it would mislead.
+                        border = if (voicePreset.isEnabled && !showMicPermissionBadge) BorderStroke(
                             width = 2.dp,
                             color = colorResource(id = com.difft.android.base.R.color.blue_400),
                         ) else null
@@ -209,12 +150,20 @@ fun MainPageWithBottomControlView(
                                     indication = null,
                                     onClick = {
                                         L.i { "[call] LCallActivity onClick Mic" }
-                                        if (viewModel.isControlButtonClickEnabled()) requestMicPermission()
+                                        if (viewModel.isControlButtonClickEnabled() && context is LCallActivity) {
+                                            context.onMediaControlTapped(CallMediaPermission.Microphone)
+                                        }
                                     }
                                 )
                         )
                     }
-                    if (voicePreset.isEnabled) {
+                    if (showMicPermissionBadge) {
+                        MicPermissionBadge(modifier = Modifier.align(Alignment.TopEnd))
+                    }
+                    // The permission badge replaces the entire voice-preset treatment (badge
+                    // here, ring above) while visible — Figma 17129:3875 shows only the alert
+                    // badge, and an inactive capture chain makes the preset state meaningless.
+                    if (voicePreset.isEnabled && !showMicPermissionBadge) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -261,60 +210,20 @@ fun MainPageWithBottomControlView(
                                 indication = null
                             ) {
                                 L.i { "[call] LCallActivity onClick Camera" }
-                                if (viewModel.isControlButtonClickEnabled()) requestCameraPermission()
+                                if (viewModel.isControlButtonClickEnabled() && context is LCallActivity) {
+                                    context.onMediaControlTapped(CallMediaPermission.Camera)
+                                }
                             }
                     )
                 }
 
                 Spacer(modifier = Modifier.width(controlPadding))
 
-                var showAudioDeviceDialog by remember { mutableStateOf(false) }
-
-                Surface(
-                    modifier = Modifier.size(controlSize),
-                    color = Color.Transparent
-                ) {
-                    val painter = when (currentAudioDevice) {
-                        is AudioDevice.Earpiece -> volumePhonePainter
-                        is AudioDevice.Speakerphone -> volumeSpeakerPainter
-                        is AudioDevice.WiredHeadset -> volumeHeadphonesPainter
-                        is AudioDevice.BluetoothHeadset -> volumeAirpodPainter
-                        else -> volumeSpeakerPainter
-                    }
-                    Image(
-                        painter = painter,
-                        contentDescription = "Horn",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .testTag("call_btn_horn")
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                L.i { "[call] LCallActivity onClick Horn" }
-                                if (audioSwitchHandler != null) {
-                                    if (audioSwitchHandler.availableAudioDevices.size > 2) {
-                                        showAudioDeviceDialog = !showAudioDeviceDialog
-                                    } else {
-                                        viewModel.audioDeviceManager.switchToNext()
-                                    }
-                                }
-                            }
-                    )
-
-                    audioSwitchHandler?.availableAudioDevices?.let { availableAudioDevices ->
-                        ShowAudioDeviceOnClickView(
-                            audioDevices = availableAudioDevices,
-                            currentDevice = currentAudioDevice ?: audioSwitchHandler.selectedAudioDevice,
-                            expanded = showAudioDeviceDialog,
-                            setExpanded = { value -> showAudioDeviceDialog = value },
-                            onClickItem = { item ->
-                                viewModel.audioDeviceManager.select(item)
-                                showAudioDeviceDialog = false
-                            }
-                        )
-                    }
-                }
+                AudioRouteControl(
+                    viewModel = viewModel,
+                    isOneVOneCall = isOneVOneCall,
+                    controlSize = controlSize,
+                )
 
                 if (isUserSharingScreen) {
                     Spacer(modifier = Modifier.width(controlPadding))
@@ -429,4 +338,22 @@ fun MainPageWithBottomControlView(
             }
         }
     }
+}
+
+/**
+ * Red alert badge on the mic toggle while RECORD_AUDIO is denied (spec: persistent,
+ * non-blocking denial indicator; mic only — camera/screen-share are dialog-only).
+ *
+ * Per the Figma spec (node 17129:3860): 16dp tabler alert-circle-filled, error red,
+ * flush to the button's top-end corner; the "!" is a cutout showing the background.
+ */
+@Composable
+internal fun MicPermissionBadge(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(id = R.drawable.call_ic_mic_permission_badge),
+        contentDescription = null,
+        modifier = modifier
+            .testTag("call_mic_permission_badge")
+            .size(16.dp)
+    )
 }

@@ -25,10 +25,10 @@ internal sealed interface FirstScreenAnchor {
  *   readPosition AND not mine — i.e. exactly the message the "NEW MESSAGES" divider lands on
  *   (`ChatMessageViewModel`). MUST come from `WCDB.firstUnreadFromOthersMessage`, never from
  *   `ChatNormalPaginationController`'s `expectedUnreadMessages.firstOrNull()`: that set has no
- *   `fromWho` predicate (`BaseChatPaginationController.commonMessageQueryCondition` filters on
- *   room only), so a failed message — necessarily mine and usually newer than readPosition — would
- *   be its first element and make the decision fire `FromReadPosition` unconditionally, silently
- *   disabling the anchoring entirely.
+ *   `fromWho` predicate (`WcdbChatMessageWindowSource.roomCondition` filters on room only), so a
+ *   failed message — necessarily mine and usually newer than readPosition — would be its first
+ *   element and make the decision fire `FromReadPosition` unconditionally, silently disabling the
+ *   anchoring entirely.
  */
 internal fun decideFirstScreenAnchor(
     firstFailedTs: Long?,

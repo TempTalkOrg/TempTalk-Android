@@ -12,6 +12,7 @@ import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.SpeakerStateHolder
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.media.CallAudioSetup
+import com.difft.android.call.network.NetworkQualityCoordinator
 import com.difft.android.call.service.ForegroundService
 import com.difft.android.call.session.CallTypeCoordinator
 import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStateHolder
@@ -46,6 +47,7 @@ internal object CallCleanupSteps {
         screenSharePreWarmer: ScreenSharePreWarmer,
         roomEventDispatcher: RoomEventDispatcher?,
         callTypeCoordinator: CallTypeCoordinator?,
+        networkQualityCoordinator: NetworkQualityCoordinator?,
         statisticsLogManager: CallStatisticsLogManager,
         feedbackBinder: CallFeedbackBinder,
         shouldTriggerFeedbackView: () -> Unit,
@@ -58,14 +60,25 @@ internal object CallCleanupSteps {
         },
         CallCleanupExecutor.Step("shouldTriggerFeedbackView") { shouldTriggerFeedbackView() },
         CallCleanupExecutor.Step("cancelCallTimeoutCheck") { timeoutMonitor.cancelIfActive() },
+        CallCleanupExecutor.Step("cancelRoomEventDispatcher") { roomEventDispatcher?.cancelJobs() },
+        // Before disconnectAndRelease: stops the tick and the room-state collector so the room can't
+        // be released while a tick is still reading the quality providers. The hop to main is
+        // required, not cosmetic: steps run on Dispatchers.IO, while the coordinator drives a
+        // lock-free state machine that every other entry point touches from the main dispatcher.
+        CallCleanupExecutor.Step("resetNetworkQuality") {
+            withContext(Dispatchers.Main.immediate) { networkQualityCoordinator?.stop() }
+        },
         CallCleanupExecutor.Step("roomCtl.disconnectAndRelease") {
             withTimeoutOrNull(5000L) { roomCtl.disconnectAndRelease() }
                 ?: L.w { "[Call] CallCleanupSteps: roomCtl.disconnectAndRelease timeout" }
         },
         CallCleanupExecutor.Step("stopAudioHandler") {
             audioProcessor.release()
-            audioHandler.stop()
+            // audioSetup first: it cancels the route guard and the applier, both of which drive the
+            // handler. Stopping the handler first left a window where the applier could still call
+            // selectDevice on a dead switch, and where the guard's rebuild could restart one.
             audioSetup.stop()
+            audioHandler.stop()
         },
         CallCleanupExecutor.Step("stopTimers") {
             timerManager.stopCallTimer()
@@ -84,7 +97,6 @@ internal object CallCleanupSteps {
         CallCleanupExecutor.Step("cancelSpeakerStateJobs") { speakerState.cancelJobs() },
         CallCleanupExecutor.Step("cancelScreenShareFloatingSpeaker") { screenShareFloatingSpeakerStateHolder?.cancel() },
         CallCleanupExecutor.Step("cancelScreenSharePreWarmer") { screenSharePreWarmer.cancelJobs() },
-        CallCleanupExecutor.Step("cancelRoomEventDispatcher") { roomEventDispatcher?.cancelJobs() },
         CallCleanupExecutor.Step("cancelCallTypeCoordinator") { callTypeCoordinator?.cancelJobs() },
         CallCleanupExecutor.Step("clearE2eeKey") { clearE2eeKey() },
     )

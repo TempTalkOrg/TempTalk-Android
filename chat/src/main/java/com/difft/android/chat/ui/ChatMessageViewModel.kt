@@ -22,12 +22,16 @@ import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.ChatMessageListBehavior
 import com.difft.android.chat.IChatPaginationController
 import com.difft.android.chat.R
+import com.difft.android.chat.ScrollAction
+import com.difft.android.chat.messagesToConvert
 import com.difft.android.chat.compose.SelectMessageState
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.group.ChatUIData
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
+import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageTwo
@@ -77,6 +81,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.forEachMessagePaged
@@ -87,6 +93,9 @@ import org.difft.app.database.delete
 import org.difft.app.database.getContactorsFromAllTable
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.getReadInfoList
+import org.difft.app.database.hydration.MessageHydration
+import org.difft.app.database.hydration.MessageHydrator
+import org.difft.app.database.isKnownContact
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
@@ -123,6 +132,18 @@ internal data class ReadReceiptJobPlan(
     val maxMessage: MessageModel
 )
 
+/**
+ * Everything [ChatMessageViewModel.assembleMessagesUIData] reads from the database, gathered by one
+ * `withContext(Dispatchers.IO)` block. Exists so the DB reads stay a single IO hop instead of the
+ * three the fields used to be fetched by (one hop for contacts, a blocking call on `Default` for the
+ * member count, and ~7-9 blocking point queries per message inside `generateMessageTwo`).
+ */
+private data class AssembleDbInputs(
+    val members: List<ContactorModel>,
+    val groupMemberCount: Int,
+    val hydration: MessageHydration,
+)
+
 // All wcdb calls in this class run on Dispatchers.IO.
 @Suppress("BlockingWcdbInSuspend")
 @HiltViewModel(assistedFactory = ChatMessageViewModelFactory::class)
@@ -140,12 +161,73 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
     private val activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher,
     private val onGoingCallStateManager: OnGoingCallStateManager,
-    private val callDataManager: CallDataManager
+    private val callDataManager: CallDataManager,
+    private val messageHydrator: MessageHydrator
 ) : ViewModel(),
     IChatPaginationController by chatPaginationControllerFactory.create(forWhat) {
 
     init {
         L.i { "[message]=========open ${if (forWhat is For.Group) "group" else "one to one"} chat page===========${forWhat.id}." }
+    }
+
+    /** Static E2EE-hint eligibility for THIS conversation (never changes for this ViewModel's
+     * lifetime). 1v1 non-self non-official true, group true, note-to-self false, official
+     * account false. */
+    val isE2eeHintEligible: Boolean = when (forWhat) {
+        is For.Group -> true
+        is For.Account -> forWhat.id != globalServices.myId && !forWhat.id.isOfficialAccount()
+    }
+
+    /** Resource id for the input hint whenever NOT the confidential-mode string. E2EE variant
+     * when [isE2eeHintEligible], the existing generic hint otherwise. Single owner for all 3
+     * call sites that need it (ChatMessageInputFragment ×2, ChatFragment full-screen input) —
+     * all three share this ViewModel instance. isE2eeHintEligible never changes post-construction,
+     * so this property is safe to read once at Fragment setup. */
+    val neutralInputHintRes: Int
+        get() = if (isE2eeHintEligible) R.string.chat_message_input_hint_e2ee else R.string.chat_message_input_hint
+
+    private val _dbNonFriend = MutableStateFlow(false)
+    private val _optimisticNonFriendOverride = MutableStateFlow<Boolean?>(null)
+
+    /** Single source of truth for "this 1v1 peer is not yet a contact" — used ONLY by this
+     * feature's header (Task 2) and does NOT replace the independent isFriend fields in
+     * ChatMessageInputFragment / ChatFragment / ChatHeaderFragment (unrelated features, out of
+     * scope). Always false for groups/self/official. Merges contactsUpdate (authoritative DB
+     * re-query) with friendStatusUpdate (immediate optimistic flip on accept) so header/footer/
+     * placeholder observe ONE value and flip in lockstep. */
+    val isNonFriendOneToOne: StateFlow<Boolean> =
+        combine(_dbNonFriend, _optimisticNonFriendOverride) { dbValue, override -> override ?: dbValue }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Called from the existing observe-contacts init block below — never a second top-level
+     * init {}. No-op for groups/self/official: [isE2eeHintEligible] gates the query entirely. */
+    private suspend fun refreshDbNonFriend() {
+        try {
+            _dbNonFriend.value = !wcdb.isKnownContact(forWhat.id)
+        } catch (e: Exception) {
+            L.e { "[Chat] isNonFriendOneToOne query failed roomId=${forWhat.id}: ${e.stackTraceToString()}" }
+        }
+    }
+
+    private fun initE2eeHintObservers() {
+        if (forWhat is For.Account && forWhat.id != globalServices.myId && !forWhat.id.isOfficialAccount()) {
+            viewModelScope.launch(Dispatchers.IO) { refreshDbNonFriend() }
+            ContactorUtil.contactsUpdate
+                .filter { it.contains(forWhat.id) }
+                .onEach {
+                    // Await the DB re-query BEFORE clearing the override: clearing first opens a
+                    // window where isNonFriendOneToOne's combine() falls back to _dbNonFriend while
+                    // it's still stale, causing a transient flip. onEach suspends the flow's own
+                    // coroutine per emission, so this await is safe here.
+                    withContext(Dispatchers.IO) { refreshDbNonFriend() }
+                    _optimisticNonFriendOverride.value = null
+                }
+                .launchIn(viewModelScope)
+            ContactorUtil.friendStatusUpdate
+                .filter { it.first == forWhat.id }
+                .onEach { (_, isFriend) -> _optimisticNonFriendOverride.value = !isFriend }
+                .launchIn(viewModelScope)
+        }
     }
 
     val viewModelCreateTime = System.currentTimeMillis()
@@ -235,6 +317,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     init {
         // 监听联系人更新事件
         observeContactorUpdates()
+        initE2eeHintObservers()
     }
 
     /**
@@ -290,8 +373,14 @@ class ChatMessageViewModel @AssistedInject constructor(
         bindCoroutineScope(viewModelScope)
         combine(
             chatMessagesStateFlow.filterNotNull(), // 过滤初始 null 状态
-            _readInfoList
-        ) { chatMessageListBehavior, readInfoList ->
+            _readInfoList,
+            // Third source is intentionally unused in the lambda below (`_`) — assembleMessagesUIData
+            // still reads isNonFriendOneToOne.value internally. This combine addition exists ONLY to
+            // re-trigger the pipeline whenever that StateFlow emits, closing a reactive-staleness
+            // window: without it, a friendStatusUpdate/contactsUpdate flip that resolves after the
+            // last chatMessagesStateFlow emission would never re-render the header's variant.
+            isNonFriendOneToOne,
+        ) { chatMessageListBehavior, readInfoList, _ ->
             assembleMessagesUIData(chatMessageListBehavior, readInfoList)
         }
             .distinctUntilChanged()
@@ -302,8 +391,8 @@ class ChatMessageViewModel @AssistedInject constructor(
 
         // PRD §5 recall cleanup: rely on the wcdb query in onCopyClick to drop
         // deleted/recalled ids — not on chatMessagesStateFlow, which only carries
-        // a paginated window (max 60 messages) and would mis-evict ids scrolled
-        // out of view.
+        // a paginated window (capped at MAX_MESSAGE_COUNT) and would mis-evict ids
+        // scrolled out of view.
 
         viewModelScope.launch(Dispatchers.IO) {
             initLoadMessage(jumpMessageTimeStamp)
@@ -315,11 +404,9 @@ class ChatMessageViewModel @AssistedInject constructor(
 
         // 监听已读状态更新事件
         viewModelScope.launch(Dispatchers.IO) {
-            RoomChangeTracker.readInfoUpdates
-                .filter { it == forWhat.id }
-                .collect {
-                    _readInfoList.value = wcdb.getReadInfoList(forWhat.id)
-                }
+            readInfoSignals(RoomChangeTracker.readInfoUpdates, forWhat.id).collect {
+                _readInfoList.value = wcdb.getReadInfoList(forWhat.id)
+            }
         }
     }
 
@@ -737,14 +824,23 @@ class ChatMessageViewModel @AssistedInject constructor(
         chatMessageListBehavior: ChatMessageListBehavior,
         readInfoList: List<ReadInfoModel>
     ): ChatMessageListUIState {
-        // 1. 先批量查询消息发送者的联系人信息（generateMessageTwo需要用于设置nickname）
+        // 1. Window + both anchors — the single owner of "which messages need child-table data".
+        val toConvert = chatMessageListBehavior.messagesToConvert()
         val senderIds = chatMessageListBehavior.messageList.mapNotNull { it.fromWho }.distinct()
-        val members = withContext(Dispatchers.IO) {
-            wcdb.getContactorsFromAllTable(senderIds)
-        }
 
-        // 2. 在循环外判断是否是大群，避免重复查询
-        val groupMemberCount = if (forWhat is For.Group) wcdb.getGroupMemberCount(forWhat.id) else 0
+        // 2. ONE IO hop for every database read this function needs: the sender contacts, the group
+        //    member count (which used to run blocking on Dispatchers.Default) and the batched
+        //    child-row hydration for the whole window. generateMessageTwo below is pure CPU and
+        //    stays on the flowOn(Dispatchers.Default) dispatcher — that flowOn is unchanged.
+        val db = withContext(Dispatchers.IO) {
+            AssembleDbInputs(
+                members = wcdb.getContactorsFromAllTable(senderIds),
+                groupMemberCount = if (forWhat is For.Group) wcdb.getGroupMemberCount(forWhat.id) else 0,
+                hydration = messageHydrator.hydrate(toConvert),
+            )
+        }
+        val members = db.members
+        val groupMemberCount = db.groupMemberCount
         val isLargeGroup = if (forWhat is For.Group) {
             val threshold = globalServices.globalConfigsManager.getNewGlobalConfigs()?.data?.group?.chatWithoutReceiptThreshold ?: Double.MAX_VALUE
             groupMemberCount > threshold
@@ -752,17 +848,17 @@ class ChatMessageViewModel @AssistedInject constructor(
             false
         }
 
-        // 3. 生成 ChatMessage（generateMessageTwo 内部会查询子数据一次）
+        // 3. Generate ChatMessage — child data is already hydrated by the IO block above, zero queries here.
         // 转换锚点消息用于计算显示逻辑
         val anchorChatMessageBefore = chatMessageListBehavior.anchorMessageBefore?.let {
-            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount)
+            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount, db.hydration[it.id])
         }
         val anchorChatMessageAfter = chatMessageListBehavior.anchorMessageAfter?.let {
-            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount)
+            generateMessageTwo(forWhat, it, members, readInfoList, isLargeGroup, groupMemberCount, db.hydration[it.id])
         }
 
         val chatMessages = chatMessageListBehavior.messageList.mapNotNull { msg ->
-            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup, groupMemberCount)
+            generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup, groupMemberCount, db.hydration[msg.id])
         }
 
         // 4. 从已生成的 ChatMessage 中收集所有联系人ID（不触发新查询）
@@ -778,6 +874,18 @@ class ChatMessageViewModel @AssistedInject constructor(
             it is NotifyChatMessage && it.notifyMessage?.showContent.isNullOrEmpty()
         }
 
+        // E2EE header: prepended unconditionally before the (already-sorted) message list, so it
+        // is always index 0 and any tombstone (sentinel 1L) at listWithoutErrorNotify[0] is always
+        // pushed to index 1 — "header always above tombstone" falls out of insertion order.
+        // EncryptionHeaderChatMessage is a notify-style message (isNotifyStyleMessage()), so the
+        // existing day-header-skip / forced-showName-on-next-item logic below applies automatically.
+        val showE2eeHeader = chatMessageListBehavior.hasReachedHistoryStart && isE2eeHintEligible
+        val listWithHeader = if (showE2eeHeader) {
+            listOf(EncryptionHeaderChatMessage(isNonFriendVariant = isNonFriendOneToOne.value)) + listWithoutErrorNotify
+        } else {
+            listWithoutErrorNotify
+        }
+
         // Capture the divider anchor on the first load that carries one, then reuse it for the rest
         // of the page session — see [dividerReadPosition].
         if (!dividerCleared && dividerReadPosition == null) {
@@ -788,18 +896,23 @@ class ChatMessageViewModel @AssistedInject constructor(
         // 标记是否已经找到第一个未读的非自己发送的消息
         var firstUnreadFound = false
 
+        // Most recent non-notify row seen so far, so the day-header decision is a single forward
+        // pass instead of one backward rescan per row (quadratic on windows with long notify runs).
+        // Seeded with the before-anchor under exactly the condition the rescan's fallback used.
+        var lastNonNotify: ChatMessage? = anchorChatMessageBefore?.takeIf { !it.isNotifyStyleMessage() }
+
         // 处理消息显示逻辑
-        val newList = listWithoutErrorNotify.mapIndexed { index, message ->
+        val newList = listWithHeader.mapIndexed { index, message ->
             // 使用锚点消息来计算第一条和最后一条消息的显示逻辑
             val previousMessage = if (index > 0) {
-                listWithoutErrorNotify[index - 1]
+                listWithHeader[index - 1]
             } else {
                 anchorChatMessageBefore
             }
             val isSameDayWithPreviousMessage = TimeFormatter.isSameDay(message.timeStamp, previousMessage?.timeStamp ?: 0L)
 
-            val nextMessage = if (index < listWithoutErrorNotify.size - 1) {
-                listWithoutErrorNotify[index + 1]
+            val nextMessage = if (index < listWithHeader.size - 1) {
+                listWithHeader[index + 1]
             } else {
                 anchorChatMessageAfter
             }
@@ -809,16 +922,16 @@ class ChatMessageViewModel @AssistedInject constructor(
 
             // Notify-style messages (NotifyChatMessage, screenshot) never show the day header.
             // The day header transfers to the first normal message that follows.
-            if (message.isNotifyStyleMessage()) {
+            val isNotifyStyle = message.isNotifyStyleMessage()
+            if (isNotifyStyle) {
                 message.showDayTime = false
             } else {
-                val previousNonNotify = if (index > 0) {
-                    listWithoutErrorNotify.subList(0, index).lastOrNull { !it.isNotifyStyleMessage() }
-                } else {
-                    null
-                } ?: anchorChatMessageBefore?.takeIf { !it.isNotifyStyleMessage() }
-                message.showDayTime = !TimeFormatter.isSameDay(message.timeStamp, previousNonNotify?.timeStamp ?: 0L)
+                message.showDayTime = !TimeFormatter.isSameDay(message.timeStamp, lastNonNotify?.timeStamp ?: 0L)
             }
+            // Advance only AFTER the decision above: lastNonNotify must mean "strictly before this
+            // row". Advancing first would let a row be compared against itself, and every
+            // showDayTime would come out false.
+            if (!isNotifyStyle) lastNonNotify = message
 
             message.showTime = !isSameDayWithNextMessage || nextMessage?.isNotifyStyleMessage() == true || message.authorId != nextMessage?.authorId
 
@@ -835,17 +948,29 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
 
         // 只有消息数据真正变化时才传递 scrollAction，避免 _readInfoList 变化时重复触发滚动
-        val scrollAction = if (chatMessageListBehavior.updateTimestamp != lastMessageListTimestamp) {
+        val rawScrollAction = if (chatMessageListBehavior.updateTimestamp != lastMessageListTimestamp) {
             lastMessageListTimestamp = chatMessageListBehavior.updateTimestamp
             chatMessageListBehavior.scrollAction
         } else {
             null
         }
 
+        // The header shifts every real message's actual adapter position by +1 whenever it's
+        // showing — rawScrollAction.position was computed against pageMessages (no header).
+        val scrollAction = if (showE2eeHeader && rawScrollAction is ScrollAction.ToPosition) {
+            ScrollAction.ToPosition(rawScrollAction.position + 1)
+        } else {
+            rawScrollAction
+        }
+
         L.i { "[${forWhat.id}] Finally to be submit to recyclerview adapter with chat message size: ${newList.size}, scrollAction: $scrollAction" }
         return ChatMessageListUIState(
             chatMessages = newList,
-            scrollAction = scrollAction
+            scrollAction = scrollAction,
+            // Loaded-window size, deliberately NOT newList.size — see the field's KDoc.
+            windowSize = chatMessageListBehavior.messageList.size,
+            hasReachedHistoryStart = chatMessageListBehavior.hasReachedHistoryStart,
+            hasReachedLatest = chatMessageListBehavior.hasReachedLatest
         )
     }
 

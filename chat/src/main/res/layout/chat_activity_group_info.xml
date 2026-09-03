@@ -21,8 +21,8 @@
             android:layout_alignParentStart="true"
             android:layout_centerVertical="true"
             android:background="@null"
-            android:padding="10dp"
-            android:src="@mipmap/chat_tabler_arrow_left"
+            android:padding="12dp"
+            android:src="@drawable/chative_ic_back"
             android:tint="@color/t.primary" />
 
         <androidx.appcompat.widget.AppCompatTextView

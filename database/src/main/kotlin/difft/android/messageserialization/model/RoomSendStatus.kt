@@ -20,11 +20,33 @@ package difft.android.messageserialization.model
  */
 const val ROOM_SEND_STATUS_NONE = 0
 
-/** Reserved: an outgoing message is in flight. Not produced yet — see [aggregateRoomSendStatus]. */
+/**
+ * Reserved, permanently unused: "sending" ships as the SEPARATE `RoomModel.sendingStatus`
+ * column (see [ROOM_SENDING_STATUS_ACTIVE]) rather than a value in this domain — independent
+ * cells keep the failed-writer and sending-writer race-free structurally. Kept so stored
+ * values stay interpretable and [resolveRoomSendStatus]'s escalation contract stays testable.
+ */
 const val ROOM_SEND_STATUS_SENDING = 1
 
 /** At least one real outgoing message in this room failed to send. */
 const val ROOM_SEND_STATUS_FAILED = 2
+
+/**
+ * Domain of `RoomModel.sendingStatus` — the room-level aggregate for outgoing messages still
+ * in flight. Independent of `sendStatus` on purpose: the two signals are written concurrently
+ * by different paths, and separate columns make the set-vs-clear race structurally impossible.
+ *
+ * INVARIANT (mirror of the FAILED one above): whenever a REAL outgoing message enters
+ * `sendType = SEND_TYPE_SENDING`, [ROOM_SENDING_STATUS_ACTIVE] MUST be written for that room
+ * with the message row committed first. The recompute only ever CLEARS. The aggregate's sole
+ * writer is PushTextSendJob.updateMessage (via onAdded); note ChatMessageViewModel.addOneMessage
+ * may insert the Sending MESSAGE row moments before the job is enqueued — the aggregate then
+ * lands when onAdded runs, and a crash in that window is healed by the cold-start sweep.
+ */
+const val ROOM_SENDING_STATUS_NONE = 0
+
+/** At least one real outgoing message in this room is still sending. */
+const val ROOM_SENDING_STATUS_ACTIVE = 1
 
 /**
  * Aggregate the room-level signal. Equivalent to max-of-priorities, spelled as a `when` for

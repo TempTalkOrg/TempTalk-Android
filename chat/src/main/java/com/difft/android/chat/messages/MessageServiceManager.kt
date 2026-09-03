@@ -17,6 +17,7 @@ import com.difft.android.chat.util.DeviceProperties
 import com.difft.android.chat.util.ForegroundServiceUtil
 import com.difft.android.chat.websocket.monitor.WebSocketHealthMonitor
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import util.AppForegroundObserver
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,7 +63,63 @@ class MessageServiceManager @Inject constructor(
         // - Doze: system extends to ~15 min (meets system minimum, won't extend to hours)
         private const val EXACT_ALARM_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
+        // Chain considered dead after this silence. Doze legitimately stretches an exact
+        // allow-while-idle alarm to ~15 min (3x interval), so keep one extra interval of
+        // margin: a false "stale" verdict cancels the pending (possibly imminent) alarm
+        // and postpones the wake instead of healing anything.
+        private const val EXACT_ALARM_CHAIN_STALE_MS = 4 * EXACT_ALARM_INTERVAL_MS
+
+        // Without exact-alarm permission Doze legitimately defers delivery 30 min - 2 hr
+        // (see scheduleAlarmCheck), so the stale window must exceed that worst case or
+        // every Doze cycle would misdiagnose a live chain and cancel its pending alarm.
+        private const val NON_EXACT_ALARM_CHAIN_STALE_MS =
+            2 * 60 * 60 * 1000L + NON_EXACT_ALARM_INTERVAL_MS
+
         private const val ALARM_REQUEST_CODE = 10001
+    }
+
+    // Last scheduleAlarmCheck() time. Baseline = construction time, so a START_STICKY
+    // revival with a dead chain also heals after one stale window.
+    @Volatile
+    private var lastAlarmChainActivityElapsed: Long = SystemClock.elapsedRealtime()
+
+    init {
+        // Self-healing anchors: vendor ROMs (observed on Huawei) can swallow one alarm
+        // broadcast, which kills the self-re-arming chain until the app is reopened.
+        // Re-verify the chain on any independent liveness signal.
+        // Anchors must survive any throw: a dead collector silently disables healing for
+        // the process lifetime, and the foreground listener runs on the main thread.
+        appScope.launch {
+            webSocketHealthMonitor.monitorWakeTicks.collect {
+                runCatching { ensureAlarmChainAlive("monitor-tick") }
+                    .onFailure { L.e { "[MessageService] Alarm-chain heal failed: ${it.stackTraceToString()}" } }
+            }
+        }
+        AppForegroundObserver.addListener(object : AppForegroundObserver.Listener {
+            override fun onForeground() {
+                runCatching { ensureAlarmChainAlive("foreground") }
+                    .onFailure { L.e { "[MessageService] Alarm-chain heal failed: ${it.stackTraceToString()}" } }
+            }
+        })
+    }
+
+    /**
+     * Re-arms the alarm chain after a stale window of silence ([EXACT_ALARM_CHAIN_STALE_MS]
+     * or [NON_EXACT_ALARM_CHAIN_STALE_MS], matching the active alarm mode's worst legitimate
+     * Doze deferral) while keep-alive is enabled. Re-arm only, no service start: this may run
+     * from background contexts where a direct FGS start is restricted — the armed alarm is
+     * the legal wake path.
+     */
+    @Synchronized
+    fun ensureAlarmChainAlive(source: String) {
+        if (userManager.getUserData()?.keepAliveEnabled != true) return
+        val sinceLast = SystemClock.elapsedRealtime() - lastAlarmChainActivityElapsed
+        // Cheap check first: fresh for both modes — skips the permission binder call
+        // on the every-30s monitor-tick hot path.
+        if (sinceLast <= EXACT_ALARM_CHAIN_STALE_MS) return
+        if (!hasExactAlarmPermission() && sinceLast <= NON_EXACT_ALARM_CHAIN_STALE_MS) return
+        L.w { "[MessageService] Alarm chain stale (${sinceLast / 1000}s since last activity), re-arming from source=$source" }
+        scheduleAlarmCheck()
     }
 
     /**
@@ -228,32 +285,52 @@ class MessageServiceManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Cancel any existing alarm first to ensure clean state
-        // (Though FLAG_UPDATE_CURRENT should handle this, explicit cancel is clearer)
-        alarmManager.cancel(pendingIntent)
+        // Never throws (callers include a main-thread foreground listener and an appScope
+        // collector where a throw is fatal), and the chain-activity timestamp advances only
+        // after a set call succeeded — a failed arm must stay "stale" so the next healing
+        // anchor retries instead of being suppressed for a full stale window.
+        try {
+            // Cancel any existing alarm first to ensure clean state
+            // (Though FLAG_UPDATE_CURRENT should handle this, explicit cancel is clearer)
+            alarmManager.cancel(pendingIntent)
 
-        val hasExactAlarmPermission = hasExactAlarmPermission()
-        val interval = if (hasExactAlarmPermission) EXACT_ALARM_INTERVAL_MS else NON_EXACT_ALARM_INTERVAL_MS
-        val triggerTime = SystemClock.elapsedRealtime() + interval
+            val hasExactAlarmPermission = hasExactAlarmPermission()
+            val interval = if (hasExactAlarmPermission) EXACT_ALARM_INTERVAL_MS else NON_EXACT_ALARM_INTERVAL_MS
+            val triggerTime = SystemClock.elapsedRealtime() + interval
 
-        if (hasExactAlarmPermission) {
-            // Has permission: use exact alarm
-            // - Below Android 12: no permission needed, use directly
-            // - Android 12+: requires SCHEDULE_EXACT_ALARM permission
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                triggerTime,
-                pendingIntent
-            )
-            L.i { "[MessageService] Exact alarm scheduled (5 min, Doze extends to ~15 min)" }
-        } else {
-            // No permission: use inexact alarm (only Android 12+ and user not authorized)
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                triggerTime,
-                pendingIntent
-            )
-            L.i { "[MessageService] Non-exact alarm scheduled (5 min, Doze may extend to 30min-2hr)" }
+            if (hasExactAlarmPermission) {
+                // Has permission: use exact alarm
+                // - Below Android 12: no permission needed, use directly
+                // - Android 12+: requires SCHEDULE_EXACT_ALARM permission
+                try {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                    L.i { "[MessageService] Exact alarm scheduled (5 min, Doze extends to ~15 min)" }
+                } catch (e: SecurityException) {
+                    // TOCTOU: SCHEDULE_EXACT_ALARM revoked between the permission check and
+                    // the set call — degrade to the inexact alarm instead.
+                    L.w { "[MessageService] Exact alarm rejected (permission revoked?), falling back to inexact: ${e.message}" }
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerTime,
+                        pendingIntent
+                    )
+                }
+            } else {
+                // No permission: use inexact alarm (only Android 12+ and user not authorized)
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+                L.i { "[MessageService] Non-exact alarm scheduled (5 min, Doze may extend to 30min-2hr)" }
+            }
+            lastAlarmChainActivityElapsed = SystemClock.elapsedRealtime()
+        } catch (e: Exception) {
+            L.e { "[MessageService] Failed to arm keep-alive alarm: ${e.stackTraceToString()}" }
         }
     }
 

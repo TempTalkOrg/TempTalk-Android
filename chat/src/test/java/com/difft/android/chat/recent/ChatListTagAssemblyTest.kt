@@ -113,7 +113,9 @@ class ChatListTagAssemblyTest {
         assertTrue(
             segments(sendStatus = ROOM_SEND_STATUS_NONE).none { it.tag == ChatListTag.SEND_FAILED }
         )
-        // SENDING deliberately renders nothing this release.
+        // The TAG ROW never renders sending: the shipped "sending" indicator is the separate
+        // imageview_sending icon driven by RoomViewData.sendingStatus, not a tag segment, and
+        // the reserved ROOM_SEND_STATUS_SENDING value of THIS column stays unproduced.
         assertTrue(
             segments(sendStatus = ROOM_SEND_STATUS_SENDING).none { it.tag == ChatListTag.SEND_FAILED }
         )

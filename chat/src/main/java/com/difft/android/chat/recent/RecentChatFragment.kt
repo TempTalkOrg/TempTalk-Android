@@ -2,6 +2,7 @@ package com.difft.android.chat.recent
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -43,6 +44,8 @@ import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.messageserialization.db.store.ConversationUtils
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.base.activity.ActivityType
+import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheet
+import com.difft.android.network.UrlManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
@@ -107,6 +110,9 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
     @Inject
     lateinit var proxyConfigProvider: ProxyConfigProvider
 
+    @Inject
+    lateinit var urlManager: UrlManager
+
     private lateinit var binding: ChatFragmentRecentChatBinding
     private var popupWindow: PopupWindow? = null
     private lateinit var popupItemList: MutableList<ChativePopupView.Item>
@@ -166,6 +172,16 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
             override fun onItemLongClicked(view: View, roomViewData: RoomViewData, position: Int, touchX: Int, touchY: Int) {
                 showItemActionsPop(view, roomViewData, touchX, touchY)
+            }
+
+            override fun onFooterClicked() {
+                L.i { "[ChatList] E2EE footer hint tapped" }
+                val darkTheme = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+                E2eeInfoSheet.show(
+                    activity = requireActivity(),
+                    darkTheme = darkTheme,
+                    learnMoreUrl = urlManager.e2eeLearnMoreUrl,
+                )
             }
 
         }
@@ -326,6 +342,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         val items = mutableListOf<ListItem>()
         items.add(ListItem.SearchInput)
         items.addAll(sortedList.map { ListItem.ChatItem(it) })
+        items.add(ListItem.E2eeFooter) // shown even on an empty list, deliberately not gated on room count
         mAdapter.submitList(items)
     }
 

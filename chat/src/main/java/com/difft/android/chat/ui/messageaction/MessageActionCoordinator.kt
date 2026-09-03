@@ -68,7 +68,6 @@ class MessageActionCoordinator(
     private var currentAnchorView: View? = null
     private var currentContainerView: View? = null
     private var currentConfig: MessageActionConfigBuilder.Config? = null
-    private var currentRestoreWindowBackground: Boolean = true
     private var actionListener: ActionListener? = null
     private var lastSelStart = -1
     private var lastSelEnd = -1
@@ -101,8 +100,6 @@ class MessageActionCoordinator(
      * @param isSaved Whether the message is saved
      * @param touchPoint The touch point in screen coordinates
      * @param containerView Optional container view for determining available bounds (e.g., RecyclerView)
-     * @param restoreWindowBackground Whether to restore window background after showing popup (default true).
-     *        Set to false when background is set on a view rather than window (e.g., in popup-style activities)
      * @param enableTextSelection Whether to enable text selection (default true).
      *        Set to false for confidential messages.
      */
@@ -115,7 +112,6 @@ class MessageActionCoordinator(
         isSaved: Boolean,
         touchPoint: Point,
         containerView: View? = null,
-        restoreWindowBackground: Boolean = true,
         enableTextSelection: Boolean = true
     ) {
         // If popup is already showing for the same message, ignore (prevents duplicate overlay)
@@ -130,7 +126,6 @@ class MessageActionCoordinator(
         currentTextView = textView
         currentAnchorView = messageView
         currentContainerView = containerView
-        currentRestoreWindowBackground = restoreWindowBackground
         textSelectionEnabled = enableTextSelection
         // Save original text for restoring OnTouchListener later
         // For single forward messages, the text is in forwardContext.forwards[0].text
@@ -195,7 +190,6 @@ class MessageActionCoordinator(
                 anchorView = messageView,
                 config = config,
                 containerView = containerView,
-                restoreWindowBackground = restoreWindowBackground,
                 textView = textView,
                 callbacks = createPopupCallbacks()
             )

@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -178,10 +177,11 @@ class CriticalAlertActivity: ComponentActivity() {
 
     private fun showCriticalAlertUI(conversationId: String, title: String, message: String, roomId: String? = null) {
         setContent {
-            DifftTheme(darkTheme = true) {
-                SideEffect {
-                    window.setBackgroundDrawableResource(android.R.color.transparent)
-                }
+            // TransparentActivityTheme (AndroidManifest.xml, call/themes.xml:3-8) declares this
+            // Activity's window as transparent by design. This Compose tree never owns the window
+            // background — the manifest theme is the sole source of truth for it, for the entire
+            // Activity lifetime. No embedded override needed.
+            DifftTheme(darkTheme = true, applyWindowBackground = false) {
                 Content(
                     title = title,
                     message = message,

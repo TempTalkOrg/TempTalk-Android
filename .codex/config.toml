@@ -1,0 +1,10 @@
+# Project-scoped Codex configuration. Codex loads this file only for a trusted
+# checkout. Firebase credentials are provisioned by .codex/setup.sh.
+
+[mcp_servers.firebase]
+command = "bash"
+args = ["-lc", "export PATH=\"$HOME/.local/bin:$PATH\"; exec firebase mcp"]
+enabled = true
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 120

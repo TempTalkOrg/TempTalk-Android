@@ -72,14 +72,14 @@
         </FrameLayout>
 
 
-        <TextView
+        <com.difft.android.chat.widget.MiddleEllipsisTextView
             android:id="@+id/attachment_name"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:ellipsize="middle"
+            android:ellipsize="end"
             android:gravity="start"
-            android:singleLine="true"
+            android:maxLines="2"
             android:textColor="@color/t.primary"
             android:textSize="14sp"
             app:layout_constraintEnd_toStartOf="@id/fl_actions"
@@ -97,6 +97,8 @@
             android:textSize="12sp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="@+id/attachment_name"
+            app:layout_constraintTop_toBottomOf="@+id/attachment_name"
+            app:layout_constraintVertical_bias="1"
             tools:text="1.2M" />
 
         <TextView

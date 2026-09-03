@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.TitleBar
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.base.widget.ToastUtil
@@ -174,7 +175,10 @@ private fun ProxySettingsContent(
     ) {
         Spacer(modifier = Modifier.height(topInset))
 
-        ProxyTopBar(onBack = onBack)
+        TitleBar(
+            titleText = stringResource(R.string.proxy_settings_title),
+            onBackClick = onBack,
+        )
 
         if (state.readOnly) {
             Spacer(modifier = Modifier.height(12.dp))
@@ -286,40 +290,6 @@ private fun ProxySettingsContent(
                 .navigationBarsPadding()
                 .height(16.dp),
         )
-    }
-}
-
-@Composable
-private fun ProxyTopBar(onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painter = painterResource(id = com.difft.android.chat.R.drawable.chat_contact_detail_ic_back),
-            contentDescription = "Back",
-            tint = DifftTheme.colors.textPrimary,
-            modifier = Modifier
-                .size(24.dp)
-                .clickable { onBack() },
-        )
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-            Text(
-                text = stringResource(R.string.proxy_settings_title),
-                style = TextStyle(
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight.Medium,
-                    color = DifftTheme.colors.textPrimary,
-                    textAlign = TextAlign.Center,
-                ),
-            )
-        }
-        Spacer(modifier = Modifier.size(24.dp))
     }
 }
 

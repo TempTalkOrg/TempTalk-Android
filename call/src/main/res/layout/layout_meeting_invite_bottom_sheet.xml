@@ -18,7 +18,7 @@
         <!-- 顶部标题栏 -->
         <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:paddingStart="16dp"
             android:paddingEnd="16dp">
 
@@ -112,7 +112,7 @@
         <!-- 顶部导航栏 -->
         <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="52dp"
             android:paddingStart="16dp"
             android:paddingEnd="16dp">
 

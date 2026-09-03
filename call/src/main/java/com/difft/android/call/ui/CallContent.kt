@@ -36,7 +36,6 @@ import com.difft.android.call.ui.invite.InviteViewState
 import com.difft.android.call.ui.screenshare.ScreenShareSpeakerBanner
 import com.difft.android.call.ui.invite.MeetingInviteScreen
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
-import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.room.Room
 
 /**
@@ -44,7 +43,6 @@ import io.livekit.android.room.Room
  * 
  * @param room 房间对象
  * @param viewModel 通话 ViewModel
- * @param audioSwitchHandler 音频切换处理器
  * @param isUserSharingScreen 用户是否在分享屏幕
  * @param callConfig 通话配置
  * @param callIntent 通话 Intent
@@ -64,7 +62,6 @@ import io.livekit.android.room.Room
 fun CallContent(
     room: Room? = null,
     viewModel: LCallViewModel,
-    audioSwitchHandler: AudioSwitchHandler? = null,
     inviteCallHandler: InviteCallHandler? = null,
     isUserSharingScreen: Boolean = false,
     callConfig: CallConfig,
@@ -102,7 +99,6 @@ fun CallContent(
             room = room,
             currentCallType = currentCallType,
             viewModel = viewModel,
-            audioSwitchHandler = audioSwitchHandler,
             inviteCallHandler = inviteCallHandler,
             isUserSharingScreen = isUserSharingScreen,
             callConfig = callConfig,
@@ -129,7 +125,6 @@ private fun CallContentContainer(
     room: Room?,
     currentCallType: String,
     viewModel: LCallViewModel,
-    audioSwitchHandler: AudioSwitchHandler?,
     inviteCallHandler: InviteCallHandler?,
     isUserSharingScreen: Boolean,
     callConfig: CallConfig,
@@ -176,7 +171,6 @@ private fun CallContentContainer(
                     OneOnOneCallContent(
                         room = room,
                         viewModel = viewModel,
-                        audioSwitchHandler = audioSwitchHandler,
                         inviteCallHandler = inviteCallHandler,
                         isUserSharingScreen = isUserSharingScreen,
                         callConfig = callConfig,
@@ -197,7 +191,6 @@ private fun CallContentContainer(
                     MultiParticipantCallContent(
                         room = room,
                         viewModel = viewModel,
-                        audioSwitchHandler = audioSwitchHandler,
                         inviteCallHandler = inviteCallHandler,
                         isUserSharingScreen = isUserSharingScreen,
                         callConfig = callConfig,
@@ -227,7 +220,6 @@ private fun CallContentContainer(
 private fun OneOnOneCallContent(
     room: Room,
     viewModel: LCallViewModel,
-    audioSwitchHandler: AudioSwitchHandler?,
     inviteCallHandler: InviteCallHandler?,
     isUserSharingScreen: Boolean,
     callConfig: CallConfig,
@@ -261,7 +253,6 @@ private fun OneOnOneCallContent(
             viewModel = viewModel,
             isOneVOneCall = true,
             isUserSharingScreen = isUserSharingScreen,
-            audioSwitchHandler = audioSwitchHandler,
             callConfig = callConfig,
             callIntent = callIntent,
             callRole = callRole,
@@ -290,7 +281,6 @@ private fun OneOnOneCallContent(
 private fun MultiParticipantCallContent(
     room: Room,
     viewModel: LCallViewModel,
-    audioSwitchHandler: AudioSwitchHandler?,
     inviteCallHandler: InviteCallHandler?,
     isUserSharingScreen: Boolean,
     callConfig: CallConfig,
@@ -323,7 +313,6 @@ private fun MultiParticipantCallContent(
             viewModel = viewModel,
             isOneVOneCall = false,
             isUserSharingScreen = isUserSharingScreen,
-            audioSwitchHandler = audioSwitchHandler,
             callConfig = callConfig,
             callIntent = callIntent,
             callRole = callRole,

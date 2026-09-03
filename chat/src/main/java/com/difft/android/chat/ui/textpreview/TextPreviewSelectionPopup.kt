@@ -107,7 +107,7 @@ class TextPreviewSelectionPopup(private val activity: Activity) {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             
             setContent {
-                DifftTheme {
+                DifftTheme(applyWindowBackground = false) {
                     TextPreviewSelectionOverlay(
                         selectionBounds = relativeSelectionBounds,
                         screenWidth = screenWidth,

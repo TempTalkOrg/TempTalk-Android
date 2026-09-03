@@ -3,6 +3,7 @@ package com.difft.android.chat.recent
 import com.difft.android.base.call.CallData
 import difft.android.messageserialization.model.CRITICAL_ALERT_TYPE_NONE
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 
 data class RoomViewData(
@@ -29,6 +30,12 @@ data class RoomViewData(
      * that have no DB row (and therefore cannot hold a local failure).
      */
     val sendStatus: Int = ROOM_SEND_STATUS_NONE,
+    /**
+     * Whether the room holds an outgoing message still in flight, mirrored from
+     * `RoomModel.sendingStatus`. Independent of [sendStatus] — both may render at once.
+     * Same mapping caveat as [sendStatus]: sites fed by a `RoomModel` must map it explicitly.
+     */
+    val sendingStatus: Int = ROOM_SENDING_STATUS_NONE,
     val messageExpiry: Long? = null, //消息过期时间
     var isInstantCall: Boolean = false,
     var isLiveStream: Boolean = false,

@@ -232,7 +232,7 @@ class SignalServiceDataClass(
             if (signalServiceEnvelope.hasMsgExtra() && signalServiceEnvelope.msgExtra.hasConversationId()) {
                 if (signalServiceEnvelope.msgExtra.conversationId.hasGroupId()) {
                     val groupIdMsgExtra = signalServiceEnvelope.msgExtra.conversationId.groupId.toByteArray()
-                    if (groupIdMsgExtra.size != 32 && groupIdMsgExtra.size != 36) {
+                    if (groupIdMsgExtra.size != 16 && groupIdMsgExtra.size != 32 && groupIdMsgExtra.size != 36) {
                         val hex = Hex.toStringCondensed(groupIdMsgExtra)
                         val string = String(groupIdMsgExtra)
                         FirebaseCrashlytics.getInstance().recordException(
@@ -306,14 +306,24 @@ class SignalServiceDataClass(
             throw IllegalArgumentException("Unknown message type msg typ: ${signalServiceEnvelope.msgType} content: $signalServiceContent")
         }
     }
+
+    /**
+     * Server-stamped conversation from Envelope.msgExtra.conversationId, normalized to the
+     * same For representation as [conversation]. null when the server has not stamped it
+     * (old/transitional server) -> caller treats as absent (fail-open). Never throws.
+     * Public accessor for the receive-path cross-check in :chat.
+     */
+    val envelopeConversation: For? by lazy {
+        extractEnvelopeConversation(signalServiceEnvelope)
+    }
 }
 
 /**
  * Private helper — `MsgExtra.ConversationId` → [For].
  *
- * Routes group ids through [transformGroupIdFromServerToLocal]; Firebase-records
- * an anomaly if the groupId has an unexpected byte length (server is expected
- * to hand us 32 or 36-byte group ids, per existing legacy paths).
+ * Routes group ids through [transformGroupIdFromServerToLocal]. Accepts 16-byte
+ * (legacy WEEK), 32-byte, and 36-byte group ids as valid; logs a warning (no
+ * Crashlytics) if the byte length is anything else.
  *
  * Returns `null` when neither `groupId` nor `number` is set — callers decide
  * the fallback (typically `For.Account(senderId)`).
@@ -323,11 +333,24 @@ private fun SignalServiceProtos.ConversationId.parseToFor(
 ): For? {
     if (hasGroupId()) {
         val bytes = groupId.toByteArray()
-        if (bytes.size != 32 && bytes.size != 36) {
+        if (bytes.size != 16 && bytes.size != 32 && bytes.size != 36) {
             L.w { "[ForwardNotice] Invalid group id length: ${bytes.size}, timestamp=$timestampForLog" }
         }
         return For.Group(bytes.transformGroupIdFromServerToLocal())
     }
     if (hasNumber() && number.isNotEmpty()) return For.Account(number)
     return null
+}
+
+/**
+ * Envelope-side conversation for the cross-check. Reuses [parseToFor] so envelope-side
+ * group ids reduce to the identical String the content side produces (both go through
+ * transformGroupIdFromServerToLocal).
+ *
+ * Returns null when conversationId is absent or present-but-empty — both cases are
+ * "absent" (fail-open). Never throws.
+ */
+internal fun extractEnvelopeConversation(envelope: SignalServiceProtos.Envelope): For? {
+    if (!envelope.hasMsgExtra() || !envelope.msgExtra.hasConversationId()) return null
+    return envelope.msgExtra.conversationId.parseToFor(envelope.timestamp)
 }

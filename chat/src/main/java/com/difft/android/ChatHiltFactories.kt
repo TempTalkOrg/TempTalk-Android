@@ -4,6 +4,7 @@ import android.content.Intent
 import com.difft.android.chat.ChatNormalPaginationController
 import com.difft.android.chat.ChatPaginationController
 import com.difft.android.chat.group.GroupChatContentActivity.Companion.groupID
+import com.difft.android.chat.pagination.ChatMessageWindowSource
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.contactorID
 import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
@@ -124,8 +125,15 @@ interface PushActivityNoticeSendJobFactory {
 
 @AssistedFactory
 interface ChatNormalPaginationControllerFactory {
+    /**
+     * [source] is assisted rather than injected because an `@AssistedFactory` method must return a
+     * concrete `@AssistedInject` class: giving the WCDB-backed source its own factory would pin the
+     * controller's field to that concrete type and destroy the test seam. `ChatPaginationController`
+     * owns the assembly instead.
+     */
     fun create(
         forWhat: For,
+        source: ChatMessageWindowSource,
     ): ChatNormalPaginationController
 }
 

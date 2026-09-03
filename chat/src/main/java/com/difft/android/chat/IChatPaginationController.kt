@@ -13,6 +13,16 @@ interface IChatPaginationController {
     suspend fun jumpToMessage(messageTimeStamp: Long): Boolean
     suspend fun jumpToBottom()
     fun addOneMessage(messageModel: MessageModel)
+
+    /**
+     * Drops the oldest rows so the loaded window is back at its cap. Pure in-memory re-slice, zero
+     * queries; a no-op when the window is already at or under the cap.
+     *
+     * The caller MUST have established that the viewport sits at the bottom — this function has no
+     * viewport knowledge of its own. See the implementation's KDoc for the invariant that makes
+     * that check meaningful.
+     */
+    suspend fun trimToLatest()
 }
 
 /**
@@ -43,4 +53,31 @@ data class ChatMessageListBehavior(
     // purpose: ChatMessageViewModel captures the first value for the whole page session, so a null
     // here means "no new anchor", NOT "hide the divider".
     val readPosition: Long? = null,
+    /** True when [messageList]'s oldest loaded message is the conversation's actual first
+     * message. Default false is a safe fallback: any emission site that forgets to set it
+     * simply never shows the header, it cannot show a wrong header. */
+    val hasReachedHistoryStart: Boolean = false,
+    /**
+     * True when [messageList]'s newest loaded message is the conversation's newest message, i.e.
+     * there is nothing left to load at the bottom edge.
+     *
+     * Symmetric counterpart of [hasReachedHistoryStart], and derived at every emission site with
+     * ZERO extra queries. Default false is the safe fallback in the same sense: a site that forgets
+     * to set it merely fails to suppress a redundant page load (today's behaviour), it cannot
+     * suppress a needed one. The one site where a naive carry-forward WOULD wrongly suppress is
+     * `loadPreviousPage` — see its comment.
+     */
+    val hasReachedLatest: Boolean = false,
 )
+
+/**
+ * The window plus its two invisible layout anchors — the single definition of "which messages this
+ * emission needs child-table data for".
+ *
+ * Sole owner of that set: the ViewModel derives the hydration id set AND its three
+ * `generateMessageTwo` call groups from this one list, so an anchor can never be decorated from
+ * empty sub-data while the window rows around it are hydrated. Anchors are never rendered, but they
+ * drive the first/last row's day-header, name and time decisions, which read their sub-data.
+ */
+fun ChatMessageListBehavior.messagesToConvert(): List<MessageModel> =
+    listOfNotNull(anchorMessageBefore) + messageList + listOfNotNull(anchorMessageAfter)

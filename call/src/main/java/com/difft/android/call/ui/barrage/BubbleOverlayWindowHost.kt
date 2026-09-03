@@ -83,7 +83,11 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
                 ViewCompositionStrategy.DisposeOnLifecycleDestroyed(lifecycleOwner)
             )
             setContent {
-                DifftTheme(darkTheme = true) {
+                // This ComposeView paints into an independent TYPE_APPLICATION_PANEL window, but
+                // its Context is the host Activity, so DifftTheme's window mutation — if left
+                // enabled — would target CallContent's own window. This subtree never owns that
+                // window.
+                DifftTheme(darkTheme = true, applyWindowBackground = false) {
                     BubbleOverlayLayer(viewModel = viewModel)
                 }
             }

@@ -23,6 +23,7 @@ import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallTlsProvider
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.CallStatus
+import com.difft.android.call.data.MediaSendIssueState
 import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.feedback.CallFeedbackBinder
@@ -36,6 +37,7 @@ import com.difft.android.call.manager.CallStatisticsLogManager
 import com.difft.android.call.manager.CallTimeoutManager
 import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.manager.ContactorCacheManager
+import com.difft.android.call.permission.CallMediaPermissionCoordinator
 import com.difft.android.call.handler.CallTimeoutMonitor
 import com.difft.android.call.handler.CriticalAlertDispatcher
 import com.difft.android.call.cleanup.CallCleanupExecutor
@@ -44,10 +46,12 @@ import com.difft.android.call.handler.RoomEventDispatcher
 import com.difft.android.call.handler.RoomEventHost
 import com.difft.android.call.manager.ParticipantManager
 import com.difft.android.call.manager.SpeakerStateHolder
+import com.difft.android.call.media.AudioRouteApplier
 import com.difft.android.call.media.CallAudioSetup
 import com.difft.android.call.media.CallMediaController
 import com.difft.android.call.handler.RtmMessageHandler
 import com.difft.android.call.manager.TimerManager
+import com.difft.android.call.network.NetworkQualityCoordinator
 import com.difft.android.call.session.CallObservers
 import com.difft.android.call.session.CallSessionStarter
 import com.difft.android.call.session.CallTypeCoordinator
@@ -58,6 +62,7 @@ import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStateHold
 import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStatePort
 import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.UrlManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import dagger.assisted.Assisted
@@ -69,7 +74,11 @@ import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.video.CameraCapturerUtils
 import io.livekit.android.util.flow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.util.concurrent.atomic.AtomicBoolean
@@ -104,6 +113,7 @@ class LCallViewModel @AssistedInject constructor(
     @ChativeHttpClientModule.Chat private val httpClient: dagger.Lazy<ChativeHttpClient>,
     private val userManager: UserManager,
     private val proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider,
+    private val urlManager: UrlManager,
 ) : AndroidViewModel(application) {
 
     // coerceInputValues so an explicit `null` for a non-null field falls back to its default rather
@@ -124,7 +134,16 @@ class LCallViewModel @AssistedInject constructor(
     val callUiController = CallUiController()
     val timerManager = TimerManager(viewModelScope)
     val audioDeviceManager = AudioDeviceManager(application, callIntent.callType, userManager)
+    val mediaPermissions = CallMediaPermissionCoordinator(userManager)
     val audioHandler get() = audioDeviceManager.audioHandler
+
+    /** Drives and verifies every route target the manager publishes; holds no route state itself. */
+    private val audioRouteApplier = AudioRouteApplier(
+        appContext = application,
+        host = audioDeviceManager,
+        audioHandler = audioHandler,
+        scope = viewModelScope,
+    )
     private val audioSetup = CallAudioSetup(
         scope = viewModelScope,
         audioDeviceManager = audioDeviceManager,
@@ -132,6 +151,7 @@ class LCallViewModel @AssistedInject constructor(
         callConfig = callConfig,
         isDenoiseEnabledProvider = { deNoiseEnable.value },
         userManager = userManager,
+        routeApplier = audioRouteApplier,
     )
 
     private val roomCtl = CallRoomController(
@@ -177,11 +197,17 @@ class LCallViewModel @AssistedInject constructor(
     val isNoSpeakSoloTimeout get() = roomCtl.isNoSpeakSoloTimeout
     val micEnabled get() = roomCtl.micEnabled
     val cameraEnabled get() = roomCtl.cameraEnabled
+
+    // Room CONNECTED but the local uplink (publisher) is degraded — "others can't hear/see me".
+    // IDLE (no local publish demand) and CONNECTED are healthy; connecting/reconnecting rooms keep
+    // showing the existing connection UI instead.
+    private val _mediaSendIssue = MutableStateFlow(MediaSendIssueState.NONE)
+    val mediaSendIssue: StateFlow<MediaSendIssueState> = _mediaSendIssue.asStateFlow()
     val participants get() = participantManager.participants
     val screenSharingUser get() = participantManager.screenSharingUser
     val screenShareFloatingSpeaker: ScreenShareFloatingSpeakerStatePort
         get() = screenShareFloatingSpeakerStateHolder
-    val currentAudioDevice get() = audioDeviceManager.selected
+    val audioRoute get() = audioDeviceManager.routeSnapshot
 
     private val feedbackBinder = CallFeedbackBinder(
         timerManager = timerManager,
@@ -256,12 +282,18 @@ class LCallViewModel @AssistedInject constructor(
             stopRingToneAndTimeoutCheckFn = ::stopRingToneAndTimeoutCheck,
             resolveCallTypeFn = { callTypeCoordinator.resolveNow() },
             handleConnectedStateFn = ::handleConnectedState,
+            startCallDurationTimerFn = ::startCallDurationTimer,
             onFeedbackIdentityResolvedFn = feedbackBinder::onIdentityResolved,
             onNetworkPoorStateChangedFn = { feedbackBinder.currentCallNetworkPoor = it },
             getCurrentCallTypeFn = ::getCurrentCallType,
             getCurrentRoomIdFn = { roomId },
         )
     }
+
+    private val _networkQualityLazy = lazy {
+        NetworkQualityCoordinator.create(viewModelScope, room, callUiController, mediaSendIssue)
+    }
+    private val networkQualityCoordinator by _networkQualityLazy
 
     private val _roomEventDispatcherLazy = lazy {
         RoomEventDispatcher(
@@ -279,6 +311,7 @@ class LCallViewModel @AssistedInject constructor(
             callDataManager = callDataManager,
             statisticsLogManager = callStatisticsLogManager,
             mySelfId = mySelfId,
+            networkQuality = networkQualityCoordinator,
             host = roomEventHost,
         )
     }
@@ -354,8 +387,17 @@ class LCallViewModel @AssistedInject constructor(
         // Before the room events collector: the coordinator subscribes to room.metadata, whose
         // current value already carries the authoritative callType by the time Connected is handled.
         callTypeCoordinator.start()
+        // Constructed here (the `room` getter is fail-loud once released) but started on main: the
+        // coordinator drives a lock-free state machine and is main-confined, while this whole Phase B
+        // runs on Dispatchers.Default. Order against the event collector is irrelevant — a quality
+        // event arriving first is simply recorded, and the first room-state frame re-seeds anyway.
+        val networkQuality = networkQualityCoordinator
+        viewModelScope.launch(Dispatchers.Main.immediate) { networkQuality.start() }
         roomEventDispatcher.startCollectingRoomEvents()
         roomEventDispatcher.startCollectingParticipants()
+        // Local `r`, not the `room` getter: the latter is fail-loud once the room is released.
+        audioSetup.bindRoomState(r::state.flow)
+        observeMediaSendConnectionState(r)
         CallObservers.register(
             scope = viewModelScope,
             room = r,
@@ -379,9 +421,28 @@ class LCallViewModel @AssistedInject constructor(
         sessionStarter.start()
     }
 
+    /** Mapping semantics live in [MediaSendIssueState.resolve] (pure, directly unit-tested). */
+    private fun observeMediaSendConnectionState(r: Room) {
+        viewModelScope.launch {
+            combine(r::state.flow, r::mediaSendConnectionState.flow, MediaSendIssueState::resolve)
+                .distinctUntilChanged().collect { issue ->
+                    L.i { "[Call] mediaSendIssue=$issue sendState=${r.mediaSendConnectionState} roomState=${r.state}" }
+                    _mediaSendIssue.value = issue
+                }
+        }
+    }
+
     fun getE2eeKey(): ByteArray? = e2eeKey
 
     fun getRoomId(): String? = roomId
+
+    /** 1v1 remote peer id. Mirrors SingleParticipantCallPage.kt's exact fallback shape
+     * (remote participant's LiveKit identity once joined, else conversationId before join). */
+    fun getOneOnOnePeerId(): String? =
+        participants.value.filterIsInstance<RemoteParticipant>().firstOrNull()?.identity?.value ?: conversationId
+
+    val e2eeLearnMoreUrl: String
+        get() = urlManager.e2eeLearnMoreUrl
 
     fun getCallRoomName(): String {
         val name = callTypeCoordinator.currentRoomName
@@ -440,8 +501,19 @@ class LCallViewModel @AssistedInject constructor(
     fun setMicEnabled(enabled: Boolean, publishMuted: Boolean = false, isShowBarrage: Boolean = true) =
         mediaCtl.setMicEnabled(enabled, publishMuted, isShowBarrage)
 
+    /**
+     * Enters the connected state. For 1v1 the duration timer is NOT started here — the remote can be
+     * in the room over signaling while its RTC transport is still connecting, and counting from that
+     * moment tells the user they can talk when the remote cannot hear them yet. [RoomEventDispatcher]
+     * gates that call's timer on the remote reaching ACTIVE and subscribing the local microphone;
+     * group/instant keep the old behaviour of counting as soon as the room is up.
+     */
     fun handleConnectedState() {
         roomCtl.updateCallStatus(CallStatus.CONNECTED)
+        if (getCurrentCallType() != CallType.ONE_ON_ONE.type) startCallDurationTimer()
+    }
+
+    fun startCallDurationTimer() {
         timerManager.startCallTimer { show -> roomId?.let { onGoingCallStateManager.updateCallingTime(it, show) } }
     }
 
@@ -477,6 +549,7 @@ class LCallViewModel @AssistedInject constructor(
         screenSharePreWarmer = screenSharePreWarmer,
         roomEventDispatcher = _roomEventDispatcherLazy.takeIf { it.isInitialized() }?.value,
         callTypeCoordinator = _callTypeCoordinatorLazy.takeIf { it.isInitialized() }?.value,
+        networkQualityCoordinator = _networkQualityLazy.takeIf { it.isInitialized() }?.value,
         statisticsLogManager = callStatisticsLogManager,
         feedbackBinder = feedbackBinder,
         shouldTriggerFeedbackView = { shouldTriggerFeedbackView() },

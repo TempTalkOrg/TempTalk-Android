@@ -18,6 +18,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
 import com.tencent.wcdb.winq.Order
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 import difft.android.messageserialization.model.needsSendStatusRecompute
 import difft.android.messageserialization.model.resolveRoomSendStatus
@@ -329,6 +330,18 @@ object WCDBUpdateService :
                                                 }
                                                 L.i { "[WCDBUpdateService] room=$roomId sendStatus ${roomObject.sendStatus}->$targetStatus (clear is conditional; no-op if a failure raced in)" }
                                             }
+                                    }
+
+                                    // The independent sending aggregate, same doctrine: clear-only here
+                                    // (discovery is PushTextSendJob's job), own cost-filter gate, and the
+                                    // guarded UPDATE re-checks the message table so a send that raced in
+                                    // is never wiped. No escalation branch exists — the two columns never
+                                    // convert into each other.
+                                    if (roomObject.sendingStatus != ROOM_SENDING_STATUS_NONE &&
+                                        !wcdb.hasSendingOutgoingMessage(roomId)
+                                    ) {
+                                        wcdb.clearRoomSendingStatusIfNoSending(roomId)
+                                        L.i { "[WCDBUpdateService] room=$roomId sendingStatus cleared (conditional; no-op if a send raced in)" }
                                     }
 
                                     // Skip forward/copy notices so the preview falls back to the latest

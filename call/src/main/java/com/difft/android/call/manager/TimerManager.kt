@@ -19,6 +19,14 @@ class TimerManager(private val scope: CoroutineScope) {
     private val _callDurationText = MutableStateFlow("00:00")
     val callDurationText: StateFlow<String> = _callDurationText.asStateFlow()
 
+    /**
+     * Whether the call duration timer is actually running. 1v1 keeps the call in CONNECTED while
+     * still waiting for the remote's transport to come up, so the UI needs to tell "connected but
+     * not yet counting" apart from "counting" instead of rendering a frozen 00:00.
+     */
+    private val _callTimerRunning = MutableStateFlow(false)
+    val callTimerRunning: StateFlow<Boolean> = _callTimerRunning.asStateFlow()
+
     private val _countDownEnabled = MutableStateFlow(false)
     val countDownEnabled: StateFlow<Boolean> = _countDownEnabled.asStateFlow()
 
@@ -31,6 +39,7 @@ class TimerManager(private val scope: CoroutineScope) {
      */
     fun startCallTimer(onTick: (String) -> Unit) {
         if (callTimerJob != null) return
+        _callTimerRunning.value = true
         callTimerJob = scope.launch {
             while (true) {
                 delay(1000)
@@ -49,6 +58,7 @@ class TimerManager(private val scope: CoroutineScope) {
     fun stopCallTimer() {
         callTimerJob?.cancel()
         callTimerJob = null
+        _callTimerRunning.value = false
     }
 
     /**

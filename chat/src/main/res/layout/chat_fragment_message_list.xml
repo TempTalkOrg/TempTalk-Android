@@ -14,21 +14,6 @@
     <!--            android:layout_width="match_parent"-->
     <!--            android:layout_height="wrap_content" />-->
 
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/tv_privacy_banner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingHorizontal="50dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="8dp"
-        android:text="@string/chat_privacy_banner"
-        android:textColor="@color/t.third"
-        android:textSize="12sp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:visibility="visible" />
-
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerViewMessage"
         android:layout_width="match_parent"
@@ -36,7 +21,7 @@
         android:paddingVertical="3dp"
         android:scrollbars="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tv_privacy_banner" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!--    </com.scwang.smart.refresh.layout.SmartRefreshLayout>-->
 

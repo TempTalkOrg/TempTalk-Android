@@ -3,6 +3,7 @@ package com.difft.android.call.core
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.call.CallIntent
+import com.difft.android.call.exception.CallPreconditionException
 import io.livekit.android.LiveKit
 import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.room.Room
@@ -188,11 +189,13 @@ class CallRoomControllerConcurrencyTest {
 
     // ---------------------------------------------------------------------------------
     // Fail-loud `room` getter: never hands out a pre-create or post-release Room.
+    // The type is part of the contract — connection failover reads this getter inside its
+    // try block and only ends the attempt sequence for a typed precondition failure.
     // ---------------------------------------------------------------------------------
     @Test
     fun `room getter throws before createRoom`() {
         val ctl = buildController()
-        val ex = assertThrows(IllegalStateException::class.java) { ctl.room }
+        val ex = assertThrows(CallPreconditionException::class.java) { ctl.room }
         assertTrue(ex.message!!.contains("before createRoom"))
     }
 
@@ -204,7 +207,7 @@ class CallRoomControllerConcurrencyTest {
 
         ctl.disconnectAndRelease()
 
-        val ex = assertThrows(IllegalStateException::class.java) { ctl.room }
+        val ex = assertThrows(CallPreconditionException::class.java) { ctl.room }
         assertTrue("post-release access must fail loud", ex.message!!.contains("after release"))
     }
 

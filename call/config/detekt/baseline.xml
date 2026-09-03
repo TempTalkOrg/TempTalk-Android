@@ -8,7 +8,7 @@
     <ID>LongMethod:CallCriticalAlertBanner.kt:@Composable fun CallCriticalAlertBanner</ID>
     <ID>LongMethod:CallQuestionView.kt:@Composable internal fun CallQuestionView</ID>
     <ID>LongMethod:CallRatingView.kt:@Composable internal fun CallRatingView</ID>
-    <ID>LongMethod:MainPageWithBottomControlView.kt:@OptIn(ExperimentalFoundationApi::class, ExperimentalPermissionsApi::class) @Composable fun MainPageWithBottomControlView</ID>
+    <ID>LongMethod:MainPageWithBottomControlView.kt:@OptIn(ExperimentalFoundationApi::class) @Composable fun MainPageWithBottomControlView</ID>
     <ID>LongMethod:MainPageWithTopStatusView.kt:@Composable fun MainPageWithTopStatusView</ID>
     <ID>LongMethod:MeetingInviteBottomSheetFragment.kt:MeetingInviteBottomSheetFragment$private fun setupAddMembersScreen</ID>
     <ID>LongMethod:MultiParticipantCallPage.kt:@SuppressLint("ConfigurationScreenWidthHeight") @OptIn(ExperimentalFoundationApi::class) @Composable fun MultiParticipantCallPage</ID>

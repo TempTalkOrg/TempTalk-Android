@@ -1,5 +1,7 @@
 package com.difft.android.chat.recent
 
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_ACTIVE
+import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 import org.junit.Test
@@ -57,5 +59,27 @@ class RoomViewDataEqualityTest {
         val failed = room(ROOM_SEND_STATUS_FAILED)
 
         assertEquals(ROOM_SEND_STATUS_FAILED, failed.copy(roomName = "renamed").sendStatus)
+    }
+
+    // Same gate, same failure mode for the independent sending aggregate: not in equals ->
+    // StateFlow drops the emission -> the icon never appears/disappears.
+    @Test
+    fun `rooms differing only in sendingStatus are not equal`() {
+        val idle = room(ROOM_SEND_STATUS_NONE)
+        val sending = room(ROOM_SEND_STATUS_NONE).copy(sendingStatus = ROOM_SENDING_STATUS_ACTIVE)
+
+        assertNotEquals(idle, sending)
+        assertNotEquals(idle.hashCode(), sending.hashCode())
+    }
+
+    @Test
+    fun `sendingStatus defaults to NONE and is independent of sendStatus`() {
+        val synthesized = RoomViewData(roomId = "r-call")
+        assertEquals(ROOM_SENDING_STATUS_NONE, synthesized.sendingStatus)
+
+        // Both flags set at once is a legal, renderable state (icon + [Send failed] side by side).
+        val both = room(ROOM_SEND_STATUS_FAILED).copy(sendingStatus = ROOM_SENDING_STATUS_ACTIVE)
+        assertEquals(ROOM_SEND_STATUS_FAILED, both.sendStatus)
+        assertEquals(ROOM_SENDING_STATUS_ACTIVE, both.sendingStatus)
     }
 }

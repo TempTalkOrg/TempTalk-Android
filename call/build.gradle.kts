@@ -33,6 +33,8 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // Gradle test workers default to 512m; the Robolectric/Compose suite OOMs there on CI.
+        unitTests.all { it.maxHeapSize = "2g" }
     }
 }
 
@@ -78,7 +80,6 @@ dependencies {
 
     // Call specific dependencies
     implementation(libs.accompanist.systemuicontroller)
-    implementation(libs.accompanist.permissions)
     implementation(libs.livekit.android)
     implementation(libs.livekit.android.camerax)
     implementation(libs.livekit.ttsignal)

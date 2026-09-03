@@ -7,7 +7,6 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.R
 import com.difft.android.call.exception.DisconnectException
-import com.difft.android.call.exception.NetworkConnectionPoorException
 import com.difft.android.call.exception.ServerConnectionException
 import com.difft.android.call.exception.StartCallException
 import kotlinx.coroutines.CancellationException
@@ -34,11 +33,6 @@ class CallErrorHandler(
         when (error) {
             is CancellationException -> {
                 L.e { "[Call] CallErrorHandler, CancellationException: $error" }
-            }
-
-            is NetworkConnectionPoorException -> {
-                L.e { "[Call] CallErrorHandler, NetworkConnectionPoorException: ${error.message}" }
-                showToast(activity.getString(R.string.call_myself_network_poor_tip))
             }
 
             is StartCallException -> {

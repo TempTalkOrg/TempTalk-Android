@@ -30,6 +30,10 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    testFixtures {
+        enable = true
+    }
 }
 
 kotlin {
@@ -60,4 +64,9 @@ dependencies {
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
+
+    // testFixtures source set dependencies. AGP 9 compiles testFixtures as its own Kotlin source
+    // set, so anything the fixtures use must be declared here explicitly — it does not inherit the
+    // test compilation's classpath. Mirrors base/build.gradle.kts.
+    testFixturesImplementation(libs.junit)
 }

@@ -25,11 +25,12 @@
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/add_options"
-            android:layout_width="wrap_content"
+            android:layout_width="44dp"
             android:layout_height="match_parent"
+            android:layout_marginEnd="6dp"
             android:contentDescription="@string/chat_add_options"
-            android:padding="16dp"
-            android:src="@mipmap/chat_add_options"
+            android:padding="10dp"
+            android:src="@drawable/chat_add_options"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/t.primary" />

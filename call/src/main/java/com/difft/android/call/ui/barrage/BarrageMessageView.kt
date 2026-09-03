@@ -88,6 +88,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+/**
+ * Barrage stack bottom reserve: total control-bar height + breathing gap, so the barrage/entry
+ * button floats above the control bar.
+ */
+internal val barrageStackBottomPadding =
+    (LCallUiConstants.BOTTOM_BAR_TOTAL_HEIGHT_DP + LCallUiConstants.CHROME_CONTENT_GAP_DP).dp  // 88
 
 @Composable
 fun BarrageMessageView(
@@ -140,8 +146,8 @@ fun BarrageMessageView(
     val bottomPadding = when {
         isLandscape -> 24.dp
         isFoldableOpen -> 36.dp
-        isFoldableClosed -> 88.dp
-        else -> 88.dp
+        isFoldableClosed -> barrageStackBottomPadding
+        else -> barrageStackBottomPadding
     }
 
     val maxInputChars = config.textMaxLength
@@ -455,7 +461,13 @@ internal fun ShouldShowBarrageInput(
                 .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
                 .wrapContentSize()
                 .background(color = DifftTheme.colors.bgElevated, shape = RoundedCornerShape(size = 8.dp))
-                .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
+                .padding(
+                    start = LCallUiConstants.BARRAGE_ENTRY_PADDING_DP.dp,
+                    top = LCallUiConstants.BARRAGE_ENTRY_PADDING_DP.dp,
+                    end = LCallUiConstants.BARRAGE_ENTRY_PADDING_DP.dp,
+                    bottom = LCallUiConstants.BARRAGE_ENTRY_PADDING_DP.dp,
+                )
+                .testTag("barrage-entry-button")
                 .clickable {
                     val now = android.os.SystemClock.uptimeMillis()
                     if (now - clickGate[0] >= 100L) {
@@ -468,8 +480,9 @@ internal fun ShouldShowBarrageInput(
         ) {
             Image(
                 modifier = Modifier
-                    .width(20.dp)
-                    .height(20.dp),
+                    .width(LCallUiConstants.BARRAGE_ENTRY_ICON_SIZE_DP.dp)
+                    .height(LCallUiConstants.BARRAGE_ENTRY_ICON_SIZE_DP.dp)
+                    .testTag("barrage-entry-icon"),
                 painter = painterResource(id = com.difft.android.call.R.drawable.tabler_mood_smile),
                 contentDescription = "barrage input icon",
                 contentScale = ContentScale.Fit,
